@@ -1,0 +1,5 @@
+localhost {
+    root * src/
+    php_fastcgi localhost:8747
+    rewrite * index.php/{path}
+}

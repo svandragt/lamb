@@ -1,0 +1,24 @@
+{
+    "name": "svandragt/lamb",
+    "description": "Micro blogging like an animal",
+    "license": "GPL",
+    "type": "project",
+    "authors": [
+        {
+            "name": "Sander van Dragt",
+            "email": "sander@vandragt.com"
+        }
+    ],
+    "require": {
+        "erusev/parsedown": "^1.7",
+        "gabordemooij/redbean": "^5.7"
+    },
+    "autoload": {
+        "psr-4": {
+            "Svandragt\\Microsites\\": "src/"
+        }
+    },
+    "scripts": {
+        "serve": "php -S localhost:8747 -t src"
+    }
+}
