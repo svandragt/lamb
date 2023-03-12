@@ -1,6 +1,6 @@
 Literally Another Micro Blog.
 
-Barrier free super simple blogging.
+Barrier free super simple blogging, selfhosted.
 
 - sqlite based
 - twitter like interface
