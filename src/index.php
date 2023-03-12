@@ -27,7 +27,7 @@ function response_404() {
 	];
 }
 
-R::setup( 'sqlite:lamb.db' );
+R::setup( 'sqlite:../data/lamb.db' );
 # Submission
 if (! empty($_POST) && $_POST['submit'] === 'Blaat') {
 	$bleat = R::dispense('bleat');
