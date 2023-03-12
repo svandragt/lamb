@@ -4,7 +4,7 @@ Barrier free super simple blogging, selfhosted.
 
 - sqlite based
 - twitter like interface
-- register to a flock, index of blaats
+- register to a flock, index of bleats
 
 
 # Getting started

@@ -1,20 +1,20 @@
 <?php 
-function action_delete($blaat) {
-	if (! isset($blaat['id'])) {
+function action_delete($bleat) {
+	if (! isset($bleat['id'])) {
 		return '';
 	}
-	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete blaat %s?\');"><input type="submit" value="Delete"/></form>',
-		$blaat['id'],
-		$blaat['id'],
+	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete"/></form>',
+		$bleat['id'],
+		$bleat['id'],
 	);
 }
-function date_created($blaat) {
-	if (! isset($blaat['created'])) {
+function date_created($bleat) {
+	if (! isset($bleat['created'])) {
 		return '';
 	}
-	return sprintf('<a href="/blaat/%s">%s</a>',
-		$blaat['id'],
-		$blaat['created']
+	return sprintf('<a href="/bleat/%s">%s</a>',
+		$bleat['id'],
+		$bleat['created']
 	);
 }
 
@@ -121,10 +121,10 @@ function page_title() {
 		</form>
 		<?= page_title(); ?>
 
-		<?php foreach ($data['blaats'] as $b): ?>
+		<?php foreach ($data['bleats'] as $b): ?>
 			<section>
 			<h2><?= $b['title']; ?></h2>
-			<?= $b['blaat']; ?>
+			<?= $b['bleat']; ?>
 			
 			<small><?= date_created($b); ?> <?= action_delete($b); ?></small>
 			</section>

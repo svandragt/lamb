@@ -5,8 +5,8 @@ require '../vendor/autoload.php';
 
 use \RedBeanPHP\R as R;
 
-function md($blaat) {
-	$parts = explode('---',$blaat);
+function md($bleat) {
+	$parts = explode('---',$bleat);
 	$max = count($parts);
 	$front_matter = [];
 	if ($max > 2) {
@@ -15,7 +15,7 @@ function md($blaat) {
 	}
 	$md_text = trim($parts[$max-1]);
 	$markdown = (new \Parsedown())->text($md_text);
-	return array_merge($front_matter,['blaat' => $markdown]);
+	return array_merge($front_matter,['bleat' => $markdown]);
 }
 
 function response_404() {
@@ -23,55 +23,55 @@ function response_404() {
 	header($header);
 	return [
 		'title' => $header,
-		'blaat' => 'Page not found',
+		'bleat' => 'Page not found',
 	];
 }
 
 R::setup( 'sqlite:lamb.db' );
 # Submission
 if (! empty($_POST) && $_POST['submit'] === 'Blaat') {
-	$blaat = R::dispense('blaat');
-	$blaat->contents = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
-	$blaat->created = date("Y-m-d H:i:s");
-	$id = R::store($blaat);
+	$bleat = R::dispense('bleat');
+	$bleat->contents = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
+	$bleat->created = date("Y-m-d H:i:s");
+	$id = R::store($bleat);
 }
 
 $path_info = (empty($_SERVER['PATH_INFO']) ? '/index' : $_SERVER['PATH_INFO']);
 $action = strtok($path_info, '/');
 
 switch ($action) {
-	case 'blaat':
+	case 'bleat':
 		$id = strtok('/');
-		$blaats = [R::load('blaat', (integer)$id)];
-		if (empty($blaats)) {
-			$data['blaats'] = response_404();
+		$bleats = [R::load('bleat', (integer)$id)];
+		if (empty($bleats)) {
+			$data['bleats'] = response_404();
 		} 
 		else {
-			foreach ($blaats as $b){
-				$data['blaats'][] = array_merge(['created' => $b->created, 'id' => $b->id],md($b->contents));
+			foreach ($bleats as $b){
+				$data['bleats'][] = array_merge(['created' => $b->created, 'id' => $b->id],md($b->contents));
 			}
 		}
 		break;
 	case 'delete':
 		$id = strtok('/');
-		$blaat = R::load('blaat', (integer)$id);
-		if (empty($blaat)) {
-			$data['blaats'] = response_404();
+		$bleat = R::load('bleat', (integer)$id);
+		if (empty($bleat)) {
+			$data['bleats'] = response_404();
 		} 
 		else {
-			R::trash( $blaat );
+			R::trash( $bleat );
 			header("Location: /");
 			die();
 		}
 	case 'index':
 		$data['title'] = 'Blaats';
-		$blaats = R::findAll('blaat');
-		if (empty($blaats)) {
-			$data['blaats'] = response_404();
+		$bleats = R::findAll('bleat');
+		if (empty($bleats)) {
+			$data['bleats'] = response_404();
 		} 
 		else {
-			foreach ($blaats as $b){
-				$data['blaats'][] = array_merge(['created' => $b->created, 'id' => $b->id],md($b->contents));
+			foreach ($bleats as $b){
+				$data['bleats'][] = array_merge(['created' => $b->created, 'id' => $b->id],md($b->contents));
 			}
 		}
 		break;
