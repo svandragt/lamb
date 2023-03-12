@@ -30,3 +30,6 @@ Support for Caddy (untested) is also provided.
 - Security tightening
 - attach an image
 - feeds
+
+# Screenshot
+![image](https://user-images.githubusercontent.com/594871/224541914-20ce6cee-24cf-4ebf-8962-0b69ea5bccf0.png)
