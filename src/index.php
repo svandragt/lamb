@@ -28,7 +28,8 @@ function redirect_create() {
 	$bleat->body = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
 	$bleat->created = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
-	return $id;
+	header("Location: /");
+	die();
 }
 
 function redirect_deleted($id) {
@@ -51,12 +52,12 @@ function respond_404() {
 }
 
 function respond_index() {
-	$bleats = R::findAll('bleat');
+	$bleats = R::findAll('bleat', 'ORDER BY created DESC');
 	$data['title'] = 'Bleats';
 	return array_merge($data, process($bleats));
 }
 
-function respond_view($id) {
+function respond_bleat($id) {
 	$bleats = [R::load('bleat', (integer)$id)];
 	return process($bleats);
 }
@@ -74,7 +75,7 @@ function process($bleats) {
 R::setup( 'sqlite:../data/lamb.db' );
 
 # Router
-$path_info = (empty($_SERVER['PATH_INFO']) ? '/index' : $_SERVER['PATH_INFO']);
+$path_info = $_SERVER['PATH_INFO'] ?? '/index';
 $action = strtok($path_info, '/');
 switch ($action) {
 	case 'delete':
@@ -83,17 +84,17 @@ switch ($action) {
 		break;
 	case 'index':
 		if (! empty($_POST)) {
-			$id = redirect_create();
+			redirect_create();
 		}
 		$data = respond_index();
 		break;
 	case 'bleat':
 		$id = strtok('/');
-		$data =  respond_view($id);
+		$data =  respond_bleat($id);
 		break;
 	default:
 		$data = respond_404();
 		break;
 }
 
-require_once("layout.php");
+require_once("views/_layout.php");

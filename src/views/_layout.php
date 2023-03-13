@@ -82,7 +82,7 @@ function page_intro() {
 			padding-top: 1em;
 		}
 
-		section	 {
+		article	 {
 			background: #eee;
 			padding: 0.1px 1em;
 			border-bottom: 1px solid #aaa;
@@ -127,23 +127,7 @@ function page_intro() {
 		</ul>
 	</nav>
 	<main>
-		<?php if ($action === 'index'): ?>
-		<form method="post" action="/">
-			<textarea placeholder="Bleat here..." name="contents"></textarea>
-			<input type="submit" name="submit" value="<?php echo BUTTON_LABEL; ?>">
-		</form>
-		<?php endif; ?>
-		<?= page_title(); ?>
-		<?= page_intro(); ?>
-
-		<?php foreach ($data['items'] as $item): ?>
-			<section>
-			<?= $item['body']; ?>
-			
-			<small><?= date_created($item); ?> <?= action_delete($item); ?></small>
-			</section>
-		<?php endforeach; ?>
-
+		<?php require("views/$action" . '.php'); ?>
 	</main>
 </body>
 </html>
