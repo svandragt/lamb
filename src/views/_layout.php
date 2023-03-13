@@ -60,6 +60,8 @@ function page_intro() {
 
 		nav ul, nav li {
 			display: inline;
+			margin: 0;
+			padding:0;
 		}
 
 		nav a {
@@ -67,6 +69,7 @@ function page_intro() {
 			border: 0 1px solid white;
 			color: white;
 			line-height: 2em;
+			padding: 0 0.5em;
 		}
 
 		form {
@@ -116,13 +119,23 @@ function page_intro() {
 			margin: 1em 0;
 			box-sizing: border-box;
 		}
+
+		.nunderlined {
+			text-decoration: none;
+		}
 	</style>
 </head>
 <body>
 	<nav>
 		<ul>
 			<li>
-				<a href="/">Home</a>
+				<a href="/" class="nunderlined">🐑</a>
+				<?php 	if ( !$_SESSION['loggedin']): ?>
+					<a href="/login">Login</a>
+				<?php else: ?>
+					<a href="/logout">Logout</a>
+				<?php endif; ?>
+
 			</li>
 		</ul>
 	</nav>

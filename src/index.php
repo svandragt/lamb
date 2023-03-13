@@ -5,7 +5,8 @@ require '../vendor/autoload.php';
 
 use \RedBeanPHP\R as R;
 
-define('BUTTON_LABEL', 'Bleat!');
+define('BUTTON_BLEAT', 'Bleat!');
+define('BUTTON_LOGIN', 'Log in');
 
 function render($bleat) {
 	$parts = explode('---',$bleat);
@@ -21,13 +22,31 @@ function render($bleat) {
 }
 
 function redirect_create() {
-	if ($_POST['submit'] !== BUTTON_LABEL) {
+	if ($_POST['submit'] !== BUTTON_BLEAT) {
+		return null;
+	}
+	if ( ! session['loggedin']) {
 		return null;
 	}
 	$bleat = R::dispense('bleat');
 	$bleat->body = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
 	$bleat->created = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
+	header("Location: /");
+	die();
+}
+
+function redirect_login() {
+	// if ($_POST['submit'] !== BUTTON_LOGIN) {
+	// 	return null;
+	// }
+	$_SESSION['loggedin'] = 'yup';
+	header("Location: /");
+	die();
+}
+
+function redirect_logout() {
+	unset($_SESSION['loggedin']);
 	header("Location: /");
 	die();
 }
@@ -51,7 +70,7 @@ function respond_404() {
 	];
 }
 
-function respond_index() {
+function respond_home() {
 	$bleats = R::findAll('bleat', 'ORDER BY created DESC');
 	$data['title'] = 'Bleats';
 	return array_merge($data, process($bleats));
@@ -72,21 +91,29 @@ function process($bleats) {
 	return $data;
 }
 
+session_start();
 R::setup( 'sqlite:../data/lamb.db' );
 
 # Router
-$path_info = $_SERVER['PATH_INFO'] ?? '/index';
+$path_info = $_SERVER['PATH_INFO'] ?? '/home';
 $action = strtok($path_info, '/');
+$match = true;
 switch ($action) {
 	case 'delete':
 		$id = strtok('/');
 		$data = redirect_deleted($id);
 		break;
-	case 'index':
+	case 'home':
 		if (! empty($_POST)) {
 			redirect_create();
 		}
-		$data = respond_index();
+		$data = respond_home();
+		break;
+	case 'login':
+		redirect_login();
+		break;
+	case 'logout':
+		redirect_logout();
 		break;
 	case 'bleat':
 		$id = strtok('/');
