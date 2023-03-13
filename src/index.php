@@ -130,12 +130,20 @@ R::setup( 'sqlite:../data/lamb.db' );
 # Router
 $path_info = $_SERVER['PATH_INFO'] ?? '/home';
 $action = strtok($path_info, '/');
-$match = true;
 switch ($action) {
+	case 'bleat':
+		$id = strtok('/');
+		$data =  respond_bleat($id);
+		break;
 	case 'delete':
 		$id = strtok('/');
 		$data = redirect_deleted($id);
 		break;
+	case 'feed':
+		$format ='.feed';
+		$data = respond_home();
+		require_once('views/feed.php');
+		die();
 	case 'home':
 		if (! empty($_POST)) {
 			redirect_create();
@@ -148,13 +156,10 @@ switch ($action) {
 	case 'logout':
 		redirect_logout();
 		break;
-	case 'bleat':
-		$id = strtok('/');
-		$data =  respond_bleat($id);
-		break;
+
 	default:
 		$data = respond_404();
 		break;
 }
 
-require_once("views/_layout.php");
+require_once("views/_layout.php");	
