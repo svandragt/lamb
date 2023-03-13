@@ -126,10 +126,12 @@ function page_intro() {
 		</ul>
 	</nav>
 	<main>
+		<?php if ($action === 'index'): ?>
 		<form method="post" action="/">
 			<textarea placeholder="Bleat here..." name="contents"></textarea>
 			<input type="submit" name="submit" value="<?php echo BUTTON_LABEL; ?>">
 		</form>
+		<?php endif; ?>
 		<?= page_title(); ?>
 		<?= page_intro(); ?>
 
