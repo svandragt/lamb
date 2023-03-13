@@ -26,7 +26,6 @@ Support for Caddy (untested) is also provided.
 # TODO
 
 - attach an image
-- feeds
 - integration into 'flock' (wip)
 
 # Screenshot
