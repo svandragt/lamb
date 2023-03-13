@@ -5,7 +5,9 @@ require '../vendor/autoload.php';
 
 use \RedBeanPHP\R as R;
 
-function md($bleat) {
+define('BUTTON_LABEL', 'Bleat!');
+
+function render($bleat) {
 	$parts = explode('---',$bleat);
 	$max = count($parts);
 	$front_matter = [];
@@ -15,15 +17,15 @@ function md($bleat) {
 	}
 	$md_text = trim($parts[$max-1]);
 	$markdown = (new \Parsedown())->text($md_text);
-	return array_merge($front_matter,['bleat' => $markdown]);
+	return array_merge($front_matter,['body' => $markdown]);
 }
 
 function redirect_create() {
-	if ($_POST['submit'] !== 'Bleat') {
+	if ($_POST['submit'] !== BUTTON_LABEL) {
 		return null;
 	}
 	$bleat = R::dispense('bleat');
-	$bleat->contents = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
+	$bleat->body = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
 	$bleat->created = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
 	return $id;
@@ -64,7 +66,7 @@ function process($bleats) {
 		return respond_404();
 	} 
 	foreach ($bleats as $b){
-		$data['bleats'][] = array_merge(['created' => $b->created, 'id' => $b->id],md($b->contents));
+		$data['items'][] = array_merge(['created' => $b->created, 'id' => $b->id],render($b->body));
 	}
 	return $data;
 }

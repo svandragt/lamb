@@ -34,6 +34,8 @@ function page_intro() {
 	return sprintf('<p>%s</p>', $data['intro']);
 }
 
+
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -126,16 +128,16 @@ function page_intro() {
 	<main>
 		<form method="post" action="/">
 			<textarea placeholder="Bleat here..." name="contents"></textarea>
-			<input type="submit" name="submit" value="Bleat">
+			<input type="submit" name="submit" value="<?php echo BUTTON_LABEL; ?>">
 		</form>
 		<?= page_title(); ?>
 		<?= page_intro(); ?>
 
-		<?php foreach ($data['bleats'] as $b): ?>
+		<?php foreach ($data['items'] as $item): ?>
 			<section>
-			<?= $b['bleat']; ?>
+			<?= $item['body']; ?>
 			
-			<small><?= date_created($b); ?> <?= action_delete($b); ?></small>
+			<small><?= date_created($item); ?> <?= action_delete($item); ?></small>
 			</section>
 		<?php endforeach; ?>
 
