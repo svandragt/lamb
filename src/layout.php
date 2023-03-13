@@ -116,8 +116,8 @@ function page_title() {
 	</nav>
 	<main>
 		<form method="post" action="/">
-			<textarea placeholder="Blaat here..." name="contents"></textarea>
-			<input type="submit" name="submit" value="Blaat">
+			<textarea placeholder="Bleat here..." name="contents"></textarea>
+			<input type="submit" name="submit" value="Bleat">
 		</form>
 		<?= page_title(); ?>
 
