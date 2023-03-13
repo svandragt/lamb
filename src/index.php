@@ -38,8 +38,13 @@ function redirect_create() {
 	}
 	unset($_SESSION[CSRF_TOKEN_NAME]);
 
+	$contents = trim(filter_input(INPUT_POST, 'contents', FILTER_SANITIZE_STRING));
+	if (empty($contents)) {
+		return null;
+	}
+
 	$bleat = R::dispense('bleat');
-	$bleat->body = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
+	$bleat->body = $contents;
 	$bleat->created = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
 	header("Location: /");
