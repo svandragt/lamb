@@ -7,7 +7,9 @@ use \RedBeanPHP\R as R;
 
 define('BUTTON_BLEAT', 'Bleat!');
 define('BUTTON_LOGIN', 'Log in');
+define('CSRF_TOKEN_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
+define('SESSION_LOGIN', 'loggedin');
 
 function render($bleat) {
 	$parts = explode('---',$bleat);
@@ -26,9 +28,16 @@ function redirect_create() {
 	if ($_POST['submit'] !== BUTTON_BLEAT) {
 		return null;
 	}
-	if ( ! session['loggedin']) {
+	if ( ! $_SESSION[SESSION_LOGIN]) {
 		return null;
 	}
+
+	$token = filter_input(INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING);
+	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
+		return null;
+	}
+	unset($_SESSION[CSRF_TOKEN_NAME]);
+
 	$bleat = R::dispense('bleat');
 	$bleat->body = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
 	$bleat->created = date("Y-m-d H:i:s");
@@ -44,13 +53,20 @@ function redirect_login() {
 	if ($_POST['password'] !== LOGIN_PASSWORD) {
 		return null;
 	}
-	$_SESSION['loggedin'] = 'yup';
+
+	$token = filter_input(INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING);
+	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
+		return null;
+	}
+	unset($_SESSION[CSRF_TOKEN_NAME]);
+	
+	$_SESSION[SESSION_LOGIN] = 'yup';
 	header("Location: /");
 	die();
 }
 
 function redirect_logout() {
-	unset($_SESSION['loggedin']);
+	unset($_SESSION[SESSION_LOGIN]);
 	header("Location: /");
 	die();
 }

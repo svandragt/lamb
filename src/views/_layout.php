@@ -1,6 +1,6 @@
 <?php 
 function action_delete($bleat) {
-	if (! isset($bleat['id'])) {
+	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
 		return '';
 	}
 	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete"/></form>',
@@ -8,6 +8,13 @@ function action_delete($bleat) {
 		$bleat['id'],
 	);
 }
+
+function csrf_token() {
+	$_SESSION[CSRF_TOKEN_NAME] = hash('sha256',uniqid(mt_rand(), true));
+	return $_SESSION[CSRF_TOKEN_NAME];
+}
+
+
 function date_created($bleat) {
 	if (! isset($bleat['created'])) {
 		return '';
@@ -47,6 +54,10 @@ function page_intro() {
 		body {
 			font: 16px/1.4em "Inter", sans-serif;
 			color:  #222;
+		}
+
+		input[type='submit'] {
+			cursor: pointer;
 		}
 		main {
 			margin: auto;
@@ -114,6 +125,7 @@ function page_intro() {
 		textarea {
 			font: 12px/1.4em "DejaVu Sans Mono", monospace;
 			width: 100%;
+			max-width: 100%;
 			min-height: 10em;
 			display:block;
 			margin: 1em 0;
@@ -130,7 +142,7 @@ function page_intro() {
 		<ul>
 			<li>
 				<a href="/" class="nunderlined">🐑</a>
-				<?php 	if ( !$_SESSION['loggedin']): ?>
+				<?php 	if ( !isset($_SESSION[SESSION_LOGIN])): ?>
 					<a href="/login">Login</a>
 				<?php else: ?>
 					<a href="/logout">Logout</a>

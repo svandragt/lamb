@@ -1,9 +1,8 @@
-<?php 
-	if ( $_SESSION['loggedin']):
-?>
+<?php if ( $_SESSION[SESSION_LOGIN]): ?>
 <form method="post" action="/">
 	<textarea placeholder="Bleat here..." name="contents"></textarea>
-	<input type="submit" name="submit" value="<?php echo BUTTON_BLEAT; ?>">
+	<input type="submit" name="submit" value="<?= BUTTON_BLEAT; ?>">
+	<input type="hidden" name="<?= CSRF_TOKEN_NAME; ?>" value="<?= csrf_token(); ?>" />
 </form>
 <?php endif; ?>
 
