@@ -4,12 +4,11 @@ Barrier free super simple blogging, selfhosted.
 
 - sqlite based
 - twitter like interface
-- register to a flock, index of bleats
-
+- friction free
 
 # Getting started
 
-Setup requirements
+Setup requirements: [PHP 8.1](https://www.php.net/manual/en/install.php), [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 ```
 sudo apt install php8.1 php8.1-sqlite3
 composer install
@@ -26,7 +25,6 @@ Support for Caddy (untested) is also provided.
 
 # TODO
 
-- Login
 - Security tightening
 - attach an image
 - feeds
