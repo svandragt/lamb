@@ -17,7 +17,7 @@ composer install
 
 Run:
 ```
-composer serve
+LAMB_LOGIN_PASSWORD=hackme composer serve
 open http://localhost:8747/
 ```
 

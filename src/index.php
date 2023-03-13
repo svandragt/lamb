@@ -7,6 +7,7 @@ use \RedBeanPHP\R as R;
 
 define('BUTTON_BLEAT', 'Bleat!');
 define('BUTTON_LOGIN', 'Log in');
+define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 
 function render($bleat) {
 	$parts = explode('---',$bleat);
@@ -37,9 +38,12 @@ function redirect_create() {
 }
 
 function redirect_login() {
-	// if ($_POST['submit'] !== BUTTON_LOGIN) {
-	// 	return null;
-	// }
+	if ($_POST['submit'] !== BUTTON_LOGIN) {
+		return null;
+	}
+	if ($_POST['password'] !== LOGIN_PASSWORD) {
+		return null;
+	}
 	$_SESSION['loggedin'] = 'yup';
 	header("Location: /");
 	die();

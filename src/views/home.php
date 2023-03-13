@@ -6,6 +6,8 @@
 	<input type="submit" name="submit" value="<?php echo BUTTON_BLEAT; ?>">
 </form>
 <?php endif; ?>
+
+
 <?= page_title(); ?>
 <?= page_intro(); ?>
 
