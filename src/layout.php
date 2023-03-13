@@ -25,6 +25,15 @@ function page_title() {
 	}
 	return sprintf('<h1>%s</h1>', $data['title']);
 }
+
+function page_intro() {
+	global $data;
+	if (! isset($data['intro'])) {
+		return '';
+	}
+	return sprintf('<p>%s</p>', $data['intro']);
+}
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -120,10 +129,10 @@ function page_title() {
 			<input type="submit" name="submit" value="Bleat">
 		</form>
 		<?= page_title(); ?>
+		<?= page_intro(); ?>
 
 		<?php foreach ($data['bleats'] as $b): ?>
 			<section>
-			<h2><?= $b['title']; ?></h2>
 			<?= $b['bleat']; ?>
 			
 			<small><?= date_created($b); ?> <?= action_delete($b); ?></small>
