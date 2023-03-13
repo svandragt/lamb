@@ -25,7 +25,6 @@ Support for Caddy (untested) is also provided.
 
 # TODO
 
-- Security tightening
 - attach an image
 - feeds
 - integration into 'flock' (wip)
