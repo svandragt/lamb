@@ -27,6 +27,9 @@ Support for Caddy (untested) is also provided.
 # TODO
 
 - attach an image
+- tagging
+- ini based site configuration
+- docs
 - integration into 'flock' (wip)
 
 # Screenshot
