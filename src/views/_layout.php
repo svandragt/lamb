@@ -51,6 +51,8 @@ function page_intro() {
 <head>
 	<meta charset="utf-8">
 	<title><?= $data['title'] ?></title>
+	<link rel="alternate" type="application/atom+xml" href="<?= HOSTNAME; ?>/feed/" title="<?= $data['title'] ?>">
+
 
 	<style type="text/css">
 		body {

@@ -11,6 +11,9 @@ define('CSRF_TOKEN_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 define('SESSION_LOGIN', 'loggedin');
 
+$hostname = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
+define('HOSTNAME', $hostname);
+
 function render($bleat) {
 	$parts = explode('---',$bleat);
 	$max = count($parts);

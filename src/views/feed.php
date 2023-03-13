@@ -1,7 +1,6 @@
 <?php
     header('Content-type: application/atom+xml');
-    $hostname = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
-    $channel_link = $hostname . $_SERVER["REQUEST_URI"];
+    $channel_link = HOSTNAME . $_SERVER["REQUEST_URI"];
 
     $Xml = new SimpleXMLElement('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
     # TODO config title
@@ -10,7 +9,7 @@
     # TODO created of last item
     $Xml->addChild('updated', date(DATE_ATOM));
     $Xml->addChild('generator', 'Lamb');
-    
+
     $Link = $Xml->addChild('atom:link');
     $Link->addAttribute('rel', 'self');
     $Link->addAttribute('href',  $channel_link);
@@ -23,7 +22,7 @@
 
     foreach ($data['items'] as $item) {
         $Entry = $Xml->addChild('entry');
-        $Entry->addChild('id', $hostname . '/bleat/'. $item['id']);
+        $Entry->addChild('id', HOSTNAME . '/bleat/'. $item['id']);
         $Entry->addChild('title', $item['title']);
         $Entry->addChild('updated', date(DATE_ATOM, strtotime($item['created'])));
         $Content = $Entry->addChild('content', $item['body']);
