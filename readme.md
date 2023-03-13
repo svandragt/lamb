@@ -2,9 +2,10 @@ Literally Another Micro Blog.
 
 Barrier free super simple blogging, selfhosted.
 
-- sqlite based
-- twitter like interface
-- friction free
+- SQLite based portable single author blog
+- Twitter like interface
+- Friction free Markdown entry
+- Generates Atom feed
 
 # Getting started
 
