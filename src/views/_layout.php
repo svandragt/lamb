@@ -3,14 +3,16 @@ function action_delete($bleat) {
 	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
 		return '';
 	}
-	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete"/></form>',
+	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete"/><input type="hidden" name="csrf" value="%s" />
+</form>',
 		$bleat['id'],
 		$bleat['id'],
+		csrf_token(),
 	);
 }
 
 function csrf_token() {
-	$_SESSION[CSRF_TOKEN_NAME] = hash('sha256',uniqid(mt_rand(), true));
+	$_SESSION[CSRF_TOKEN_NAME] = $_SESSION[CSRF_TOKEN_NAME] ?? hash('sha256',uniqid(mt_rand(), true));
 	return $_SESSION[CSRF_TOKEN_NAME];
 }
 
@@ -132,6 +134,12 @@ function page_intro() {
 			box-sizing: border-box;
 		}
 
+		.flash {
+			margin: 1em 0; 
+			padding: 0.25em 0.5em;
+			background: orange;
+		} 
+
 		.nunderlined {
 			text-decoration: none;
 		}
@@ -152,6 +160,15 @@ function page_intro() {
 		</ul>
 	</nav>
 	<main>
+		<?php 
+		if (isset($_SESSION['flash'])):
+		while (count($_SESSION['flash']) > 0):
+			$flash = array_pop($_SESSION['flash']);
+			?>
+			<div class="flash"><?= $flash; ?></div>
+		<?php 
+		endwhile;
+		endif; ?>
 		<?php require("views/$action" . '.php'); ?>
 	</main>
 </body>

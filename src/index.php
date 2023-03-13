@@ -25,30 +25,21 @@ function render($bleat) {
 }
 
 function redirect_create() {
+	require_login();
+	require_csrf();
 	if ($_POST['submit'] !== BUTTON_BLEAT) {
 		return null;
 	}
-	if ( ! $_SESSION[SESSION_LOGIN]) {
-		return null;
-	}
-
-	$token = filter_input(INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING);
-	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
-		return null;
-	}
-	unset($_SESSION[CSRF_TOKEN_NAME]);
-
 	$contents = trim(filter_input(INPUT_POST, 'contents', FILTER_SANITIZE_STRING));
 	if (empty($contents)) {
 		return null;
 	}
-
 	$bleat = R::dispense('bleat');
 	$bleat->body = $contents;
 	$bleat->created = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
 	header("Location: /");
-	die();
+	die('Redirecting to /');
 }
 
 function redirect_login() {
@@ -58,32 +49,49 @@ function redirect_login() {
 	if ($_POST['password'] !== LOGIN_PASSWORD) {
 		return null;
 	}
+	require_csrf();
 
-	$token = filter_input(INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING);
-	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
-		return null;
-	}
-	unset($_SESSION[CSRF_TOKEN_NAME]);
-	
 	$_SESSION[SESSION_LOGIN] = 'yup';
 	header("Location: /");
-	die();
+	die('Redirecting to /');
 }
 
 function redirect_logout() {
 	unset($_SESSION[SESSION_LOGIN]);
 	header("Location: /");
-	die();
+	die('Redirecting to /');
 }
 
 function redirect_deleted($id) {
+	require_login();
+	require_csrf($id);	
+
 	$bleat = R::load('bleat', (integer)$id);
 	if (empty($bleat)) {
 		return respond_404();
 	} 
 	R::trash( $bleat );
 	header("Location: /");
-	die();
+	die('Redirecting to /');
+}
+
+function require_login() {
+	if ( ! $_SESSION[SESSION_LOGIN]) {
+		$_SESSION['flash'][] = 'Please login.';
+		header("Location: /login");
+		die('Redirecting to /login');
+	}	
+}
+
+function require_csrf() {
+	$token = filter_input(INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING);
+	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
+		$txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
+		header($txt);
+		var_dump($token,$_SESSION[CSRF_TOKEN_NAME]);
+		die($txt);
+	}
+	unset($_SESSION[CSRF_TOKEN_NAME]);
 }
 
 function respond_404() {
