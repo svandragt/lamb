@@ -45,7 +45,7 @@ function page_intro() {
 
 	<style type="text/css">
 		body {
-			font: 16px/1.4em sans-serif;
+			font: 16px/1.4em "Inter", sans-serif;
 			color:  #222;
 		}
 		main {
@@ -109,6 +109,7 @@ function page_intro() {
 		}
 
 		textarea {
+			font: 12px/1.4em "DejaVu Sans Mono", monospace;
 			width: 100%;
 			min-height: 10em;
 			display:block;
