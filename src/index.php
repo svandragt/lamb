@@ -29,7 +29,7 @@ function response_404() {
 
 R::setup( 'sqlite:../data/lamb.db' );
 # Submission
-if (! empty($_POST) && $_POST['submit'] === 'Blaat') {
+if (! empty($_POST) && $_POST['submit'] === 'Bleat') {
 	$bleat = R::dispense('bleat');
 	$bleat->contents = filter_var($_POST['contents'], FILTER_SANITIZE_STRING);
 	$bleat->created = date("Y-m-d H:i:s");
@@ -64,7 +64,7 @@ switch ($action) {
 			die();
 		}
 	case 'index':
-		$data['title'] = 'Blaats';
+		$data['title'] = 'Bleats';
 		$bleats = R::findAll('bleat');
 		if (empty($bleats)) {
 			$data['bleats'] = response_404();
