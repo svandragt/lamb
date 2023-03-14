@@ -6,7 +6,7 @@
     $Xml->addChild('title', $config['site_title']);
     $Xml->addChild('id', $channel_link);
     # TODO created of last item
-    $Xml->addChild('updated', date(DATE_ATOM));
+    $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['items'][0]['created'])));
     $Xml->addChild('generator', 'Lamb');
 
     $Link = $Xml->addChild('atom:link');

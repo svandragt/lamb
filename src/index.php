@@ -104,6 +104,14 @@ function respond_404() {
 	];
 }
 
+
+function respond_feed() {
+	$bleats = R::findAll('bleat', 'ORDER BY created DESC LIMIT 20');
+	$data['updated'] = $bleats[0]['created'];
+	$data['title'] = $config['site_title'];
+	return array_merge($data, process($bleats));
+}
+
 function respond_home() {
 	$bleats = R::findAll('bleat', 'ORDER BY created DESC');
 	$data['title'] = $config['site_title'];
@@ -152,8 +160,7 @@ switch ($action) {
 		$data = redirect_deleted($id);
 		break;
 	case 'feed':
-		$format ='.feed';
-		$data = respond_home();
+		$data = respond_feed();
 		require_once('views/feed.php');
 		die();
 	case 'home':
