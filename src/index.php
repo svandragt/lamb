@@ -35,7 +35,7 @@ function require_csrf() {
 # Transformation
 function transform($bleats) {
 	if (empty($bleats)) {
-		return respond_404();
+		return [];
 	} 
 	function render($bleat) {
 		$parts = explode('---',$bleat);
@@ -134,10 +134,17 @@ function respond_bleat($id) {
 	return transform($bleats);
 }
 
-function respond_tag($tag) {
-	global $config;
-	$tag = filter_var($tag, FILTER_SANITIZE_STRING);
+function respond_search($query) {
+	$query = filter_var($query, FILTER_SANITIZE_STRING);
+	$bleats = R::find('bleat', 'body LIKE ?', ["%$query%"], 'ORDER BY created DESC');
+	$data['title'] = 'Search results for "' . $query . '"';
+	$result = ngettext("result", "results",count($bleats));
+	$data['intro'] = count($bleats) . " $result found.";
+	return array_merge($data, transform($bleats));
+}
 
+function respond_tag($tag) {
+	$tag = filter_var($tag, FILTER_SANITIZE_STRING);
 	$bleats = R::find('bleat', 'body LIKE ?', ["%#$tag%"], 'ORDER BY created DESC');
 	$data['title'] = 'Tagged with #' . $tag;
 	return array_merge($data, transform($bleats));
@@ -184,6 +191,10 @@ switch ($action) {
 	case 'logout':
 		redirect_logout();
 		break;
+	case 'search':
+		$query = strtok('/');
+		$data = respond_search($query);
+		break;
 	case 'tag':
 		$tag = strtok('/');
 		$data = respond_tag($tag);
@@ -192,6 +203,7 @@ switch ($action) {
 		$data = respond_404();
 		break;
 }
+
 
 # Views
 require_once("views/html.php");	
