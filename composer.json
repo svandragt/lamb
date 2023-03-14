@@ -15,7 +15,7 @@
     },
     "autoload": {
         "psr-4": {
-            "Svandragt\\Microsites\\": "src/"
+            "Svandragt\\Lamb\\": "src/"
         }
     },
     "scripts": {

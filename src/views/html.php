@@ -171,7 +171,7 @@ function page_intro() {
 		<?php 
 		endwhile;
 		endif; ?>
-		<?php require("views/$action" . '.php'); ?>
+		<?php require("views/actions/$action" . '.php'); ?>
 	</main>
 </body>
 </html>

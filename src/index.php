@@ -1,5 +1,5 @@
 <?php
-namespace Svandragt\Microsites;
+namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
@@ -165,4 +165,4 @@ switch ($action) {
 		break;
 }
 
-require_once("views/_layout.php");	
+require_once("views/html.php");	
