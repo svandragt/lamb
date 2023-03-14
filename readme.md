@@ -23,7 +23,7 @@ open http://localhost:8747/
 
 Support for Caddy (untested) is also provided.
 
-# Configuration
+# Configuration (optional)
 
 Place a `config.ini` file in the project root with the following contents and update any of the following lines after uncommenting them:
 ```
