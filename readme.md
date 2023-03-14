@@ -38,6 +38,7 @@ Place a `config.ini` file in the project root with the following contents and up
 
 - attach an image
 - docs
+- full text search for improved tag and search pages.
 - integration into 'flock' (wip)
 
 # Screenshot
