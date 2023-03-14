@@ -107,7 +107,7 @@ function page_intro() {
 		nav form {
 			display:inline-block;
 			margin:0 0.5em;
-			line-height: 1.8em;
+			line-height: 1.9em;
 		}
 
 		form {
