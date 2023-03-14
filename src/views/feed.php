@@ -6,7 +6,7 @@
     $Xml->addChild('title', $config['site_title']);
     $Xml->addChild('id', $channel_link);
     # TODO created of last item
-    $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['items'][0]['created'])));
+    $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['items'][0]['updated'])));
     $Xml->addChild('generator', 'Lamb');
 
     $Link = $Xml->addChild('atom:link');
@@ -21,7 +21,7 @@
         $Entry = $Xml->addChild('entry');
         $Entry->addChild('id', HOSTNAME . '/bleat/'. $item['id']);
         $Entry->addChild('title', $item['title']);
-        $Entry->addChild('updated', date(DATE_ATOM, strtotime($item['created'])));
+        $Entry->addChild('updated', date(DATE_ATOM, strtotime($item['updated'])));
         $Content = $Entry->addChild('content', $item['body']);
         $Content->addAttribute('type', 'html');
         $Link = $Entry->addChild('link');

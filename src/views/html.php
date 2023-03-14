@@ -11,6 +11,14 @@ function action_delete($bleat) {
 	);
 }
 
+function action_edit($bleat) {
+	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
+		return '';
+	}
+	return sprintf('<button type="button" onclick="location.href=\'/edit/%s\'">Edit</button>',
+		$bleat['id'],
+	);
+}
 function csrf_token() {
 	$_SESSION[CSRF_TOKEN_NAME] = $_SESSION[CSRF_TOKEN_NAME] ?? hash('sha256',uniqid(mt_rand(), true));
 	return $_SESSION[CSRF_TOKEN_NAME];
@@ -69,7 +77,7 @@ function page_intro() {
 			color:  #222;
 		}
 
-		input[type='submit'] {
+		input[type='submit'], button {
 			cursor: pointer;
 		}
 		main {

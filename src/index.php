@@ -6,6 +6,7 @@ require '../vendor/autoload.php';
 use \RedBeanPHP\R as R;
 
 define('BUTTON_BLEAT', 'Bleat!');
+define('BUTTON_SAVE', 'Save');
 define('BUTTON_LOGIN', 'Log in');
 define('CSRF_TOKEN_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
@@ -56,7 +57,7 @@ function transform($bleats) {
 }
 
 # Router handling
-function redirect_create() {
+function redirect_created() {
 	require_login();
 	require_csrf();
 	if ($_POST['submit'] !== BUTTON_BLEAT) {
@@ -69,20 +70,44 @@ function redirect_create() {
 	$bleat = R::dispense('bleat');
 	$bleat->body = $contents;
 	$bleat->created = date("Y-m-d H:i:s");
+	$bleat->updated = date("Y-m-d H:i:s");
 	$id = R::store($bleat);
-	header("Location: /");
-	die('Redirecting to /');
+	redirect_home();
 }
 
-function redirect_delete($id) {
+function redirect_deleted($id) {
 	require_login();
-	require_csrf($id);	
+	require_csrf();	
 
 	$bleat = R::load('bleat', (integer)$id);
 	if (empty($bleat)) {
 		return respond_404();
 	} 
 	R::trash( $bleat );
+	redirect_home();
+}
+
+function redirect_edited() {
+	require_login();
+	require_csrf();
+	if ($_POST['submit'] !== BUTTON_SAVE) {
+		return null;
+	}
+
+	$contents = trim(filter_input(INPUT_POST, 'contents', FILTER_SANITIZE_STRING));
+	$id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_STRING));
+	if (empty($contents) || empty($id)) {
+		return null;
+	}
+	$bleat = R::load('bleat', (integer)$id);
+	$bleat->body = $contents;
+	$bleat->updated = date("Y-m-d H:i:s");
+	$id = R::store($bleat);
+	redirect_home();
+}
+
+
+function redirect_home() {
 	header("Location: /");
 	die('Redirecting to /');
 }
@@ -97,14 +122,12 @@ function redirect_login() {
 	require_csrf();
 
 	$_SESSION[SESSION_LOGIN] = true;
-	header("Location: /");
-	die('Redirecting to /');
+	redirect_home();
 }
 
 function redirect_logout() {
 	unset($_SESSION[SESSION_LOGIN]);
-	header("Location: /");
-	die('Redirecting to /');
+	redirect_home();
 }
 
 function redirect_search($query) {
@@ -125,6 +148,11 @@ function respond_404() {
 function respond_bleat($id) {
 	$bleats = [R::load('bleat', (integer)$id)];
 	return transform($bleats);
+}
+
+function respond_edit($id) {
+	$bleat = R::load('bleat', (integer)$id);
+	return $bleat;
 }
 
 # Atom feed
@@ -162,7 +190,7 @@ function respond_search($query) {
 # Tag pages
 function respond_tag($tag) {
 	$tag = filter_var($tag, FILTER_SANITIZE_STRING);
-	$bleats = R::find('bleat', 'body LIKE ?', ["%#$tag%"], 'ORDER BY created DESC');
+	$bleats = R::find('bleat', 'body LIKE ?', ["%#$tag %"], 'ORDER BY created DESC');
 	$data['title'] = 'Tagged with #' . $tag;
 	return array_merge($data, transform($bleats));
 }
@@ -188,9 +216,19 @@ switch ($action) {
 		$id = strtok('/');
 		$data =  respond_bleat($id);
 		break;
-	case 'delete':
+	case 'edit':
 		$id = strtok('/');
-		$data = redirect_delete($id);
+		if ( !empty($_POST)) {
+			redirect_edited();
+		}
+		$bleat = respond_edit($id);
+		break;
+	case 'delete':
+		if ( empty($_POST)) {
+			redirect_home();
+		}
+		$id = strtok('/');
+		$data = redirect_deleted($id);
 		break;
 	case 'feed':
 		$data = respond_feed();
@@ -198,7 +236,7 @@ switch ($action) {
 		die();
 	case 'home':
 		if (! empty($_POST)) {
-			redirect_create();
+			redirect_created();
 		}
 		$data = respond_home();
 		break;
