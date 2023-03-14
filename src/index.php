@@ -11,6 +11,16 @@ define('CSRF_TOKEN_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 define('SESSION_LOGIN', 'loggedin');
 
+$config = [
+	'author_email' => 'joe.sheeple@example.com',
+	'author_name' => 'Joe Sheeple',
+	'site_title' => 'Bleats',
+];
+$user_config = parse_ini_file('config.ini') ?? [];
+if ($user_config) {
+	$config = array_merge($config, $user_config);
+} 
+
 $hostname = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
 define('HOSTNAME', $hostname);
 
@@ -91,7 +101,6 @@ function require_csrf() {
 	if (!$token || $token !== $_SESSION[CSRF_TOKEN_NAME]) {
 		$txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
 		header($txt);
-		var_dump($token,$_SESSION[CSRF_TOKEN_NAME]);
 		die($txt);
 	}
 	unset($_SESSION[CSRF_TOKEN_NAME]);
@@ -108,7 +117,7 @@ function respond_404() {
 
 function respond_home() {
 	$bleats = R::findAll('bleat', 'ORDER BY created DESC');
-	$data['title'] = 'Bleats';
+	$data['title'] = $config['site_title'];
 	return array_merge($data, process($bleats));
 }
 

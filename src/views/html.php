@@ -27,6 +27,11 @@ function date_created($bleat) {
 	);
 }
 
+function site_title() {
+	global $config;
+	return sprintf('<h1>%s</h1>', $config['site_title']);
+}
+
 function page_title() {
 	global $data;
 	if (! isset($data['title'])) {
@@ -50,8 +55,8 @@ function page_intro() {
 <html>
 <head>
 	<meta charset="utf-8">
-	<title><?= $data['title'] ?></title>
-	<link rel="alternate" type="application/atom+xml" href="<?= HOSTNAME; ?>/feed/" title="<?= $data['title'] ?>">
+	<title><?= $config['site_title'] ?></title>
+	<link rel="alternate" type="application/atom+xml" href="<?= HOSTNAME; ?>/feed/" title="<?= $config['site_title'] ?>">
 
 
 	<style type="text/css">
@@ -171,6 +176,7 @@ function page_intro() {
 		<?php 
 		endwhile;
 		endif; ?>
+		
 		<?php require("views/actions/$action" . '.php'); ?>
 	</main>
 </body>

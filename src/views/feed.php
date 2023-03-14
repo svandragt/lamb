@@ -3,8 +3,7 @@
     $channel_link = HOSTNAME . $_SERVER["REQUEST_URI"];
 
     $Xml = new SimpleXMLElement('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
-    # TODO config title
-    $Xml->addChild('title', 'site title');
+    $Xml->addChild('title', $config['site_title']);
     $Xml->addChild('id', $channel_link);
     # TODO created of last item
     $Xml->addChild('updated', date(DATE_ATOM));
@@ -15,10 +14,8 @@
     $Link->addAttribute('href',  $channel_link);
 
     $Author = $Xml->addChild('author');
-    # TODO
-    $Author->addChild('name', 'Sander van Dragt');
-    # TODO
-    $Author->addChild('email', 'sander@vandragt.com');
+    $Author->addChild('name', $config['author_name']);
+    $Author->addChild('email', $config['author_email']);
 
     foreach ($data['items'] as $item) {
         $Entry = $Xml->addChild('entry');

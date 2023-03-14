@@ -7,7 +7,7 @@
 <?php endif; ?>
 
 
-<?= page_title(); ?>
+<?= site_title(); ?>
 <?= page_intro(); ?>
 
 <?php require "views/_items.php"; ?>
