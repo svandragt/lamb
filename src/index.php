@@ -107,6 +107,11 @@ function redirect_logout() {
 	die('Redirecting to /');
 }
 
+function redirect_search($query) {
+	header("Location: /search/$query");
+	die("Redirecting to /search/$query");
+}
+
 function respond_404() {
 	$header = "HTTP/1.0 404 Not Found";
 	header($header);
@@ -116,6 +121,13 @@ function respond_404() {
 	];
 }
 
+# Single 
+function respond_bleat($id) {
+	$bleats = [R::load('bleat', (integer)$id)];
+	return transform($bleats);
+}
+
+# Atom feed
 function respond_feed() {
 	$bleats = R::findAll('bleat', 'ORDER BY created DESC LIMIT 20');
 	$data['updated'] = $bleats[0]['created'];
@@ -123,19 +135,23 @@ function respond_feed() {
 	return array_merge($data, transform($bleats));
 }
 
+# Index
 function respond_home() {
 	$bleats = R::findAll('bleat', 'ORDER BY created DESC');
 	$data['title'] = $config['site_title'];
 	return array_merge($data, transform($bleats));
 }
 
-function respond_bleat($id) {
-	$bleats = [R::load('bleat', (integer)$id)];
-	return transform($bleats);
-}
-
+# Search result (non-FTS)
 function respond_search($query) {
 	$query = filter_var($query, FILTER_SANITIZE_STRING);
+	if (empty($query)) {
+		$query = filter_input(INPUT_GET, 's', FILTER_SANITIZE_STRING);
+		if (empty($query)) {
+			return [];
+		}
+		redirect_search($query);
+	}
 	$bleats = R::find('bleat', 'body LIKE ?', ["%$query%"], 'ORDER BY created DESC');
 	$data['title'] = 'Search results for "' . $query . '"';
 	$result = ngettext("result", "results",count($bleats));
@@ -143,6 +159,7 @@ function respond_search($query) {
 	return array_merge($data, transform($bleats));
 }
 
+# Tag pages
 function respond_tag($tag) {
 	$tag = filter_var($tag, FILTER_SANITIZE_STRING);
 	$bleats = R::find('bleat', 'body LIKE ?', ["%#$tag%"], 'ORDER BY created DESC');

@@ -96,6 +96,12 @@ function page_intro() {
 			padding: 0 0.5em;
 		}
 
+		nav form {
+			display:inline-block;
+			margin:0 0.5em;
+			line-height: 1.8em;
+		}
+
 		form {
 			margin: 2em 0;
 		}
@@ -158,15 +164,17 @@ function page_intro() {
 </head>
 <body>
 	<nav>
-		<ul>
-			<li>
+		<ul style="display:flow-root">
+			<li style="float:left;">
 				<a href="/" class="nunderlined">🐑</a>
 				<?php 	if ( !isset($_SESSION[SESSION_LOGIN])): ?>
 					<a href="/login">Login</a>
 				<?php else: ?>
 					<a href="/logout">Logout</a>
 				<?php endif; ?>
-
+			</li>
+			<li style="float:right;">
+				<form action="/search" method="get"><input type="text" name="s" required /><input type="submit" value="🔎" /></form>
 			</li>
 		</ul>
 	</nav>
