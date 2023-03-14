@@ -209,7 +209,10 @@ if ($user_config) {
 } 
 
 # Router
-$path_info = $_SERVER['PATH_INFO'] ?? '/home';
+$path_info = '/home';
+if (!empty($_SERVER['PATH_INFO'])) {
+	$path_info = $_SERVER['PATH_INFO'];
+}
 $action = strtok($path_info, '/');
 switch ($action) {
 	case 'bleat':
