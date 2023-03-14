@@ -5,7 +5,8 @@ Barrier free super simple blogging, selfhosted.
 - SQLite based portable single author blog
 - Twitter like interface
 - Friction free Markdown entry
-- Generates Atom feed
+- Generates a discoverable Atom feed (/feed)
+- Hashtags support, by just typing them.
 
 # Getting started
 
@@ -36,7 +37,6 @@ Place a `config.ini` file in the project root with the following contents and up
 # TODO
 
 - attach an image
-- tagging
 - docs
 - integration into 'flock' (wip)
 
