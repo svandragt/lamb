@@ -37,7 +37,6 @@ Place a `config.ini` file in the project root with the following contents and up
 
 - attach an image
 - tagging
-- ini based site configuration
 - docs
 - integration into 'flock' (wip)
 
