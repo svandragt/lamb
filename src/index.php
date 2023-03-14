@@ -134,6 +134,15 @@ function respond_bleat($id) {
 	return transform($bleats);
 }
 
+function respond_tag($tag) {
+	global $config;
+	$tag = filter_var($tag, FILTER_SANITIZE_STRING);
+
+	$bleats = R::find('bleat', 'body LIKE ?', ["%#$tag%"], 'ORDER BY created DESC');
+	$data['title'] = 'Tagged with #' . $tag;
+	return array_merge($data, transform($bleats));
+}
+
 # Bootstrap
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
@@ -142,7 +151,7 @@ $config = [
 	'author_name' => 'Joe Sheeple',
 	'site_title' => 'Bleats',
 ];
-$user_config = parse_ini_file('../config.ini');
+$user_config = @parse_ini_file('../config.ini');
 if ($user_config) {
 	$config = array_merge($config, $user_config);
 } 
@@ -175,7 +184,10 @@ switch ($action) {
 	case 'logout':
 		redirect_logout();
 		break;
-
+	case 'tag':
+		$tag = strtok('/');
+		$data = respond_tag($tag);
+		break;
 	default:
 		$data = respond_404();
 		break;

@@ -27,6 +27,10 @@ function date_created($bleat) {
 	);
 }
 
+function parse_tags($text) {
+	return preg_replace('/(?:^|\s)#(\w+)/', ' <a href="/tag/$1">#$1</a>', $text);
+}
+
 function site_title() {
 	global $config;
 	return sprintf('<h1>%s</h1>', $config['site_title']);
