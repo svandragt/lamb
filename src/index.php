@@ -10,17 +10,6 @@ define('BUTTON_LOGIN', 'Log in');
 define('CSRF_TOKEN_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 define('SESSION_LOGIN', 'loggedin');
-
-$config = [
-	'author_email' => 'joe.sheeple@example.com',
-	'author_name' => 'Joe Sheeple',
-	'site_title' => 'Bleats',
-];
-$user_config = parse_ini_file('config.ini') ?? [];
-if ($user_config) {
-	$config = array_merge($config, $user_config);
-} 
-
 $hostname = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
 define('HOSTNAME', $hostname);
 
@@ -135,6 +124,17 @@ function process($bleats) {
 	}
 	return $data;
 }
+
+
+$config = [
+	'author_email' => 'joe.sheeple@example.com',
+	'author_name' => 'Joe Sheeple',
+	'site_title' => 'Bleats',
+];
+$user_config = parse_ini_file('../config.ini') ?? [];
+if ($user_config) {
+	$config = array_merge($config, $user_config);
+} 
 
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
