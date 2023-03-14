@@ -142,7 +142,7 @@ $config = [
 	'author_name' => 'Joe Sheeple',
 	'site_title' => 'Bleats',
 ];
-$user_config = parse_ini_file('../config.ini') ?? [];
+$user_config = parse_ini_file('../config.ini');
 if ($user_config) {
 	$config = array_merge($config, $user_config);
 } 
