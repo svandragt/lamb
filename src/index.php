@@ -181,7 +181,7 @@ function respond_search($query) {
 		redirect_search($query);
 	}
 	$bleats = R::find('bleat', 'body LIKE ?', ["%$query%"], 'ORDER BY created DESC');
-	$data['title'] = 'Search results for "' . $query . '"';
+	$data['title'] = 'Searched for "' . $query . '"';
 	$result = ngettext("result", "results",count($bleats));
 	$data['intro'] = count($bleats) . " $result found.";
 	return array_merge($data, transform($bleats));
