@@ -1,3 +1,4 @@
 /vendor/
 content/*.md
 *.db
+config.ini
