@@ -211,7 +211,7 @@ if ($user_config) {
 # Router
 $request_uri = '/home';
 if ($_SERVER['REQUEST_URI'] !== '/') {
-	$request_uri = $_SERVER['REQUEST_URI'];
+	$request_uri = strtok($_SERVER['REQUEST_URI'], '?');
 }
 $action = strtok($request_uri, '/');
 switch ($action) {
