@@ -73,9 +73,15 @@ function page_intro() {
 
 
 	<style type="text/css">
+		html, body {
+			padding: 0;
+			margin:0;
+		}
+
 		body {
 			font: 16px/1.4em "Inter", sans-serif;
-			color:  #222;
+			color:  RGB(40, 39, 35);
+			background: #f0efe7;
 		}
 
 		input[type='submit'], button {
@@ -88,7 +94,8 @@ function page_intro() {
 		}
 
 		nav {
-			background: #444;
+			background: RGB(90, 79, 71);
+			color: white;
 		}
 
 		nav ul, nav li {
@@ -99,7 +106,6 @@ function page_intro() {
 
 		nav a {
 			display:inline-block;
-			border: 0 1px solid white;
 			color: white;
 			line-height: 2em;
 			padding: 0 0.5em;
@@ -127,15 +133,16 @@ function page_intro() {
 		}
 
 		h1 {
-			border-top:  2px solid black;
+			border-top:  2px solid RGB(90, 79, 71);
 			padding-top: 1em;
 		}
 
 		article	 {
-			background: #eee;
+			background: #fff;
 			padding: 0.1px 1em;
-			border-bottom: 1px solid #aaa;
+			border: 1px solid RGB(220, 219, 211);
 			margin: 1rem 0;
+			border-radius: 4px;
 		}
 		section:last-child {
 			border:none;
@@ -144,10 +151,10 @@ function page_intro() {
 		main small {
 			overflow:auto;
 			border-top: 1px dotted #aaa;
-			background: #ddd;
+			background: RGBA(240, 239, 231, 0.5);
 			display:block;
 			margin: 0 -1rem;
-			padding: 0 1rem;
+			padding: 1px 1rem;
 		}
 		main small a {
 			margin-right: 1rem;
