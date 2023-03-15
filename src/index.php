@@ -209,11 +209,11 @@ if ($user_config) {
 } 
 
 # Router
-$path_info = '/home';
-if (!empty($_SERVER['PATH_INFO'])) {
-	$path_info = $_SERVER['PATH_INFO'];
+$request_uri = '/home';
+if ($_SERVER['REQUEST_URI'] !== '/') {
+	$request_uri = $_SERVER['REQUEST_URI'];
 }
-$action = strtok($path_info, '/');
+$action = strtok($request_uri, '/');
 switch ($action) {
 	case 'bleat':
 		$id = strtok('/');
