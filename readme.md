@@ -33,6 +33,8 @@ Place a `config.ini` file in the project root with the following contents and up
 ;site_title = Bleats
 ```
 
+See also [reference nginx configuration](.nginx/readme.md).
+
 # TODO
 
 - attach an image

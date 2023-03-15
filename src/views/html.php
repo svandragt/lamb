@@ -66,6 +66,7 @@ function page_intro() {
 <!DOCTYPE html>
 <html>
 <head>
+	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<meta charset="utf-8">
 	<title><?= $config['site_title'] ?></title>
 	<link rel="alternate" type="application/atom+xml" href="<?= HOSTNAME; ?>/feed/" title="<?= $config['site_title'] ?>">
