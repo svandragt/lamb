@@ -1,4 +1,3 @@
-# HTTPS 
 server {
 	listen 80;
 
