@@ -7,7 +7,7 @@ sudo chown $USER:www-data data -R
 sudo chmod g+w data -R
 ```
 
-Copy the files in the `site-available` and `snippets` into the respective directories. The `fastcgi`  and `php` configuration might already exist on the system, in which case you can use these as reference.
+Copy the files in the `site-available` and `snippets` into the respective directories. The `fastcgi`  and `php` configuration files might already exist on the system, in which case you can use these as known-good reference.
 
 Update the `lamb.test` file to point to your preferred server_name, logs and document root.
 
