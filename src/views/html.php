@@ -111,9 +111,15 @@ function page_intro() {
 			line-height: 1.9em;
 		}
 
+		footer {
+			text-align: center;
+		}
+
+
 		form {
 			margin: 2em 0;
 		}
+
 
 		h1,h2,h3 {
 			font-weight: normal;
@@ -134,7 +140,7 @@ function page_intro() {
 			border:none;
 		}
 
-		small {
+		main small {
 			overflow:auto;
 			border-top: 1px dotted #aaa;
 			background: #ddd;
@@ -142,7 +148,7 @@ function page_intro() {
 			margin: 0 -1rem;
 			padding: 0 1rem;
 		}
-		small a {
+		main small a {
 			margin-right: 1rem;
 		}
 
@@ -201,5 +207,8 @@ function page_intro() {
 		
 		<?php require("views/actions/$action" . '.php'); ?>
 	</main>
+	<footer>
+		<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
+	</footer>
 </body>
 </html>
