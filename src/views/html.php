@@ -113,6 +113,7 @@ function page_intro() {
 
 		footer {
 			text-align: center;
+			opacity:0.5;
 		}
 
 
