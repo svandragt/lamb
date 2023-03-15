@@ -51,7 +51,7 @@ function transform($bleats) {
 		return array_merge($front_matter,['body' => $markdown]);
 	}
 	foreach ($bleats as $b){
-		$data['items'][] = array_merge(['created' => $b->created, 'id' => $b->id],render($b->body));
+		$data['items'][] = array_merge(['created' => $b->created, 'updated' => $b->updated, 'id' => $b->id],render($b->body));
 	}
 	return $data;
 }
