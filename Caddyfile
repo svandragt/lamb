@@ -1,5 +1,5 @@
-localhost {
+lamb.test:80 {
     root * src/
-    php_fastcgi localhost:8747
+    php_fastcgi unix//run/php/php8.1-fpm.sock
     rewrite * index.php/{path}
 }
