@@ -3,7 +3,7 @@ function action_delete($bleat) {
 	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
 		return '';
 	}
-	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete"/><input type="hidden" name="csrf" value="%s" />
+	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
 </form>',
 		$bleat['id'],
 		$bleat['id'],
@@ -135,6 +135,7 @@ function page_intro() {
 		}
 
 		small {
+			overflow:auto;
 			border-top: 1px dotted #aaa;
 			background: #ddd;
 			display:block;
