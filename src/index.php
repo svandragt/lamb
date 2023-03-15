@@ -157,8 +157,8 @@ function respond_edit($id) {
 
 # Atom feed
 function respond_feed() {
-	$bleats = R::findAll('bleat', 'ORDER BY created DESC LIMIT 20');
-	$data['updated'] = $bleats[0]['created'];
+	$bleats = R::findAll('bleat', 'ORDER BY updated DESC LIMIT 20');
+	$data['updated'] = $bleats[0]['updated'];
 	$data['title'] = $config['site_title'];
 	return array_merge($data, transform($bleats));
 }
