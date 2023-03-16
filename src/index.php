@@ -260,6 +260,10 @@ switch ($action) {
 		break;
 	default:
 		$data = respond_404();
+		# Stash action
+		$data['action'] = $action;
+		$action = '404';
+		var_dump($data, $action);
 		break;
 }
 
