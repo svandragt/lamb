@@ -151,6 +151,7 @@ function respond_bleat($id) {
 }
 
 function respond_edit($id) {
+	require_login();
 	$bleat = R::load('bleat', (integer)$id);
 	return $bleat;
 }

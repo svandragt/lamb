@@ -73,6 +73,15 @@ function page_intro() {
 
 
 	<style type="text/css">
+		:root {
+			--shadow: #050100;
+			--bg: #9A5F3D;
+			--fg: #FEFEFE;
+			--bg2: #86745C;
+			--bglight: #E2DCD7;
+			--info: #FEE684;
+			--link: #027EAB;
+		}
 		html, body {
 			padding: 0;
 			margin:0;
@@ -80,8 +89,8 @@ function page_intro() {
 
 		body {
 			font: 16px/1.4em "Inter", sans-serif;
-			color:  RGB(40, 39, 35);
-			background: #f0efe7;
+			color:  var(--shadow);
+			background: var(--bglight);
 		}
 
 		input[type='submit'], button {
@@ -94,8 +103,8 @@ function page_intro() {
 		}
 
 		nav {
-			background: RGB(90, 79, 71);
-			color: white;
+			background: var(--bg);
+			color: var(--fg);
 		}
 
 		nav ul, nav li {
@@ -106,7 +115,7 @@ function page_intro() {
 
 		nav a {
 			display:inline-block;
-			color: white;
+			color: var(--fg);
 			line-height: 2em;
 			padding: 0 0.5em;
 		}
@@ -133,25 +142,28 @@ function page_intro() {
 		}
 
 		h1 {
-			border-top:  2px solid RGB(90, 79, 71);
+			border-top:  2px solid var(--shadow);
 			padding-top: 1em;
 		}
 
 		article	 {
-			background: #fff;
+			background: var(--fg);
 			padding: 0.1px 1em;
-			border: 1px solid RGB(220, 219, 211);
-			margin: 1rem 0;
+			border-bottom: 1px solid var(--bg2);
 			border-radius: 4px;
+			margin: 0 0 1rem 0;
 		}
 		section:last-child {
 			border:none;
 		}
 
+		main a {
+			color: var(--link);
+		}
+
 		main small {
 			overflow:auto;
-			border-top: 1px dotted #aaa;
-			background: RGBA(240, 239, 231, 0.5);
+			border-top: 1px dotted var(--bg2);
 			display:block;
 			margin: 0 -1rem;
 			padding: 1px 1rem;
@@ -178,12 +190,45 @@ function page_intro() {
 		.flash {
 			margin: 1em 0; 
 			padding: 0.25em 0.5em;
-			background: orange;
+			background: var(--info);
+			border: 1px solid var(--bg);
+			border-radius: 4px;
 		} 
 
 		.nunderlined {
 			text-decoration: none;
 		}
+
+		/* Text meant only for screen readers. */
+.screen-reader-text {
+  border: 0;
+  clip: rect(1px, 1px, 1px, 1px);
+  clip-path: inset(50%);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  word-wrap: normal !important;
+}
+
+.screen-reader-text:focus {
+  background-color: #eee;
+  clip: auto !important;
+  clip-path: none;
+  color: #444;
+  display: block;
+  font-size: 1em;
+  height: auto;
+  left: 5px;
+  line-height: normal;
+  padding: 15px 23px 14px;
+  text-decoration: none;
+  top: 5px;
+  width: auto;
+  z-index: 100000; /* Above WP toolbar. */
+}
 	</style>
 </head>
 <body>
@@ -198,7 +243,7 @@ function page_intro() {
 				<?php endif; ?>
 			</li>
 			<li style="float:right;">
-				<form action="/search" method="get"><input type="text" name="s" required /><input type="submit" value="🔎" /></form>
+				<form action="/search" method="get"><label><span class="screen-reader-text">Search</span> <input type="text" name="s" required /><input type="submit" value="🔎" /></form>
 			</li>
 		</ul>
 	</nav>
@@ -208,7 +253,7 @@ function page_intro() {
 		while (count($_SESSION['flash']) > 0):
 			$flash = array_pop($_SESSION['flash']);
 			?>
-			<div class="flash"><?= $flash; ?></div>
+			<div class="flash">⚠️ <?= $flash; ?></div>
 		<?php 
 		endwhile;
 		endif; ?>
