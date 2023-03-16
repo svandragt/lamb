@@ -7,6 +7,7 @@ Barrier free super simple blogging, selfhosted.
 - Friction free Markdown entry
 - Generates a discoverable Atom feed (/feed)
 - Hashtags support, by just typing them.
+- 404 fallback url feature (redirects 404's relative urls to another site).
 
 # Getting started
 
@@ -31,6 +32,7 @@ Place a `config.ini` file in the project root with the following contents and up
 ;author_email = joe.sheeple@example.com
 ;author_name = Joe Sheeple
 ;site_title = Bleats
+;404_fallback = https://my.oldsite.com
 ```
 
 See also [reference nginx configuration](.nginx/readme.md).

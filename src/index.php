@@ -57,6 +57,12 @@ function transform($bleats) {
 }
 
 # Router handling
+function redirect_404($fallback) {
+	global $request_uri;
+	header("Location: $fallback/$request_uri");
+	die("Redirecting to $fallback/$request_uri");
+}
+
 function redirect_created() {
 	require_login();
 	require_csrf();
@@ -80,10 +86,9 @@ function redirect_deleted($id) {
 	require_csrf();	
 
 	$bleat = R::load('bleat', (integer)$id);
-	if (empty($bleat)) {
-		return respond_404();
+	if (! empty($bleat)) {
+		R::trash( $bleat );
 	} 
-	R::trash( $bleat );
 	redirect_home();
 }
 
@@ -259,11 +264,17 @@ switch ($action) {
 		$data = respond_tag($tag);
 		break;
 	default:
+		if (isset($config['404_fallback'])) {
+			$fallback = $config['404_fallback'];
+			if (filter_var($fallback, FILTER_VALIDATE_URL)) {
+				redirect_404($fallback);
+			}
+		}
+		# Display
 		$data = respond_404();
 		# Stash action
 		$data['action'] = $action;
 		$action = '404';
-		var_dump($data, $action);
 		break;
 }
 
