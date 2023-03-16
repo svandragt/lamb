@@ -138,7 +138,8 @@ function page_intro() {
 
 
 		h1,h2,h3 {
-			font-weight: normal;
+			font-weight: 800;
+			color: var(--bg);
 		}
 
 		h1 {
