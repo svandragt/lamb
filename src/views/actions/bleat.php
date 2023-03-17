@@ -1,4 +1,4 @@
 <?= page_title(); ?>
 <?= page_intro(); ?>
 
-<?php require "views/_items.php"; ?>
+<?php require ROOT_DIR . "/views/_items.php"; ?>

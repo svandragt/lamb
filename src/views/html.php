@@ -1,268 +1,274 @@
-<?php 
-function action_delete($bleat) {
-	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
+<?php
+global $config;
+global $action;
+function action_delete( $bleat ) : string {
+	if ( ! isset( $bleat['id'] ) || ! $_SESSION[ SESSION_LOGIN ] ) {
 		return '';
 	}
-	return sprintf('<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>',
-		$bleat['id'],
-		$bleat['id'],
-		csrf_token(),
-	);
+
+	return sprintf( '<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
+</form>', $bleat['id'], $bleat['id'], csrf_token() );
 }
 
-function action_edit($bleat) {
-	if (! isset($bleat['id']) || ! $_SESSION[SESSION_LOGIN]) {
+function action_edit( $bleat ) : string {
+	if ( ! isset( $bleat['id'] ) || ! $_SESSION[ SESSION_LOGIN ] ) {
 		return '';
 	}
-	return sprintf('<button type="button" onclick="location.href=\'/edit/%s\'">Edit</button>',
-		$bleat['id'],
-	);
-}
-function csrf_token() {
-	$_SESSION[CSRF_TOKEN_NAME] = $_SESSION[CSRF_TOKEN_NAME] ?? hash('sha256',uniqid(mt_rand(), true));
-	return $_SESSION[CSRF_TOKEN_NAME];
+
+	return sprintf( '<button type="button" onclick="location.href=\'/edit/%s\'">Edit</button>', $bleat['id'] );
 }
 
+function csrf_token() : string {
+	$_SESSION[ CSRF_TOKEN_NAME ] = $_SESSION[ CSRF_TOKEN_NAME ] ?? hash( 'sha256', uniqid( mt_rand(), true ) );
 
-function date_created($bleat) {
-	if (! isset($bleat['created'])) {
+	return $_SESSION[ CSRF_TOKEN_NAME ];
+}
+
+function date_created( $bleat ) : string {
+	if ( ! isset( $bleat['created'] ) ) {
 		return '';
 	}
-	return sprintf('<a href="/bleat/%s">%s</a>',
-		$bleat['id'],
-		$bleat['created']
-	);
+
+	return sprintf( '<a href="/bleat/%s">%s</a>', $bleat['id'], $bleat['created'] );
 }
 
-function parse_tags($text) {
-	return preg_replace('/(?:^|\s)#(\w+)/', ' <a href="/tag/$1">#$1</a>', $text);
+function parse_tags( $text ) {
+	return preg_replace( '/(?:^|\s)#(\w+)/', ' <a href="/tag/$1">#$1</a>', $text );
 }
 
-function site_title() {
+function site_title() : string {
 	global $config;
-	return sprintf('<h1>%s</h1>', $config['site_title']);
+
+	return sprintf( '<h1>%s</h1>', $config['site_title'] );
 }
 
-function page_title() {
+function page_title() : string {
 	global $data;
-	if (! isset($data['title'])) {
+	if ( ! isset( $data['title'] ) ) {
 		return '';
 	}
-	return sprintf('<h1>%s</h1>', $data['title']);
+
+	return sprintf( '<h1>%s</h1>', $data['title'] );
 }
 
-function page_intro() {
+function page_intro() : string {
 	global $data;
-	if (! isset($data['intro'])) {
+	if ( ! isset( $data['intro'] ) ) {
 		return '';
 	}
-	return sprintf('<p>%s</p>', $data['intro']);
+
+	return sprintf( '<p>%s</p>', $data['intro'] );
 }
-
-
 
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en-GB">
 <head>
-	<meta name="viewport" content="width=device-width, initial-scale=1">
-	<meta charset="utf-8">
-	<title><?= $config['site_title'] ?></title>
-	<link rel="alternate" type="application/atom+xml" href="<?= HOSTNAME; ?>/feed/" title="<?= $config['site_title'] ?>">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title><?= $config['site_title'] ?></title>
+    <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
+          title="<?= $config['site_title'] ?>">
 
 
-	<style type="text/css">
-		:root {
-			--shadow: #050100;
-			--bg: #9A5F3D;
-			--fg: #FEFEFE;
-			--bg2: #86745C;
-			--bglight: #E2DCD7;
-			--info: #FEE684;
-			--link: #027EAB;
-		}
-		html, body {
-			padding: 0;
-			margin:0;
-		}
+    <style>
+        :root {
+            --shadow: #050100;
+            --bg: #9A5F3D;
+            --fg: #FEFEFE;
+            --bg2: #86745C;
+            --bglight: #E2DCD7;
+            --info: #FEE684;
+            --link: #027EAB;
+        }
 
-		body {
-			font: 16px/1.4em "Inter", sans-serif;
-			color:  var(--shadow);
-			background: var(--bglight);
-		}
+        html, body {
+            padding: 0;
+            margin: 0;
+        }
 
-		input[type='submit'], button {
-			cursor: pointer;
-		}
-		main {
-			margin: auto;
-			padding: 0 1%;
-			max-width:  70ch;
-		}
+        body {
+            font: 16px/1.4em "Inter", sans-serif;
+            color: var(--shadow);
+            background: var(--bglight);
+        }
 
-		nav {
-			background: var(--bg);
-			color: var(--fg);
-		}
+        input[type='submit'], button {
+            cursor: pointer;
+        }
 
-		nav ul, nav li {
-			display: inline;
-			margin: 0;
-			padding:0;
-		}
+        main {
+            margin: auto;
+            padding: 0 1%;
+            max-width: 70ch;
+        }
 
-		nav a {
-			display:inline-block;
-			color: var(--fg);
-			line-height: 2em;
-			padding: 0 0.5em;
-		}
+        nav {
+            background: var(--bg);
+            color: var(--fg);
+        }
 
-		nav form {
-			display:inline-block;
-			margin:0 0.5em;
-			line-height: 1.9em;
-		}
+        nav ul, nav li {
+            display: inline;
+            margin: 0;
+            padding: 0;
+        }
 
-		footer {
-			text-align: center;
-			opacity:0.5;
-		}
+        nav a {
+            display: inline-block;
+            color: var(--fg);
+            line-height: 2em;
+            padding: 0 0.5em;
+        }
 
+        nav form {
+            display: inline-block;
+            margin: 0 0.5em;
+            line-height: 1.9em;
+        }
 
-		form {
-			margin: 2em 0;
-		}
+        footer {
+            text-align: center;
+            opacity: 0.5;
+        }
 
 
-		h1,h2,h3 {
-			font-weight: 800;
-			color: var(--bg);
-		}
+        form {
+            margin: 2em 0;
+        }
 
-		h1 {
-			border-top:  2px solid var(--shadow);
-			padding-top: 1em;
-		}
 
-		article	 {
-			background: var(--fg);
-			padding: 0.1px 1em;
-			border-bottom: 1px solid var(--bg2);
-			border-radius: 4px;
-			margin: 0 0 1rem 0;
-		}
-		section:last-child {
-			border:none;
-		}
+        h1, h2, h3 {
+            font-weight: 800;
+            color: var(--bg);
+        }
 
-		main a {
-			color: var(--link);
-		}
+        h1 {
+            border-top: 2px solid var(--shadow);
+            padding-top: 1em;
+        }
 
-		main small {
-			overflow:auto;
-			border-top: 1px dotted var(--bg2);
-			display:block;
-			margin: 0 -1rem;
-			padding: 1px 1rem;
-		}
-		main small a {
-			margin-right: 1rem;
-		}
+        article {
+            background: var(--fg);
+            padding: 1px 1em;
+            border-bottom: 1px solid var(--bg2);
+            border-radius: 4px;
+            margin: 0 0 1rem 0;
+        }
 
-		small form {
-			margin: auto;
-			display:inline;
-		}
+        section:last-child {
+            border: none;
+        }
 
-		textarea {
-			font: 12px/1.4em "DejaVu Sans Mono", monospace;
-			width: 100%;
-			max-width: 100%;
-			min-height: 10em;
-			display:block;
-			margin: 1em 0;
-			box-sizing: border-box;
-		}
+        main a {
+            color: var(--link);
+        }
 
-		.flash {
-			margin: 1em 0; 
-			padding: 0.25em 0.5em;
-			background: var(--info);
-			border: 1px solid var(--bg);
-			border-radius: 4px;
-		} 
+        main small {
+            overflow: auto;
+            border-top: 1px dotted var(--bg2);
+            display: block;
+            margin: 0 -1rem;
+            padding: 1px 1rem;
+        }
 
-		.nunderlined {
-			text-decoration: none;
-		}
+        main small a {
+            margin-right: 1rem;
+        }
 
-		/* Text meant only for screen readers. */
-.screen-reader-text {
-  border: 0;
-  clip: rect(1px, 1px, 1px, 1px);
-  clip-path: inset(50%);
-  height: 1px;
-  margin: -1px;
-  overflow: hidden;
-  padding: 0;
-  position: absolute;
-  width: 1px;
-  word-wrap: normal !important;
-}
+        small form {
+            margin: auto;
+            display: inline;
+        }
 
-.screen-reader-text:focus {
-  background-color: #eee;
-  clip: auto !important;
-  clip-path: none;
-  color: #444;
-  display: block;
-  font-size: 1em;
-  height: auto;
-  left: 5px;
-  line-height: normal;
-  padding: 15px 23px 14px;
-  text-decoration: none;
-  top: 5px;
-  width: auto;
-  z-index: 100000; /* Above WP toolbar. */
-}
-	</style>
+        textarea {
+            font: 12px/1.4em "DejaVu Sans Mono", monospace;
+            width: 100%;
+            max-width: 100%;
+            min-height: 10em;
+            display: block;
+            margin: 1em 0;
+            box-sizing: border-box;
+        }
+
+        .flash {
+            margin: 1em 0;
+            padding: 0.25em 0.5em;
+            background: var(--info);
+            border: 1px solid var(--bg);
+            border-radius: 4px;
+        }
+
+        .nunderlined {
+            text-decoration: none;
+        }
+
+        /* Text meant only for screen readers. */
+        .screen-reader-text {
+            border: 0;
+            clip: rect(1px, 1px, 1px, 1px);
+            clip-path: inset(50%);
+            height: 1px;
+            margin: -1px;
+            overflow: hidden;
+            padding: 0;
+            position: absolute;
+            width: 1px;
+            word-wrap: normal !important;
+        }
+
+        .screen-reader-text:focus {
+            background-color: #eee;
+            clip: auto !important;
+            clip-path: none;
+            color: #444;
+            display: block;
+            font-size: 1em;
+            height: auto;
+            left: 5px;
+            line-height: normal;
+            padding: 15px 23px 14px;
+            text-decoration: none;
+            top: 5px;
+            width: auto;
+            z-index: 100000; /* Above WP toolbar. */
+        }
+    </style>
 </head>
 <body>
-	<nav>
-		<ul style="display:flow-root">
-			<li style="float:left;">
-				<a href="/" class="nunderlined">🐑</a>
-				<?php 	if ( !isset($_SESSION[SESSION_LOGIN])): ?>
-					<a href="/login">Login</a>
-				<?php else: ?>
-					<a href="/logout">Logout</a>
-				<?php endif; ?>
-			</li>
-			<li style="float:right;">
-				<form action="/search" method="get"><label><span class="screen-reader-text">Search</span> <input type="text" name="s" required /><input type="submit" value="🔎" /></form>
-			</li>
-		</ul>
-	</nav>
-	<main>
-		<?php 
-		if (isset($_SESSION['flash'])):
-		while (count($_SESSION['flash']) > 0):
-			$flash = array_pop($_SESSION['flash']);
+<nav>
+    <ul style="display:flow-root">
+        <li style="float:left;">
+            <a href="/" class="nunderlined">🐑</a>
+			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+                <a href="/login">Login</a>
+			<?php else: ?>
+                <a href="/logout">Logout</a>
+			<?php endif; ?>
+        </li>
+        <li style="float:right;">
+            <form action="/search" method="get"><label><span class="screen-reader-text">Search</span> <input type="text"
+                                                                                                             name="s"
+                                                                                                             required/><input
+                            type="submit" value="🔎"/></form>
+        </li>
+    </ul>
+</nav>
+<main>
+	<?php
+	if ( isset( $_SESSION['flash'] ) ):
+		while ( count( $_SESSION['flash'] ) > 0 ):
+			$flash = array_pop( $_SESSION['flash'] );
 			?>
-			<div class="flash">⚠️ <?= $flash; ?></div>
-		<?php 
+            <div class="flash">⚠️ <?= $flash; ?></div>
+		<?php
 		endwhile;
-		endif; ?>
-		
-		<?php require("views/actions/$action" . '.php'); ?>
-	</main>
-	<footer>
-		<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
-	</footer>
+	endif; ?>
+
+	<?php require( ROOT_DIR . "/views/actions/$action.php" ); ?>
+</main>
+<footer>
+    <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
+</footer>
 </body>
 </html>

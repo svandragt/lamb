@@ -1,3 +1,6 @@
+<?php
+global $data;
+?>
 <?= page_title(); ?>
 <?= page_intro(); ?>
 
