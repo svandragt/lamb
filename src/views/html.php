@@ -153,7 +153,7 @@ function page_intro() : string {
             padding: 1px 1em;
             border-bottom: 1px solid var(--bg2);
             border-radius: 4px;
-            margin: 0 0 1rem 0;
+            margin: 1rem 0;
         }
 
         section:last-child {
