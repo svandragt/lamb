@@ -73,8 +73,8 @@ function transform( $bleats ) : array {
 # Router handling
 function redirect_404( $fallback ) {
 	global $request_uri;
-	header( "Location: $fallback/$request_uri" );
-	die( "Redirecting to $fallback/$request_uri" );
+	header( "Location: $fallback$request_uri" );
+	die( "Redirecting to $fallback$request_uri" );
 }
 
 function redirect_created() {
