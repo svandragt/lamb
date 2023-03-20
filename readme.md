@@ -27,7 +27,12 @@ LAMB_LOGIN_PASSWORD=hackme composer serve
 open http://localhost:8747/
 ```
 
-Support for Caddy (untested) is also provided.
+Support for Caddy is also provided:
+```shell
+sudo caddy run
+```
+
+Or [use nginx](https://github.com/svandragt/lamb/tree/main/.nginx).
 
 # Configuration (optional)
 
