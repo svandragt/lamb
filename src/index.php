@@ -214,7 +214,7 @@ function respond_search( $query ) : array {
 		}
 		redirect_search( $query );
 	}
-	$bleats = R::find( 'bleat', 'body LIKE ?', [ "% $query%" ], 'ORDER BY created DESC' );
+	$bleats = R::find( 'bleat', 'body LIKE ? or body LIKE ?', [ "% $query%", "$query%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Searched for "' . $query . '"';
 	$result = ngettext( "result", "results", count( $bleats ) );
 	$data['intro'] = count( $bleats ) . " $result found.";
@@ -225,7 +225,7 @@ function respond_search( $query ) : array {
 # Tag pages
 function respond_tag( $tag ) : array {
 	$tag = filter_var( $tag, FILTER_SANITIZE_STRING );
-	$bleats = R::find( 'bleat', 'body LIKE ?', [ "% #$tag%" ], 'ORDER BY created DESC' );
+	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
 	return array_merge( $data, transform( $bleats ) );
