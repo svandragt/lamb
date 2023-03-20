@@ -95,7 +95,7 @@ function redirect_created() {
 	try {
 		R::store( $bleat );
 	} catch ( SQL $e ) {
-		$_SESSION['flash'][] = 'Failed to save bleat: ' . $e->getMessage();
+		$_SESSION['flash'][] = 'Failed to save status: ' . $e->getMessage();
 	}
 	redirect_home();
 }
@@ -129,7 +129,7 @@ function redirect_edited() {
 	try {
 		R::store( $bleat );
 	} catch ( SQL $e ) {
-		$_SESSION['flash'][] = 'Failed to update bleat: ' . $e->getMessage();
+		$_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
 	}
 	redirect_home();
 }
@@ -173,7 +173,7 @@ function respond_404() : array {
 }
 
 # Single
-function respond_bleat( $id ) : array {
+function respond_status( $id ) : array {
 	$bleats = [ R::load( 'bleat', (integer) $id ) ];
 
 	return transform( $bleats );
@@ -251,9 +251,9 @@ if ( $_SERVER['REQUEST_URI'] !== '/' ) {
 }
 $action = strtok( $request_uri, '/' );
 switch ( $action ) {
-	case 'bleat':
+	case 'status':
 		$id = strtok( '/' );
-		$data = respond_bleat( $id );
+		$data = respond_status( $id );
 		break;
 	case 'edit':
 		$id = strtok( '/' );

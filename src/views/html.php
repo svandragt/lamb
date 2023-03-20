@@ -31,7 +31,7 @@ function date_created( $bleat ) : string {
 
 	$created = human_time( strtotime( $bleat['created'] ) );
 
-	return sprintf( '<a href="/bleat/%s" title="%s">%s</a>', $bleat['id'], $bleat['created'], $created );
+	return sprintf( '<a href="/status/%s" title="%s">%s</a>', $bleat['id'], $bleat['created'], $created );
 }
 
 function parse_tags( $html ) {

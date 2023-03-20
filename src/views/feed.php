@@ -21,12 +21,12 @@ $Author->addChild( 'email', $config['author_email'] );
 
 foreach ( $data['items'] as $item ) {
 	$Entry = $Xml->addChild( 'entry' );
-	$Entry->addChild( 'id', ROOT_URL . '/bleat/' . $item['id'] );
+	$Entry->addChild( 'id', ROOT_URL . '/status/' . $item['id'] );
 	$Entry->addChild( 'title', $item['title'] );
 	$Entry->addChild( 'updated', date( DATE_ATOM, strtotime( $item['updated'] ) ) );
 	$Content = $Entry->addChild( 'content', $item['body'] );
 	$Content->addAttribute( 'type', 'html' );
 	$Link = $Entry->addChild( 'link' );
-	$Link->addAttribute( 'href', ROOT_URL . '/bleat/' . $item['id'] );
+	$Link->addAttribute( 'href', ROOT_URL . '/status/' . $item['id'] );
 }
 echo $Xml->asXML();
