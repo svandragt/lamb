@@ -83,7 +83,7 @@ function redirect_created() {
 	if ( $_POST['submit'] !== BUTTON_BLEAT ) {
 		return null;
 	}
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING ) );
+	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
 	if ( empty( $contents ) ) {
 		return null;
 	}
@@ -117,8 +117,8 @@ function redirect_edited() {
 		return null;
 	}
 
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING ) );
-	$id = trim( filter_input( INPUT_POST, 'id', FILTER_SANITIZE_STRING ) );
+	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
+	$id = trim( filter_input( INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT ) );
 	if ( empty( $contents ) || empty( $id ) ) {
 		return null;
 	}
