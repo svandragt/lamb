@@ -62,6 +62,15 @@ function page_intro() : string {
 	return sprintf( '<p>%s</p>', $data['intro'] );
 }
 
+function the_styles() : void {
+	foreach ( glob( ROOT_DIR . "/css/*.css" ) as $filename ) {
+		$id = basename( $filename );
+		$href = str_replace( ROOT_DIR, ROOT_URL, $filename );
+		$html = "<link rel='stylesheet' id='%s' href='%s' />";
+		printf( $html, $id, $href );
+	}
+}
+
 /**
  * Thanks to Rose Perrone
  * @link https://stackoverflow.com/a/11813996
@@ -138,186 +147,7 @@ function human_time( $timestamp ) {
     <title><?= $config['site_title'] ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= $config['site_title'] ?>">
-
-
-    <style>
-        :root {
-            --shadow: #050100;
-            --bg: #9A5F3D;
-            --fg: #FEFEFE;
-            --bg2: #86745C;
-            --bglight: #E2DCD7;
-            --info: #FEE684;
-            --link: #027EAB;
-        }
-
-        html, body {
-            padding: 0;
-            margin: 0;
-        }
-
-        body {
-            font: 16px/1.4em "Inter", sans-serif;
-            color: var(--shadow);
-            background: var(--bglight);
-        }
-
-        code {
-            box-shadow: inset 0 0 5.5em 0 var(--bglight);
-            font: 12px/1.2em "JetBrains Mono", "Roboto Mono", monospace;
-            padding: 0 0.25rem;
-            border-radius: 4px;
-        }
-
-        pre code {
-            display: block;
-            max-width: 100%;
-            word-wrap: break-word;
-            white-space: pre-wrap;
-            padding: 0.5rem;
-        }
-
-        input[type='submit'], button {
-            cursor: pointer;
-        }
-
-        main {
-            margin: auto;
-            padding: 0 1%;
-            max-width: 80ch;
-        }
-
-        nav {
-            background: var(--bg);
-            color: var(--fg);
-        }
-
-        nav ul, nav li {
-            display: inline;
-            margin: 0;
-            padding: 0;
-        }
-
-        nav a {
-            display: inline-block;
-            color: var(--fg);
-            line-height: 2em;
-            padding: 0 0.5em;
-        }
-
-        nav form {
-            display: inline-block;
-            margin: 0 0.5em;
-            line-height: 1.9em;
-        }
-
-        footer {
-            text-align: center;
-            opacity: 0.5;
-        }
-
-
-        form {
-            margin: 2em 0;
-        }
-
-
-        h1, h2, h3 {
-            font-weight: 800;
-            color: var(--bg);
-        }
-
-        h1 {
-            border-top: 2px solid var(--shadow);
-            padding-top: 1em;
-        }
-
-        article {
-            background: var(--fg);
-            padding: 1px 1em;
-            border-bottom: 1px solid var(--bg2);
-            border-radius: 4px;
-            margin: 1rem 0;
-        }
-
-        section:last-child {
-            border: none;
-        }
-
-        main a {
-            color: var(--link);
-        }
-
-        main small {
-            overflow: auto;
-            border-top: 1px dotted var(--bg2);
-            display: block;
-            margin: 0 -1rem;
-            padding: 1px 1rem;
-        }
-
-        main small a {
-            margin-right: 1rem;
-        }
-
-        small form {
-            margin: auto;
-            display: inline;
-        }
-
-        textarea {
-            font: 12px/1.4em "DejaVu Sans Mono", monospace;
-            width: 100%;
-            max-width: 100%;
-            min-height: 10em;
-            display: block;
-            margin: 1em 0;
-            box-sizing: border-box;
-        }
-
-        .flash {
-            margin: 1em 0;
-            padding: 0.25em 0.5em;
-            background: var(--info);
-            border: 1px solid var(--bg);
-            border-radius: 4px;
-        }
-
-        .nunderlined {
-            text-decoration: none;
-        }
-
-        /* Text meant only for screen readers. */
-        .screen-reader-text {
-            border: 0;
-            clip: rect(1px, 1px, 1px, 1px);
-            clip-path: inset(50%);
-            height: 1px;
-            margin: -1px;
-            overflow: hidden;
-            padding: 0;
-            position: absolute;
-            width: 1px;
-            word-wrap: normal !important;
-        }
-
-        .screen-reader-text:focus {
-            background-color: #eee;
-            clip: auto !important;
-            clip-path: none;
-            color: #444;
-            display: block;
-            font-size: 1em;
-            height: auto;
-            left: 5px;
-            line-height: normal;
-            padding: 15px 23px 14px;
-            text-decoration: none;
-            top: 5px;
-            width: auto;
-            z-index: 100000; /* Above WP toolbar. */
-        }
-    </style>
+	<?= the_styles(); ?>
 </head>
 <body>
 <nav>
