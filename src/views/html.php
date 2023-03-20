@@ -34,8 +34,8 @@ function date_created( $bleat ) : string {
 	return sprintf( '<a href="/bleat/%s" title="%s">%s</a>', $bleat['id'], $bleat['created'], $created );
 }
 
-function parse_tags( $text ) {
-	return preg_replace( '/(?:^|\s)#(\w+)/', ' <a href="/tag/$1">#$1</a>', $text );
+function parse_tags( $html ) {
+	return preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
 }
 
 function site_title() : string {
