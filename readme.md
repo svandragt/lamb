@@ -32,7 +32,7 @@ Support for Caddy is also provided:
 sudo caddy run
 ```
 
-Or [use nginx](https://github.com/svandragt/lamb/tree/main/.nginx).
+Or [use nginx](.nginx).
 
 # Configuration (optional)
 
