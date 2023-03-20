@@ -162,14 +162,19 @@ function human_time( $timestamp ) {
             background: var(--bglight);
         }
 
+        code {
+            box-shadow: inset 0 0 5.5em 0 var(--bglight);
+            font: 12px/1.2em "JetBrains Mono", "Roboto Mono", monospace;
+            padding: 0 0.25rem;
+            border-radius: 4px;
+        }
+
         pre code {
             display: block;
             max-width: 100%;
             word-wrap: break-word;
             white-space: pre-wrap;
             padding: 0.5rem;
-            box-shadow: inset 0 0 5.5em 0 var(--bglight);
-            font: 12px/1.2em "JetBrains Mono", "Roboto Mono", monospace;
         }
 
         input[type='submit'], button {
