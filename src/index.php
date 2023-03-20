@@ -4,7 +4,6 @@ namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
-use Parsedown;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
@@ -52,7 +51,9 @@ function transform( $bleats ) : array {
 			$front_matter = parse_ini_string( $ini_text );
 		}
 		$md_text = trim( $parts[ $max - 1 ] );
-		$markdown = ( new Parsedown() )->text( $md_text );
+		$parser = new LambDown();
+		$parser->setSafeMode( true );
+		$markdown = $parser->text( $md_text );
 
 		return array_merge( $front_matter, [ 'body' => $markdown ] );
 	}
