@@ -162,6 +162,16 @@ function human_time( $timestamp ) {
             background: var(--bglight);
         }
 
+        pre code {
+            display: block;
+            max-width: 100%;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            padding: 0.5rem;
+            box-shadow: inset 0 0 5.5em 0 var(--bglight);
+            font: 12px/1.2em "JetBrains Mono", "Roboto Mono", monospace;
+        }
+
         input[type='submit'], button {
             cursor: pointer;
         }
@@ -169,7 +179,7 @@ function human_time( $timestamp ) {
         main {
             margin: auto;
             padding: 0 1%;
-            max-width: 70ch;
+            max-width: 80ch;
         }
 
         nav {
