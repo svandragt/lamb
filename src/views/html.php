@@ -138,6 +138,10 @@ function human_time( $timestamp ) {
 	return $text;
 }
 
+function redirect_to() {
+	return filter_input( INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL );
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
@@ -147,7 +151,7 @@ function human_time( $timestamp ) {
     <title><?= $config['site_title'] ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= $config['site_title'] ?>">
-	<?= the_styles(); ?>
+	<?php the_styles(); ?>
 </head>
 <body>
 <nav>
@@ -155,7 +159,7 @@ function human_time( $timestamp ) {
         <li style="float:left;">
             <a href="/" class="nunderlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-                <a href="/login">Login</a>
+                <a href="/login?redirect_to=<?= $_SERVER['REQUEST_URI']; ?>">Login</a>
 			<?php else: ?>
                 <a href="/logout">Logout</a>
 			<?php endif; ?>

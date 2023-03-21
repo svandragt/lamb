@@ -21,9 +21,9 @@ define( 'ROOT_DIR', __DIR__ );
 # Security
 function require_login() {
 	if ( ! $_SESSION[ SESSION_LOGIN ] ) {
-		$_SESSION['flash'][] = 'Please login.';
-		header( "Location: /login" );
-		die( 'Redirecting to /login' );
+		$redirect_to = filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
+		$_SESSION['flash'][] = "Please login. You will be redirected to $redirect_to";
+		redirect_uri( "/login?redirect_to=$redirect_to" );
 	}
 }
 
@@ -97,7 +97,7 @@ function redirect_created() {
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to save status: ' . $e->getMessage();
 	}
-	redirect_home();
+	redirect_uri( '/' );
 }
 
 function redirect_deleted( $id ) {
@@ -108,7 +108,7 @@ function redirect_deleted( $id ) {
 	if ( $bleat !== null ) {
 		R::trash( $bleat );
 	}
-	redirect_home();
+	redirect_uri( '/' );
 }
 
 function redirect_edited() {
@@ -131,15 +131,21 @@ function redirect_edited() {
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
 	}
-	redirect_home();
+	redirect_uri( '/' );
 }
 
-function redirect_home() {
-	header( "Location: /" );
-	die( 'Redirecting to /' );
+function redirect_uri( $where ) {
+	if ( empty( $where ) ) {
+		$where = '/';
+	}
+	header( "Location: $where" );
+	die( "Redirecting to $where" );
 }
 
 function redirect_login() {
+	if ( $_SESSION[ SESSION_LOGIN ] ) {
+		redirect_uri( '/' );
+	}
 	if ( $_POST['submit'] !== BUTTON_LOGIN ) {
 		return null;
 	}
@@ -149,12 +155,14 @@ function redirect_login() {
 	require_csrf();
 
 	$_SESSION[ SESSION_LOGIN ] = true;
-	redirect_home();
+	$where = filter_input( INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL );
+	redirect_uri( $where );
 }
 
 function redirect_logout() {
 	unset( $_SESSION[ SESSION_LOGIN ] );
-	redirect_home();
+	$_SESSION['flash'][] = "Successfully logged out.";
+	redirect_uri( '/' );
 }
 
 function redirect_search( $query ) {
@@ -264,7 +272,7 @@ switch ( $action ) {
 		break;
 	case 'delete':
 		if ( empty( $_POST ) ) {
-			redirect_home();
+			redirect_uri( '/' );
 		}
 		$id = strtok( '/' );
 		redirect_deleted( $id );
