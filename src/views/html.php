@@ -19,9 +19,9 @@ function action_edit( $bleat ) : string {
 }
 
 function csrf_token() : string {
-	$_SESSION[ CSRF_TOKEN_NAME ] = $_SESSION[ CSRF_TOKEN_NAME ] ?? hash( 'sha256', uniqid( mt_rand(), true ) );
+	$_SESSION[ HIDDEN_CSRF_NAME ] = $_SESSION[ HIDDEN_CSRF_NAME ] ?? hash( 'sha256', uniqid( mt_rand(), true ) );
 
-	return $_SESSION[ CSRF_TOKEN_NAME ];
+	return $_SESSION[ HIDDEN_CSRF_NAME ];
 }
 
 function date_created( $bleat ) : string {
