@@ -259,6 +259,11 @@ if ( $_SERVER['REQUEST_URI'] !== '/' ) {
 }
 $action = strtok( $request_uri, '/' );
 switch ( $action ) {
+	case '404':
+		$data = respond_404();
+		$data['action'] = $action;
+		$action = '404';
+		break;
 	case 'status':
 		$id = strtok( '/' );
 		$data = respond_status( $id );
