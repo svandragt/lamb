@@ -25,6 +25,8 @@
         }
     },
     "scripts": {
-        "serve": "php -S localhost:8747 -t src"
+        "serve": "php -S localhost:8747 -t src",
+        "serve:caddy": "sudo caddy run",
+        "serve:nginx": "sudo systemctl nginx start"
     }
 }
