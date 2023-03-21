@@ -161,7 +161,6 @@ function redirect_login() {
 
 function redirect_logout() {
 	unset( $_SESSION[ SESSION_LOGIN ] );
-	$_SESSION['flash'][] = "Successfully logged out.";
 	redirect_uri( '/' );
 }
 

@@ -28,6 +28,7 @@ open http://localhost:8747/
 ```
 
 Support for Caddy is also provided:
+
 ```shell
 sudo caddy run
 ```
@@ -58,3 +59,9 @@ See also [reference nginx configuration](.nginx/readme.md).
 # Screenshot
 
 ![image](https://i.imgur.com/rwk2VmV.png)
+
+# Philosophy
+
+- Simple over complex.
+- Opinionated defaults over settings.
+- Assume success, communicate failure.
