@@ -1,8 +1,8 @@
 <?php if ( $_SESSION[ SESSION_LOGIN ] ): ?>
     <form method="post" action="/">
         <textarea placeholder="Bleat here..." name="contents" required></textarea>
-        <input type="submit" name="submit" value="<?= BUTTON_BLEAT; ?>">
-        <input type="hidden" name="<?= CSRF_TOKEN_NAME; ?>" value="<?= csrf_token(); ?>"/>
+        <input type="submit" name="submit" value="<?= BUTTON_SUBMIT_CREATE; ?>">
+        <input type="hidden" name="<?= INPUT_CSRF; ?>" value="<?= csrf_token(); ?>"/>
     </form>
 <?php endif; ?>
 

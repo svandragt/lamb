@@ -8,15 +8,16 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
-define( 'BUTTON_BLEAT', 'Bleat!' );
-define( 'BUTTON_SAVE', 'Save' );
-define( 'BUTTON_LOGIN', 'Log in' );
-define( 'CSRF_TOKEN_NAME', 'csrf' );
-define( 'LOGIN_PASSWORD', getenv( "LAMB_LOGIN_PASSWORD" ) );
-define( 'SESSION_LOGIN', 'logged-in' );
 $root_url = ( isset( $_SERVER['HTTPS'] ) && $_SERVER['HTTPS'] === 'on' ? "https" : "http" ) . "://" . $_SERVER["HTTP_HOST"];
-define( 'ROOT_URL', $root_url );
+define( 'BUTTON_SUBMIT_CREATE', 'Bleat!' );
+define( 'BUTTON_SUBMIT_EDIT', 'Save' );
+define( 'BUTTON_SUBMIT_LOGIN', 'Log in' );
+define( 'INPUT_CSRF', 'csrf' );
+define( 'LOGIN_PASSWORD', getenv( "LAMB_LOGIN_PASSWORD" ) );
 define( 'ROOT_DIR', __DIR__ );
+define( 'ROOT_URL', $root_url );
+define( 'SESSION_LOGIN', 'logged-in' );
+unset( $root_url );
 
 # Security
 function require_login() {
@@ -28,13 +29,13 @@ function require_login() {
 }
 
 function require_csrf() {
-	$token = filter_input( INPUT_POST, CSRF_TOKEN_NAME, FILTER_SANITIZE_STRING );
-	if ( ! $token || $token !== $_SESSION[ CSRF_TOKEN_NAME ] ) {
+	$token = filter_input( INPUT_POST, INPUT_CSRF, FILTER_SANITIZE_STRING );
+	if ( ! $token || $token !== $_SESSION[ INPUT_CSRF ] ) {
 		$txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
 		header( $txt );
 		die( $txt );
 	}
-	unset( $_SESSION[ CSRF_TOKEN_NAME ] );
+	unset( $_SESSION[ INPUT_CSRF ] );
 }
 
 # Transformation
@@ -81,7 +82,7 @@ function redirect_404( $fallback ) {
 function redirect_created() {
 	require_login();
 	require_csrf();
-	if ( $_POST['submit'] !== BUTTON_BLEAT ) {
+	if ( $_POST['submit'] !== BUTTON_SUBMIT_CREATE ) {
 		return null;
 	}
 	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
@@ -114,7 +115,7 @@ function redirect_deleted( $id ) {
 function redirect_edited() {
 	require_login();
 	require_csrf();
-	if ( $_POST['submit'] !== BUTTON_SAVE ) {
+	if ( $_POST['submit'] !== BUTTON_SUBMIT_EDIT ) {
 		return null;
 	}
 
@@ -146,7 +147,7 @@ function redirect_login() {
 	if ( $_SESSION[ SESSION_LOGIN ] ) {
 		redirect_uri( '/' );
 	}
-	if ( $_POST['submit'] !== BUTTON_LOGIN ) {
+	if ( $_POST['submit'] !== BUTTON_SUBMIT_LOGIN ) {
 		return null;
 	}
 	if ( $_POST['password'] !== LOGIN_PASSWORD ) {
