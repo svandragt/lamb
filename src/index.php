@@ -48,7 +48,7 @@ function transform( $bleats ) : array {
 		$max = count( $parts );
 		$front_matter = [];
 		if ( $max > 2 ) {
-			$ini_text = trim( $parts[ $max - 3 ] );
+			$ini_text = trim( $parts[1] );
 			$front_matter = parse_ini_string( $ini_text );
 		}
 		$md_text = trim( $parts[ $max - 1 ] );
