@@ -142,15 +142,23 @@ function redirect_to() {
 	return filter_input( INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL );
 }
 
+function current_request() {
+	return filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
+}
+
+function escape( string $html ) : string {
+	return htmlspecialchars( $html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE );
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta charset="utf-8">
-    <title><?= $config['site_title'] ?></title>
+    <title><?= escape( $config['site_title'] ) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
-          title="<?= $config['site_title'] ?>">
+          title="<?= escape( $config['site_title'] ) ?>">
 	<?php the_styles(); ?>
 </head>
 <body>
@@ -159,15 +167,16 @@ function redirect_to() {
         <li style="float:left;">
             <a href="/" class="nunderlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-                <a href="/login?redirect_to=<?= $_SERVER['REQUEST_URI']; ?>">Login</a>
+                <a href="/login?redirect_to=<?= escape( current_request() ); ?>">Login</a>
 			<?php else: ?>
                 <a href="/logout">Logout</a>
 			<?php endif; ?>
         </li>
         <li style="float:right;">
-            <form action="/search" method="get"><label><span class="screen-reader-text">Search</span> <input type="text"
-                                                                                                             name="s"
-                                                                                                             required/><input
+            <form action="/search" method="get"><label><span class="screen-reader-text">Search</span>
+                    <input type="text"
+                           name="s"
+                           required/><input
                             type="submit" value="🔎"/></form>
         </li>
     </ul>
@@ -178,7 +187,7 @@ function redirect_to() {
 		while ( count( $_SESSION['flash'] ) > 0 ):
 			$flash = array_pop( $_SESSION['flash'] );
 			?>
-            <div class="flash">⚠️ <?= $flash; ?></div>
+            <div class="flash">⚠️ <?= escape( $flash ); ?></div>
 		<?php
 		endwhile;
 	endif; ?>
