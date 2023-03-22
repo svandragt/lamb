@@ -151,10 +151,14 @@ function redirect_login() {
 	if ( $_POST['submit'] !== SUBMIT_LOGIN ) {
 		return null;
 	}
-	if ( $_POST['password'] !== LOGIN_PASSWORD ) {
+	require_csrf();
+
+	$user_pass = $_POST['password'];
+	if ( ! password_verify( $user_pass, base64_decode( LOGIN_PASSWORD ) ) ) {
+		$_SESSION['flash'][] = 'Password is incorrect, please try again.';
+
 		return null;
 	}
-	require_csrf();
 
 	$_SESSION[ SESSION_LOGIN ] = true;
 	$where = filter_input( INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL );

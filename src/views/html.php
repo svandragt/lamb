@@ -138,8 +138,8 @@ function human_time( $timestamp ) {
 	return $text;
 }
 
-function redirect_to() {
-	return filter_input( INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL );
+function redirect_to() : string {
+	return (string) filter_input( INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL );
 }
 
 function current_request() {

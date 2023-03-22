@@ -23,19 +23,13 @@ composer install
 Run:
 
 ```shell
-LAMB_LOGIN_PASSWORD=hackme composer serve
+LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
 open http://localhost:8747/
 ```
 
-Support for Caddy is also provided:
+Support for [Caddy](.caddy) and [NGINX](.nginx) is also provided:
 
-```shell
-sudo caddy run
-```
-
-Or [use nginx](.nginx).
-
-# Configuration (optional)
+# Site Configuration (optional)
 
 Place a `config.ini` file in the project root with the following contents and update any of the following lines after
 uncommenting them:
@@ -46,8 +40,6 @@ uncommenting them:
 ;site_title = Bleats
 ;404_fallback = https://my.oldsite.com
 ```
-
-See also [reference nginx configuration](.nginx/readme.md).
 
 # TODO
 
