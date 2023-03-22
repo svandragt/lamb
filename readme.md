@@ -27,7 +27,7 @@ LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
 open http://localhost:8747/
 ```
 
-Support for [Caddy](.caddy) and [NGINX](.nginx) is also provided:
+Support for [Caddy](.caddy) and [NGINX](.nginx) is also provided.
 
 # Site Configuration (optional)
 
