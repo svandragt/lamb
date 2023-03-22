@@ -4,6 +4,7 @@ namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
+use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
@@ -20,7 +21,7 @@ define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
 # Security
-function require_login() {
+function require_login() : void {
 	if ( ! $_SESSION[ SESSION_LOGIN ] ) {
 		$redirect_to = filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
 		$_SESSION['flash'][] = "Please login. You will be redirected to $redirect_to";
@@ -28,8 +29,8 @@ function require_login() {
 	}
 }
 
-function require_csrf() {
-	$token = filter_input( INPUT_POST, HIDDEN_CSRF_NAME, FILTER_SANITIZE_STRING );
+function require_csrf() : void {
+	$token = htmlspecialchars( $_POST[ HIDDEN_CSRF_NAME ] );
 	if ( ! $token || $token !== $_SESSION[ HIDDEN_CSRF_NAME ] ) {
 		$txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
 		header( $txt );
@@ -73,7 +74,7 @@ function transform( $bleats ) : array {
 }
 
 # Router handling
-function redirect_404( $fallback ) {
+#[NoReturn] function redirect_404( $fallback ) : void {
 	global $request_uri;
 	header( "Location: $fallback$request_uri" );
 	die( "Redirecting to $fallback$request_uri" );
@@ -101,7 +102,7 @@ function redirect_created() {
 	redirect_uri( '/' );
 }
 
-function redirect_deleted( $id ) {
+#[NoReturn] function redirect_deleted( $id ) : void {
 	require_login();
 	require_csrf();
 
@@ -135,7 +136,7 @@ function redirect_edited() {
 	redirect_uri( '/' );
 }
 
-function redirect_uri( $where ) {
+#[NoReturn] function redirect_uri( $where ) : void {
 	if ( empty( $where ) ) {
 		$where = '/';
 	}
@@ -160,12 +161,12 @@ function redirect_login() {
 	redirect_uri( $where );
 }
 
-function redirect_logout() {
+#[NoReturn] function redirect_logout() : void {
 	unset( $_SESSION[ SESSION_LOGIN ] );
 	redirect_uri( '/' );
 }
 
-function redirect_search( $query ) {
+#[NoReturn] function redirect_search( $query ) : void {
 	header( "Location: /search/$query" );
 	die( "Redirecting to /search/$query" );
 }
@@ -261,6 +262,7 @@ $action = strtok( $request_uri, '/' );
 switch ( $action ) {
 	case '404':
 		$data = respond_404();
+		/** @noinspection PhpArrayWriteIsNotUsedInspection */
 		$data['action'] = $action;
 		$action = '404';
 		break;
@@ -281,7 +283,6 @@ switch ( $action ) {
 		}
 		$id = strtok( '/' );
 		redirect_deleted( $id );
-		break;
 	case 'feed':
 		$data = respond_feed();
 		require_once( 'views/feed.php' );
