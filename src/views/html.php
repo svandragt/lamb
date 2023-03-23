@@ -219,6 +219,8 @@ function og_escape( string $html ) : string {
 	return htmlspecialchars( htmlspecialchars_decode( $html ), ENT_COMPAT | ENT_HTML5 );
 }
 
+header( "Content-Security-Policy: default-src 'self'" );
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
@@ -233,8 +235,8 @@ function og_escape( string $html ) : string {
 </head>
 <body>
 <nav>
-    <ul style="display:flow-root">
-        <li style="float:left;">
+    <ul>
+        <li>
             <a href="/" class="not-underlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
                 <a href="/login?redirect_to=<?= escape( current_request() ) ?>">Login</a>
@@ -242,7 +244,7 @@ function og_escape( string $html ) : string {
                 <a href="/logout">Logout</a>
 			<?php endif; ?>
         </li>
-        <li style="float:right;">
+        <li>
             <form action="/search" method="get"><label><span class="screen-reader-text">Search</span>
                     <input type="text"
                            name="s"
