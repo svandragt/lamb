@@ -75,22 +75,24 @@ function the_opengraph() {
 	}
 	$item = $data['items'][0];
 	$og_tags = [
-		'description' => strip_tags( $item['body'] ),
-		'locale' => 'en_GB',
-		'modified_time' => $item['created'],
-		'published_time' => $item['updated'],
-		'publisher' => ROOT_URL,
-		'site_name' => $config['site_title'],
-		'title' => $item['title'] ?? $config['site_title'],
-		'type' => 'article',
-		'url' => Lamb\permalink( $item ),
+		'og:description' => strip_tags( $item['body'] ),
+		'og:locale' => 'en_GB',
+		'og:modified_time' => $item['created'],
+		'og:published_time' => $item['updated'],
+		'og:publisher' => ROOT_URL,
+		'og:site_name' => $config['site_title'],
+		'og:title' => $item['title'] ?? $config['site_title'],
+		'og:type' => 'article',
+		'og:url' => Lamb\permalink( $item ),
+		'twitter:description' => strip_tags( $item['body'] ),
+		'twitter:title' => $item['title'] ?? $config['site_title'],
 
 	];
 	foreach ( $og_tags as $property => $content ) {
 		if ( empty( $content ) ) {
 			continue;
 		}
-		printf( '<meta property="og:%s" content="%s"/>' . PHP_EOL, og_escape( $property ), og_escape( $content ) );
+		printf( '<meta property="%s" content="%s"/>' . PHP_EOL, og_escape( $property ), og_escape( $content ) );
 	}
 }
 
