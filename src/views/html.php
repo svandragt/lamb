@@ -90,7 +90,7 @@ function the_opengraph() {
 		if ( empty( $content ) ) {
 			continue;
 		}
-		printf( '<meta property="og:%s" content="%s"/>' . PHP_EOL, escape( $property ), escape( $content ) );
+		printf( '<meta property="og:%s" content="%s"/>' . PHP_EOL, og_escape( $property ), og_escape( $content ) );
 	}
 }
 
@@ -203,6 +203,10 @@ function current_request() {
 
 function escape( string $html ) : string {
 	return htmlspecialchars( $html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE );
+}
+
+function og_escape( string $html ) : string {
+	return htmlspecialchars( $html, ENT_HTML5 | ENT_SUBSTITUTE );
 }
 
 ?>
