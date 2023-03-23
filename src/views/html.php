@@ -109,7 +109,7 @@ function the_styles() : void {
 	];
 	$assets = asset_loader( $styles, 'css' );
 	foreach ( $assets as $id => $href ) {
-		printf( "<link rel='stylesheet' id='%s' href='%s' />", $id, $href );
+		printf( "<link rel='stylesheet' id='%s' href='%s'>", $id, $href );
 	}
 }
 
@@ -247,8 +247,8 @@ header( "Content-Security-Policy: default-src 'self'" );
             <form action="/search" method="get"><label><span class="screen-reader-text">Search</span>
                     <input type="text"
                            name="s"
-                           required/><input
-                            type="submit" value="🔎"/></label></form>
+                           required><input
+                            type="submit" value="🔎"></label></form>
         </li>
     </ul>
 </nav>
