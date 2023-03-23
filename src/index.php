@@ -255,6 +255,7 @@ function respond_tag( $tag ) : array {
 }
 
 # Bootstrap
+header('Cache-Control: max-age=300');
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
 $config = [
