@@ -105,7 +105,7 @@ function the_opengraph() {
 
 function the_styles() : void {
 	$styles = [
-		'' => [ '/styles.css' ],
+		'' => [ 'styles.css' ],
 	];
 	$assets = asset_loader( $styles, 'css' );
 	foreach ( $assets as $id => $href ) {
@@ -215,7 +215,7 @@ function escape( string $html ) : string {
 }
 
 function og_escape( string $html ) : string {
-	return escape( $html );
+	return htmlspecialchars( $html, ENT_QUOTES );
 }
 
 ?>
