@@ -76,6 +76,10 @@ function the_opengraph() {
 	$item = $data['items'][0];
 	$og_tags = [
 		'og:description' => strip_tags( $item['body'] ),
+		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
+		'og:image:height' => '630',
+		'og:image:type' => 'image/jpeg',
+		'og:image:width' => '1200',
 		'og:locale' => 'en_GB',
 		'og:modified_time' => $item['created'],
 		'og:published_time' => $item['updated'],
@@ -84,13 +88,12 @@ function the_opengraph() {
 		'og:title' => $item['title'] ?? $config['site_title'],
 		'og:type' => 'article',
 		'og:url' => Lamb\permalink( $item ),
+		'twitter:card' => 'summary_large_image',
 		'twitter:description' => strip_tags( $item['body'] ),
-		'twitter:title' => $item['title'] ?? $config['site_title'],
-		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-		'og:image:height' => '630',
-		'og:image:type' => 'image/jpeg',
-		'og:image:width' => '1200',
+		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
+		'twitter:title' => $item['title'] ?? $config['site_title'],
+		'twitter:url' => Lamb\permalink( $item ),
 	];
 	foreach ( $og_tags as $property => $content ) {
 		if ( empty( $content ) ) {
@@ -212,7 +215,7 @@ function escape( string $html ) : string {
 }
 
 function og_escape( string $html ) : string {
-	return htmlspecialchars( $html, ENT_HTML5 | ENT_SUBSTITUTE );
+	return escape( $html );
 }
 
 ?>
