@@ -244,11 +244,11 @@ header( "Content-Security-Policy: default-src 'self'" );
 			<?php endif; ?>
         </li>
         <li>
-            <form action="/search" method="get"><label><span class="screen-reader-text">Search</span>
+            <form action="/search" method="get"><label for="s"><span class="screen-reader-text">Search</span></label>
                     <input type="text"
                            name="s"
                            required><input
-                            type="submit" value="🔎"></label></form>
+                            type="submit" value="🔎">></form>
         </li>
     </ul>
 </nav>
