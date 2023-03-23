@@ -61,6 +61,10 @@ function transform( $bleats ) : array {
 		$parser->setSafeMode( true );
 		$markdown = $parser->text( $md_text );
 
+		if ( isset( $front_matter['title'] ) ) {
+			$markdown = $parser->text( "## {$front_matter['title']}" ) . $markdown;
+		}
+
 		return array_merge( $front_matter, [ 'body' => $markdown ] );
 	}
 
