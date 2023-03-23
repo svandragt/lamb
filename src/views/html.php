@@ -34,8 +34,8 @@ function date_created( $bleat ) : string {
 	return sprintf( '<a href="/status/%s" title="%s">%s</a>', $bleat['id'], $bleat['created'], $created );
 }
 
-function parse_tags( $html ) {
-	return preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
+function parse_tags( $html ) : string {
+	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
 }
 
 function site_title() : string {
@@ -87,7 +87,7 @@ function the_scripts() : void {
  * Thanks to Rose Perrone
  * @link https://stackoverflow.com/a/11813996
  */
-function human_time( $timestamp ) {
+function human_time( $timestamp ) : string {
 	// Get time difference and setup arrays
 	$difference = time() - $timestamp;
 	$periods = [ "second", "minute", "hour", "day", "week", "month", "years" ];
@@ -109,10 +109,10 @@ function human_time( $timestamp ) {
 	}
 
 	// Round up
-	$difference = round( $difference );
+	$difference = (int) round( $difference );
 
 	// Make plural if needed
-	if ( $difference != 1 ) {
+	if ( $difference !== 1 ) {
 		$periods[ $j ] .= "s";
 	}
 
@@ -121,9 +121,9 @@ function human_time( $timestamp ) {
 
 	// over 24 hours
 	if ( $j > 2 ) {
-		// future date over a day formate with year
+		// future date over a day format with year
 		if ( $ending === "to go" ) {
-			if ( $j == 3 && $difference == 1 ) {
+			if ( $j === 3 && $difference === 1 ) {
 				$text = "Tomorrow at " . date( "g:i a", $timestamp );
 			} else {
 				$text = date( "F j, Y \a\\t g:i a", $timestamp );
@@ -132,13 +132,13 @@ function human_time( $timestamp ) {
 			return $text;
 		}
 
-		if ( $j == 3 && $difference == 1 ) // Yesterday
+		if ( $j === 3 && $difference === 1 ) // Yesterday
 		{
 			$text = "Yesterday at " . date( "g:i a", $timestamp );
-		} else if ( $j == 3 ) // Less than a week display -- Monday at 5:28pm
+		} else if ( $j === 3 ) // Less than a week display -- Monday at 5:28pm
 		{
 			$text = date( "l \a\\t g:i a", $timestamp );
-		} else if ( $j < 6 && ! ( $j == 5 && $difference == 12 ) ) // Less than a year display -- June 25 at 5:23am
+		} else if ( $j < 6 && ! ( $j === 5 && $difference === 12 ) ) // Less than a year display -- June 25 at 5:23am
 		{
 			$text = date( "F j \a\\t g:i a", $timestamp );
 		} else // if over a year or the same month one year ago -- June 30, 2010 at 5:34pm
@@ -177,9 +177,9 @@ function escape( string $html ) : string {
 <nav>
     <ul style="display:flow-root">
         <li style="float:left;">
-            <a href="/" class="nunderlined">🐑</a>
+            <a href="/" class="not-underlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-                <a href="/login?redirect_to=<?= escape( current_request() ); ?>">Login</a>
+                <a href="/login?redirect_to=<?= escape( current_request() ) ?>">Login</a>
 			<?php else: ?>
                 <a href="/logout">Logout</a>
 			<?php endif; ?>
@@ -199,7 +199,7 @@ function escape( string $html ) : string {
 		while ( count( $_SESSION['flash'] ) > 0 ):
 			$flash = array_pop( $_SESSION['flash'] );
 			?>
-            <div class="flash">⚠️ <?= escape( $flash ); ?></div>
+            <div class="flash">⚠️ <?= escape( $flash ) ?></div>
 		<?php
 		endwhile;
 	endif; ?>
