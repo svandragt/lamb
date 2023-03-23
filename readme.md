@@ -1,4 +1,6 @@
-Literally Another Micro Blog.
+![Lamb made out of circuitry](src/images/og-image-lamb.jpg)
+
+Lamb - Literally Another Micro Blog.
 
 Barrier free super simple blogging, self-hosted.
 
