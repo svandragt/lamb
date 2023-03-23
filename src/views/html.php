@@ -89,7 +89,7 @@ function the_opengraph() {
 		'og:title' => $item['title'] ?? $config['site_title'],
 		'og:type' => 'article',
 		'og:url' => Lamb\permalink( $item ),
-		'twitter:card' => 'summary_large_image',
+		'twitter:card' => 'summary',
 		'twitter:description' => $description,
 		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
