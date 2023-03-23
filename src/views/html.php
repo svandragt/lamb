@@ -74,8 +74,9 @@ function the_opengraph() {
 		return;
 	}
 	$item = $data['items'][0];
+	$description = strtok( strip_tags( $item['body'] ), "\n" );
 	$og_tags = [
-		'og:description' => strip_tags( $item['body'] ),
+		'og:description' => $description,
 		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
 		'og:image:height' => '630',
 		'og:image:type' => 'image/jpeg',
@@ -89,7 +90,7 @@ function the_opengraph() {
 		'og:type' => 'article',
 		'og:url' => Lamb\permalink( $item ),
 		'twitter:card' => 'summary_large_image',
-		'twitter:description' => strip_tags( $item['body'] ),
+		'twitter:description' => $description,
 		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
 		'twitter:title' => $item['title'] ?? $config['site_title'],
