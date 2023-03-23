@@ -246,7 +246,7 @@ header( "Content-Security-Policy: default-src 'self'" );
         <li>
             <form action="/search" method="get"><label for="s"><span class="screen-reader-text">Search</span></label>
                     <input type="text"
-                           name="s"
+                           name="s" id="s"
                            required><input
                             type="submit" value="🔎">></form>
         </li>
