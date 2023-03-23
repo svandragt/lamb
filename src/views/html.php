@@ -74,7 +74,7 @@ function the_opengraph() {
 		return;
 	}
 	$item = $data['items'][0];
-	$description = strtok( strip_tags( $item['body'] ), "\n" );
+	$description = $item['description'];
 	$og_tags = [
 		'og:description' => $description,
 		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
@@ -216,7 +216,7 @@ function escape( string $html ) : string {
 }
 
 function og_escape( string $html ) : string {
-	return htmlspecialchars( $html, ENT_QUOTES );
+	return htmlspecialchars( htmlspecialchars_decode( $html ), ENT_COMPAT | ENT_HTML5 );
 }
 
 ?>
