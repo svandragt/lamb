@@ -63,22 +63,33 @@ function page_intro() : string {
 }
 
 function the_styles() : void {
-	foreach ( glob( ROOT_DIR . "/css/*.css" ) as $filename ) {
-		$id = basename( $filename );
-		$href = str_replace( ROOT_DIR, ROOT_URL, $filename );
-		$html = "<link rel='stylesheet' id='%s' href='%s' />";
-		printf( $html, $id, $href );
+	$styles = [
+		'' => [ '/styles.css' ],
+	];
+	$assets = asset_loader( $styles, 'css' );
+	foreach ( $assets as $id => $href ) {
+		printf( "<link rel='stylesheet' id='%s' href='%s' />", $id, $href );
 	}
 }
 
 function the_scripts() : void {
-	foreach ( glob( ROOT_DIR . "/js/**/*.js" ) as $filename ) {
-		$dir = basename( dirname( $filename ) );
-		$is_admin_script = $dir === SESSION_LOGIN;
-		if ( $dir === 'js' || ( $is_admin_script && $_SESSION[ SESSION_LOGIN ] ) ) {
-			$id = basename( $filename );
-			$href = str_replace( ROOT_DIR, ROOT_URL, $filename );
-			printf( "<script id='%s' src='%s' ></script>", $id, $href );
+	$scripts = [
+		'logged_in' => [ '/growing-input.js' ],
+	];
+	$assets = asset_loader( $scripts, 'js' );
+	foreach ( $assets as $id => $href ) {
+		printf( "<script id='%s' src='%s'></script>", $id, $href );
+	}
+}
+
+function asset_loader( $assets, $asset_dir ) : Generator {
+	foreach ( $assets as $dir => $files ) {
+		foreach ( $files as $file ) {
+			$is_admin_script = $dir === SESSION_LOGIN;
+			if ( empty( $dir ) || ( $is_admin_script && $_SESSION[ SESSION_LOGIN ] ) ) {
+				$href = ROOT_URL . "/$asset_dir/$dir$file";
+				yield md5( $href ) => $href;
+			}
 		}
 	}
 }
