@@ -62,6 +62,7 @@ function transform( $bleats ) : array {
 		$markdown = $parser->text( $md_text );
 
 		if ( isset( $front_matter['title'] ) ) {
+			$front_matter['slug'] = preg_replace( '/\W+/m', "-", $front_matter['title'] );
 			$markdown = $parser->text( "## {$front_matter['title']}" ) . $markdown;
 		}
 
