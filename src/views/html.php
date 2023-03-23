@@ -86,7 +86,11 @@ function the_opengraph() {
 		'og:url' => Lamb\permalink( $item ),
 		'twitter:description' => strip_tags( $item['body'] ),
 		'twitter:title' => $item['title'] ?? $config['site_title'],
-
+		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
+		'og:image:height' => '630',
+		'og:image:type' => 'image/jpeg',
+		'og:image:width' => '1200',
+		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
 	];
 	foreach ( $og_tags as $property => $content ) {
 		if ( empty( $content ) ) {
