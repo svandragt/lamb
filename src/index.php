@@ -60,10 +60,10 @@ function transform( $bleats ) : array {
 		$parser = new LambDown();
 		$parser->setSafeMode( true );
 		$markdown = $parser->text( $md_text );
+		$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
 
 		if ( isset( $front_matter['title'] ) ) {
 			$front_matter['slug'] = preg_replace( '/\W+/m', "-", $front_matter['title'] );
-			$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
 			$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
 		}
 

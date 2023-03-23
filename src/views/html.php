@@ -18,7 +18,7 @@ function action_edit( $bleat ) : string {
 		return '';
 	}
 
-	return sprintf( '<button type="button" onclick="location.href=\'/edit/%s\'">Edit</button>', $bleat['id'] );
+	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $bleat['id'] );
 }
 
 function csrf_token() : string {
@@ -115,7 +115,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/growing-input.js', '/confirm-delete.js' ],
+		'logged_in' => [ '/growing-input.js', '/confirm-delete.js', '/link-edit-buttons.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
