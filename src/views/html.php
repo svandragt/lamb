@@ -248,7 +248,7 @@ header( "Content-Security-Policy: default-src 'self'" );
                     <input type="text"
                            name="s"
                            required/><input
-                            type="submit" value="🔎"/></form>
+                            type="submit" value="🔎"/></label></form>
         </li>
     </ul>
 </nav>

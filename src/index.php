@@ -2,8 +2,6 @@
 
 namespace Svandragt\Lamb;
 
-$start = microtime(true);
-
 require '../vendor/autoload.php';
 
 use JetBrains\PhpStorm\NoReturn;
@@ -341,7 +339,3 @@ switch ( $action ) {
 
 # Views
 require_once( "views/html.php" );
-
-$end = microtime(true);
-$creationtime = ($end - $start);
-printf("<!-- Page created in %.6f seconds -->", $creationtime);
