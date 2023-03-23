@@ -30,7 +30,7 @@ foreach ( $data['items'] as $item ) {
 	$Entry = $Xml->addChild( 'entry' );
 	# TODO assumed status
 	$Entry->addChild( 'id', Lamb\permalink( $item ) );
-	$Entry->addChild( 'title', escape( (string) $item['title'] ) );
+	$Entry->addChild( 'title', escape( (string) ( $item['title'] ?? $config['site_title'] ) ) );
 	$Entry->addChild( 'updated', date( DATE_ATOM, strtotime( $item['updated'] ) ) );
 	$Content = $Entry->addChild( 'content', $item['body'] );
 	$Content->addAttribute( 'type', 'html' );
