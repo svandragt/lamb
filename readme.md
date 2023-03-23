@@ -18,8 +18,15 @@ Setup requirements:
 [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 
 ```shell
+# Install required system packages
 sudo apt update
 sudo apt install php8.1 php8.1-gettext php8.1-mbstring php8.1-sqlite3 php8.1-xml composer
+
+# checkout project
+git clone https://github.com/svandragt/lamb.git
+cd lamb
+
+# install project packages
 composer install
 ```
 
