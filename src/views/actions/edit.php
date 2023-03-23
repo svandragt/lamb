@@ -1,7 +1,7 @@
 <?php
 global $bleat;
-if ( $_SESSION[ SESSION_LOGIN ] ): ?>
-    <h2> Edit Bleat</h2>
+if ( isset($_SESSION[ SESSION_LOGIN ] )): ?>
+    <h2> Edit Status</h2>
 
     <form method="post" action="/edit" id="editform">
         <textarea placeholder="Bleat here..." name="contents" required><?= strip_tags( $bleat->body ); ?></textarea>

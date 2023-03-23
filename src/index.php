@@ -26,7 +26,7 @@ function permalink( $item ) : string {
 
 # Security
 function require_login() : void {
-	if ( ! $_SESSION[ SESSION_LOGIN ] ) {
+	if ( ! isset($_SESSION[ SESSION_LOGIN ]) ) {
 		$redirect_to = filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
 		$_SESSION['flash'][] = "Please login. You will be redirected to $redirect_to";
 		redirect_uri( "/login?redirect_to=$redirect_to" );
@@ -155,10 +155,10 @@ function redirect_edited() {
 }
 
 function redirect_login() {
-	if ( $_SESSION[ SESSION_LOGIN ] ) {
+	if ( isset($_SESSION[ SESSION_LOGIN ] )) {
 		redirect_uri( '/' );
 	}
-	if ( $_POST['submit'] !== SUBMIT_LOGIN ) {
+	if ( ! isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN ) {
 		return null;
 	}
 	require_csrf();

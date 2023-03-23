@@ -1,4 +1,4 @@
-<?php if ( $_SESSION[ SESSION_LOGIN ] ): ?>
+<?php if ( isset($_SESSION[SESSION_LOGIN]) ): ?>
     <form method="post" action="/">
         <textarea placeholder="Bleat here..." name="contents" required></textarea>
         <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">

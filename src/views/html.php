@@ -6,16 +6,15 @@ global $action;
 use Svandragt\Lamb;
 
 function action_delete( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! $_SESSION[ SESSION_LOGIN ] ) {
+	if ( ! isset( $bleat['id'] ) || ! isset($_SESSION[ SESSION_LOGIN ] )) {
 		return '';
 	}
-
-	return sprintf( '<form action="/delete/%s" method="post" onsubmit="return confirm(\'Really delete bleat %s?\');"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
+	return sprintf( '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
 </form>', $bleat['id'], $bleat['id'], csrf_token() );
 }
 
 function action_edit( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! $_SESSION[ SESSION_LOGIN ] ) {
+	if ( ! isset( $bleat['id'] ) || ! isset($_SESSION[ SESSION_LOGIN ]) ) {
 		return '';
 	}
 
@@ -116,7 +115,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/growing-input.js' ],
+		'logged_in' => [ '/growing-input.js', '/confirm-delete.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
@@ -128,7 +127,7 @@ function asset_loader( $assets, $asset_dir ) : Generator {
 	foreach ( $assets as $dir => $files ) {
 		foreach ( $files as $file ) {
 			$is_admin_script = $dir === SESSION_LOGIN;
-			if ( empty( $dir ) || ( $is_admin_script && $_SESSION[ SESSION_LOGIN ] ) ) {
+			if ( empty( $dir ) || ( $is_admin_script && isset($_SESSION[ SESSION_LOGIN ]) ) ) {
 				$href = ROOT_URL . "/$asset_dir/$dir$file";
 				yield md5( $href ) => $href;
 			}
