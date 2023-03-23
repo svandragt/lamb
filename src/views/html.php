@@ -71,6 +71,18 @@ function the_styles() : void {
 	}
 }
 
+function the_scripts() : void {
+	foreach ( glob( ROOT_DIR . "/js/**/*.js" ) as $filename ) {
+		$dir = basename( dirname( $filename ) );
+		$is_admin_script = $dir === SESSION_LOGIN;
+		if ( $dir === 'js' || ( $is_admin_script && $_SESSION[ SESSION_LOGIN ] ) ) {
+			$id = basename( $filename );
+			$href = str_replace( ROOT_DIR, ROOT_URL, $filename );
+			printf( "<script id='%s' src='%s' ></script>", $id, $href );
+		}
+	}
+}
+
 /**
  * Thanks to Rose Perrone
  * @link https://stackoverflow.com/a/11813996
@@ -197,5 +209,6 @@ function escape( string $html ) : string {
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
+<?php the_scripts(); ?>
 </body>
 </html>

@@ -14,7 +14,7 @@ define( 'HIDDEN_CSRF_NAME', 'csrf' );
 define( 'LOGIN_PASSWORD', getenv( "LAMB_LOGIN_PASSWORD" ) );
 define( 'ROOT_DIR', __DIR__ );
 define( 'ROOT_URL', $root_url );
-define( 'SESSION_LOGIN', 'logged-in' );
+define( 'SESSION_LOGIN', 'is_admin' );
 define( 'SUBMIT_CREATE', 'Bleat!' );
 define( 'SUBMIT_EDIT', 'Save' );
 define( 'SUBMIT_LOGIN', 'Log in' );
