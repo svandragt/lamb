@@ -81,12 +81,15 @@ function the_opengraph() {
 		'published_time' => $item['updated'],
 		'publisher' => ROOT_URL,
 		'site_name' => $config['site_title'],
-		'title' => $item['title'],
+		'title' => $item['title'] ?? '',
 		'type' => 'article',
 		'url' => Lamb\permalink( $item ),
 
 	];
 	foreach ( $og_tags as $property => $content ) {
+		if ( empty( $content ) ) {
+			continue;
+		}
 		printf( '<meta property="og:%s" content="%s"/>' . PHP_EOL, escape( $property ), escape( $content ) );
 	}
 }
