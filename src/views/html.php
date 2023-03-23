@@ -1,6 +1,10 @@
 <?php
+
 global $config;
 global $action;
+
+use Svandragt\Lamb;
+
 function action_delete( $bleat ) : string {
 	if ( ! isset( $bleat['id'] ) || ! $_SESSION[ SESSION_LOGIN ] ) {
 		return '';
@@ -60,6 +64,31 @@ function page_intro() : string {
 	}
 
 	return sprintf( '<p>%s</p>', $data['intro'] );
+}
+
+function the_opengraph() {
+	global $action;
+	global $config;
+	global $data;
+	if ( $action !== 'status' ) {
+		return;
+	}
+	$item = $data['items'][0];
+	$og_tags = [
+		'description' => strip_tags( $item['body'] ),
+		'locale' => 'en_GB',
+		'modified_time' => $item['created'],
+		'published_time' => $item['updated'],
+		'publisher' => ROOT_URL,
+		'site_name' => $config['site_title'],
+		'title' => $item['title'],
+		'type' => 'article',
+		'url' => Lamb\permalink( $item ),
+
+	];
+	foreach ( $og_tags as $property => $content ) {
+		printf( '<meta property="og:%s" content="%s"/>' . PHP_EOL, escape( $property ), escape( $content ) );
+	}
 }
 
 function the_styles() : void {
@@ -183,6 +212,7 @@ function escape( string $html ) : string {
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape( $config['site_title'] ) ?>">
 	<?php the_styles(); ?>
+	<?php the_opengraph(); ?>
 </head>
 <body>
 <nav>

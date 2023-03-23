@@ -1,13 +1,12 @@
 <?php
+
 global $config;
 global $data;
 
+use Svandragt\Lamb;
+
 function escape( string $html ) : string {
 	return htmlspecialchars( $html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE );
-}
-
-function permalink( $item ) : string {
-	return ROOT_URL . '/status/' . $item['id'];
 }
 
 header( 'Content-type: application/atom+xml' );
@@ -30,13 +29,13 @@ $Author->addChild( 'email', escape( $config['author_email'] ) );
 foreach ( $data['items'] as $item ) {
 	$Entry = $Xml->addChild( 'entry' );
 	# TODO assumed status
-	$Entry->addChild( 'id', permalink( $item ) );
+	$Entry->addChild( 'id', Lamb\permalink( $item ) );
 	$Entry->addChild( 'title', escape( (string) $item['title'] ) );
 	$Entry->addChild( 'updated', date( DATE_ATOM, strtotime( $item['updated'] ) ) );
 	$Content = $Entry->addChild( 'content', $item['body'] );
 	$Content->addAttribute( 'type', 'html' );
 	$Link = $Entry->addChild( 'link' );
 	# TODO assumed, store with item?
-	$Link->addAttribute( 'href', permalink( $item ) );
+	$Link->addAttribute( 'href', Lamb\permalink( $item ) );
 }
 echo $Xml->asXML();

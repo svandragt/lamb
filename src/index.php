@@ -20,6 +20,10 @@ define( 'SUBMIT_EDIT', 'Save' );
 define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
+function permalink( $item ) : string {
+	return ROOT_URL . '/status/' . $item['id'];
+}
+
 # Security
 function require_login() : void {
 	if ( ! $_SESSION[ SESSION_LOGIN ] ) {
