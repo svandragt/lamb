@@ -81,7 +81,7 @@ function the_opengraph() {
 		'published_time' => $item['updated'],
 		'publisher' => ROOT_URL,
 		'site_name' => $config['site_title'],
-		'title' => $item['title'] ?? '',
+		'title' => $item['title'] ?? $config['site_title'],
 		'type' => 'article',
 		'url' => Lamb\permalink( $item ),
 
