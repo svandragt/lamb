@@ -21,6 +21,10 @@ define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
 function permalink( $item ) : string {
+	if ( $item['slug'] ) {
+		return ROOT_URL . "/{$item['slug']}";
+	}
+
 	return ROOT_URL . '/status/' . $item['id'];
 }
 
@@ -94,11 +98,11 @@ function transform( $bleats ) : array {
 
 	foreach ( $bleats as $b ) {
 		$data['items'][] = array_merge( render( $b->body ), [
-				'created' => $b->created,
-				'id' => $b->id,
-				'slug' => $b->slug,
-				'updated' => $b->updated,
-			] );
+			'created' => $b->created,
+			'id' => $b->id,
+			'slug' => $b->slug,
+			'updated' => $b->updated,
+		] );
 	}
 
 	return $data;
