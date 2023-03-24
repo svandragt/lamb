@@ -26,7 +26,7 @@ function permalink( $item ) : string {
 
 # Security
 function require_login() : void {
-	if ( ! isset($_SESSION[ SESSION_LOGIN ]) ) {
+	if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		$redirect_to = filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
 		$_SESSION['flash'][] = "Please login. You will be redirected to $redirect_to";
 		redirect_uri( "/login?redirect_to=$redirect_to" );
@@ -155,10 +155,10 @@ function redirect_edited() {
 }
 
 function redirect_login() {
-	if ( isset($_SESSION[ SESSION_LOGIN ] )) {
+	if ( isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		redirect_uri( '/' );
 	}
-	if ( ! isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN ) {
+	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
 		return null;
 	}
 	require_csrf();
@@ -255,7 +255,7 @@ function respond_tag( $tag ) : array {
 }
 
 # Bootstrap
-header('Cache-Control: max-age=300');
+header( 'Cache-Control: max-age=300' );
 header( "Content-Security-Policy: default-src 'self'" );
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
@@ -275,6 +275,7 @@ if ( $_SERVER['REQUEST_URI'] !== '/' ) {
 	$request_uri = strtok( $_SERVER['REQUEST_URI'], '?' );
 }
 $action = strtok( $request_uri, '/' );
+$lookup = strtok( '/' );
 switch ( $action ) {
 	case '404':
 		$data = respond_404();
@@ -283,22 +284,19 @@ switch ( $action ) {
 		$action = '404';
 		break;
 	case 'status':
-		$id = strtok( '/' );
-		$data = respond_status( $id );
+		$data = respond_status( $lookup );
 		break;
 	case 'edit':
-		$id = strtok( '/' );
 		if ( ! empty( $_POST ) ) {
 			redirect_edited();
 		}
-		$bleat = respond_edit( $id );
+		$bleat = respond_edit( $lookup );
 		break;
 	case 'delete':
 		if ( empty( $_POST ) ) {
 			redirect_uri( '/' );
 		}
-		$id = strtok( '/' );
-		redirect_deleted( $id );
+		redirect_deleted( $lookup );
 	case 'feed':
 		$data = respond_feed();
 		require_once( 'views/feed.php' );
@@ -316,12 +314,10 @@ switch ( $action ) {
 		redirect_logout();
 		break;
 	case 'search':
-		$query = strtok( '/' );
-		$data = respond_search( $query );
+		$data = respond_search( $lookup );
 		break;
 	case 'tag':
-		$tag = strtok( '/' );
-		$data = respond_tag( $tag );
+		$data = respond_tag( $lookup );
 		break;
 	default:
 		if ( isset( $config['404_fallback'] ) ) {

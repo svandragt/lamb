@@ -13,6 +13,11 @@ html, body {
     margin: 0;
 }
 
+blockquote {
+    font-style: italic;
+    opacity: 0.8
+}
+
 body {
     font: 16px/1.4em "Inter", sans-serif;
     color: var(--shadow);

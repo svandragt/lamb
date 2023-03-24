@@ -6,15 +6,16 @@ global $action;
 use Svandragt\Lamb;
 
 function action_delete( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! isset($_SESSION[ SESSION_LOGIN ] )) {
+	if ( ! isset( $bleat['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
+
 	return sprintf( '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
 </form>', $bleat['id'], $bleat['id'], csrf_token() );
 }
 
 function action_edit( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! isset($_SESSION[ SESSION_LOGIN ]) ) {
+	if ( ! isset( $bleat['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
@@ -127,7 +128,7 @@ function asset_loader( $assets, $asset_dir ) : Generator {
 	foreach ( $assets as $dir => $files ) {
 		foreach ( $files as $file ) {
 			$is_admin_script = $dir === SESSION_LOGIN;
-			if ( empty( $dir ) || ( $is_admin_script && isset($_SESSION[ SESSION_LOGIN ]) ) ) {
+			if ( empty( $dir ) || ( $is_admin_script && isset( $_SESSION[ SESSION_LOGIN ] ) ) ) {
 				$href = ROOT_URL . "/$asset_dir/$dir$file";
 				yield md5( $href ) => $href;
 			}
@@ -242,11 +243,11 @@ function og_escape( string $html ) : string {
 			<?php endif; ?>
         </li>
         <li>
-            <form action="/search" method="get"><label for="s"><span class="screen-reader-text">Search</span></label>
-                    <input type="text"
-                           name="s" id="s"
-                           required><input
-                            type="submit" value="🔎">></form>
+            <form action="/search" method="get" class="form-search">
+                <label for="s"><span class="screen-reader-text">Search</span></label>
+                <input type="text" name="s" id="s" required>
+                <input type="submit" value="🔎">
+            </form>
         </li>
     </ul>
 </nav>
