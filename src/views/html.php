@@ -218,8 +218,6 @@ function og_escape( string $html ) : string {
 	return htmlspecialchars( htmlspecialchars_decode( $html ), ENT_COMPAT | ENT_HTML5 );
 }
 
-header( "Content-Security-Policy: default-src 'self'" );
-
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
