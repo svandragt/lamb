@@ -43,6 +43,29 @@ function require_csrf() : void {
 	unset( $_SESSION[ HIDDEN_CSRF_NAME ] );
 }
 
+/**
+ * @param string $text
+ *
+ * @return array
+ */
+function parse_matter( string $text ) : array {
+	$parts = explode( '---', $text );
+	if ( count( $parts ) < 3 ) {
+		return [];
+	}
+	$ini_text = trim( $parts[1] );
+	$matter = parse_ini_string( $ini_text );
+	if ( ! $matter ) {
+		return [];
+	}
+
+	if ( isset( $matter['title'] ) ) {
+		$matter['slug'] = strtolower( preg_replace( '/\W+/m', "-", $matter['title'] ) );
+	}
+
+	return $matter;
+}
+
 # Transformation
 function transform( $bleats ) : array {
 	if ( empty( $bleats ) ) {
@@ -50,20 +73,17 @@ function transform( $bleats ) : array {
 	}
 	function render( $bleat ) : array {
 		$parts = explode( '---', $bleat );
-		$max = count( $parts );
-		$front_matter = [];
-		if ( $max > 2 ) {
-			$ini_text = trim( $parts[1] );
-			$front_matter = parse_ini_string( $ini_text );
-		}
-		$md_text = trim( $parts[ $max - 1 ] );
+		$front_matter = parse_matter( $bleat );
+
+		$md_text = trim( $parts[ count( $parts ) - 1 ] );
 		$parser = new LambDown();
 		$parser->setSafeMode( true );
 		$markdown = $parser->text( $md_text );
+
 		$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
 
 		if ( isset( $front_matter['title'] ) ) {
-			$front_matter['slug'] = preg_replace( '/\W+/m', "-", $front_matter['title'] );
+			# Only posts have titles
 			$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
 		}
 
@@ -73,11 +93,12 @@ function transform( $bleats ) : array {
 	$data = [];
 
 	foreach ( $bleats as $b ) {
-		$data['items'][] = array_merge( [
-			'created' => $b->created,
-			'updated' => $b->updated,
-			'id' => $b->id,
-		], render( $b->body ) );
+		$data['items'][] = array_merge( render( $b->body ), [
+				'created' => $b->created,
+				'id' => $b->id,
+				'slug' => $b->slug,
+				'updated' => $b->updated,
+			] );
 	}
 
 	return $data;
@@ -100,8 +121,11 @@ function redirect_created() {
 	if ( empty( $contents ) ) {
 		return null;
 	}
+
+	$matter = parse_matter( $contents );
 	$bleat = R::dispense( 'bleat' );
 	$bleat->body = $contents;
+	$bleat->slug = $matter['slug'] ?? '';
 	$bleat->created = date( "Y-m-d H:i:s" );
 	$bleat->updated = date( "Y-m-d H:i:s" );
 	try {
@@ -135,8 +159,14 @@ function redirect_edited() {
 	if ( empty( $contents ) || empty( $id ) ) {
 		return null;
 	}
+
+	$matter = parse_matter( $contents );
 	$bleat = R::load( 'bleat', (integer) $id );
 	$bleat->body = $contents;
+	if ( empty( $bleat->slug ) ) {
+		# Good URLS don't change!
+		$bleat->slug = $matter['slug'] ?? '';
+	}
 	$bleat->updated = date( "Y-m-d H:i:s" );
 	try {
 		R::store( $bleat );
@@ -227,6 +257,12 @@ function respond_home() : array {
 	return array_merge( $data, transform( $bleats ) );
 }
 
+function respond_post( string $slug ) : array {
+	$bleats = [ R::findOne( 'bleat', ' slug = ? ', [ $slug ] ) ];
+
+	return transform( $bleats );
+}
+
 # Search result (non-FTS)
 function respond_search( $query ) : array {
 	$query = filter_var( $query, FILTER_SANITIZE_STRING );
@@ -276,7 +312,18 @@ if ( $_SERVER['REQUEST_URI'] !== '/' ) {
 }
 $action = strtok( $request_uri, '/' );
 $lookup = strtok( '/' );
+
+function post_has_slug( string $lookup ) : string {
+	$bleat = R::findOne( 'bleat', ' slug = ? ', [ $lookup ] );
+	if ( $bleat->id === 0 ) {
+		return '';
+	}
+
+	return $bleat->slug;
+}
+
 switch ( $action ) {
+	case false:
 	case '404':
 		$data = respond_404();
 		/** @noinspection PhpArrayWriteIsNotUsedInspection */
@@ -318,6 +365,10 @@ switch ( $action ) {
 		break;
 	case 'tag':
 		$data = respond_tag( $lookup );
+		break;
+	case post_has_slug( $action ):
+		$data = respond_post( $action );
+		$action = 'status';
 		break;
 	default:
 		if ( isset( $config['404_fallback'] ) ) {

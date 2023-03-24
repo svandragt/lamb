@@ -1,6 +1,6 @@
 <?php
 global $bleat;
-if ( isset($_SESSION[ SESSION_LOGIN ]) && $bleat->id > 0 ): ?>
+if ( isset( $_SESSION[ SESSION_LOGIN ] ) && $bleat->id > 0 ): ?>
     <h2> Edit Status</h2>
 
     <form method="post" action="/edit" id="editform">
@@ -12,6 +12,6 @@ if ( isset($_SESSION[ SESSION_LOGIN ]) && $bleat->id > 0 ): ?>
 
     <small><?= action_delete( $bleat ); ?></small>
 <?php else:
-    $_SESSION['flash'][] = "Error: Status does not exist!";
-    Svandragt\Lamb\respond_404();
+	$_SESSION['flash'][] = "Error: Status does not exist!";
+	Svandragt\Lamb\respond_404();
 endif;

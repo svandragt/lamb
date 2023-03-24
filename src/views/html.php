@@ -33,9 +33,14 @@ function date_created( $bleat ) : string {
 		return '';
 	}
 
-	$created = human_time( strtotime( $bleat['created'] ) );
+	$human_created = human_time( strtotime( $bleat['created'] ) );
 
-	return sprintf( '<a href="/status/%s" title="%s">%s</a>', $bleat['id'], $bleat['created'], $created );
+	$slug = "/status/{$bleat['id']}";
+	if ( isset( $bleat['slug'] ) ) {
+		$slug = $bleat['slug'];
+	}
+
+	return sprintf( '<a href="%s" title="%s">%s</a>', $slug, $bleat['created'], $human_created );
 }
 
 function parse_tags( $html ) : string {
