@@ -36,7 +36,7 @@ function date_created( $bleat ) : string {
 	$human_created = human_time( strtotime( $bleat['created'] ) );
 
 	$slug = "/status/{$bleat['id']}";
-	if ( isset( $bleat['slug'] ) ) {
+	if ( ! empty( $bleat['slug'] ) ) {
 		$slug = $bleat['slug'];
 	}
 
@@ -228,33 +228,33 @@ function og_escape( string $html ) : string {
 <!DOCTYPE html>
 <html lang="en-GB">
 <head>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta charset="utf-8">
-    <title><?= escape( $config['site_title'] ) ?></title>
-    <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
-          title="<?= escape( $config['site_title'] ) ?>">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<meta charset="utf-8">
+	<title><?= escape( $config['site_title'] ) ?></title>
+	<link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
+	      title="<?= escape( $config['site_title'] ) ?>">
 	<?php the_styles(); ?>
 	<?php the_opengraph(); ?>
 </head>
 <body>
 <nav>
-    <ul>
-        <li>
-            <a href="/" class="not-underlined">🐑</a>
+	<ul>
+		<li>
+			<a href="/" class="not-underlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-                <a href="/login?redirect_to=<?= escape( current_request() ) ?>">Login</a>
+				<a href="/login?redirect_to=<?= escape( current_request() ) ?>">Login</a>
 			<?php else: ?>
-                <a href="/logout">Logout</a>
+				<a href="/logout">Logout</a>
 			<?php endif; ?>
-        </li>
-        <li>
-            <form action="/search" method="get" class="form-search">
-                <label for="s"><span class="screen-reader-text">Search</span></label>
-                <input type="text" name="s" id="s" required>
-                <input type="submit" value="🔎">
-            </form>
-        </li>
-    </ul>
+		</li>
+		<li>
+			<form action="/search" method="get" class="form-search">
+				<label for="s"><span class="screen-reader-text">Search</span></label>
+				<input type="text" name="s" id="s" required>
+				<input type="submit" value="🔎">
+			</form>
+		</li>
+	</ul>
 </nav>
 <main>
 	<?php
@@ -262,7 +262,7 @@ function og_escape( string $html ) : string {
 		while ( count( $_SESSION['flash'] ) > 0 ):
 			$flash = array_pop( $_SESSION['flash'] );
 			?>
-            <div class="flash">⚠️ <?= escape( $flash ) ?></div>
+			<div class="flash">⚠️ <?= escape( $flash ) ?></div>
 		<?php
 		endwhile;
 	endif; ?>
@@ -270,7 +270,7 @@ function og_escape( string $html ) : string {
 	<?php require( ROOT_DIR . "/views/actions/$action.php" ); ?>
 </main>
 <footer>
-    <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
+	<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
 <?php the_scripts(); ?>
 </body>
