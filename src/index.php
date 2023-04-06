@@ -193,15 +193,15 @@ function redirect_login() {
 		redirect_uri( '/' );
 	}
 	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
-		return null;
+		$_SESSION['flash'][] = 'Not a login.';
+		redirect_uri( '/' );
 	}
 	require_csrf();
 
 	$user_pass = $_POST['password'];
 	if ( ! password_verify( $user_pass, base64_decode( LOGIN_PASSWORD ) ) ) {
 		$_SESSION['flash'][] = 'Password is incorrect, please try again.';
-
-		return null;
+		redirect_uri( '/' );
 	}
 
 	$_SESSION[ SESSION_LOGIN ] = true;
@@ -219,7 +219,15 @@ function redirect_login() {
 	die( "Redirecting to /search/$query" );
 }
 
-function respond_404() : array {
+function respond_404( $use_fallback = false ) : array {
+	if ( $use_fallback ) {
+		if ( isset( $config['404_fallback'] ) ) {
+			$fallback = $config['404_fallback'];
+			if ( filter_var( $fallback, FILTER_VALIDATE_URL ) ) {
+				redirect_404( $fallback );
+			}
+		}
+	}
 	$header = "HTTP/1.0 404 Not Found";
 	header( $header );
 
@@ -279,8 +287,11 @@ function respond_search( $query ) : array {
 	}
 	$bleats = R::find( 'bleat', 'body LIKE ? or body LIKE ?', [ "% $query%", "$query%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Searched for "' . $query . '"';
-	$result = ngettext( "result", "results", count( $bleats ) );
-	$data['intro'] = count( $bleats ) . " $result found.";
+	$num_results = count( $bleats );
+	if ( $num_results > 0 ) {
+		$result = ngettext( "result", "results", $num_results );
+		$data['intro'] = count( $bleats ) . " $result found.";
+	}
 
 	return array_merge( $data, transform( $bleats ) );
 }
@@ -366,23 +377,23 @@ switch ( $action ) {
 		break;
 	case 'search':
 		$data = respond_search( $lookup );
+		if ( empty( $data['items'] ) ) {
+			respond_404( true );
+		}
 		break;
 	case 'tag':
 		$data = respond_tag( $lookup );
+		if ( empty( $data['items'] ) ) {
+			respond_404( true );
+		}
 		break;
 	case post_has_slug( $action ):
 		$data = respond_post( $action );
 		$action = 'status';
 		break;
 	default:
-		if ( isset( $config['404_fallback'] ) ) {
-			$fallback = $config['404_fallback'];
-			if ( filter_var( $fallback, FILTER_VALIDATE_URL ) ) {
-				redirect_404( $fallback );
-			}
-		}
 		# Display
-		$data = respond_404();
+		$data = respond_404( true );
 		# Stash action
 		/** @noinspection PhpArrayWriteIsNotUsedInspection */
 		$data['action'] = $action;
