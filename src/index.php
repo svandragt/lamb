@@ -220,6 +220,7 @@ function redirect_login() {
 }
 
 function respond_404( $use_fallback = false ) : array {
+	global $config;
 	if ( $use_fallback ) {
 		if ( isset( $config['404_fallback'] ) ) {
 			$fallback = $config['404_fallback'];
