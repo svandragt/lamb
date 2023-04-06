@@ -190,11 +190,12 @@ function redirect_edited() {
 
 function redirect_login() {
 	if ( isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+		// Already logged in
 		redirect_uri( '/' );
 	}
 	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
-		$_SESSION['flash'][] = 'Not a login.';
-		redirect_uri( '/' );
+		// Show login page?
+		return null;
 	}
 	require_csrf();
 
