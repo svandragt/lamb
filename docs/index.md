@@ -10,7 +10,3 @@ Barrier free super simple blogging, self-hosted.
 - 404 fallback url feature (redirects 404's relative urls to another site).
 
 Directions for: [Caddy](caddy.md), [Nginx](nginx.md)
-
-Source: [github.com/svandragt/lamb](https://github.com/svandragt/lamb)
-
-Lamb Docs are hosted on [svandragt.github.io/lamb](https://svandragt.github.io/lamb)
