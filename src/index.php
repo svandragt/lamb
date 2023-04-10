@@ -22,7 +22,7 @@ unset( $root_url );
 
 function permalink( $item ) : string {
 	if ( $item['slug'] ) {
-		return ROOT_URL . "/status/{$item['slug']}";
+		return ROOT_URL . "/{$item['slug']}";
 	}
 
 	return ROOT_URL . '/status/' . $item['id'];
