@@ -91,16 +91,18 @@ function the_opengraph() {
 		'og:published_time' => $item['updated'],
 		'og:publisher' => ROOT_URL,
 		'og:site_name' => $config['site_title'],
-		'og:title' => $item['title'] ?? $config['site_title'],
 		'og:type' => 'article',
 		'og:url' => Lamb\permalink( $item ),
 		'twitter:card' => 'summary',
 		'twitter:description' => $description,
 		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-		'twitter:title' => $item['title'] ?? $config['site_title'],
 		'twitter:url' => Lamb\permalink( $item ),
 	];
+	if ( isset( $item['title'] ) ) {
+		$og_tags['og:title'] = $item['title'];
+		$og_tags['twitter:title'] = $item['title'];
+	}
 	foreach ( $og_tags as $property => $content ) {
 		if ( empty( $content ) ) {
 			continue;
