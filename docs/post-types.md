@@ -16,13 +16,13 @@ This is a status post #hello
 
 ## Page
 
-This is a status plus INI-parsed front-matter, this is metadata and will not be rendered.
+This is a status plus YAML-parsed front-matter, this is metadata and will not be rendered.
 
 Links for statuses are derived from the title on creation. The permalink for the example below is `/about-me`.
 
 ```markdown
 ---
-title = About me
+title: About me
 ---
 
 Hi I'm John Sheeple and the example author of this site.

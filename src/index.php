@@ -53,14 +53,12 @@ function require_csrf() : void {
  * @return array
  */
 function parse_matter( string $text ) : array {
-	$parts = explode( '---', $text );
-	if ( count( $parts ) < 3 ) {
-		return [];
-	}
-	$ini_text = trim( $parts[1] );
-	$matter = parse_ini_string( $ini_text );
+	$matter = \yaml_parse( $text );
 	if ( ! $matter ) {
-		return [];
+		$matter = parse_ini_matter( $text );
+		if ( ! $matter ) {
+			return [];
+		}
 	}
 
 	if ( isset( $matter['title'] ) ) {
@@ -68,6 +66,17 @@ function parse_matter( string $text ) : array {
 	}
 
 	return $matter;
+}
+
+function parse_ini_matter( string $text ) : array|false {
+	trigger_error( "Deprecated function called - " . __FUNCTION__, E_USER_DEPRECATED );
+	$parts = explode( '---', $text );
+	if ( count( $parts ) < 3 ) {
+		return [];
+	}
+	$ini_text = trim( $parts[1] );
+
+	return parse_ini_string( $ini_text );
 }
 
 # Transformation

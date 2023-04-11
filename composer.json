@@ -13,6 +13,7 @@
         "ext-gettext": "*",
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
+        "ext-yaml": "*",
         "erusev/parsedown": "^1.7",
         "gabordemooij/redbean": "^5.7"
     },
