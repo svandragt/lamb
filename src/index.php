@@ -54,7 +54,7 @@ function require_csrf() : void {
  */
 function parse_matter( string $text ) : array {
 	$matter = \yaml_parse( $text );
-	if ( ! $matter ) {
+	if ( ! is_array( $matter ) ) {
 		$matter = parse_ini_matter( $text );
 		if ( ! $matter ) {
 			return [];
