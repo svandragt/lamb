@@ -3,7 +3,6 @@
 namespace Svandragt\Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
-use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
@@ -64,13 +63,14 @@ function redirect_created() {
 }
 
 #[NoReturn]
-function redirect_deleted( $id ) : void {
+function redirect_deleted( $args ) : void {
 	if ( empty( $_POST ) ) {
 		redirect_uri( '/' );
 	}
 	Security\require_login();
 	Security\require_csrf();
 
+	[ $id ] = $args;
 	$bleat = R::load( 'bleat', (integer) $id );
 	if ( $bleat !== null ) {
 		R::trash( $bleat );
@@ -151,7 +151,8 @@ function redirect_search( $query ) : void {
 }
 
 # Single
-function respond_status( $id ) : array {
+function respond_status( array $args ) : array {
+	[ $id ] = $args;
 	$bleats = [ R::load( 'bleat', (integer) $id ) ];
 
 	$data = transform( $bleats );
@@ -162,13 +163,16 @@ function respond_status( $id ) : array {
 	return $data;
 }
 
-function respond_edit( $id ) : OODBBean {
+function respond_edit( array $args ) : array {
 	if ( ! empty( $_POST ) ) {
 		redirect_edited();
 	}
 	Security\require_login();
 
-	return R::load( 'bleat', (integer) $id );
+	[ $id ] = $args;
+	$data = [ 'bleat' => R::load( 'bleat', (integer) $id ) ];
+
+	return $data;
 }
 
 # Atom feed
@@ -209,7 +213,8 @@ function respond_post( string $slug ) : array {
 }
 
 # Search result (non-FTS)
-function respond_search( $query ) : array {
+function respond_search( array $args ) : array {
+	[ $query ] = $args;
 	$query = filter_var( $query, FILTER_SANITIZE_STRING );
 	if ( empty( $query ) ) {
 		$query = filter_input( INPUT_GET, 's', FILTER_SANITIZE_STRING );
@@ -235,7 +240,8 @@ function respond_search( $query ) : array {
 }
 
 # Tag pages
-function respond_tag( $tag ) : array {
+function respond_tag( array $args ) : array {
+	[ $tag ] = $args;
 	$tag = filter_var( $tag, FILTER_SANITIZE_STRING );
 	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;

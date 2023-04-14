@@ -101,8 +101,8 @@ Route\register_route( 'edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup
 Route\register_route( 'delete', __NAMESPACE__ . '\\Response\redirect_deleted', $lookup );
 Route\register_route( 'feed', __NAMESPACE__ . '\\Response\respond_feed' );
 Route\register_route( 'home', __NAMESPACE__ . '\\Response\respond_home' );
-Route\register_route( 'login', __NAMESPACE__ . '\\Response\respond_login' );
-Route\register_route( 'logout', __NAMESPACE__ . '\\Response\respond_logout' );
+Route\register_route( 'login', __NAMESPACE__ . '\\Response\redirect_login' );
+Route\register_route( 'logout', __NAMESPACE__ . '\\Response\redirect_logout' );
 Route\register_route( 'search', __NAMESPACE__ . '\\Response\respond_search', $lookup );
 Route\register_route( 'tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup );
 
