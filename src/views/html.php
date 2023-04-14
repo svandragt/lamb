@@ -226,6 +226,17 @@ function og_escape( string $html ) : string {
 	return htmlspecialchars( htmlspecialchars_decode( $html ), ENT_COMPAT | ENT_HTML5 );
 }
 
+function li_menu_items() {
+	global $config;
+	$items = [];
+	$format = '<li><a href="/%s">%s</a></li>';
+	foreach ( $config['menu_items'] as $slug => $label ) {
+		$items[] = sprintf( $format, $slug, $label );
+	}
+
+	return implode( PHP_EOL, $items );
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
@@ -249,6 +260,7 @@ function og_escape( string $html ) : string {
 				<a href="/logout">Logout</a>
 			<?php endif; ?>
 		</li>
+		<?php echo li_menu_items(); ?>
 		<li>
 			<form action="/search" method="get" class="form-search">
 				<label for="s"><span class="screen-reader-text">Search</span></label>

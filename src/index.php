@@ -4,6 +4,7 @@ namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
+use http\Exception\RuntimeException;
 use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -68,6 +69,12 @@ function parse_matter( string $text ) : array {
 	return $matter;
 }
 
+function is_menu_item( string $slug ) : bool {
+	global $config;
+
+	return isset( $config['menu_items'][ $slug ] );
+}
+
 function parse_ini_matter( string $text ) : array|false {
 	trigger_error( "Deprecated function called - " . __FUNCTION__, E_USER_DEPRECATED );
 	$parts = explode( '---', $text );
@@ -106,6 +113,9 @@ function transform( $bleats ) : array {
 	$data = [];
 
 	foreach ( $bleats as $b ) {
+		if ( $b->id === 0 ) {
+			continue;
+		}
 		$data['items'][] = array_merge( render( $b->body ), [
 			'created' => $b->created,
 			'id' => $b->id,
@@ -178,7 +188,7 @@ function redirect_edited() {
 	$bleat->body = $contents;
 	if ( empty( $bleat->slug ) ) {
 		# Good URLS don't change!
-		$bleat->slug = $matter['slug'] ?? '';
+		$bleat->slug = $matter['slug'] ?? null;
 	}
 	$bleat->updated = date( "Y-m-d H:i:s" );
 	try {
@@ -277,7 +287,12 @@ function respond_home() : array {
 	$bleats = R::findAll( 'bleat', 'ORDER BY created DESC' );
 	$data['title'] = $config['site_title'];
 
-	return array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $bleats ) );
+	foreach ( $data['items'] as &$item ) {
+		$item['is_menu_item'] = is_menu_item( $item['slug'] ?? $item['id'] );
+	}
+
+	return $data;
 }
 
 function respond_post( string $slug ) : array {
@@ -326,7 +341,7 @@ $config = [
 	'author_name' => 'Joe Sheeple',
 	'site_title' => 'Bleats',
 ];
-$user_config = @parse_ini_file( '../config.ini' );
+$user_config = @parse_ini_file( '../config.ini', true );
 if ( $user_config ) {
 	$config = array_merge( $config, $user_config );
 }
@@ -358,6 +373,9 @@ switch ( $action ) {
 		break;
 	case 'status':
 		$data = respond_status( $lookup );
+		if ( empty( $data['items'] ) ) {
+			respond_404( true );
+		}
 		break;
 	case 'edit':
 		if ( ! empty( $_POST ) ) {
