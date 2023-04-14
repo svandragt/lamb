@@ -279,9 +279,8 @@ function li_menu_items() {
 			<div class="flash">⚠️ <?= escape( $flash ) ?></div>
 		<?php
 		endwhile;
-	endif; ?>
-
-	<?php require( ROOT_DIR . "/views/actions/$action.php" ); ?>
+	endif;
+	require( ROOT_DIR . "/views/actions/$action.php" ); ?>
 </main>
 <footer>
 	<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>

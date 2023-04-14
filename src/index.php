@@ -160,6 +160,9 @@ function redirect_created() {
 }
 
 #[NoReturn] function redirect_deleted( $id ) : void {
+	if ( empty( $_POST ) ) {
+		redirect_uri( '/' );
+	}
 	require_login();
 	require_csrf();
 
@@ -255,6 +258,7 @@ function respond_404( $use_fallback = false ) : array {
 	return [
 		'title' => $header,
 		'intro' => 'Page not found.',
+		'action' => '404',
 	];
 }
 
@@ -262,10 +266,18 @@ function respond_404( $use_fallback = false ) : array {
 function respond_status( $id ) : array {
 	$bleats = [ R::load( 'bleat', (integer) $id ) ];
 
-	return transform( $bleats );
+	$data = transform( $bleats );
+	if ( empty( $data['items'] ) ) {
+		respond_404( true );
+	}
+
+	return $data;
 }
 
 function respond_edit( $id ) : OODBBean {
+	if ( ! empty( $_POST ) ) {
+		redirect_edited();
+	}
 	require_login();
 
 	return R::load( 'bleat', (integer) $id );
@@ -278,12 +290,18 @@ function respond_feed() : array {
 	$data['updated'] = $bleats[0]['updated'];
 	$data['title'] = $config['site_title'];
 
-	return array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $bleats ) );
+	require_once( 'views/feed.php' );
+	die();
 }
 
 # Index
 function respond_home() : array {
 	global $config;
+	if ( ! empty( $_POST ) ) {
+		redirect_created();
+	}
+
 	$bleats = R::findAll( 'bleat', 'ORDER BY created DESC' );
 	$data['title'] = $config['site_title'];
 
@@ -319,7 +337,12 @@ function respond_search( $query ) : array {
 		$data['intro'] = count( $bleats ) . " $result found.";
 	}
 
-	return array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $bleats ) );
+	if ( empty( $data['items'] ) ) {
+		respond_404( true );
+	}
+
+	return $data;
 }
 
 # Tag pages
@@ -328,7 +351,12 @@ function respond_tag( $tag ) : array {
 	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
-	return array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $bleats ) );
+	if ( empty( $data['items'] ) ) {
+		respond_404( true );
+	}
+
+	return $data;
 }
 
 # Bootstrap
@@ -354,7 +382,7 @@ if ( $_SERVER['REQUEST_URI'] !== '/' ) {
 $action = strtok( $request_uri, '/' );
 $lookup = strtok( '/' );
 
-function post_has_slug( string $lookup ) : string {
+function post_has_slug( string $lookup ) : string|null {
 	$bleat = R::findOne( 'bleat', ' slug = ? ', [ $lookup ] );
 	if ( $bleat->id === 0 ) {
 		return '';
@@ -363,70 +391,49 @@ function post_has_slug( string $lookup ) : string {
 	return $bleat->slug;
 }
 
+function register_route( bool|string $action, string $callback, mixed ...$args ) {
+	global $routes;
+	$routes[ $action ] = [ $callback, $args ];
+}
+
+function call_route( bool|string $action ) : array {
+	global $routes;
+	[ $callback, $args ] = $routes[ $action ];
+
+	$data = [];
+	if ( $callback ) {
+		$data = $callback( $args );
+	}
+	if ( ! $data ) {
+		$data = respond_404( true );
+	}
+
+	return $data;
+}
+
+register_route( false, __NAMESPACE__ . '\\respond_404' );
+register_route( '404', __NAMESPACE__ . '\\respond_404' );
+register_route( 'status', __NAMESPACE__ . '\\respond_status', $lookup );
+register_route( 'edit', __NAMESPACE__ . '\\respond_edit', $lookup );
+register_route( 'delete', __NAMESPACE__ . '\\redirect_deleted', $lookup );
+register_route( 'feed', __NAMESPACE__ . '\\respond_feed' );
+register_route( 'home', __NAMESPACE__ . '\\respond_home' );
+register_route( 'login', __NAMESPACE__ . '\\respond_login' );
+register_route( 'logout', __NAMESPACE__ . '\\respond_logout' );
+register_route( 'search', __NAMESPACE__ . '\\respond_search', $lookup );
+register_route( 'tag', __NAMESPACE__ . '\\respond_tag', $lookup );
+
+$data = call_route( $action );
+
 switch ( $action ) {
 	case false:
 	case '404':
-		$data = respond_404();
 		/** @noinspection PhpArrayWriteIsNotUsedInspection */
-		$data['action'] = $action;
 		$action = '404';
-		break;
-	case 'status':
-		$data = respond_status( $lookup );
-		if ( empty( $data['items'] ) ) {
-			respond_404( true );
-		}
-		break;
-	case 'edit':
-		if ( ! empty( $_POST ) ) {
-			redirect_edited();
-		}
-		$bleat = respond_edit( $lookup );
-		break;
-	case 'delete':
-		if ( empty( $_POST ) ) {
-			redirect_uri( '/' );
-		}
-		redirect_deleted( $lookup );
-	case 'feed':
-		$data = respond_feed();
-		require_once( 'views/feed.php' );
-		die();
-	case 'home':
-		if ( ! empty( $_POST ) ) {
-			redirect_created();
-		}
-		$data = respond_home();
-		break;
-	case 'login':
-		redirect_login();
-		break;
-	case 'logout':
-		redirect_logout();
-		break;
-	case 'search':
-		$data = respond_search( $lookup );
-		if ( empty( $data['items'] ) ) {
-			respond_404( true );
-		}
-		break;
-	case 'tag':
-		$data = respond_tag( $lookup );
-		if ( empty( $data['items'] ) ) {
-			respond_404( true );
-		}
 		break;
 	case post_has_slug( $action ):
 		$data = respond_post( $action );
 		$action = 'status';
-		break;
-	default:
-		# Display
-		$data = respond_404( true );
-		# Stash action
-		/** @noinspection PhpArrayWriteIsNotUsedInspection */
-		$data['action'] = $action;
-		$action = '404';
 		break;
 }
 
