@@ -74,7 +74,7 @@ function transform( $bleats ) : array {
 
 function post_has_slug( string $lookup ) : string|null {
 	$bleat = R::findOne( 'bleat', ' slug = ? ', [ $lookup ] );
-	if ( $bleat->id === 0 ) {
+	if ( is_null( $bleat ) || $bleat->id === 0 ) {
 		return '';
 	}
 

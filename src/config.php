@@ -30,7 +30,7 @@ function is_menu_item( string $slug ) : bool {
  * @return array
  */
 function parse_matter( string $text ) : array {
-	$matter = yaml_parse( $text );
+	$matter = @yaml_parse( $text );
 	if ( ! is_array( $matter ) ) {
 		$matter = parse_ini_matter( $text );
 		if ( ! $matter ) {

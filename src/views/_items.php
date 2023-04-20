@@ -3,7 +3,7 @@ global $data;
 if ( empty( $data['items'] ) ):?><p>Sorry no items found.</p>
 <?php else:
 	foreach ( $data['items'] as $item ):
-		if ( ! ( $item['is_menu_item'] ) ):
+		if ( empty ( $item['is_menu_item'] ) ):
 			?>
 			<article>
 				<?= parse_tags( $item['body'] ); ?>
