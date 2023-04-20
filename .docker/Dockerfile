@@ -3,7 +3,7 @@ LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 
 # Install application dependencies
 RUN apt-get update -y && \
-	apt-get install libyaml-dev -y && \
+	apt-get install git libyaml-dev -y && \
 	pecl install yaml && echo "extension=yaml.so" > /usr/local/etc/php/conf.d/ext-yaml.ini && docker-php-ext-enable yaml && \
 	docker-php-ext-install gettext
 
