@@ -30,6 +30,7 @@ Build new images (if necessary): If you have made changes to the application cod
 rebuild the Docker images using the docker-compose build command.
 
 ```bash
+$ git pull
 $ docker-compose build
 ```
 
