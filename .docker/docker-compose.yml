@@ -9,8 +9,12 @@ services:
       - 443:443
     volumes:
       - ..:/srv/app
-      - ../data:/srv/app/data
       - ./Caddyfile:/etc/caddy/Caddyfile
+  composer:
+    image: composer:2
+    volumes:
+      - ..:/app
+    command: install --ignore-platform-reqs
 
   php:
     build:
@@ -20,4 +24,6 @@ services:
       - ./secrets.env
     image: php:fpm
     volumes:
-      - ..:/srv/app
+      - ../src:/srv/app/src
+      - ../vendor:/srv/app/vendor
+      - ../data:/srv/app/data
