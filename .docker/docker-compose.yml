@@ -2,19 +2,22 @@ version: '3'
 
 services:
   caddy:
-    image: caddy
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile
-      - ..:/srv/app
-    ports:
-      - 443:443
     depends_on:
       - php
-
-  php:
-    image: php:fpm
+    image: caddy
+    ports:
+      - 443:443
     volumes:
       - ..:/srv/app
+      - ../data:/srv/app/data
+      - ./Caddyfile:/etc/caddy/Caddyfile
+
+  php:
     build:
       context: ..
       dockerfile: .docker/Dockerfile
+    env_file:
+      - ./secrets.env
+    image: php:fpm
+    volumes:
+      - ..:/srv/app
