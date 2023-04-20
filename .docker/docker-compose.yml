@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  caddy:
+    image: caddy
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - ..:/srv/app
+    ports:
+      - 443:443
+    depends_on:
+      - php
+
+  php:
+    image: php:fpm
+    volumes:
+      - ..:/srv/app
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
