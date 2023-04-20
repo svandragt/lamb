@@ -22,7 +22,7 @@ services:
       context: ..
       dockerfile: .docker/Dockerfile
     env_file:
-      - ./${ENVIRON}.env
+      - ./secrets.env
     image: php:fpm
     volumes:
       - ../src:/srv/app/src
