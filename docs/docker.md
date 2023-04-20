@@ -4,7 +4,11 @@
 
 ```shell
 $ cd .docker
-$ echo "LAMB_LOGIN_PASSWORD=$(php ../make_password_hash.php hackme)" > secrets.env
+
+# Run an instance of the container to generate a password hash. Replace hackme with your own password
+$ echo "LAMB_LOGIN_PASSWORD=$(docker-compose run php php make_password_hash.php hackme" > secrets.env
+
+# Bring up the application
 $ docker-compose up -d
 ```
 
