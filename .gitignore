@@ -1,5 +1,4 @@
 *.db
-/.docker/secrets.env
+/.docker/*.env
 /vendor/
 config.ini
-content/*.md
