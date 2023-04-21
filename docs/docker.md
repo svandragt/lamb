@@ -18,7 +18,7 @@ $ docker compose restart
 
 Your site is now ready at https://localhost
 
-Known Issue: Currently the PHP errors are shown on screen.
+Errors can be inspected with `docker composer logs -f php`.
 
 ## Update Lamb
 
