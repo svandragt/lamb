@@ -6,13 +6,10 @@
 $ cd .docker
 
 # Bring up the application
-$ docker compose up -d
-
-# Test the setup, you should see the container's PHP version
-$ docker compose exec php php -v 
+$ touch secrets.env; docker compose up --build -d
 
 # To enable the admin role, generate a password hash. Replace hackme with your own password
-$ echo "LAMB_LOGIN_PASSWORD=$(docker compose exec php bash -c \"php make_password_hash.php hackme \"" > secrets.env
+$ echo "LAMB_LOGIN_PASSWORD=$(sudo docker compose exec php bash -c 'php make_password_hash.php hackme')" > secrets.env
 
 # Apple the secret
 $ docker compose restart
