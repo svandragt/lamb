@@ -2,6 +2,7 @@ version: '3'
 
 services:
   caddy:
+    container_name: lamb-web
     depends_on:
       - php
     image: caddy
@@ -11,6 +12,7 @@ services:
       - ..:/srv/app
       - ./Caddyfile:/etc/caddy/Caddyfile
   composer:
+    container_name: lamb-deps
     image: composer:2
     volumes:
       - ..:/app
@@ -21,6 +23,7 @@ services:
     build:
       context: ..
       dockerfile: .docker/Dockerfile
+    container_name: lamb-app
     env_file:
       - ./secrets.env
     image: php:fpm
