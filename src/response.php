@@ -199,6 +199,7 @@ function respond_home() : array {
 	$data['title'] = $config['site_title'];
 
 	$data = array_merge( $data, transform( $bleats ) );
+	$data['items'] = $data['items'] ?? [];
 	foreach ( $data['items'] as &$item ) {
 		$item['is_menu_item'] = Config\is_menu_item( $item['slug'] ?? $item['id'] );
 	}
