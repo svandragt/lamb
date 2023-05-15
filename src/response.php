@@ -37,7 +37,7 @@ function respond_404( $use_fallback = false ) : array {
 	];
 }
 
-function redirect_created() {
+function redirect_created() : ?array {
 	Security\require_login();
 	Security\require_csrf();
 	if ( $_POST['submit'] !== SUBMIT_CREATE ) {
@@ -123,7 +123,7 @@ function redirect_login() {
 	}
 	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
 		// Show login page by returning a non empty array.
-		return [ 'show login page.' ];
+		return [];
 	}
 	Security\require_csrf();
 
