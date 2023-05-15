@@ -122,8 +122,8 @@ function redirect_login() {
 		redirect_uri( '/' );
 	}
 	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
-		// Show login page?
-		return null;
+		// Show login page by returning a non empty array.
+		return [ 'show login page.' ];
 	}
 	Security\require_csrf();
 
