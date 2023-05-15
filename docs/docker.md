@@ -51,3 +51,7 @@ $ docker compose up -d
 ```
 
 The `-d` flag is used to start the containers in the background (detached mode).
+
+## Known Issues
+
+1. A change in `config.ini` requires a new docker build to take effect. Not sure why.

@@ -170,17 +170,22 @@ function respond_edit( array $args ) : array {
 	Security\require_login();
 
 	[ $id ] = $args;
-	$data = [ 'bleat' => R::load( 'bleat', (integer) $id ) ];
 
-	return $data;
+	return [ 'bleat' => R::load( 'bleat', (integer) $id ) ];
 }
 
 # Atom feed
 #[NoReturn]
 function respond_feed() : array {
 	global $config;
-	$bleats = R::findAll( 'bleat', 'ORDER BY updated DESC LIMIT 20' );
-	$data['updated'] = $bleats[0]['updated'];
+	global $data;
+
+	// Exclude pages with slugs
+	$menu_items = array_keys( $config['menu_items'] ) ?? [];
+	$bleats = R::find( 'bleat', ' slug NOT IN (:menu_items) ORDER BY updated DESC LIMIT 20', [ ':menu_items' => $menu_items ], );
+
+	$first_item = reset( $bleats );
+	$data['updated'] = $first_item['updated'];
 	$data['title'] = $config['site_title'];
 
 	$data = array_merge( $data, transform( $bleats ) );
@@ -207,7 +212,8 @@ function respond_home() : array {
 	return $data;
 }
 
-function respond_post( string $slug ) : array {
+function respond_post( array $args ) : array {
+	[ $slug ] = $args;
 	$bleats = [ R::findOne( 'bleat', ' slug = ? ', [ $slug ] ) ];
 
 	return transform( $bleats );

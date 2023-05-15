@@ -280,7 +280,7 @@ function li_menu_items() {
 		<?php
 		endwhile;
 	endif;
-	require( ROOT_DIR . "/views/actions/$action.php" ); ?>
+	require( ROOT_DIR . "/views/actions/$template.php" ); ?>
 </main>
 <footer>
 	<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
