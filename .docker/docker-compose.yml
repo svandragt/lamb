@@ -28,9 +28,10 @@ services:
       - ./secrets.env
     image: php:fpm
     volumes:
+      - ../config.ini:/srv/app/config.ini
+      - ../data:/srv/app/data
       - ../src:/srv/app/src
       - vendor:/srv/app/vendor
-      - ../data:/srv/app/data
 
 volumes:
   vendor:
