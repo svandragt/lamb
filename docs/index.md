@@ -9,4 +9,8 @@ Barrier free super simple blogging, self-hosted.
 - Hashtags support, by just typing them.
 - 404 fallback url feature (redirects 404's relative urls to another site).
 
-Directions for: [Caddy](caddy.md), [Nginx](nginx.md)
+Directions for: [Caddy](caddy.md), [Docker](docker.md), [Nginx](nginx.md).
+
+## Topics
+
+ * [Post Types](post-types.md)
