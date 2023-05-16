@@ -13,13 +13,9 @@ function call_route( bool|string $action ) : array {
 	global $routes;
 	[ $callback, $args ] = $routes[ $action ];
 
-	$data = [];
-	if ( $callback ) {
-		$data = $callback( $args );
-	}
-	if ( ! $data ) {
-		$data = Response\respond_404( true );
+	if ( is_null( $callback ) ) {
+		return Response\respond_404( true );
 	}
 
-	return $data;
+	return $callback( $args );
 }

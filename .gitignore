@@ -1,4 +1,4 @@
-/vendor/
-content/*.md
 *.db
+/.docker/*.env
+/vendor/
 config.ini

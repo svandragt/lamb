@@ -7,9 +7,8 @@ use Svandragt\Lamb\Response;
 # Security
 function require_login() : void {
 	if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
-		$redirect_to = filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
-		$_SESSION['flash'][] = "Please login. You will be redirected to $redirect_to";
-		Response\redirect_uri( "/login?redirect_to=$redirect_to" );
+		$_SESSION['flash'][] = "Please login";
+		Response\redirect_uri( "/login" );
 	}
 }
 

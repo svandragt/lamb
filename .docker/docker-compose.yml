@@ -1,0 +1,37 @@
+version: '3'
+
+services:
+  caddy:
+    container_name: lamb-web
+    depends_on:
+      - php
+    image: caddy
+    ports:
+      - 443:443
+    volumes:
+      - ..:/srv/app
+      - ./Caddyfile:/etc/caddy/Caddyfile
+  composer:
+    container_name: lamb-deps
+    image: composer:2
+    volumes:
+      - ..:/app
+      - vendor:/app/vendor
+    command: install --ignore-platform-reqs
+
+  php:
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile
+    container_name: lamb-app
+    env_file:
+      - ./secrets.env
+    image: php:fpm
+    volumes:
+      - ../config.ini:/srv/app/config.ini
+      - ../data:/srv/app/data
+      - ../src:/srv/app/src
+      - vendor:/srv/app/vendor
+
+volumes:
+  vendor:

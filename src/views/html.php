@@ -214,10 +214,6 @@ function redirect_to() : string {
 	return (string) filter_input( INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL );
 }
 
-function current_request() {
-	return filter_input( INPUT_SERVER, 'REQUEST_URI', FILTER_SANITIZE_URL );
-}
-
 function escape( string $html ) : string {
 	return htmlspecialchars( $html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE );
 }
@@ -255,7 +251,7 @@ function li_menu_items() {
 		<li>
 			<a href="/" class="not-underlined">🐑</a>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-				<a href="/login?redirect_to=<?= escape( current_request() ) ?>">Login</a>
+				<a href="/login">Login</a>
 			<?php else: ?>
 				<a href="/logout">Logout</a>
 			<?php endif; ?>
@@ -280,7 +276,7 @@ function li_menu_items() {
 		<?php
 		endwhile;
 	endif;
-	require( ROOT_DIR . "/views/actions/$action.php" ); ?>
+	require( ROOT_DIR . "/views/actions/$template.php" ); ?>
 </main>
 <footer>
 	<small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
