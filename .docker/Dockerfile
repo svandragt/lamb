@@ -7,7 +7,6 @@ RUN apt-get update -y && \
 	pecl install yaml && echo "extension=yaml.so" > /usr/local/etc/php/conf.d/ext-yaml.ini && docker-php-ext-enable yaml && \
 	docker-php-ext-install gettext
 
-COPY . /srv/app
 WORKDIR /srv/app/
 
 RUN touch /usr/local/etc/php/conf.d/app.ini && \
