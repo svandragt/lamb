@@ -11,10 +11,13 @@ $ cd .docker
 $ touch secrets.env; docker compose up --build -d
 
 # To enable the admin role, generate a password hash. Replace hackme with your own password
-$ echo "LAMB_LOGIN_PASSWORD=$(sudo docker compose exec lamb-app bash -c 'php make_password_hash.php hackme')" > secrets.env
+$ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php make_password_hash.php hackme')" > secrets.env
+
+# Test the previous command. If output is "err(1)" please review your secrets file
+$ test "$(wc -c < secrets.env)" -ne 21 && echo "ok($?)" || echo 'err($?)'
 
 # Apple the secret
-$ docker compose restart
+$ docker compose up --build -d
 
 ```
 
@@ -26,11 +29,12 @@ Errors can be inspected with `docker composer logs -f php`.
 
 To refresh Docker Compose containers, you can follow these steps:
 
-Build new images (if necessary): Pull the latest changes to the application code or Dockerfile, and rebuild 
+Build new images (if necessary): Pull the latest changes to the application code or Dockerfile, and rebuild
 the Docker images using the docker compose build command.
 
 ```bash
 $ git pull
 $ docker compose up --build -d
 ```
+
 The `-d` flag is used to start the containers in the background (detached mode).
