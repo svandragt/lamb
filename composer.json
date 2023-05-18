@@ -18,6 +18,9 @@
         "gabordemooij/redbean": "^5.7"
     },
     "require-dev": {
+        "codeception/codeception": "^5.0",
+        "codeception/module-asserts": "*",
+        "codeception/module-phpbrowser": "*",
         "roave/security-advisories": "dev-latest"
     },
     "autoload": {
@@ -28,6 +31,7 @@
     "scripts": {
         "serve": "php -S localhost:8747 -t src",
         "serve:caddy": "sudo caddy run",
-        "serve:nginx": "sudo systemctl nginx start"
+        "serve:nginx": "sudo systemctl nginx start",
+        "tests": "php vendor/bin/codecept run --steps"
     }
 }
