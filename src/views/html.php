@@ -225,7 +225,7 @@ function og_escape( string $html ) : string {
 function li_menu_items() {
 	global $config;
 	$items = [];
-	$format = '<li><a href="/%s">%s</a></li>';
+	$format = '<li><a href="%s">%s</a></li>';
 	if ( empty( $config['menu_items'] ) ) {
 		return '';
 	}
