@@ -230,7 +230,7 @@ function li_menu_items() {
 		return '';
 	}
 	foreach ( $config['menu_items'] as $slug => $label ) {
-		$items[] = sprintf( $format, $slug, $label );
+		$items[] = sprintf( $format, escape($slug), escape($label) );
 	}
 
 	return implode( PHP_EOL, $items );
