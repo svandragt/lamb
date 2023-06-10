@@ -17,7 +17,7 @@ services:
     volumes:
       - ..:/app
       - vendor:/app/vendor
-    command: install --ignore-platform-reqs
+    command: install --ignore-platform-reqs --no-interaction
 
   php:
     build:
