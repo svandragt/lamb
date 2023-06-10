@@ -10,7 +10,7 @@ function load() : array {
 		'author_name' => 'Joe Sheeple',
 		'site_title' => 'Bleats',
 	];
-	$user_config = @parse_ini_file( '../config.ini', true );
+	$user_config = @parse_ini_file( 'config.ini', true );
 	if ( $user_config ) {
 		$config = array_merge( $config, $user_config );
 	}

@@ -28,7 +28,6 @@ services:
       - ./secrets.env
     image: php:fpm
     volumes:
-      - ../config.ini:/srv/app/config.ini
       - ../data:/srv/app/data
       - ../src:/srv/app/src
       - ../make_password_hash.php:/srv/app/make_password_hash.php

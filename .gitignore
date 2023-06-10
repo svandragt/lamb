@@ -1,4 +1,4 @@
 *.db
 /.docker/*.env
 /vendor/
-config.ini
+src/config.ini

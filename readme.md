@@ -43,7 +43,7 @@ Support for [Docker](docs/docker.md), [Caddy](docs/caddy.md) and [NGINX](docs/ng
 
 # Site Configuration (optional)
 
-Place a `config.ini` file in the project root with the following contents and update any of the following lines after
+Add a `src/config.ini` file with the following contents and update any of the following lines after
 uncommenting them:
 
 ```ini
