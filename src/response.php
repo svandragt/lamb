@@ -104,7 +104,9 @@ function redirect_edited() {
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
 	}
-	redirect_uri( '/' );
+	$redirect =  $_SESSION['edit-referrer'];
+	unset( $_SESSION['edit-referrer']);
+	redirect_uri($redirect );
 }
 
 #[NoReturn]
@@ -170,6 +172,8 @@ function respond_edit( array $args ) : array {
 	Security\require_login();
 
 	[ $id ] = $args;
+
+	$_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'];
 
 	return [ 'bleat' => R::load( 'bleat', (integer) $id ) ];
 }
