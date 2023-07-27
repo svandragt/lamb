@@ -253,14 +253,14 @@ function li_menu_items() {
     <ul>
         <li>
             <a href="/" class="not-underlined">🐑</a>
+        </li>
+		<?php echo li_menu_items(); ?>
+        <li>
 			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
                 <a href="/login">Login</a>
 			<?php else: ?>
                 <a href="/logout">Logout</a>
 			<?php endif; ?>
-        </li>
-		<?php echo li_menu_items(); ?>
-        <li>
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
                 <input type="text" name="s" id="s" required>
