@@ -62,6 +62,7 @@ nav ul, nav li {
 
 nav a {
     display: inline-block;
+    text-decoration: none;
     color: var(--fg);
     line-height: 2em;
     padding: 0 0.5em;
