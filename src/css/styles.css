@@ -155,10 +155,6 @@ textarea {
     border-radius: 4px;
 }
 
-.not-underlined {
-    text-decoration: none;
-}
-
 /* Text meant only for screen readers. */
 .screen-reader-text {
     border: 0;

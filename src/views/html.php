@@ -252,7 +252,7 @@ function li_menu_items() {
 <nav>
     <ul>
         <li>
-            <a href="/" class="not-underlined">🐑</a>
+            <a href="/">🐑</a>
         </li>
 		<?php echo li_menu_items(); ?>
         <li>
