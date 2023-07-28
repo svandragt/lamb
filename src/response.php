@@ -96,7 +96,7 @@ function redirect_edited() {
 	$bleat->body = $contents;
 	if ( empty( $bleat->slug ) ) {
 		# Good URLS don't change!
-		$bleat->slug = $matter['slug'] ?? null;
+		$bleat->slug = $matter['slug'] ?? '';
 	}
 	$bleat->updated = date( "Y-m-d H:i:s" );
 	try {
@@ -186,7 +186,7 @@ function respond_feed() : array {
 
 	// Exclude pages with slugs
 	$menu_items = array_keys( $config['menu_items'] ) ?? [];
-	$bleats = R::find( 'bleat', ' slug NOT IN (:menu_items) ORDER BY updated DESC LIMIT 20', [ ':menu_items' => $menu_items ], );
+	$bleats = R::find( 'bleat', ' slug NOT IN (?) ORDER BY updated DESC LIMIT 20',  $menu_items );
 
 	$first_item = reset( $bleats );
 	$data['updated'] = $first_item['updated'];
