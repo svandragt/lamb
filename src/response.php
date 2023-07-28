@@ -186,7 +186,14 @@ function respond_feed() : array {
 
 	// Exclude pages with slugs
 	$menu_items = array_keys( $config['menu_items'] ) ?? [];
-	$bleats = R::find( 'bleat', ' slug NOT IN (?) ORDER BY updated DESC LIMIT 20',  $menu_items );
+	$bleats = R::find( 
+		'bleat', 
+		sprintf(
+			' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20',
+			R::genSlots($menu_items) 
+		), 
+		$menu_items
+	);
 
 	$first_item = reset( $bleats );
 	$data['updated'] = $first_item['updated'];
