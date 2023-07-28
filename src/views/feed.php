@@ -32,7 +32,7 @@ foreach ( $data['items'] as $item ) {
 	$Entry->addChild( 'id', Lamb\permalink( $item ) );
 	$Entry->addChild( 'title', escape( $item['title'] ?? '' ) );
 	$Entry->addChild( 'updated', date( DATE_ATOM, strtotime( $item['updated'] ) ) );
-	$Content = $Entry->addChild( 'content', $item['body'] );
+	$Content = $Entry->addChild( 'content', Lamb\parse_tags( $item['body'] ) );
 	$Content->addAttribute( 'type', 'html' );
 	$Link = $Entry->addChild( 'link' );
 	# TODO assumed, store with item?

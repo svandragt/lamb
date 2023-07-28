@@ -24,6 +24,11 @@ require_once( ROOT_DIR . '/response.php' );
 require_once( ROOT_DIR . '/routes.php' );
 require_once( ROOT_DIR . '/security.php' );
 
+
+function parse_tags( $html ) : string {
+	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
+}
+
 function permalink( $item ) : string {
 	if ( $item['slug'] ) {
 		return ROOT_URL . "/{$item['slug']}";

@@ -43,10 +43,6 @@ function date_created( $bleat ) : string {
 	return sprintf( '<a href="%s" title="%s">%s</a>', $slug, $bleat['created'], $human_created );
 }
 
-function parse_tags( $html ) : string {
-	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
-}
-
 function site_title() : string {
 	global $config;
 
