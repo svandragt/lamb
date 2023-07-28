@@ -40,7 +40,7 @@ function date_created( $bleat ) : string {
 		$slug = $bleat['slug'];
 	}
 
-	return sprintf( '<a href="%s" title="%s">%s</a>', $slug, $bleat['created'], $human_created );
+	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bleat['created'], $human_created );
 }
 
 function site_title() : string {
