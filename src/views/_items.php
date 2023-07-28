@@ -6,7 +6,7 @@ if ( empty( $data['items'] ) ):?><p>Sorry no items found.</p>
 		if ( empty ( $item['is_menu_item'] ) ):
 			?>
 			<article>
-				<?= parse_tags( $item['body'] ); ?>
+				<?= Svandragt\Lamb\parse_tags( $item['body'] ); ?>
 
 				<small><?= date_created( $item ); ?> <?= action_edit( $item ); ?> <?= action_delete( $item ); ?></small>
 			</article>
