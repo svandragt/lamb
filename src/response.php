@@ -185,7 +185,7 @@ function respond_feed() : array {
 	global $data;
 
 	// Exclude pages with slugs
-	$menu_items = array_keys( $config['menu_items'] ) ?? [];
+	$menu_items = array_keys( $config['menu_items'] ?? [] );
 	$bleats = R::find( 
 		'bleat', 
 		sprintf(
