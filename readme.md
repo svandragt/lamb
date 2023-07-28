@@ -21,22 +21,21 @@ Setup requirements:
 
 ```shell
 # Install required system packages
-$ sudo apt update
-$ sudo apt install php8.1 php8.1-gettext php8.1-mbstring php8.1-sqlite3 php8.1-yaml php8.1-xml composer
+sudo apt update
+sudo apt install php8.1 php8.1-gettext php8.1-mbstring php8.1-sqlite3 php8.1-yaml php8.1-xml composer
 
 # checkout project
-$ git clone https://github.com/svandragt/lamb.git
-$ cd lamb
+git clone https://github.com/svandragt/lamb.git
+cd lamb
 
 # install project packages
-$ composer install
+composer install
 ```
 
 To Run:
 
 ```shell
-$ LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
-$ open http://localhost:8747/
+LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
 ```
 
 Support for [Docker](docs/docker.md), [Caddy](docs/caddy.md) and [NGINX](docs/nginx.md) is also provided.
