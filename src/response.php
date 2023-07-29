@@ -185,13 +185,13 @@ function respond_feed() : array {
 	global $data;
 
 	// Exclude pages with slugs
-	$menu_items = array_keys( $config['menu_items'] ?? [] );
-	$bleats = R::find( 
-		'bleat', 
+	$menu_items = array_values( $config['menu_items'] ?? [] );
+	$bleats = R::find(
+		'bleat',
 		sprintf(
 			' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20',
-			R::genSlots($menu_items) 
-		), 
+			R::genSlots($menu_items)
+		),
 		$menu_items
 	);
 
