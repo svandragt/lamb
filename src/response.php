@@ -8,6 +8,7 @@ use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
 use function Svandragt\Lamb\Config\parse_matter;
+use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
 
 #[NoReturn]
@@ -54,10 +55,16 @@ function redirect_created() : ?array {
 	$bleat->slug = $matter['slug'] ?? '';
 	$bleat->created = date( "Y-m-d H:i:s" );
 	$bleat->updated = date( "Y-m-d H:i:s" );
+
+	if ( is_reserved_route( $bleat->slug ) ) {
+		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+		return null;
+	}
+
 	try {
 		R::store( $bleat );
 	} catch ( SQL $e ) {
-		$_SESSION['flash'][] = 'Failed to save status: ' . $e->getMessage();
+		$_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
 	}
 	redirect_uri( '/' );
 }
@@ -99,6 +106,12 @@ function redirect_edited() {
 		$bleat->slug = $matter['slug'] ?? '';
 	}
 	$bleat->updated = date( "Y-m-d H:i:s" );
+
+	if ( is_reserved_route( $bleat->slug ) ) {
+		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+		return null;
+	}
+
 	try {
 		R::store( $bleat );
 	} catch ( SQL $e ) {

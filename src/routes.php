@@ -19,3 +19,8 @@ function call_route( bool|string $action ) : array {
 
 	return $callback( $args );
 }
+
+function is_reserved_route(string $name) : bool {
+	global $routes;
+	return isset($routes[$name]);
+}
