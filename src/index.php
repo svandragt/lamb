@@ -19,6 +19,7 @@ define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
 require_once( ROOT_DIR . '/config.php' );
+require_once( ROOT_DIR . '/flock.php' );
 require_once( ROOT_DIR . '/http.php' );
 require_once( ROOT_DIR . '/response.php' );
 require_once( ROOT_DIR . '/routes.php' );

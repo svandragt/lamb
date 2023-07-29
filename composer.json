@@ -15,7 +15,8 @@
         "ext-sqlite3": "*",
         "ext-yaml": "*",
         "erusev/parsedown": "^1.7",
-        "gabordemooij/redbean": "^5.7"
+        "gabordemooij/redbean": "^5.7",
+        "simplepie/simplepie": "^1.8"
     },
     "require-dev": {
         "roave/security-advisories": "dev-latest"
