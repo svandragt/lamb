@@ -33,26 +33,12 @@ function is_menu_item( string $slug ) : bool {
 function parse_matter( string $text ) : array {
 	$matter = @yaml_parse( $text );
 	if ( ! is_array( $matter ) ) {
-		$matter = parse_ini_matter( $text );
-		if ( ! $matter ) {
-			return [];
-		}
+		// There is no front matter.
+		return [];
 	}
-
 	if ( isset( $matter['title'] ) ) {
 		$matter['slug'] = strtolower( preg_replace( '/\W+/m', "-", $matter['title'] ) );
 	}
 
 	return $matter;
-}
-
-function parse_ini_matter( string $text ) : array|false {
-	trigger_error( "Deprecated function called - " . __FUNCTION__, E_USER_DEPRECATED );
-	$parts = explode( '---', $text );
-	if ( count( $parts ) < 3 ) {
-		return [];
-	}
-	$ini_text = trim( $parts[1] );
-
-	return parse_ini_string( $ini_text );
 }
