@@ -18,6 +18,7 @@ define( 'SUBMIT_EDIT', 'Save' );
 define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
+require_once( ROOT_DIR . '/bleat.php' );
 require_once( ROOT_DIR . '/config.php' );
 require_once( ROOT_DIR . '/flock.php' );
 require_once( ROOT_DIR . '/http.php' );
@@ -45,7 +46,7 @@ function transform( $bleats ) : array {
 	}
 	function render( $bleat ) : array {
 		$parts = explode( '---', $bleat );
-		$front_matter = Config\parse_matter( $bleat );
+		$front_matter = Bleat\parse_matter( $bleat );
 
 		$md_text = trim( $parts[ count( $parts ) - 1 ] );
 		$parser = new LambDown();

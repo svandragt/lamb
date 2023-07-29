@@ -10,7 +10,7 @@ from your accounts on other services.
 ## Setup
 
 You must have a `src/config.ini`. To setup an example feed add a new `flock_subscriptions` section and one or more subs
-in the format of `label = url`:
+in the format of `name = url`:
 
 ```ini
 ; Example 

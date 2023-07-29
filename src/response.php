@@ -7,7 +7,8 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
-use function Svandragt\Lamb\Config\parse_matter;
+use function Svandragt\Lamb\Bleat\parse_matter;
+use function Svandragt\Lamb\Bleat\prepare;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
 
@@ -49,12 +50,7 @@ function redirect_created() : ?array {
 		return null;
 	}
 
-	$matter = parse_matter( $contents );
-	$bleat = R::dispense( 'bleat' );
-	$bleat->body = $contents;
-	$bleat->slug = $matter['slug'] ?? '';
-	$bleat->created = date( "Y-m-d H:i:s" );
-	$bleat->updated = date( "Y-m-d H:i:s" );
+	$bleat = prepare($contents);
 
 	if ( is_reserved_route( $bleat->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
