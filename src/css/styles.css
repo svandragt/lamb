@@ -109,7 +109,8 @@ article {
     background: var(--fg);
     padding: 1em 2em 1px;
     border-bottom: 1px solid var(--bg2);
-    border-radius: 4px;
+    border-top: 4px solid var(--info);
+    border-radius: 8px;
     margin: 1em 0;
 }
 
