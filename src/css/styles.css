@@ -46,7 +46,7 @@ input[type='submit'], button {
 main {
     margin: auto;
     padding: 0 1%;
-    max-width: 75ch;
+    max-width: 65ch;
 }
 
 nav {
