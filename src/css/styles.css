@@ -126,7 +126,7 @@ main small {
     border-top: 1px dotted var(--bg2);
     display: block;
     margin: 2em -2em 0;
-    padding: 1px 1px;
+    padding: 1px 2em;
 }
 
 main small a {
