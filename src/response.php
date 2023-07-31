@@ -50,10 +50,11 @@ function redirect_created() : ?array {
 		return null;
 	}
 
-	$bleat = prepare($contents);
+	$bleat = prepare( $contents );
 
 	if ( is_reserved_route( $bleat->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+
 		return null;
 	}
 
@@ -105,6 +106,7 @@ function redirect_edited() {
 
 	if ( is_reserved_route( $bleat->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+
 		return null;
 	}
 
@@ -113,9 +115,9 @@ function redirect_edited() {
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
 	}
-	$redirect =  $_SESSION['edit-referrer'];
-	unset( $_SESSION['edit-referrer']);
-	redirect_uri($redirect );
+	$redirect = $_SESSION['edit-referrer'];
+	unset( $_SESSION['edit-referrer'] );
+	redirect_uri( $redirect );
 }
 
 #[NoReturn]
@@ -195,14 +197,7 @@ function respond_feed() : array {
 
 	// Exclude pages with slugs
 	$menu_items = array_values( $config['menu_items'] ?? [] );
-	$bleats = R::find(
-		'bleat',
-		sprintf(
-			' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20',
-			R::genSlots($menu_items)
-		),
-		$menu_items
-	);
+	$bleats = R::find( 'bleat', sprintf( ' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots( $menu_items ) ), $menu_items );
 
 	$first_item = reset( $bleats );
 	$data['updated'] = $first_item['updated'];
@@ -225,6 +220,7 @@ function respond_home() : array {
 
 	$data = array_merge( $data, transform( $bleats ) );
 	$data['items'] = $data['items'] ?? [];
+	// TODO should we just mirror feeds and exclude them in sql?
 	foreach ( $data['items'] as &$item ) {
 		$item['is_menu_item'] = Config\is_menu_item( $item['slug'] ?? $item['id'] );
 	}

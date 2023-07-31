@@ -2,8 +2,6 @@
 
 namespace Svandragt\Lamb\Config;
 
-use function yaml_parse;
-
 function load() : array {
 	$config = [
 		'author_email' => 'joe.sheeple@example.com',
@@ -22,5 +20,5 @@ function is_menu_item( string $slug ) : bool {
 	global $config;
 
 	// Checks array values for needle.
-	return in_array( $slug, $config['menu_items']);
+	return in_array( $slug, $config['menu_items'], true );
 }
