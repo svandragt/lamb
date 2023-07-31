@@ -225,7 +225,7 @@ function li_menu_items() {
 	if ( empty( $config['menu_items'] ) ) {
 		return '';
 	}
-	foreach ( $config['menu_items'] as $slug => $label ) {
+	foreach ( $config['menu_items'] as $label => $slug ) {
 		$items[] = sprintf( $format, escape($slug), escape($label) );
 	}
 

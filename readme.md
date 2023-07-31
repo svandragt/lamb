@@ -52,13 +52,6 @@ uncommenting them:
 ;404_fallback = https://my.oldsite.com
 ```
 
-# TODO
-
-- attach an image
-- docs
-- full text search for improved tag and search pages.
-- integration into 'flock' (wip)
-
 # Screenshot
 
 ![image](https://i.imgur.com/rwk2VmV.png)
