@@ -121,7 +121,7 @@ main a {
     color: var(--link);
 }
 
-main > small {
+main small {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
