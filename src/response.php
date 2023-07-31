@@ -107,7 +107,7 @@ function redirect_edited() {
 	if ( is_reserved_route( $bleat->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
 
-		return null;
+    return null;
 	}
 
 	try {
