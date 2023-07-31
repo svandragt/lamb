@@ -125,7 +125,7 @@ main small {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
-    margin: 0 -1em;
+    margin: 0 -2em;
     padding: 1px 1em;
 }
 
