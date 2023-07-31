@@ -273,7 +273,7 @@ function respond_search( array $args ) : array {
 # Tag pages
 function respond_tag( array $args ) : array {
 	[ $tag ] = $args;
-	$tag = filter_var( $tag, FILTER_SANITIZE_STRING );
+	$tag = htmlspecialchars( $tag);
 	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
