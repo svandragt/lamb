@@ -2,6 +2,7 @@
 
 global $config;
 global $action;
+global $template;
 
 use Svandragt\Lamb;
 
