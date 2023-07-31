@@ -46,7 +46,7 @@ function date_created( $bleat ) : string {
 function site_title() : string {
 	global $config;
 
-	return sprintf( '<h1>%s</h1>', $config['site_title'] );
+	return sprintf( '<h1 class="screen-reader-text">%s</h1>', $config['site_title'] );
 }
 
 function page_title() : string {
@@ -247,16 +247,11 @@ function li_menu_items() {
 <body>
 <nav>
     <ul>
-        <li>
-            <a href="/">🐑</a>
-        </li>
-		<?php echo li_menu_items(); ?>
-        <li>
-			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-                <a href="/login">Login</a>
-			<?php else: ?>
-                <a href="/logout">Logout</a>
-			<?php endif; ?>
+		<?php echo li_menu_items("left"); ?>
+	    <?php if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+            <li class="right"><a href="/logout">Logout</a></li>
+	    <?php endif; ?>
+        <li class="right">
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
                 <input type="text" name="s" id="s" required>

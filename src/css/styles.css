@@ -79,7 +79,7 @@ nav ul {
 }
 
 
-nav li:last-child {
+nav li.right {
     float: right;
 }
 
