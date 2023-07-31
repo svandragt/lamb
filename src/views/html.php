@@ -40,7 +40,18 @@ function date_created( $bleat ) : string {
 		$slug = $bleat['slug'];
 	}
 
-	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bleat['created'], $human_created );
+	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $bleat['created'], $human_created );
+}
+
+function link_source( $bleat ) : string {
+	if ( ! isset( $bleat['feed_name'] ) ) {
+		return '';
+	}
+	$subs = Lamb\Flock\get_subscriptions();
+
+	$url = $subs[ $bleat['feed_name'] ];
+
+	return sprintf( '<a href="%s" title="View feed">Source feed</a>', $url, );
 }
 
 function site_title() : string {
@@ -226,7 +237,7 @@ function li_menu_items() {
 		return '';
 	}
 	foreach ( $config['menu_items'] as $label => $slug ) {
-		$items[] = sprintf( $format, escape($slug), escape($label) );
+		$items[] = sprintf( $format, escape( $slug ), escape( $label ) );
 	}
 
 	return implode( PHP_EOL, $items );

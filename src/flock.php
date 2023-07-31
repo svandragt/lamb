@@ -25,10 +25,12 @@ function get_subscriptions() : array {
 }
 
 function process_subs() {
+	header( 'Content-Type: text/plain' );
+
 	$subs = get_subscriptions();
 
 	$option_lpdate = get_option( 'last_processed_date', 0 );
-	if ( (time() - $option_lpdate->value) < MIN_RETRY_SECONDS ) {
+	if ( ( time() - $option_lpdate->value ) < MIN_RETRY_SECONDS ) {
 		die( 'Try again later.' );
 	}
 	foreach ( $subs as $name => $url ) {
@@ -59,7 +61,7 @@ function process_subs() {
 		}
 	}
 
-	set_option( $option_lpdate, (int)date( 'U' ) );
+	set_option( $option_lpdate, (int) date( 'U' ) );
 	exit();
 }
 
@@ -70,7 +72,7 @@ function update_item( Item $item, string $name ) {
 		// Bleat not found
 		return;
 	}
-	$contents = $item->get_content();
+	$contents = wrapped_contents( $item, $name );
 	$title = $item->get_title();
 	if ( ! empty( $title ) ) {
 		$contents = <<<MATTER
@@ -92,7 +94,7 @@ MATTER;
 }
 
 function create_item( Item $item, string $name ) {
-	$contents = strip_tags($item->get_content());
+	$contents = wrapped_contents( $item, $name );
 	$title = $item->get_title();
 	if ( ! empty( $title ) ) {
 		$contents = <<<MATTER
@@ -123,13 +125,28 @@ MATTER;
 function get_option( string $key, $default ) : OODBBean {
 	$bean = R::findOneOrDispense( 'option', ' key = ? ', [ $key ] );
 	$bean->key = $key;
-	if ($bean->id === 0) {
+	if ( $bean->id === 0 ) {
 		$bean->value = $default;
 	}
+
 	return $bean;
 }
 
 function set_option( OODBBean $bean, $value ) {
 	$bean->value = $value;
 	R::store( $bean );
+}
+
+function wrapped_contents( Item $item, string $name ) : string {
+	$contents = strip_tags( $item->get_description() );
+	$lines = explode( PHP_EOL, $contents );
+	foreach ( $lines as &$line ) {
+		$line = "> $line";
+	}
+
+	$contents = implode( PHP_EOL, $lines );
+	$url = $item->get_permalink();
+	$contents = "[$name] ($url): " . PHP_EOL . PHP_EOL . $contents;
+
+	return $contents;
 }
