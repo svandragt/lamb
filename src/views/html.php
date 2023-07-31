@@ -52,7 +52,7 @@ function link_source( $bleat ) : string {
 
 	$url = $subs[ $bleat['feed_name'] ];
 
-	return sprintf( '<a href="%s" title="View feed">Source feed</a>', $url, );
+	return sprintf( 'Via <a href="%s" title="View feed">%s</a>', $url, $bleat['feed_name'] );
 }
 
 function site_title() : string {

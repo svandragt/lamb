@@ -50,12 +50,12 @@ function process_subs() {
 				// Compare the publication date of the item with the last processed date.
 				if ( $pub_date > $option_lpdate->value ) {
 					create_item( $item, $name );
-					echo "Created: $name - " . $item->get_id() . $item->get_title() . PHP_EOL;
+					printf("Created: %s - [%s] %s" . PHP_EOL, $name,$item->get_id(), $item->get_title());
 				}
 
 				if ( $mod_date > $option_lpdate->value ) {
 					update_item( $item, $name );
-					echo "Updated: $name - " . $item->get_id() . $item->get_title() . PHP_EOL;
+					printf( "Updated: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
 				}
 			}
 		}
@@ -146,7 +146,7 @@ function wrapped_contents( Item $item, string $name ) : string {
 
 	$contents = implode( PHP_EOL, $lines );
 	$url = $item->get_permalink();
-	$contents = "[$name] ($url): " . PHP_EOL . PHP_EOL . $contents;
+	$contents = "Originally written on [$name]($url): " . PHP_EOL . PHP_EOL . $contents;
 
 	return $contents;
 }
