@@ -1,18 +1,18 @@
 <?php
 global $data;
-$bleat = $data['bleat'];
+$post = $data['post'];
 
-if ( isset( $_SESSION[ SESSION_LOGIN ] ) && $bleat->id > 0 ): ?>
-	<h2> Edit Status</h2>
+if ( isset( $_SESSION[ SESSION_LOGIN ] ) && $post->id > 0 ): ?>
+    <h2> Edit Status</h2>
 
-	<form method="post" action="/edit" id="editform">
-		<textarea placeholder="Bleat here..." name="contents" required><?= strip_tags( $bleat->body ); ?></textarea>
-		<input type="hidden" name="id" value="<?= strip_tags( $bleat->id ); ?>"/>
-		<input type="submit" form="editform" name="submit" value="<?= SUBMIT_EDIT; ?>">
-		<input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
-	</form>
+    <form method="post" action="/edit" id="editform">
+        <textarea placeholder="What's happening?" name="contents" required><?= strip_tags( $post->body ); ?></textarea>
+        <input type="hidden" name="id" value="<?= strip_tags( $post->id ); ?>"/>
+        <input type="submit" form="editform" name="submit" value="<?= SUBMIT_EDIT; ?>">
+        <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
+    </form>
 
-	<small><?= action_delete( $bleat ); ?></small>
+    <small><?= action_delete( $post ); ?></small>
 <?php else:
 	$_SESSION['flash'][] = "Error: Status does not exist!";
 	Svandragt\Lamb\Response\respond_404();

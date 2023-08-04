@@ -6,21 +6,21 @@ global $template;
 
 use Svandragt\Lamb;
 
-function action_delete( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+function action_delete( $post ) : string {
+	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
 	return sprintf( '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>', $bleat['id'], $bleat['id'], csrf_token() );
+</form>', $post['id'], $post['id'], csrf_token() );
 }
 
-function action_edit( $bleat ) : string {
-	if ( ! isset( $bleat['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+function action_edit( $post ) : string {
+	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
-	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $bleat['id'] );
+	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $post['id'] );
 }
 
 function csrf_token() : string {
@@ -29,19 +29,19 @@ function csrf_token() : string {
 	return $_SESSION[ HIDDEN_CSRF_NAME ];
 }
 
-function date_created( $bleat ) : string {
-	if ( ! isset( $bleat['created'] ) ) {
+function date_created( $post ) : string {
+	if ( ! isset( $post['created'] ) ) {
 		return '';
 	}
 
-	$human_created = human_time( strtotime( $bleat['created'] ) );
+	$human_created = human_time( strtotime( $post['created'] ) );
 
-	$slug = "/status/{$bleat['id']}";
-	if ( ! empty( $bleat['slug'] ) ) {
-		$slug = $bleat['slug'];
+	$slug = "/status/{$post['id']}";
+	if ( ! empty( $post['slug'] ) ) {
+		$slug = $post['slug'];
 	}
 
-	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $bleat['created'], $human_created );
+	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $post['created'], $human_created );
 }
 
 function link_source( $bleat ) : string {

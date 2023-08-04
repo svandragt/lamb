@@ -50,16 +50,16 @@ function redirect_created() : ?array {
 		return null;
 	}
 
-	$bleat = prepare( $contents );
+	$post = prepare( $contents );
 
-	if ( is_reserved_route( $bleat->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+	if ( is_reserved_route( $post->slug ) ) {
+		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
 
 		return null;
 	}
 
 	try {
-		R::store( $bleat );
+		R::store( $post );
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
 	}
@@ -75,9 +75,9 @@ function redirect_deleted( $args ) : void {
 	Security\require_csrf();
 
 	[ $id ] = $args;
-	$bleat = R::load( 'bleat', (integer) $id );
-	if ( $bleat !== null ) {
-		R::trash( $bleat );
+	$post = R::load( 'post', (integer) $id );
+	if ( $post !== null ) {
+		R::trash( $post );
 	}
 	redirect_uri( '/' );
 }
@@ -96,22 +96,21 @@ function redirect_edited() {
 	}
 
 	$matter = parse_matter( $contents );
-	$bleat = R::load( 'bleat', (integer) $id );
-	$bleat->body = $contents;
-	if ( empty( $bleat->slug ) ) {
+	$post = R::load( 'post', (integer) $id );
+	$post->body = $contents;
+	if ( empty( $post->slug ) ) {
 		# Good URLS don't change!
-		$bleat->slug = $matter['slug'] ?? '';
+		$post->slug = $matter['slug'] ?? '';
 	}
-	$bleat->updated = date( "Y-m-d H:i:s" );
+	$post->updated = date( "Y-m-d H:i:s" );
 
-	if ( is_reserved_route( $bleat->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
-
+	if ( is_reserved_route( $post->slug ) ) {
+		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
 		return null;
 	}
 
 	try {
-		R::store( $bleat );
+		R::store( $post );
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
 	}
@@ -166,9 +165,9 @@ function redirect_search( $query ) : void {
 # Single
 function respond_status( array $args ) : array {
 	[ $id ] = $args;
-	$bleats = [ R::load( 'bleat', (integer) $id ) ];
+	$posts = [ R::load( 'post', (integer) $id ) ];
 
-	$data = transform( $bleats );
+	$data = transform( $posts );
 	if ( empty( $data['items'] ) ) {
 		respond_404( true );
 	}
@@ -186,7 +185,7 @@ function respond_edit( array $args ) : array {
 
 	$_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'];
 
-	return [ 'bleat' => R::load( 'bleat', (integer) $id ) ];
+	return [ 'post' => R::load( 'post', (integer) $id ) ];
 }
 
 # Atom feed
@@ -197,13 +196,13 @@ function respond_feed() : array {
 
 	// Exclude pages with slugs
 	$menu_items = array_values( $config['menu_items'] ?? [] );
-	$bleats = R::find( 'bleat', sprintf( ' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots( $menu_items ) ), $menu_items );
+	$posts = R::find( 'post', sprintf( ' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots( $menu_items ) ), $menu_items );
 
-	$first_item = reset( $bleats );
-	$data['updated'] = $first_item['updated'];
+	$first_post = reset( $posts );
+	$data['updated'] = $first_post['updated'];
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $posts ) );
 	require_once( 'views/feed.php' );
 	die();
 }
@@ -215,10 +214,10 @@ function respond_home() : array {
 		redirect_created();
 	}
 
-	$bleats = R::findAll( 'bleat', 'ORDER BY created DESC' );
+	$posts = R::findAll( 'post', 'ORDER BY created DESC' );
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $posts ) );
 	$data['items'] = $data['items'] ?? [];
 	// TODO should we just mirror feeds and exclude them in sql?
 	foreach ( $data['items'] as &$item ) {
@@ -230,9 +229,9 @@ function respond_home() : array {
 
 function respond_post( array $args ) : array {
 	[ $slug ] = $args;
-	$bleats = [ R::findOne( 'bleat', ' slug = ? ', [ $slug ] ) ];
+	$posts = [ R::findOne( 'post', ' slug = ? ', [ $slug ] ) ];
 
-	return transform( $bleats );
+	return transform( $posts );
 }
 
 # Search result (non-FTS)
@@ -246,15 +245,15 @@ function respond_search( array $args ) : array {
 		}
 		redirect_search( $query );
 	}
-	$bleats = R::find( 'bleat', 'body LIKE ? or body LIKE ?', [ "% $query%", "$query%" ], 'ORDER BY created DESC' );
+	$posts = R::find( 'post', 'body LIKE ? or body LIKE ?', [ "% $query%", "$query%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Searched for "' . $query . '"';
-	$num_results = count( $bleats );
+	$num_results = count( $posts );
 	if ( $num_results > 0 ) {
 		$result = ngettext( "result", "results", $num_results );
-		$data['intro'] = count( $bleats ) . " $result found.";
+		$data['intro'] = count( $posts ) . " $result found.";
 	}
 
-	$data = array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
 		respond_404( true );
 	}
@@ -266,10 +265,10 @@ function respond_search( array $args ) : array {
 function respond_tag( array $args ) : array {
 	[ $tag ] = $args;
 	$tag = htmlspecialchars( $tag );
-	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
+	$posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
-	$data = array_merge( $data, transform( $bleats ) );
+	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
 		respond_404( true );
 	}

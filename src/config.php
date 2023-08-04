@@ -6,7 +6,7 @@ function load() : array {
 	$config = [
 		'author_email' => 'joe.sheeple@example.com',
 		'author_name' => 'Joe Sheeple',
-		'site_title' => 'Bleats',
+		'site_title' => 'My Microblog',
 	];
 	$user_config = @parse_ini_file( 'config.ini', true );
 	if ( $user_config ) {
