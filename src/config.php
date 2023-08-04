@@ -8,7 +8,7 @@ function load() : array {
 	$config = [
 		'author_email' => 'joe.sheeple@example.com',
 		'author_name' => 'Joe Sheeple',
-		'site_title' => 'Bleats',
+		'site_title' => 'My Microblog',
 	];
 	$user_config = @parse_ini_file( 'config.ini', true );
 	if ( $user_config ) {
@@ -22,7 +22,7 @@ function is_menu_item( string $slug ) : bool {
 	global $config;
 
 	// Checks array values for needle.
-	return in_array( $slug, $config['menu_items']);
+	return in_array( $slug, $config['menu_items'] );
 }
 
 /**

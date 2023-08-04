@@ -13,8 +13,8 @@ define( 'LOGIN_PASSWORD', getenv( "LAMB_LOGIN_PASSWORD" ) );
 define( 'ROOT_DIR', __DIR__ );
 define( 'ROOT_URL', $root_url );
 define( 'SESSION_LOGIN', 'logged_in' );
-define( 'SUBMIT_CREATE', 'Bleat!' );
-define( 'SUBMIT_EDIT', 'Save' );
+define( 'SUBMIT_CREATE', 'Create post' );
+define( 'SUBMIT_EDIT', 'Update post' );
 define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
 
@@ -23,7 +23,6 @@ require_once( ROOT_DIR . '/http.php' );
 require_once( ROOT_DIR . '/response.php' );
 require_once( ROOT_DIR . '/routes.php' );
 require_once( ROOT_DIR . '/security.php' );
-
 
 function parse_tags( $html ) : string {
 	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
@@ -38,13 +37,13 @@ function permalink( $item ) : string {
 }
 
 # Transformation
-function transform( $bleats ) : array {
-	if ( empty( $bleats ) ) {
+function transform( $posts ) : array {
+	if ( empty( $posts ) ) {
 		return [];
 	}
-	function render( $bleat ) : array {
-		$parts = explode( '---', $bleat );
-		$front_matter = Config\parse_matter( $bleat );
+	function render( $post ) : array {
+		$parts = explode( '---', $post );
+		$front_matter = Config\parse_matter( $post );
 
 		$md_text = trim( $parts[ count( $parts ) - 1 ] );
 		$parser = new LambDown();
@@ -63,15 +62,15 @@ function transform( $bleats ) : array {
 
 	$data = [];
 
-	foreach ( $bleats as $b ) {
-		if ( is_null( $b ) || $b->id === 0 ) {
+	foreach ( $posts as $post ) {
+		if ( is_null( $post ) || $post->id === 0 ) {
 			continue;
 		}
-		$data['items'][] = array_merge( render( $b->body ), [
-			'created' => $b->created,
-			'id' => $b->id,
-			'slug' => $b->slug,
-			'updated' => $b->updated,
+		$data['items'][] = array_merge( render( $post->body ), [
+			'created' => $post->created,
+			'id' => $post->id,
+			'slug' => $post->slug,
+			'updated' => $post->updated,
 		] );
 	}
 
@@ -79,12 +78,12 @@ function transform( $bleats ) : array {
 }
 
 function post_has_slug( string $lookup ) : string|null {
-	$bleat = R::findOne( 'bleat', ' slug = ? ', [ $lookup ] );
-	if ( is_null( $bleat ) || $bleat->id === 0 ) {
+	$post = R::findOne( 'post', ' slug = ? ', [ $lookup ] );
+	if ( is_null( $post ) || $post->id === 0 ) {
 		return '';
 	}
 
-	return $bleat->slug;
+	return $post->slug;
 }
 
 # Bootstrap

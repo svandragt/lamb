@@ -48,7 +48,7 @@ uncommenting them:
 ```ini
 ;author_email = joe.sheeple@example.com
 ;author_name = Joe Sheeple
-;site_title = Bleats
+;site_title = My Microblog
 ;404_fallback = https://my.oldsite.com
 ```
 
