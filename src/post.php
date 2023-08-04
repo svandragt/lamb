@@ -7,25 +7,26 @@ use RedBeanPHP\R;
 use SimplePie\Item;
 
 /**
- * Return an unsaved dispensed bleat.
+ * Return an unsaved dispensed bean.
  *
- * @param string $contents
+ * @param string    $text
+ * @param Item|null $feed_item
  *
  * @return OODBBean
  */
-function prepare( string $contents, Item $item = null ) : OODBBean {
-	$matter = parse_matter( $contents );
+function prepare( string $text, Item $feed_item = null ) : OODBBean {
+	$matter = parse_matter( $text );
 
-	$bleat = R::dispense( 'bleat' );
-	$bleat->body = $contents;
-	$bleat->slug = $matter['slug'] ?? '';
-	$bleat->created = date( "Y-m-d H:i:s" );
-	if ( $item ) {
-		$bleat->created = $item->get_date( "Y-m-d H:i:s" );
+	$bean = R::dispense( 'post' );
+	$bean->body = $text;
+	$bean->slug = $matter['slug'] ?? '';
+	$bean->created = date( "Y-m-d H:i:s" );
+	if ( $feed_item ) {
+		$bean->created = $feed_item->get_date( "Y-m-d H:i:s" );
 	}
-	$bleat->updated = date( "Y-m-d H:i:s" );
+	$bean->updated = date( "Y-m-d H:i:s" );
 
-	return $bleat;
+	return $bean;
 }
 
 /**

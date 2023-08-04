@@ -69,9 +69,9 @@ function process_feeds() {
 
 function update_item( Item $item, string $name ) {
 	$uuid = md5( $name . $item->get_id() );
-	$bleat = R::findOne( 'bleat', ' feeditem_uuid = ?', [ $uuid ] );
-	if ( ! $bleat ) {
-		// Bleat not found
+	$bean = R::findOne( 'post', ' feeditem_uuid = ?', [ $uuid ] );
+	if ( ! $bean ) {
+		// Record not found
 		return;
 	}
 	$contents = wrapped_contents( $item, $name );
@@ -85,11 +85,11 @@ title: {$title}
 {$contents}
 MATTER;
 	}
-	$bleat->body = $contents;
-	$bleat->updated = date( "Y-m-d H:i:s" );
+	$bean->body = $contents;
+	$bean->updated = date( "Y-m-d H:i:s" );
 
 	try {
-		R::store( $bleat );
+		R::store( $bean );
 	} catch ( SQL $e ) {
 		// continue
 	}
@@ -108,17 +108,17 @@ title: {$title}
 MATTER;
 	}
 
-	$bleat = prepare( $contents, $item );
-	if ( is_reserved_route( $bleat->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
+	$bean = prepare( $contents, $item );
+	if ( is_reserved_route( $bean->slug ) ) {
+		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
 
 		return null;
 	}
 
 	try {
-		$bleat->feeditem_uuid = md5( $name . $item->get_id() );
-		$bleat->feed_name = $name;
-		R::store( $bleat );
+		$bean->feeditem_uuid = md5( $name . $item->get_id() );
+		$bean->feed_name = $name;
+		R::store( $bean );
 	} catch ( SQL $e ) {
 		// continue
 	}

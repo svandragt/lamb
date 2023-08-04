@@ -4,6 +4,7 @@ namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use function Svandragt\Lamb\Response\respond_404;
 
@@ -39,13 +40,18 @@ function permalink( $item ) : string {
 }
 
 # Transformation
-function transform( $posts ) : array {
-	if ( empty( $posts ) ) {
+/**
+ * @param array $beans Array of beans
+ *
+ * @return array Regular array with each post's fields inside the 'items' array.
+ */
+function transform( array $beans ) : array {
+	if ( empty( $beans ) ) {
 		return [];
 	}
-	function render( $post ) : array {
-		$parts = explode( '---', $post );
-		$front_matter = Post\parse_matter( $post );
+	function render( string $text ) : array {
+		$parts = explode( '---', $text );
+		$front_matter = Post\parse_matter( $text );
 
 		$md_text = trim( $parts[ count( $parts ) - 1 ] );
 		$parser = new LambDown();
@@ -64,17 +70,17 @@ function transform( $posts ) : array {
 
 	$data = [];
 
-	foreach ( $posts as $post ) {
-		if ( is_null( $post ) || $post->id === 0 ) {
+	foreach ( $beans as $bean ) {
+		if ( is_null( $bean ) || $bean->id === 0 ) {
 			continue;
 		}
-		$data['items'][] = array_merge( render( $post->body ), [
-			'created' => $post->created,
-			'id' => $post->id,
-			'slug' => $post->slug,
-			'updated' => $post->updated,
-			'feed_name' => $post->feed_name,
-			'feeditem_uuid' => $post->feeditem_uuid,
+		$data['items'][] = array_merge( render( $bean->body ), [
+			'created' => $bean->created,
+			'id' => $bean->id,
+			'slug' => $bean->slug,
+			'updated' => $bean->updated,
+			'feed_name' => $bean->feed_name,
+			'feeditem_uuid' => $bean->feeditem_uuid,
 		] );
 	}
 

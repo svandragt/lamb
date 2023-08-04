@@ -44,15 +44,15 @@ function date_created( $post ) : string {
 	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $post['created'], $human_created );
 }
 
-function link_source( $bleat ) : string {
-	if ( ! isset( $bleat['feed_name'] ) ) {
+function link_source( array $item ) : string {
+	if ( ! isset( $item['feed_name'] ) ) {
 		return '';
 	}
-	$subs = Lamb\Network\get_feeds();
+	$feeds = Lamb\Network\get_feeds();
 
-	$url = $subs[ $bleat['feed_name'] ];
+	$url = $feeds[ $item['feed_name'] ];
 
-	return sprintf( 'Via <a href="%s" title="View feed">%s</a>', $url, $bleat['feed_name'] );
+	return sprintf( 'Via <a href="%s" title="View feed">%s</a>', $url, $item['feed_name'] );
 }
 
 function site_title() : string {
