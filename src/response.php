@@ -8,7 +8,8 @@ use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
 use function Svandragt\Lamb\Post\parse_matter;
-use function Svandragt\Lamb\Post\prepare;
+use function Svandragt\Lamb\Post\prepare_bean;
+use function Svandragt\Lamb\Post\slugify;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
 
@@ -50,16 +51,19 @@ function redirect_created() : ?array {
 		return null;
 	}
 
-	$post = prepare( $contents );
-
-	if ( is_reserved_route( $post->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
+	$bean = prepare_bean( $contents );
+	if ( is_null( $bean ) ) {
+		$_SESSION['flash'][] = 'Failed to save post';
 
 		return null;
 	}
 
 	try {
-		R::store( $post );
+		$id = R::store( $bean );
+		if ( is_reserved_route( $bean->slug ) ) {
+			$bean->slug .= "-" . $id;
+		}
+		R::store( $bean );
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
 	}
@@ -106,6 +110,7 @@ function redirect_edited() {
 
 	if ( is_reserved_route( $post->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
+
 		return null;
 	}
 

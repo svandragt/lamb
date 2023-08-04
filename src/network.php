@@ -8,7 +8,7 @@ use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 use SimplePie\SimplePie;
 use Svandragt\Lamb\Route;
-use function Svandragt\Lamb\Post\prepare;
+use function Svandragt\Lamb\Post\prepare_bean;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use const PHP_EOL;
 use const ROOT_DIR;
@@ -107,17 +107,18 @@ title: {$title}
 {$contents}
 MATTER;
 	}
-
-	$bean = prepare( $contents, $item );
-	if ( is_reserved_route( $bean->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
+	$bean = prepare_bean( $contents, $item, $name );
+	if ( is_null( $bean ) ) {
+		$_SESSION['flash'][] = 'Failed to save post';
 
 		return null;
 	}
 
 	try {
-		$bean->feeditem_uuid = md5( $name . $item->get_id() );
-		$bean->feed_name = $name;
+		$id = R::store( $bean );
+		if ( is_reserved_route( $bean->slug ) ) {
+			$bean->slug .= "-" . $id;
+		}
 		R::store( $bean );
 	} catch ( SQL $e ) {
 		// continue
