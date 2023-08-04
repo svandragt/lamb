@@ -7,8 +7,8 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
-use function Svandragt\Lamb\Bleat\parse_matter;
-use function Svandragt\Lamb\Bleat\prepare;
+use function Svandragt\Lamb\Post\parse_matter;
+use function Svandragt\Lamb\Post\prepare;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
 
@@ -107,7 +107,7 @@ function redirect_edited() {
 	if ( is_reserved_route( $bleat->slug ) ) {
 		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bleat->slug . '</code>';
 
-    return null;
+		return null;
 	}
 
 	try {
@@ -265,7 +265,7 @@ function respond_search( array $args ) : array {
 # Tag pages
 function respond_tag( array $args ) : array {
 	[ $tag ] = $args;
-	$tag = htmlspecialchars( $tag);
+	$tag = htmlspecialchars( $tag );
 	$bleats = R::find( 'bleat', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 

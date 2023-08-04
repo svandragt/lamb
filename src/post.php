@@ -1,10 +1,9 @@
 <?php
 
-namespace Svandragt\Lamb\Bleat;
+namespace Svandragt\Lamb\Post;
 
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
-use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 
 /**
@@ -14,17 +13,18 @@ use SimplePie\Item;
  *
  * @return OODBBean
  */
-function prepare( string $contents, Item $item = null): OODBBean{
+function prepare( string $contents, Item $item = null ) : OODBBean {
 	$matter = parse_matter( $contents );
 
 	$bleat = R::dispense( 'bleat' );
 	$bleat->body = $contents;
 	$bleat->slug = $matter['slug'] ?? '';
 	$bleat->created = date( "Y-m-d H:i:s" );
-	if ($item) {
-		$bleat->created = $item->get_date( "Y-m-d H:i:s");
+	if ( $item ) {
+		$bleat->created = $item->get_date( "Y-m-d H:i:s" );
 	}
 	$bleat->updated = date( "Y-m-d H:i:s" );
+
 	return $bleat;
 }
 

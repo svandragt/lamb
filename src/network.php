@@ -8,7 +8,7 @@ use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 use SimplePie\SimplePie;
 use Svandragt\Lamb\Route;
-use function Svandragt\Lamb\Bleat\prepare;
+use function Svandragt\Lamb\Post\prepare;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use const PHP_EOL;
 use const ROOT_DIR;
