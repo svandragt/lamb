@@ -48,7 +48,7 @@ function link_source( $bleat ) : string {
 	if ( ! isset( $bleat['feed_name'] ) ) {
 		return '';
 	}
-	$subs = Lamb\Flock\get_subscriptions();
+	$subs = Lamb\Network\get_feeds();
 
 	$url = $subs[ $bleat['feed_name'] ];
 
@@ -259,10 +259,10 @@ function li_menu_items() {
 <body>
 <nav>
     <ul>
-		<?php echo li_menu_items("left"); ?>
-	    <?php if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+		<?php echo li_menu_items( "left" ); ?>
+		<?php if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
             <li class="right"><a href="/logout">Logout</a></li>
-	    <?php endif; ?>
+		<?php endif; ?>
         <li class="right">
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>

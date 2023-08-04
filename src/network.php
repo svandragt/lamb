@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb\Flock;
+namespace Svandragt\Lamb\Network;
 
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -16,24 +16,24 @@ use const ROOT_DIR;
 const MIN_RETRY_SECONDS = 60;
 require_once( ROOT_DIR . '/routes.php' );
 
-Route\register_route( '_flock', __NAMESPACE__ . '\\process_subs' );
+Route\register_route( '_cron', __NAMESPACE__ . '\\process_feeds' );
 
-function get_subscriptions() : array {
+function get_feeds() : array {
 	global $config;
 
-	return $config['flock_subscriptions'] ?? [];
+	return $config['network_feeds'] ?? [];
 }
 
-function process_subs() {
+function process_feeds() {
 	header( 'Content-Type: text/plain' );
 
-	$subs = get_subscriptions();
+	$feeds = get_feeds();
 
 	$option_lpdate = get_option( 'last_processed_date', 0 );
 	if ( ( time() - $option_lpdate->value ) < MIN_RETRY_SECONDS ) {
 		die( 'Try again later.' );
 	}
-	foreach ( $subs as $name => $url ) {
+	foreach ( $feeds as $name => $url ) {
 		$feed = new SimplePie();
 		$feed->enable_cache( false );
 		$feed->set_feed_url( $url );
@@ -50,7 +50,7 @@ function process_subs() {
 				// Compare the publication date of the item with the last processed date.
 				if ( $pub_date > $option_lpdate->value ) {
 					create_item( $item, $name );
-					printf("Created: %s - [%s] %s" . PHP_EOL, $name,$item->get_id(), $item->get_title());
+					printf( "Created: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
 				}
 
 				if ( $mod_date > $option_lpdate->value ) {

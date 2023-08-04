@@ -20,8 +20,8 @@ unset( $root_url );
 
 require_once( ROOT_DIR . '/bleat.php' );
 require_once( ROOT_DIR . '/config.php' );
-require_once( ROOT_DIR . '/flock.php' );
 require_once( ROOT_DIR . '/http.php' );
+require_once( ROOT_DIR . '/network.php' );
 require_once( ROOT_DIR . '/response.php' );
 require_once( ROOT_DIR . '/routes.php' );
 require_once( ROOT_DIR . '/security.php' );
