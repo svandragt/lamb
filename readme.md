@@ -8,8 +8,9 @@ Barrier free super simple blogging, self-hosted.
 - Twitter like interface
 - Friction free Markdown entry
 - Generates a discoverable Atom feed (/feed)
-- Hashtags support, by just typing them.
-- 404 fallback url feature (redirects 404's relative urls to another site).
+- Pull external content into the blog by subscribing to feeds
+- Hashtags support, by just typing them in the post.
+- 404 fallback url feature to redirect `404 Page Not Found` responses to another sit.
 
 # Getting started
 
