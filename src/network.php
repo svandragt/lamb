@@ -29,6 +29,8 @@ function process_feeds() {
 
 	$feeds = get_feeds();
 
+	// FIXME: setting should be per feed, otherwise when adding additional feeds no existing
+	// items are imported.
 	$option_lpdate = get_option( 'last_processed_date', 0 );
 	if ( ( time() - $option_lpdate->value ) < MIN_RETRY_SECONDS ) {
 		die( 'Try again later.' );
