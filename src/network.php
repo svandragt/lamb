@@ -13,7 +13,7 @@ use function Svandragt\Lamb\Route\is_reserved_route;
 use const PHP_EOL;
 use const ROOT_DIR;
 
-const MIN_RETRY_SECONDS = 60;
+const MINUTE_IN_SECONDS = 60;
 require_once( ROOT_DIR . '/routes.php' );
 
 Route\register_route( '_cron', __NAMESPACE__ . '\\process_feeds' );
@@ -26,27 +26,27 @@ function get_feeds() : array {
 
 function process_feeds() {
 	header( 'Content-Type: text/plain' );
-	// FIXME: prevent timeout
 	// FIXME: Missing permalink and title
 
-	// FIXME: remove slice and vardump
-	$feeds = array_slice( get_feeds(), 0, 10 );
+	$feeds = get_feeds();
 
-	// FIXME: setting should be per feed, otherwise when adding additional feeds no existing
-	// items are imported.
-	$option_lpdate = get_option( 'last_processed_date', 0 );
-	// FIXME: remove next line;
-	$option_lpdate = 0;
-	if ( ( time() - $option_lpdate->value ) < MIN_RETRY_SECONDS ) {
-		//		die( 'Try again later.' );
+	$cron_last_updated = get_option( 'last_processed_date', 0 );
+	if ( ( time() - $cron_last_updated->value ) < MINUTE_IN_SECONDS ) {
+		die( 'Too often, try again later.' );
 	}
 	foreach ( $feeds as $name => $url ) {
+		flush();
+		$last_updated = get_option( 'last_processed_date_' . md5( $name . $url ), 0 );
+		if ( ( time() - $last_updated->value ) < MINUTE_IN_SECONDS * 30 ) {
+			echo( 'Skipped ' . $url . PHP_EOL );
+			continue;
+		}
+
 		$feed = new SimplePie();
-		$feed->enable_cache( false );
+		$feed->set_cache_location( '../data/cache/simplepie' );
 		$feed->set_feed_url( $url );
 		$feed->init();
-
-		echo "Processing " . $feed->get_title() . PHP_EOL;
+		echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
 
 		if ( $feed->data ) {
 			/** @var Item $item */
@@ -55,20 +55,22 @@ function process_feeds() {
 				$mod_date = $item->get_updated_date( 'U' );
 
 				// Compare the publication date of the item with the last processed date.
-				if ( $pub_date > $option_lpdate->value ) {
+				if ( $pub_date > $last_updated->value ) {
 					create_item( $item, $name );
 					printf( "Created: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
+					continue;
 				}
-				// TODO should it create AND update?
-				if ( $mod_date > $option_lpdate->value ) {
+				if ( $mod_date > $last_updated->value ) {
 					update_item( $item, $name );
 					printf( "Updated: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
+					continue;
 				}
 			}
 		}
+		set_option( $last_updated, (int) date( 'U' ) );
 	}
 
-	set_option( $option_lpdate, (int) date( 'U' ) );
+	set_option( $cron_last_updated, (int) date( 'U' ) );
 	exit();
 }
 
@@ -130,11 +132,11 @@ MATTER;
 	}
 }
 
-function get_option( string $key, $default ) : OODBBean {
+function get_option( string $key, $default_value ) : OODBBean {
 	$bean = R::findOneOrDispense( 'option', ' key = ? ', [ $key ] );
 	$bean->key = $key;
 	if ( $bean->id === 0 ) {
-		$bean->value = $default;
+		$bean->value = $default_value;
 	}
 
 	return $bean;
@@ -151,6 +153,7 @@ function wrapped_contents( Item $item, string $name ) : string {
 	foreach ( $lines as &$line ) {
 		$line = "> $line";
 	}
+	unset( $line );
 
 	$contents = implode( PHP_EOL, $lines );
 	$url = $item->get_permalink();

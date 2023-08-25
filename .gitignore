@@ -2,3 +2,4 @@
 /.docker/*.env
 /vendor/
 src/config.ini
+*.spc

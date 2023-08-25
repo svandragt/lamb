@@ -27,7 +27,10 @@
         }
     },
     "scripts": {
-        "serve": "php -S localhost:8747 -t src",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -S localhost:8747 -t src"
+        ],
         "serve:caddy": "sudo caddy run",
         "serve:nginx": "sudo systemctl nginx start"
     }
