@@ -95,6 +95,7 @@ form {
 
 
 h1, h2, h3 {
+    line-height: 1.2em;
     font-weight: 800;
     color: var(--bg);
 }
