@@ -26,14 +26,19 @@ function get_feeds() : array {
 
 function process_feeds() {
 	header( 'Content-Type: text/plain' );
+	// FIXME: prevent timeout
+	// FIXME: Missing permalink and title
 
-	$feeds = get_feeds();
+	// FIXME: remove slice and vardump
+	$feeds = array_slice( get_feeds(), 0, 10 );
 
 	// FIXME: setting should be per feed, otherwise when adding additional feeds no existing
 	// items are imported.
 	$option_lpdate = get_option( 'last_processed_date', 0 );
+	// FIXME: remove next line;
+	$option_lpdate = 0;
 	if ( ( time() - $option_lpdate->value ) < MIN_RETRY_SECONDS ) {
-		die( 'Try again later.' );
+		//		die( 'Try again later.' );
 	}
 	foreach ( $feeds as $name => $url ) {
 		$feed = new SimplePie();
@@ -54,7 +59,7 @@ function process_feeds() {
 					create_item( $item, $name );
 					printf( "Created: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
 				}
-
+				// TODO should it create AND update?
 				if ( $mod_date > $option_lpdate->value ) {
 					update_item( $item, $name );
 					printf( "Updated: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title() );
