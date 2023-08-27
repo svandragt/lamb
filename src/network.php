@@ -5,7 +5,7 @@ namespace Svandragt\Lamb\Network;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use SimplePie\Item;
+use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 use Svandragt\Lamb\Route;
 use function Svandragt\Lamb\Post\prepare_bean;
@@ -49,7 +49,7 @@ function process_feeds() {
 		echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
 
 		if ( $feed->data ) {
-			/** @var Item $item */
+			/** @var SimplePieItem $item */
 			foreach ( $feed->get_items() as $item ) {
 				$pub_date = $item->get_date( 'U' );
 				$mod_date = $item->get_updated_date( 'U' );
@@ -74,7 +74,7 @@ function process_feeds() {
 	exit();
 }
 
-function update_item( Item $item, string $name ) {
+function update_item( SimplePieItem $item, string $name ) {
 	$uuid = md5( $name . $item->get_id() );
 	$bean = R::findOne( 'post', ' feeditem_uuid = ?', [ $uuid ] );
 	if ( ! $bean ) {
@@ -102,13 +102,13 @@ MATTER;
 	}
 }
 
-function create_item( Item $item, string $name ) {
+function create_item( SimplePieItem $item, string $name ) {
 	$contents = wrapped_contents( $item, $name );
-	$title = $item->get_title();
+	$title = addslashes( $item->get_title() );
 	if ( ! empty( $title ) ) {
 		$contents = <<<MATTER
 ---
-title: {$title}
+title: "{$title}"
 ---
 
 {$contents}
@@ -147,7 +147,7 @@ function set_option( OODBBean $bean, $value ) {
 	R::store( $bean );
 }
 
-function wrapped_contents( Item $item, string $name ) : string {
+function wrapped_contents( SimplePieItem $item, string $name ) : string {
 	$contents = strip_tags( $item->get_description() );
 	$lines = explode( PHP_EOL, $contents );
 	foreach ( $lines as &$line ) {
