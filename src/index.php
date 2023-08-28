@@ -31,60 +31,40 @@ function parse_tags( $html ) : string {
 	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
 }
 
-function permalink( $item ) : string {
-	if ( $item['slug'] ) {
-		return ROOT_URL . "/{$item['slug']}";
+function permalink( OODBBean $bean ) : string {
+	if ( $bean->slug ) {
+		return ROOT_URL . "/{$bean->slug}";
 	}
 
-	return ROOT_URL . '/status/' . $item['id'];
+	return ROOT_URL . '/status/' . $bean->id;
 }
 
-# Transformation
-/**
- * @param array $beans Array of beans
- *
- * @return array Regular array with each post's fields inside the 'items' array.
- */
-function transform( array $beans ) : array {
-	if ( empty( $beans ) ) {
-		return [];
-	}
-	function render( string $text ) : array {
-		$parts = explode( '---', $text );
-		$front_matter = Post\parse_matter( $text );
+function parse_markdown( string $text ) : array {
+	$parts = explode( '---', $text );
+	$front_matter = Post\parse_matter( $text );
 
-		$md_text = trim( $parts[ count( $parts ) - 1 ] );
-		$parser = new LambDown();
-		$parser->setSafeMode( true );
-		$markdown = $parser->text( $md_text );
+	$md_text = trim( $parts[ count( $parts ) - 1 ] );
+	$parser = new LambDown();
+	$parser->setSafeMode( true );
+	$markdown = $parser->text( $md_text );
 
-		$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
+	$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
 
-		if ( isset( $front_matter['title'] ) ) {
-			# Only posts have titles
-			$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
-		}
-
-		return array_merge( $front_matter, [ 'body' => $markdown ] );
+	if ( isset( $front_matter['title'] ) ) {
+		# Only posts have titles
+		$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
 	}
 
-	$data = [];
+	$front_matter['transformed'] = parse_tags( $markdown );
 
-	foreach ( $beans as $bean ) {
-		if ( is_null( $bean ) || $bean->id === 0 ) {
-			continue;
-		}
-		$data['items'][] = array_merge( render( $bean->body ), [
-			'created' => $bean->created,
-			'id' => $bean->id,
-			'slug' => $bean->slug,
-			'updated' => $bean->updated,
-			'feed_name' => $bean->feed_name,
-			'feeditem_uuid' => $bean->feeditem_uuid,
-		] );
+	return $front_matter;
+}
+
+function populate_bean( OODBBean $bean ) : void {
+	$fields = parse_markdown( $bean->body );
+	foreach ( $fields as $key => $value ) {
+		$bean->$key = $value;
 	}
-
-	return $data;
 }
 
 function post_has_slug( string $lookup ) : string|null {

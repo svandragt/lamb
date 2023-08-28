@@ -8,6 +8,7 @@ use RedBeanPHP\RedException\SQL;
 use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 use Svandragt\Lamb\Route;
+use function Svandragt\Lamb\populate_bean;
 use function Svandragt\Lamb\Post\prepare_bean;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use const PHP_EOL;
@@ -120,6 +121,8 @@ MATTER;
 
 		return null;
 	}
+
+	populate_bean( $bean );
 
 	try {
 		$id = R::store( $bean );

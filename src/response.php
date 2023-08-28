@@ -11,7 +11,7 @@ use function Svandragt\Lamb\Post\parse_matter;
 use function Svandragt\Lamb\Post\prepare_bean;
 use function Svandragt\Lamb\Post\slugify;
 use function Svandragt\Lamb\Route\is_reserved_route;
-use function Svandragt\Lamb\transform;
+use function Svandragt\Lamb\populate_bean;
 
 #[NoReturn]
 function redirect_404( $fallback ) : void {
@@ -57,6 +57,8 @@ function redirect_created() : ?array {
 
 		return null;
 	}
+
+	populate_bean( $bean );
 
 	try {
 		$id = R::store( $bean );
@@ -113,6 +115,8 @@ function redirect_edited() {
 
 		return null;
 	}
+
+	populate_bean( $post );
 
 	try {
 		R::store( $post );
@@ -172,8 +176,8 @@ function respond_status( array $args ) : array {
 	[ $id ] = $args;
 	$posts = [ R::load( 'post', (integer) $id ) ];
 
-	$data = transform( $posts );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 
@@ -207,7 +211,7 @@ function respond_feed() : array {
 	$data['updated'] = $first_post['updated'];
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $posts ) );
+	$data['posts'] = $posts;
 	require_once( 'views/feed.php' );
 	die();
 }
@@ -219,14 +223,13 @@ function respond_home() : array {
 		redirect_created();
 	}
 
-	$posts = R::findAll( 'post', 'ORDER BY created DESC' );
+	$posts = R::findAll( 'post', 'ORDER BY created DESC LIMIT 10' );
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $posts ) );
-	$data['items'] = $data['items'] ?? [];
+	$data['posts'] = $posts;
 	// TODO should we just mirror feeds and exclude them in sql?
-	foreach ( $data['items'] as &$item ) {
-		$item['is_menu_item'] = Config\is_menu_item( $item['slug'] ?? $item['id'] );
+	foreach ( $data['posts'] as &$post ) {
+		$post->is_menu_item = Config\is_menu_item( $post->slug ?? $post->id );
 	}
 
 	return $data;
@@ -236,7 +239,7 @@ function respond_post( array $args ) : array {
 	[ $slug ] = $args;
 	$posts = [ R::findOne( 'post', ' slug = ? ', [ $slug ] ) ];
 
-	return transform( $posts );
+	return $posts;
 }
 
 # Search result (non-FTS)
@@ -258,8 +261,8 @@ function respond_search( array $args ) : array {
 		$data['intro'] = count( $posts ) . " $result found.";
 	}
 
-	$data = array_merge( $data, transform( $posts ) );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 
@@ -273,8 +276,8 @@ function respond_tag( array $args ) : array {
 	$posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
-	$data = array_merge( $data, transform( $posts ) );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 

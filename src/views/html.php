@@ -4,23 +4,24 @@ global $config;
 global $action;
 global $template;
 
+use RedBeanPHP\OODBBean;
 use Svandragt\Lamb;
 
-function action_delete( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+function action_delete( OODBBean $bean ) : string {
+	if ( ! isset( $bean->id ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
 	return sprintf( '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>', $post['id'], $post['id'], csrf_token() );
+</form>', $bean->id, $bean->id, csrf_token() );
 }
 
-function action_edit( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+function action_edit( OODBBean $bean ) : string {
+	if ( ! isset( $bean->id ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
-	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $post['id'] );
+	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $bean->id );
 }
 
 function csrf_token() : string {
@@ -29,30 +30,30 @@ function csrf_token() : string {
 	return $_SESSION[ HIDDEN_CSRF_NAME ];
 }
 
-function date_created( $post ) : string {
-	if ( ! isset( $post['created'] ) ) {
+function date_created( OODBBean $bean ) : string {
+	if ( ! isset( $bean->created ) ) {
 		return '';
 	}
 
-	$human_created = human_time( strtotime( $post['created'] ) );
+	$human_created = human_time( strtotime( $bean->created ) );
 
-	$slug = "/status/{$post['id']}";
-	if ( ! empty( $post['slug'] ) ) {
-		$slug = $post['slug'];
+	$slug = "/status/{$bean->id}";
+	if ( ! empty( $bean['slug'] ) ) {
+		$slug = $bean['slug'];
 	}
 
-	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $post['created'], $human_created );
+	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $bean->created, $human_created );
 }
 
-function link_source( array $item ) : string {
-	if ( ! isset( $item['feed_name'] ) ) {
+function link_source( OODBBean $bean ) : string {
+	if ( ! isset( $bean->feed_name ) ) {
 		return '';
 	}
 	$feeds = Lamb\Network\get_feeds();
 
-	$url = $feeds[ $item['feed_name'] ];
+	$url = $feeds[ $bean->feed_name ];
 
-	return sprintf( 'Via <a href="%s" title="View feed">%s</a>', $url, $item['feed_name'] );
+	return sprintf( 'Via <a href="%s" title="View feed">%s</a>', $url, $bean->feed_name );
 }
 
 function site_title() : string {
@@ -86,8 +87,8 @@ function the_opengraph() {
 	if ( $action !== 'status' ) {
 		return;
 	}
-	$item = $data['items'][0];
-	$description = $item['description'];
+	$bean = $data['posts'][0];
+	$description = $bean->description;
 	$og_tags = [
 		'og:description' => $description,
 		'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
@@ -95,21 +96,21 @@ function the_opengraph() {
 		'og:image:type' => 'image/jpeg',
 		'og:image:width' => '1200',
 		'og:locale' => 'en_GB',
-		'og:modified_time' => $item['created'],
-		'og:published_time' => $item['updated'],
+		'og:modified_time' => $bean->created,
+		'og:published_time' => $bean->updated,
 		'og:publisher' => ROOT_URL,
 		'og:site_name' => $config['site_title'],
 		'og:type' => 'article',
-		'og:url' => Lamb\permalink( $item ),
+		'og:url' => Lamb\permalink( $bean ),
 		'twitter:card' => 'summary',
 		'twitter:description' => $description,
 		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-		'twitter:url' => Lamb\permalink( $item ),
+		'twitter:url' => Lamb\permalink( $bean ),
 	];
-	if ( isset( $item['title'] ) ) {
-		$og_tags['og:title'] = $item['title'];
-		$og_tags['twitter:title'] = $item['title'];
+	if ( isset( $bean['title'] ) ) {
+		$og_tags['og:title'] = $bean['title'];
+		$og_tags['twitter:title'] = $bean['title'];
 	}
 	foreach ( $og_tags as $property => $content ) {
 		if ( empty( $content ) ) {

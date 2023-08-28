@@ -1,14 +1,14 @@
 <?php
 global $data;
-if ( empty( $data['items'] ) ):?><p>Sorry no items found.</p>
+if ( empty( $data['posts'] ) ):?><p>Sorry no items found.</p>
 <?php else:
-	foreach ( $data['items'] as $item ):
-		if ( empty ( $item['is_menu_item'] ) ):
+	foreach ( $data['posts'] as $bean ):
+		if ( empty ( $bean->is_menu_item ) ):
 			?>
             <article>
-				<?= Svandragt\Lamb\parse_tags( $item['body'] ); ?>
+				<?= $bean->transformed; ?>
 
-                <small><?= date_created( $item ); ?><?= link_source( $item ); ?> <?= action_edit( $item ); ?> <?= action_delete( $item ); ?></small>
+                <small><?= date_created( $bean ); ?><?= link_source( $bean ); ?> <?= action_edit( $bean ); ?> <?= action_delete( $bean ); ?></small>
             </article>
 		<?php
 		endif;
