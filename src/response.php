@@ -222,15 +222,9 @@ function respond_home() : array {
 	if ( ! empty( $_POST ) ) {
 		redirect_created();
 	}
-
-	$posts = R::findAll( 'post', 'ORDER BY created DESC LIMIT 10' );
 	$data['title'] = $config['site_title'];
 
-	$data['posts'] = $posts;
-	// TODO should we just mirror feeds and exclude them in sql?
-	foreach ( $data['posts'] as &$post ) {
-		$post->is_menu_item = Config\is_menu_item( $post->slug ?? $post->id );
-	}
+	$data['posts'] = R::findAll( 'post', 'ORDER BY created DESC LIMIT 99' );
 
 	return $data;
 }

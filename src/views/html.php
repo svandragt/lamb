@@ -38,11 +38,15 @@ function date_created( OODBBean $bean ) : string {
 	$human_created = human_time( strtotime( $bean->created ) );
 
 	$slug = "/status/{$bean->id}";
-	if ( ! empty( $bean['slug'] ) ) {
-		$slug = $bean['slug'];
+	if ( ! empty( $bean->slug ) ) {
+		$slug = $bean->slug;
 	}
 
 	return sprintf( '<a href="/%s" title="%s">%s</a>', ltrim( $slug, '/' ), $bean->created, $human_created );
+}
+
+function is_menu_item( string $id ) : bool {
+	return Lamb\Config\is_menu_item( $id );
 }
 
 function link_source( OODBBean $bean ) : string {

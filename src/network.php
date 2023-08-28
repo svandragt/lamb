@@ -122,6 +122,7 @@ MATTER;
 		return null;
 	}
 
+	// TODO should we try and markdown stripped_tags html really.
 	populate_bean( $bean );
 
 	try {
