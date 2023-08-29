@@ -45,11 +45,12 @@ function prepare_bean( string $text, Item $feed_item = null, string $feed_name =
  * @return array
  */
 function parse_matter( string $text ) : array {
-	$matter = @yaml_parse( $text );
+	$matter = yaml_parse( addslashes( $text ) );
 	if ( ! is_array( $matter ) ) {
 		// There is no front matter.
 		return [];
 	}
+	$matter['title'] = stripslashes( $matter['title'] );
 	if ( isset( $matter['title'] ) ) {
 		$matter['slug'] = slugify( $matter['title'] );
 	}
