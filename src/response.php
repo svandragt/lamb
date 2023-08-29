@@ -232,8 +232,9 @@ function respond_home() : array {
 function respond_post( array $args ) : array {
 	[ $slug ] = $args;
 	$posts = [ R::findOne( 'post', ' slug = ? ', [ $slug ] ) ];
+	$data['posts'] = $posts;
 
-	return $posts;
+	return $data;
 }
 
 # Search result (non-FTS)
