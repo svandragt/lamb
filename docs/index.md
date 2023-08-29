@@ -15,3 +15,4 @@ Directions for: [Caddy](caddy.md), [Docker](docker.md), [Nginx](nginx.md).
 
  * [Post Types](post-types.md)
  * [Menu Items](menu-items.md)
+ * [Feed Subscriptions](feeds.md)

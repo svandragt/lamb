@@ -15,7 +15,8 @@
         "ext-sqlite3": "*",
         "ext-yaml": "*",
         "erusev/parsedown": "^1.7",
-        "gabordemooij/redbean": "^5.7"
+        "gabordemooij/redbean": "^5.7",
+        "simplepie/simplepie": "^1.8"
     },
     "require-dev": {
         "roave/security-advisories": "dev-latest"
@@ -26,7 +27,10 @@
         }
     },
     "scripts": {
-        "serve": "php -S localhost:8747 -t src",
+        "serve": [
+            "Composer\\Config::disableProcessTimeout",
+            "php -S localhost:8747 -t src"
+        ],
         "serve:caddy": "sudo caddy run",
         "serve:nginx": "sudo systemctl nginx start"
     }

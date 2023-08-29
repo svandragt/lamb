@@ -4,6 +4,7 @@ namespace Svandragt\Lamb;
 
 require '../vendor/autoload.php';
 
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use function Svandragt\Lamb\Response\respond_404;
 
@@ -20,6 +21,8 @@ unset( $root_url );
 
 require_once( ROOT_DIR . '/config.php' );
 require_once( ROOT_DIR . '/http.php' );
+require_once( ROOT_DIR . '/network.php' );
+require_once( ROOT_DIR . '/post.php' );
 require_once( ROOT_DIR . '/response.php' );
 require_once( ROOT_DIR . '/routes.php' );
 require_once( ROOT_DIR . '/security.php' );
@@ -28,53 +31,40 @@ function parse_tags( $html ) : string {
 	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
 }
 
-function permalink( $item ) : string {
-	if ( $item['slug'] ) {
-		return ROOT_URL . "/{$item['slug']}";
+function permalink( OODBBean $bean ) : string {
+	if ( $bean->slug ) {
+		return ROOT_URL . "/{$bean->slug}";
 	}
 
-	return ROOT_URL . '/status/' . $item['id'];
+	return ROOT_URL . '/status/' . $bean->id;
 }
 
-# Transformation
-function transform( $posts ) : array {
-	if ( empty( $posts ) ) {
-		return [];
-	}
-	function render( $post ) : array {
-		$parts = explode( '---', $post );
-		$front_matter = Config\parse_matter( $post );
+function parse_markdown( string $text ) : array {
+	$parts = explode( '---', $text );
+	$front_matter = Post\parse_matter( $text );
 
-		$md_text = trim( $parts[ count( $parts ) - 1 ] );
-		$parser = new LambDown();
-		$parser->setSafeMode( true );
-		$markdown = $parser->text( $md_text );
+	$md_text = trim( $parts[ count( $parts ) - 1 ] );
+	$parser = new LambDown();
+	$parser->setSafeMode( true );
+	$markdown = $parser->text( $md_text );
 
-		$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
+	$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
 
-		if ( isset( $front_matter['title'] ) ) {
-			# Only posts have titles
-			$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
-		}
-
-		return array_merge( $front_matter, [ 'body' => $markdown ] );
+	if ( isset( $front_matter['title'] ) ) {
+		# Only posts have titles
+		$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
 	}
 
-	$data = [];
+	$front_matter['transformed'] = parse_tags( $markdown );
 
-	foreach ( $posts as $post ) {
-		if ( is_null( $post ) || $post->id === 0 ) {
-			continue;
-		}
-		$data['items'][] = array_merge( render( $post->body ), [
-			'created' => $post->created,
-			'id' => $post->id,
-			'slug' => $post->slug,
-			'updated' => $post->updated,
-		] );
+	return $front_matter;
+}
+
+function populate_bean( OODBBean $bean ) : void {
+	$fields = parse_markdown( $bean->body );
+	foreach ( $fields as $key => $value ) {
+		$bean->$key = $value;
 	}
-
-	return $data;
 }
 
 function post_has_slug( string $lookup ) : string|null {
@@ -91,6 +81,7 @@ header( 'Cache-Control: max-age=300' );
 header( "Content-Security-Policy: default-src 'self'; img-src https:; object-src 'none'; require-trusted-types-for 'script'" );
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
+R::useWriterCache( true );
 
 $config = Config\load();
 

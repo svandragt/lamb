@@ -7,9 +7,11 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
-use function Svandragt\Lamb\Config\parse_matter;
+use function Svandragt\Lamb\Post\parse_matter;
+use function Svandragt\Lamb\Post\prepare_bean;
+use function Svandragt\Lamb\Post\slugify;
 use function Svandragt\Lamb\Route\is_reserved_route;
-use function Svandragt\Lamb\transform;
+use function Svandragt\Lamb\populate_bean;
 
 #[NoReturn]
 function redirect_404( $fallback ) : void {
@@ -49,21 +51,21 @@ function redirect_created() : ?array {
 		return null;
 	}
 
-	$matter = parse_matter( $contents );
-	$post = R::dispense( 'post' );
-	$post->body = $contents;
-	$post->slug = $matter['slug'] ?? '';
-	$post->created = date( "Y-m-d H:i:s" );
-	$post->updated = date( "Y-m-d H:i:s" );
-
-	if ( is_reserved_route( $post->slug ) ) {
-		$_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
+	$bean = prepare_bean( $contents );
+	if ( is_null( $bean ) ) {
+		$_SESSION['flash'][] = 'Failed to save post';
 
 		return null;
 	}
 
+	populate_bean( $bean );
+
 	try {
-		R::store( $post );
+		$id = R::store( $bean );
+		if ( is_reserved_route( $bean->slug ) ) {
+			$bean->slug .= "-" . $id;
+		}
+		R::store( $bean );
 	} catch ( SQL $e ) {
 		$_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
 	}
@@ -113,6 +115,8 @@ function redirect_edited() {
 
 		return null;
 	}
+
+	populate_bean( $post );
 
 	try {
 		R::store( $post );
@@ -172,8 +176,8 @@ function respond_status( array $args ) : array {
 	[ $id ] = $args;
 	$posts = [ R::load( 'post', (integer) $id ) ];
 
-	$data = transform( $posts );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 
@@ -207,7 +211,7 @@ function respond_feed() : array {
 	$data['updated'] = $first_post['updated'];
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $posts ) );
+	$data['posts'] = $posts;
 	require_once( 'views/feed.php' );
 	die();
 }
@@ -218,15 +222,9 @@ function respond_home() : array {
 	if ( ! empty( $_POST ) ) {
 		redirect_created();
 	}
-
-	$posts = R::findAll( 'post', 'ORDER BY created DESC' );
 	$data['title'] = $config['site_title'];
 
-	$data = array_merge( $data, transform( $posts ) );
-	$data['items'] = $data['items'] ?? [];
-	foreach ( $data['items'] as &$item ) {
-		$item['is_menu_item'] = Config\is_menu_item( $item['slug'] ?? $item['id'] );
-	}
+	$data['posts'] = R::findAll( 'post', 'ORDER BY created DESC LIMIT 99' );
 
 	return $data;
 }
@@ -234,8 +232,9 @@ function respond_home() : array {
 function respond_post( array $args ) : array {
 	[ $slug ] = $args;
 	$posts = [ R::findOne( 'post', ' slug = ? ', [ $slug ] ) ];
+	$data['posts'] = $posts;
 
-	return transform( $posts );
+	return $data;
 }
 
 # Search result (non-FTS)
@@ -257,8 +256,8 @@ function respond_search( array $args ) : array {
 		$data['intro'] = count( $posts ) . " $result found.";
 	}
 
-	$data = array_merge( $data, transform( $posts ) );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 
@@ -272,8 +271,8 @@ function respond_tag( array $args ) : array {
 	$posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
-	$data = array_merge( $data, transform( $posts ) );
-	if ( empty( $data['items'] ) ) {
+	$data['posts'] = $posts;
+	if ( empty( $data['posts'] ) ) {
 		respond_404( true );
 	}
 
