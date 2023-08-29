@@ -81,6 +81,7 @@ header( 'Cache-Control: max-age=300' );
 header( "Content-Security-Policy: default-src 'self'; img-src https:; object-src 'none'; require-trusted-types-for 'script'" );
 session_start();
 R::setup( 'sqlite:../data/lamb.db' );
+R::useWriterCache( true );
 
 $config = Config\load();
 
