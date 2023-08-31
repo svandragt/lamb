@@ -109,7 +109,7 @@ function create_item( SimplePieItem $item, string $name ) {
 	if ( ! empty( $title ) ) {
 		$contents = <<<MATTER
 ---
-title: "{$title}"
+title: {$title}
 ---
 
 {$contents}

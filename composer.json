@@ -19,6 +19,9 @@
         "simplepie/simplepie": "^1.8"
     },
     "require-dev": {
+        "codeception/codeception": "*",
+        "codeception/module-asserts": "*",
+        "codeception/module-phpbrowser": "*",
         "roave/security-advisories": "dev-latest"
     },
     "autoload": {
@@ -32,6 +35,7 @@
             "php -S localhost:8747 -t src"
         ],
         "serve:caddy": "sudo caddy run",
-        "serve:nginx": "sudo systemctl nginx start"
+        "serve:nginx": "sudo systemctl nginx start",
+        "tests": "php vendor/bin/codecept run --steps"
     }
 }
