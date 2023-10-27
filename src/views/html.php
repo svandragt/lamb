@@ -221,12 +221,12 @@ function og_escape( string $html ) : string {
 function li_menu_items() {
 	global $config;
 	$items = [];
-	$format = '<li><a href="%s">%s</a></li>';
+	$format = '<li><a href="%s/%s">%s</a></li>';
 	if ( empty( $config['menu_items'] ) ) {
 		return '';
 	}
 	foreach ( $config['menu_items'] as $label => $slug ) {
-		$items[] = sprintf( $format, escape( $slug ), escape( $label ) );
+		$items[] = sprintf( $format, $_SERVER['HTTP_HOST'], escape( $slug ), escape( $label ) );
 	}
 
 	return implode( PHP_EOL, $items );
