@@ -226,7 +226,7 @@ function li_menu_items() {
 		return '';
 	}
 	foreach ( $config['menu_items'] as $label => $slug ) {
-		$items[] = sprintf( $format, $_SERVER['HTTP_HOST'], escape( $slug ), escape( $label ) );
+		$items[] = sprintf( $format, ROOT_URL, escape( $slug ), escape( $label ) );
 	}
 
 	return implode( PHP_EOL, $items );
