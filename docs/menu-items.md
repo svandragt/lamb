@@ -5,6 +5,7 @@ Lamb support menu items through the `src/config.ini` configuration file, in a se
 ```ini
 # Example src/config.ini
 [menu_items]
-About me = /about-me
+Home = ?home
+About me = about-me
 View Source = https://github.com/svandragt/lamb
 ```
