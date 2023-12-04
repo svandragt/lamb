@@ -119,7 +119,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/growing-input.js', '/confirm-delete.js', '/link-edit-buttons.js' ],
+		'logged_in' => [ '/growing-input.js', '/confirm-delete.js', '/link-edit-buttons.js', '/upload-image.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
