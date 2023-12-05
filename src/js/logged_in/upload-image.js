@@ -26,8 +26,9 @@ document.addEventListener('DOMContentLoaded', function () {
 function handleFiles(files, textarea) {
     const formData = new FormData();
     for (const file of files) {
-        formData.append('imageFile', file);
+        formData.append('imageFiles[]', file);
     }
+    console.log(formData);
 
     const currentText = textarea.value;
     const cursorPosition = textarea.selectionStart;
@@ -38,6 +39,7 @@ function handleFiles(files, textarea) {
         .then(response => response.json())
         .then(data => {
             textarea.value = currentText.slice(0, cursorPosition) + data + currentText.slice(cursorPosition);
+            textarea.dispatchEvent(new Event('input'));
         })
         .catch(error => console.error(error));
 }

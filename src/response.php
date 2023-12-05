@@ -281,13 +281,22 @@ function respond_tag( array $args ) : array {
 }
 
 function respond_upload( array $args ) : void {
-	if ( empty( $_FILES['imageFile'] ) ) {
-		//		 invalid request http status code
-		header( 'HTTP/1.1 400 Bad Request' );
-		die();
-	}
+	//	if ( empty( $_FILES['imageFile'] ) ) {
+	//		// invalid request http status code
+	//		header( 'HTTP/1.1 400 Bad Request' );
+	//		die();
+	//	}
 	Security\require_login();
 
-	echo json_encode( sprintf( "![%s](%s)", ( $_FILES['imageFile']['name'] ), ( "/uploads/" . $_FILES['imageFile']['full_path'] ) ), JSON_THROW_ON_ERROR );
+	//	foreach ( $_FILES['imageFile'] as $key => $values ) {
+	//		foreach ( $values as $i => $value ) {
+	//			$_FILES['imageFile'][ $key ][ $i ] = htmlspecialchars( $value );
+	//		}
+	//	}
+	$out = var_export( $_FILES, true );
+
+	//	$out = sprintf( "![%s](%s)", ( $_FILES['imageFile']['name'] ), ( "/uploads/" . $_FILES['imageFile']['full_path'] ) );
+	//	$out = var_export( $_FILES['imageFile'], true );
+	echo json_encode( $out, JSON_THROW_ON_ERROR );
 	die();
 }
