@@ -116,6 +116,7 @@ Route\register_route( 'logout', __NAMESPACE__ . '\\Response\redirect_logout' );
 Route\register_route( 'search', __NAMESPACE__ . '\\Response\respond_search', $lookup );
 Route\register_route( 'status', __NAMESPACE__ . '\\Response\respond_status', $lookup );
 Route\register_route( 'tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup );
+Route\register_route( 'upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup );
 
 $template = $action;
 if ( post_has_slug( $action ) === $action ) {

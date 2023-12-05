@@ -5,8 +5,8 @@ namespace Svandragt\Lamb\Response;
 use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
+use Svandragt\Lamb\Security;
 use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
@@ -195,7 +195,7 @@ function respond_edit( array $args ) : array {
 
 # Atom feed
 #[NoReturn]
-function respond_feed() : array {
+function respond_feed() : void {
 	global $config;
 	global $data;
 
@@ -278,4 +278,16 @@ function respond_tag( array $args ) : array {
 	}
 
 	return $data;
+}
+
+function respond_upload( array $args ) : void {
+	if ( empty( $_FILES['imageFile'] ) ) {
+		//		 invalid request http status code
+		header( 'HTTP/1.1 400 Bad Request' );
+		die();
+	}
+	Security\require_login();
+
+	echo json_encode( sprintf( "![%s](%s)", ( $_FILES['imageFile']['name'] ), ( "/uploads/" . $_FILES['imageFile']['full_path'] ) ), JSON_THROW_ON_ERROR );
+	die();
 }

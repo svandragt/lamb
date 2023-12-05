@@ -11,12 +11,9 @@ document.addEventListener('DOMContentLoaded', function () {
         event.preventDefault();
 
         const cursorPosition = getCursorPosition(textarea, event);
-
         const files = event.dataTransfer.files;
-
         if (files.length > 0) {
             handleFiles(files, cursorPosition, textarea.id);
-            console.log(files);
         }
     });
 });
@@ -31,29 +28,38 @@ function getCursorPosition(textarea, event) {
     const row = Math.floor(y / rowHeight);
     const col = Math.floor(x / colWidth);
     const cursorPosition = textarea.selectionStart + (row * textarea.cols) + col;
+    console.log(cursorPosition);
 
     return cursorPosition;
 }
 
 function handleFiles(files, cursorPosition, textareaId) {
+    const textarea = document.getElementById(textareaId);
     const formData = new FormData();
-    formData.append(textareaId, document.getElementById(textareaId).value);
     formData.append('cursorPosition', cursorPosition);
 
     for (const file of files) {
         formData.append('imageFile', file);
     }
 
+    console.log(formData);
+
     // Make an AJAX request or submit the form with FormData
     // Example using fetch API
-    fetch('upload.php', {
+    fetch('/upload', {
         method: 'POST',
         body: formData
     })
         .then(response => response.json())
         .then(data => {
-            // Update textarea content with the inserted image link
-            document.getElementById(textareaId).value = data[textareaId];
+            // Get the current textarea value
+            const currentText = textarea.value;
+
+            // Insert the data at the specified cursor position
+            const newText = currentText.slice(0, cursorPosition) + data + currentText.slice(cursorPosition);
+
+            // Update textarea content with the modified value
+            textarea.value = newText;
             console.log(data);
         })
         .catch(error => console.error(error));
