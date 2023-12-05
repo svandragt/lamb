@@ -3,6 +3,7 @@
 namespace Svandragt\Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
+use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Config;
@@ -11,6 +12,7 @@ use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
 
+const IMAGE_FILES = 'imageFiles';
 #[NoReturn]
 function redirect_404( $fallback ) : void {
 	global $request_uri;
@@ -280,23 +282,57 @@ function respond_tag( array $args ) : array {
 	return $data;
 }
 
+/**
+ * @param array $args
+ *
+ * @return void
+ * @throws JsonException
+ */
+#[NoReturn]
 function respond_upload( array $args ) : void {
-	//	if ( empty( $_FILES['imageFile'] ) ) {
-	//		// invalid request http status code
-	//		header( 'HTTP/1.1 400 Bad Request' );
-	//		die();
-	//	}
+	if ( empty( $_FILES[ IMAGE_FILES ] ) ) {
+		// invalid request http status code
+		header( 'HTTP/1.1 400 Bad Request' );
+		die( 'No files uploaded!' );
+	}
 	Security\require_login();
 
-	//	foreach ( $_FILES['imageFile'] as $key => $values ) {
-	//		foreach ( $values as $i => $value ) {
-	//			$_FILES['imageFile'][ $key ][ $i ] = htmlspecialchars( $value );
-	//		}
-	//	}
-	$out = var_export( $_FILES, true );
+	$files = [];
+	foreach ( $_FILES[ IMAGE_FILES ] as $name => $items ) {
+		foreach ( $items as $k => $value ) {
+			$files[ $k ][ $name ] = $_FILES[ IMAGE_FILES ][ $name ][ $k ];
+		}
+	}
 
-	//	$out = sprintf( "![%s](%s)", ( $_FILES['imageFile']['name'] ), ( "/uploads/" . $_FILES['imageFile']['full_path'] ) );
-	//	$out = var_export( $_FILES['imageFile'], true );
+	$out = '';
+	foreach ( $files as $f ) {
+		if ( $f['error'] !== UPLOAD_ERR_OK ) {
+			// File upload failed
+			echo json_encode( 'File upload error: ' . $f['error'] );
+			die();
+		}
+		// File upload successful
+		$tempFilePath = $f['tmp_name'];
+		$finalFilePath = sprintf( "%s/%s", get_upload_dir(), $f['name'] );
+		if ( ! move_uploaded_file( $tempFilePath, $finalFilePath ) ) {
+			echo json_encode( 'Move upload error: ' . $tempFilePath );
+			die();
+		}
+		$out .= sprintf( "![%s](%s)", ( $f['name'] ), ( ROOT_URL . "/uploads/" . $f['full_path'] ) );
+	}
+
 	echo json_encode( $out, JSON_THROW_ON_ERROR );
 	die();
+}
+
+function get_upload_dir() {
+	// get an upload directory in the current directory based on YYYY/MM/filename.ext
+	$upload_dir = sprintf( "%s/uploads/%s", ROOT_DIR, date( "Y/m" ) );
+	if ( ! is_dir( $upload_dir ) ) {
+		if ( ! mkdir( $upload_dir, 0777, true ) && ! is_dir( $upload_dir ) ) {
+			throw new \RuntimeException( sprintf( 'Directory "%s" was not created', $upload_dir ) );
+		}
+	}
+
+	return $upload_dir;
 }
