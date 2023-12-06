@@ -28,8 +28,6 @@ function handleFiles(files, textarea) {
     for (const file of files) {
         formData.append('imageFiles[]', file);
     }
-    console.log(formData);
-
     const currentText = textarea.value;
     const cursorPosition = textarea.selectionStart;
     fetch('/upload', {
