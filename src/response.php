@@ -11,6 +11,7 @@ use Svandragt\Lamb\Security;
 use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
+use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';
 #[NoReturn]
@@ -312,13 +313,16 @@ function respond_upload( array $args ) : void {
 			die();
 		}
 		// File upload successful
-		$tempFilePath = $f['tmp_name'];
-		$finalFilePath = sprintf( "%s/%s", get_upload_dir(), $f['name'] );
-		if ( ! move_uploaded_file( $tempFilePath, $finalFilePath ) ) {
-			echo json_encode( 'Move upload error: ' . $tempFilePath );
+		$temp_fp = $f['tmp_name'];
+		$ext = pathinfo( $f['name'] )['extension'];
+		$new_fn = sha1( $f['name'] ) . ".$ext";
+		$new_fp = sprintf( "%s/%s", get_upload_dir(), $new_fn );
+		if ( ! move_uploaded_file( $temp_fp, $new_fp ) ) {
+			echo json_encode( 'Move upload error: ' . $temp_fp );
 			die();
 		}
-		$out .= sprintf( "![%s](%s)", ( $f['name'] ), ( ROOT_URL . "/uploads/" . $f['full_path'] ) );
+		$upload_url = str_replace( ROOT_DIR, ROOT_URL, get_upload_dir() );
+		$out .= sprintf( "![%s](%s)", $f['name'], "$upload_url/$new_fn" );
 	}
 
 	echo json_encode( $out, JSON_THROW_ON_ERROR );
@@ -327,7 +331,7 @@ function respond_upload( array $args ) : void {
 
 function get_upload_dir() {
 	// get an upload directory in the current directory based on YYYY/MM/filename.ext
-	$upload_dir = sprintf( "%s/uploads/%s", ROOT_DIR, date( "Y/m" ) );
+	$upload_dir = sprintf( "%s/assets/%s", ROOT_DIR, date( "Y/m" ) );
 	if ( ! is_dir( $upload_dir ) ) {
 		if ( ! mkdir( $upload_dir, 0777, true ) && ! is_dir( $upload_dir ) ) {
 			throw new \RuntimeException( sprintf( 'Directory "%s" was not created', $upload_dir ) );
