@@ -3,14 +3,17 @@
 namespace Svandragt\Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
+use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use Svandragt\Lamb\Security;
 use Svandragt\Lamb\Config;
+use Svandragt\Lamb\Security;
 use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
+use const ROOT_DIR;
 
+const IMAGE_FILES = 'imageFiles';
 #[NoReturn]
 function redirect_404( $fallback ) : void {
 	global $request_uri;
@@ -195,7 +198,7 @@ function respond_edit( array $args ) : array {
 
 # Atom feed
 #[NoReturn]
-function respond_feed() : array {
+function respond_feed() : void {
 	global $config;
 	global $data;
 
@@ -278,4 +281,62 @@ function respond_tag( array $args ) : array {
 	}
 
 	return $data;
+}
+
+/**
+ * @param array $args
+ *
+ * @return void
+ * @throws JsonException
+ */
+#[NoReturn]
+function respond_upload( array $args ) : void {
+	if ( empty( $_FILES[ IMAGE_FILES ] ) ) {
+		// invalid request http status code
+		header( 'HTTP/1.1 400 Bad Request' );
+		die( 'No files uploaded!' );
+	}
+	Security\require_login();
+
+	$files = [];
+	foreach ( $_FILES[ IMAGE_FILES ] as $name => $items ) {
+		foreach ( $items as $k => $value ) {
+			$files[ $k ][ $name ] = $_FILES[ IMAGE_FILES ][ $name ][ $k ];
+		}
+	}
+
+	$out = '';
+	foreach ( $files as $f ) {
+		if ( $f['error'] !== UPLOAD_ERR_OK ) {
+			// File upload failed
+			echo json_encode( 'File upload error: ' . $f['error'] );
+			die();
+		}
+		// File upload successful
+		$temp_fp = $f['tmp_name'];
+		$ext = pathinfo( $f['name'] )['extension'];
+		$new_fn = sha1( $f['name'] ) . ".$ext";
+		$new_fp = sprintf( "%s/%s", get_upload_dir(), $new_fn );
+		if ( ! move_uploaded_file( $temp_fp, $new_fp ) ) {
+			echo json_encode( 'Move upload error: ' . $temp_fp );
+			die();
+		}
+		$upload_url = str_replace( ROOT_DIR, ROOT_URL, get_upload_dir() );
+		$out .= sprintf( "![%s](%s)", $f['name'], "$upload_url/$new_fn" );
+	}
+
+	echo json_encode( $out, JSON_THROW_ON_ERROR );
+	die();
+}
+
+function get_upload_dir() {
+	// get an upload directory in the current directory based on YYYY/MM/filename.ext
+	$upload_dir = sprintf( "%s/assets/%s", ROOT_DIR, date( "Y/m" ) );
+	if ( ! is_dir( $upload_dir ) ) {
+		if ( ! mkdir( $upload_dir, 0777, true ) && ! is_dir( $upload_dir ) ) {
+			throw new \RuntimeException( sprintf( 'Directory "%s" was not created', $upload_dir ) );
+		}
+	}
+
+	return $upload_dir;
 }
