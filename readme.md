@@ -52,9 +52,12 @@ uncommenting them:
 ;404_fallback = https://my.oldsite.com
 ```
 
-# Screenshot
+# Screenshots
 
-![image](https://i.imgur.com/rwk2VmV.png)
+![Demo Lamb instance](https://i.imgur.com/rwk2VmV.png "A demo Lamb instance")
+
+![Drag and drop image demo](https://vandragt.com/assets/2023/12/6c5e64336afdd939f9c9768ac07b35551de8043b.gif "Creating a post with an image")
+
 
 # Philosophy
 
