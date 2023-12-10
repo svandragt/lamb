@@ -20,7 +20,7 @@ function action_delete( $post ) : string {
         on submit
         halt the event
         call confirm(`Really delete status ${[@data-id]}?`)
-        if it is true then submit() me∏
+        if it is true then submit() me
         "
     >
         <input type="submit" value="Delete…"/>
@@ -34,8 +34,16 @@ function action_edit( $post ) : string {
 	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
-
-	return sprintf( '<button class="button-edit" data-id="%s" type="button">Edit</button>', $post['id'] );
+    ob_start();
+    ?>
+    <button
+            class="button-edit"
+            data-id="<?php echo $post['id'] ?>"
+            type="button"
+            _="on click go to url `/edit/${[@data-id]}`"
+    >Edit</button>
+    <?php
+    return ob_get_clean();
 }
 
 function csrf_token() : string {
@@ -135,7 +143,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/link-edit-buttons.js', '/upload-image.js' ],
+		'logged_in' => [ '/upload-image.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
