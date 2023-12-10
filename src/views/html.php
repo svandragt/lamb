@@ -125,6 +125,7 @@ function the_scripts() : void {
 	foreach ( $assets as $id => $href ) {
 		printf( "<script id='%s' src='%s'></script>", $id, $href );
 	}
+    // TODO: localise script
 	print( "<script src='https://unpkg.com/hyperscript.org@0.9.12'></script>" );
 }
 
