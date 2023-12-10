@@ -2,7 +2,9 @@
     <form method="post" action="/" enctype="multipart/form-data">
         <textarea placeholder="What's happening?" name="contents" required
                   ondrop="handleDrop(event)"
-                  ondragover="handleDragOver(event)" id="contents"
+                  ondragover="handleDragOver(event)"
+                  id="contents"
+                  _="on every input set my.style.height to my.scrollHeight + 'px'"
         ></textarea>
         <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
         <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>

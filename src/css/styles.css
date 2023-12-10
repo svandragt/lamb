@@ -152,6 +152,7 @@ textarea {
     display: block;
     margin: 1em 0;
     box-sizing: border-box;
+    overflow: hidden;
 }
 
 .flash {

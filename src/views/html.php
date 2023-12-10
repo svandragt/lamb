@@ -1,6 +1,6 @@
 <?php
 
-global $config;
+global $config, $template;
 global $action;
 
 use Svandragt\Lamb;
@@ -119,12 +119,13 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/growing-input.js', '/confirm-delete.js', '/link-edit-buttons.js', '/upload-image.js' ],
+		'logged_in' => ['/confirm-delete.js', '/link-edit-buttons.js', '/upload-image.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<script id='%s' src='%s'></script>", $id, $href );
 	}
+	print( "<script src='https://unpkg.com/hyperscript.org@0.9.12'></script>" );
 }
 
 function asset_loader( $assets, $asset_dir ) : Generator {
