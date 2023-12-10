@@ -9,9 +9,25 @@ function action_delete( $post ) : string {
 	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
-
-	return sprintf( '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>', $post['id'], $post['id'], csrf_token() );
+	ob_start();
+	?>
+    <form
+        data-id="<?php echo $post['id'] ?>"
+        class="form-delete"
+        action="/delete/<?php echo $post['id'] ?>"
+        method="post"
+        _="
+        on submit
+        halt the event
+        call confirm(`Really delete status ${[@data-id]}?`)
+        if it is true then submit() me∏
+        "
+    >
+        <input type="submit" value="Delete…"/>
+        <input type="hidden" name="csrf" value="<?php echo csrf_token() ?>"/>
+    </form>
+	<?php
+	return ob_get_clean();
 }
 
 function action_edit( $post ) : string {
@@ -119,13 +135,13 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => ['/confirm-delete.js', '/link-edit-buttons.js', '/upload-image.js' ],
+		'logged_in' => [ '/link-edit-buttons.js', '/upload-image.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<script id='%s' src='%s'></script>", $id, $href );
 	}
-    // TODO: localise script
+	// TODO: localise scripts
 	print( "<script src='https://unpkg.com/hyperscript.org@0.9.12'></script>" );
 }
 
