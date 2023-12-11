@@ -143,7 +143,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
-		'logged_in' => [ '/upload-image.js' ],
+//		'logged_in' => [],
 	];
 	$assets = asset_loader( $scripts, 'js' );
 	foreach ( $assets as $id => $href ) {
@@ -153,6 +153,16 @@ function the_scripts() : void {
 	print( "<script src='https://unpkg.com/hyperscript.org@0.9.12'></script>" );
 }
 
+/**
+ * Generates URLs for asset files based on the given assets array and asset directory.
+ *
+ * @param array  $assets An associative array where the keys are directories and the values are arrays of file names.
+ * @param string $asset_dir The base directory for the asset files.
+ *
+ * @return Generator Yields each asset file URL as a key-value pair, where the key is the MD5 hash of the URL and the value is the URL.
+ *
+ * @link https://stackoverflow.com/a/11813996
+ */
 function asset_loader( $assets, $asset_dir ) : Generator {
 	foreach ( $assets as $dir => $files ) {
 		foreach ( $files as $file ) {
