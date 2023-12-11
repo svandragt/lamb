@@ -19,9 +19,9 @@
                     data.append('imageFiles[]', file)
                 end
                 fetch /upload as json with {method:'POST', body:data}
-                set currentText to my value
-                set curPos to my selectionStart
-                put currentText.slice(0, curPos) + result + currentText.slice(curPos) into my value
+                set v to my.value
+                set insertionPoint to my.selectionStart
+                set my.value to v.slice(0, insertionPoint) + result + v.slice(insertionPoint)
                 trigger input on me
             end
             "
