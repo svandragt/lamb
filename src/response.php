@@ -11,6 +11,7 @@ use Svandragt\Lamb\Security;
 use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
+use function Svandragt\Lamb\get_tags;
 use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';

@@ -3,7 +3,9 @@
 global $config;
 global $action;
 
+use RedBeanPHP\R;
 use Svandragt\Lamb;
+use function Svandragt\Lamb\get_tags;
 
 function action_delete( $post ) : string {
 	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
@@ -65,6 +67,21 @@ function page_intro() : string {
 	}
 
 	return sprintf( '<p>%s</p>', $data['intro'] );
+}
+
+function related_posts( $body ) {
+	$tags = get_tags( $body );
+	$related_posts = [];
+	foreach ( $tags as $tag ) {
+		$tag_posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [
+			"% #$tag%",
+			"%\n#$tag%",
+		], 'ORDER BY created DESC' );
+		$related_posts = array_merge( $related_posts, $tag_posts );
+	}
+
+	// Deduplicate posts
+	return $related_posts;
 }
 
 function the_opengraph() {
@@ -272,6 +289,7 @@ function li_menu_items() {
 	endif;
 	require( ROOT_DIR . "/views/actions/$template.php" ); ?>
 </main>
+<?php require( ROOT_DIR . "/views/_related.php" ); ?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
