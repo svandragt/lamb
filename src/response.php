@@ -272,7 +272,7 @@ function respond_search( array $args ) : array {
 function respond_tag( array $args ) : array {
 	[ $tag ] = $args;
 	$tag = htmlspecialchars( $tag );
-	$posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "#$tag%" ], 'ORDER BY created DESC' );
+	$posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [ "% #$tag%", "%\n#$tag%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Tagged with #' . $tag;
 
 	$data = array_merge( $data, transform( $posts ) );
