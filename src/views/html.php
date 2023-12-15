@@ -68,10 +68,10 @@ function page_intro() : string {
 }
 
 function the_opengraph() {
-	global $action;
+	global $template;
 	global $config;
 	global $data;
-	if ( $action !== 'status' ) {
+	if ( $template !== 'status' ) {
 		return;
 	}
 	$item = $data['items'][0];
