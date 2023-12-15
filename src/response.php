@@ -252,7 +252,7 @@ function respond_search( array $args ) : array {
 		}
 		redirect_search( $query );
 	}
-	$posts = R::find( 'post', 'body LIKE ? or body LIKE ?', [ "% $query%", "$query%" ], 'ORDER BY created DESC' );
+	$posts = R::find( 'post', 'body LIKE ?', [ "%$query%" ], 'ORDER BY created DESC' );
 	$data['title'] = 'Searched for "' . $query . '"';
 	$num_results = count( $posts );
 	if ( $num_results > 0 ) {
