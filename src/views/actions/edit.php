@@ -7,8 +7,6 @@ if ( isset( $_SESSION[ SESSION_LOGIN ] ) && $post->id > 0 ): ?>
 
     <form method="post" action="/edit" id="editform">
         <textarea placeholder="What's happening?" name="contents" required
-                  ondrop="handleDrop(event)"
-                  ondragover="handleDragOver(event)"
                   id="contents"
         ><?= strip_tags( $post->body ); ?></textarea>
         <input type="hidden" name="id" value="<?= strip_tags( $post->id ); ?>"/>
