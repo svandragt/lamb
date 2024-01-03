@@ -2,6 +2,7 @@
 
 global $config;
 global $action;
+global $template;
 
 use RedBeanPHP\R;
 use Svandragt\Lamb;
@@ -136,6 +137,7 @@ function the_styles() : void {
 
 function the_scripts() : void {
 	$scripts = [
+		'' => [ '/shorthand.js' ],
 		'logged_in' => [ '/growing-input.js', '/confirm-delete.js', '/link-edit-buttons.js', '/upload-image.js' ],
 	];
 	$assets = asset_loader( $scripts, 'js' );
