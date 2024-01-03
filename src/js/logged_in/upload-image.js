@@ -1,21 +1,16 @@
-document.addEventListener('DOMContentLoaded', function () {
-    const textarea = document.getElementById('contents');
+onLoaded(() => {
+    const ta = $('textarea')
+    if (!ta) return
+    ta.on('dragover', (ev) => cancel(ev))
+    ta.on('drop', (ev) => {
+        cancel(ev)
 
-    textarea.addEventListener('dragover', function (event) {
-        event.stopPropagation();
-        event.preventDefault();
-    });
-
-    textarea.addEventListener('drop', function (event) {
-        event.stopPropagation();
-        event.preventDefault();
-
-        const files = event.dataTransfer.files;
+        const files = ev.dataTransfer.files;
         if (files.length > 0) {
-            handleFiles(files, textarea);
+            handleFiles(files, ta)
         }
-    });
-});
+    })
+})
 
 /**
  * Handle files dropped into the textarea.
@@ -24,20 +19,19 @@ document.addEventListener('DOMContentLoaded', function () {
  * @param {HTMLElement} textarea
  */
 function handleFiles(files, textarea) {
-    const formData = new FormData();
+    const formData = new FormData()
     for (const file of files) {
-        formData.append('imageFiles[]', file);
+        formData.append('imageFiles[]', file)
     }
-    const currentText = textarea.value;
-    const cursorPosition = textarea.selectionStart;
+    const text = textarea.value
+    const cursor = textarea.selectionStart
     fetch('/upload', {
-        method: 'POST',
-        body: formData
+        method: 'POST', body: formData
     })
         .then(response => response.json())
         .then(data => {
-            textarea.value = currentText.slice(0, cursorPosition) + data + currentText.slice(cursorPosition);
-            textarea.dispatchEvent(new Event('input'));
+            textarea.value = text.slice(0, cursor) + data + text.slice(cursor)
+            textarea.dispatchEvent(new Event('input'))
         })
-        .catch(error => console.error(error));
+        .catch(error => console.error(error))
 }

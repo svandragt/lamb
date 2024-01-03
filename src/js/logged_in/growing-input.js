@@ -1,10 +1,10 @@
-(() => {
-    var ta = document.querySelector('textarea')
+onLoaded(() => {
+    let ta = $('textarea')
     if (!ta) return
     ta.style.overflow = 'hidden'
-    ta.addEventListener('input', growing_input)
+    ta.on('input', growing_input)
     growing_input({'target': ta})
-})()
+});
 
 function growing_input(ev) {
     const target = ev.target
