@@ -140,6 +140,7 @@ function redirect_uri( $where ) : void {
 function redirect_login() {
 	if ( isset( $_SESSION[ SESSION_LOGIN ] ) ) {
 		// Already logged in
+		session_regenerate_id( true );
 		redirect_uri( '/' );
 	}
 	if ( ! isset( $_POST['submit'] ) || $_POST['submit'] !== SUBMIT_LOGIN ) {
@@ -155,6 +156,7 @@ function redirect_login() {
 	}
 
 	$_SESSION[ SESSION_LOGIN ] = true;
+	session_regenerate_id( true );
 	$where = filter_input( INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL );
 	redirect_uri( $where );
 }
@@ -162,6 +164,7 @@ function redirect_login() {
 #[NoReturn]
 function redirect_logout() : void {
 	unset( $_SESSION[ SESSION_LOGIN ] );
+	session_regenerate_id( true );
 	redirect_uri( '/' );
 }
 

@@ -95,8 +95,23 @@ function post_has_slug( string $lookup ) : string|null {
 
 # Bootstrap
 header( 'Cache-Control: max-age=300' );
-session_start();
 R::setup( 'sqlite:../data/lamb.db' );
+
+// Make cookies inaccessible via JavaScript (XSS).
+ini_set( "session.cookie_httponly", 1 );
+// Prevent the browser from sending cookies along with cross-site requests (CSRF)
+session_set_cookie_params( [ 'samesite' => 'Strict' ] ); // or 'Lax'
+session_start();
+
+// Validate user agents
+if ( isset( $_SESSION['HTTP_USER_AGENT'] ) ) {
+	if ( $_SESSION['HTTP_USER_AGENT'] !== md5( $_SERVER['HTTP_USER_AGENT'] ) ) {
+		/* Possible session hijacking attempt */
+		exit( "Security fail" );
+	}
+} else {
+	$_SESSION['HTTP_USER_AGENT'] = md5( $_SERVER['HTTP_USER_AGENT'] );
+}
 
 $config = Config\load();
 
@@ -127,7 +142,6 @@ Route\register_route( 'upload', __NAMESPACE__ . '\\Response\respond_upload', $lo
 $template = $action;
 if ( post_has_slug( $action ) === $action ) {
 	Route\register_route( $action, __NAMESPACE__ . '\\Response\respond_post', $action );
-	# Ne
 	$template = 'status';
 }
 $data = Route\call_route( $action );
