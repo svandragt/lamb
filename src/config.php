@@ -4,6 +4,11 @@ namespace Svandragt\Lamb\Config;
 
 use function yaml_parse;
 
+/**
+ * Loads the configuration settings.
+ *
+ * @return array The configuration settings.
+ */
 function load() : array {
 	$config = [
 		'author_email' => 'joe.sheeple@example.com',
@@ -18,6 +23,13 @@ function load() : array {
 	return $config;
 }
 
+/**
+ * Checks if a given menu item exists in the configuration array.
+ *
+ * @param string $slug The menu item slug to check.
+ *
+ * @return bool Returns true if the menu item exists in the configuration array, false otherwise.
+ */
 function is_menu_item( string $slug ) : bool {
 	global $config;
 
@@ -26,9 +38,11 @@ function is_menu_item( string $slug ) : bool {
 }
 
 /**
- * @param string $text
+ * Parses the front matter from a given text and returns it as an array.
  *
- * @return array
+ * @param string $text The text containing the front matter.
+ *
+ * @return array Returns an array containing the parsed front matter.
  */
 function parse_matter( string $text ) : array {
 	$matter = @yaml_parse( $text );

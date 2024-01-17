@@ -6,11 +6,11 @@ use Parsedown;
 
 class LambDown extends Parsedown {
 	/**
-	 * Handle #tag at the start of the line.
+	 * Determines if the given line is a valid header block in Markdown format.
 	 *
-	 * @param $Line
+	 * @param array $Line The line to be checked.
 	 *
-	 * @return array[]|void
+	 * @return array[]|void Returns the result of the parent's blockHeader method, or null if the line is not a valid header block.
 	 */
 	protected function blockHeader( $Line ) {
 		$level = strspn( $Line['text'], '#' );
