@@ -10,11 +10,11 @@
         }
     ],
     "require": {
+        "php": ">=8.1",
         "ext-gettext": "*",
         "ext-simplexml": "*",
         "ext-sqlite3": "*",
         "ext-yaml": "*",
-        "php": ">=8.1",
         "erusev/parsedown": "^1.7",
         "gabordemooij/redbean": "^5.7"
     },
