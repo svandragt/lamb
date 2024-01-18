@@ -211,4 +211,4 @@ switch ( $action ) {
 }
 
 # Views
-require_once( "views/html.php" );
+require_once( "themes/default/html.php" );

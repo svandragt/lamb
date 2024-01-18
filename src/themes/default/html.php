@@ -291,9 +291,9 @@ function li_menu_items() {
 		<?php
 		endwhile;
 	endif;
-	require( ROOT_DIR . "/views/actions/$template.php" ); ?>
+	require( ROOT_DIR . "/themes/default/actions/$template.php" ); ?>
 </main>
-<?php require( ROOT_DIR . "/views/_related.php" ); ?>
+<?php require( ROOT_DIR . "/themes/default/_related.php" ); ?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
