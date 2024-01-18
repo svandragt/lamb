@@ -5,8 +5,6 @@ global $action;
 global $template;
 
 use RedBeanPHP\R;
-use Svandragt\Lamb;
-use function Svandragt\Lamb\get_tags;
 
 function action_delete( $post ) : string {
 	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
@@ -71,7 +69,7 @@ function page_intro() : string {
 }
 
 function related_posts( $body ) {
-	$tags = \Svandragt\Lamb\get_tags( $body );
+	$tags = \Lamb\get_tags( $body );
 
 	return get_posts_by_tags( $tags );
 }
