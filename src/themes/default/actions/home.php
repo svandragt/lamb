@@ -10,4 +10,4 @@
 <?= site_title(); ?>
 <?= page_intro(); ?>
 
-<?php require ROOT_DIR . "/views/_items.php"; ?>
+<?php require ROOT_DIR . "/themes/default/_items.php"; ?>

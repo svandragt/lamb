@@ -312,7 +312,7 @@ function respond_feed() : void {
 	$data['title'] = $config['site_title'];
 
 	$data = array_merge( $data, transform( $posts ) );
-	require_once( 'views/feed.php' );
+	require_once( 'themes/default/feed.php' );
 	die();
 }
 
