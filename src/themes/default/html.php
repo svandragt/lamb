@@ -71,17 +71,22 @@ function page_intro() : string {
 }
 
 function related_posts( $body ) {
-	$tags = get_tags( $body );
+	$tags = \Svandragt\Lamb\get_tags( $body );
+
+	return get_posts_by_tags( $tags );
+}
+
+function get_posts_by_tags( $tags ) {
 	$related_posts = [];
 	foreach ( $tags as $tag ) {
-		$tag_posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [
-			"% #$tag%",
-			"%\n#$tag%",
-		], 'ORDER BY created DESC' );
-		$related_posts = array_merge( $related_posts, $tag_posts );
+		$sql_query = 'body LIKE ? OR body LIKE ? ORDER BY created DESC';
+		$params = [ "% #$tag%", "%\n#$tag%" ];
+		$tag_posts = R::find( 'post', $sql_query, $params );
+		foreach ( $tag_posts as $tag_post ) {
+			$related_posts[] = $tag_post;
+		}
 	}
 
-	// Deduplicate posts
 	return $related_posts;
 }
 
@@ -129,7 +134,7 @@ function the_styles() : void {
 	$styles = [
 		'' => [ 'styles.css' ],
 	];
-	$assets = asset_loader( $styles, 'css' );
+	$assets = asset_loader( $styles, 'themes/default/css' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<link rel='stylesheet' id='%s' href='%s'>", $id, $href );
 	}
