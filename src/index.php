@@ -1,11 +1,11 @@
 <?php
 
-namespace Svandragt\Lamb;
+namespace Lamb;
 
 require '../vendor/autoload.php';
 
 use RedBeanPHP\R;
-use function Svandragt\Lamb\Response\respond_404;
+use function Lamb\Response\respond_404;
 
 $root_url = ( isset( $_SERVER['HTTPS'] ) && $_SERVER['HTTPS'] === 'on' ? "https" : "http" ) . "://" . $_SERVER["HTTP_HOST"];
 define( 'HIDDEN_CSRF_NAME', 'csrf' );

@@ -1,17 +1,17 @@
 <?php /** @noinspection PhpUnused */
 
-namespace Svandragt\Lamb\Response;
+namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use Svandragt\Lamb\Config;
-use Svandragt\Lamb\Security;
-use function Svandragt\Lamb\Config\parse_matter;
-use function Svandragt\Lamb\Route\is_reserved_route;
-use function Svandragt\Lamb\transform;
-use function Svandragt\Lamb\get_tags;
+use Lamb\Config;
+use Lamb\Security;
+use function Lamb\Config\parse_matter;
+use function Lamb\Route\is_reserved_route;
+use function Lamb\transform;
+use function Lamb\get_tags;
 use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';
