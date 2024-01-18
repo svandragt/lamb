@@ -37,6 +37,7 @@ To Run:
 ```shell
 LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
 ```
+Change `hackme` to something more secure, this is the `/login` password!
 
 Support for [Docker](docs/docker.md), [Caddy](docs/caddy.md) and [NGINX](docs/nginx.md) is also provided.
 
