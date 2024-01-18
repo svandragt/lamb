@@ -6,7 +6,7 @@ Barrier free super simple blogging, self-hosted.
 
 - SQLite based portable single author blog
 - Twitter like interface
-- Friction free Markdown entry, with drag and drop image support.
+- Friction free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) entry, with drag and drop image support.
 - Generates a discoverable Atom feed (/feed)
 - Hashtags support, by just typing them.
 - 404 fallback url feature (redirects 404's relative urls to another site).
