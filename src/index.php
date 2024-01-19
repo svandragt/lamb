@@ -145,6 +145,13 @@ function post_has_slug( string $lookup ) : string|null {
 
 # Bootstrap
 header( 'Cache-Control: max-age=300' );
+
+$data_dir = '../data';
+if ( ! is_dir( $data_dir ) ) {
+	if ( ! mkdir( $data_dir, 0777, true ) && ! is_dir( $data_dir ) ) {
+		throw new \RuntimeException( sprintf( 'Directory "%s" was not created', $data_dir ) );
+	}
+}
 R::setup( 'sqlite:../data/lamb.db' );
 
 // Make cookies inaccessible via JavaScript (XSS).
