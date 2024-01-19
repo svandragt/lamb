@@ -267,8 +267,10 @@ function li_menu_items() {
 <nav>
     <ul>
 		<?php echo li_menu_items( "left" ); ?>
-		<?php if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-            <li class="right"><a href="/logout">Logout</a></li>
+		<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+            <a href="/login">Login</a>
+		<?php else: ?>
+            <a href="/logout">Logout</a>
 		<?php endif; ?>
         <li class="right">
             <form action="/search" method="get" class="form-search">
