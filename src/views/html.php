@@ -268,9 +268,9 @@ function li_menu_items() {
     <ul>
 		<?php echo li_menu_items( "left" ); ?>
 		<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-            <a href="/login">Login</a>
+            <a class="right" href="/login">Login</a>
 		<?php else: ?>
-            <a href="/logout">Logout</a>
+            <a class="right" href="/logout">Logout</a>
 		<?php endif; ?>
         <li class="right">
             <form action="/search" method="get" class="form-search">
