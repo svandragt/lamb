@@ -1,8 +1,8 @@
 <?php
 
-namespace Svandragt\Lamb\Route;
+namespace Lamb\Route;
 
-use Svandragt\Lamb\Response;
+use Lamb\Response;
 
 /**
  * Registers a new route.
