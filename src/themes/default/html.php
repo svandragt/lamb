@@ -270,15 +270,17 @@ function li_menu_items() {
 <nav>
     <ul>
 		<?php echo li_menu_items( "left" ); ?>
-		<?php if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
-            <li class="right"><a href="/logout">Logout</a></li>
-		<?php endif; ?>
         <li class="right">
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
                 <input type="text" name="s" id="s" required>
                 <input type="submit" value="🔎">
             </form>
+			<?php if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+                <a href="/login">Login</a>
+			<?php else: ?>
+                <a href="/logout">Logout</a>
+			<?php endif; ?>
         </li>
     </ul>
 </nav>
