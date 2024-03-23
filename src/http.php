@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb\Http;
+namespace Lamb\Http;
 
 /**
  * Retrieves the current request URI.

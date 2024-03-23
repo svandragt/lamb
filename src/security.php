@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-namespace Svandragt\Lamb\Security;
+namespace Lamb\Security;
 
 /**
  * Class Response
@@ -14,7 +14,7 @@ namespace Svandragt\Lamb\Security;
  * Represents a response returned by a controller action.
  */
 
-use    Svandragt\Lamb\Response;
+use    Lamb\Response;
 
 # Security
 /**

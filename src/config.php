@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb\Config;
+namespace Lamb\Config;
 
 use function yaml_parse;
 
