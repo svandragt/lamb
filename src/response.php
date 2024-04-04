@@ -140,7 +140,7 @@ function redirect_edited() {
 		return null;
 	}
 
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
+	$contents = trim( htmlspecialchars( $_POST['contents'] ) );
 	$id = trim( filter_input( INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT ) );
 	if ( empty( $contents ) || empty( $id ) ) {
 		return null;
