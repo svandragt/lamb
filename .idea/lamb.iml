@@ -2,6 +2,12 @@
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/src/Composer" isTestSource="false" packagePrefix="Composer\" />
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/src/Composer" isTestSource="false" packagePrefix="Composer\" />
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/src/Composer" isTestSource="false" packagePrefix="Composer\" />
+      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" packagePrefix="Svandragt\Lamb\" />
       <excludeFolder url="file://$MODULE_DIR$/.idea/dataSources" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/composer" />
@@ -9,6 +15,72 @@
       <excludeFolder url="file://$MODULE_DIR$/vendor/gabordemooij/redbean" />
       <excludeFolder url="file://$MODULE_DIR$/data/cache" />
       <excludeFolder url="file://$MODULE_DIR$/vendor" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/composer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/justinrainbow/json-schema" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/psr/container" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/psr/log" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/react/promise" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/seld/jsonlint" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/seld/phar-utils" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/seld/signal-handler" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/console" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/deprecation-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/filesystem" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/finder" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-ctype" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-intl-grapheme" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-intl-normalizer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-mbstring" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-php73" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-php80" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/polyfill-php81" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/process" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/service-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-2-link/share/php/composer/vendor/symfony/string" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/composer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/justinrainbow/json-schema" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/psr/container" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/psr/log" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/react/promise" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/seld/jsonlint" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/seld/phar-utils" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/seld/signal-handler" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/console" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/deprecation-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/filesystem" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/finder" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-ctype" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-intl-grapheme" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-intl-normalizer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-mbstring" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-php73" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-php80" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/polyfill-php81" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/process" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/service-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/vendor/symfony/string" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/composer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/justinrainbow/json-schema" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/psr/container" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/psr/log" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/react/promise" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/seld/jsonlint" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/seld/phar-utils" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/seld/signal-handler" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/console" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/deprecation-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/filesystem" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/finder" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-ctype" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-intl-grapheme" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-intl-normalizer" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-mbstring" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-php73" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-php80" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/polyfill-php81" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/process" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/service-contracts" />
+      <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/string" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
