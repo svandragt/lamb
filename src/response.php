@@ -73,7 +73,7 @@ function redirect_created() : ?array {
 	if ( $_POST['submit'] !== SUBMIT_CREATE ) {
 		return null;
 	}
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
+	$contents = trim( htmlspecialchars( filter_input( INPUT_POST, 'contents', FILTER_FLAG_NO_ENCODE_QUOTES ) ) );
 	if ( empty( $contents ) ) {
 		return null;
 	}
@@ -381,9 +381,9 @@ function respond_post( array $args ) : array {
  */
 function respond_search( array $args ) : array {
 	[ $query ] = $args;
-	$query = filter_var( $query, FILTER_SANITIZE_STRING );
+	$query = htmlspecialchars( $query );
 	if ( empty( $query ) ) {
-		$query = filter_input( INPUT_GET, 's', FILTER_SANITIZE_STRING );
+		$query = htmlspecialchars( $_GET['s'] );
 		if ( empty( $query ) ) {
 			return [];
 		}

@@ -45,13 +45,18 @@ function is_menu_item( string $slug ) : bool {
  *
  * @return array Returns an array containing the parsed front matter.
  */
-function parse_matter( string $text ) : array {
+function parse_matter( string $body ) : array {
+	$matter = null;
+	$text = explode( '---', $body );
 	try {
-		$matter = Yaml::parse( $text );
+		if ( isset( $text[1] ) ) {
+			$matter = Yaml::parse( $text[1] );
+		}
 	} catch ( ParseException ) {
 		// Invalid YAML
 		return [];
 	}
+
 	// There is no matter.
 	if ( ! is_array( $matter ) ) {
 		return [];
