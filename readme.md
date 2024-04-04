@@ -19,7 +19,7 @@ git clone https://github.com/svandragt/lamb.git
 cd lamb
 ```
 
-Lamb can be run  locally with the builtin PHP webserver, in two ways
+Lamb can be run locally with the builtin PHP webserver, here are two ways to set this up:
 
 1. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
 2. locally install [PHP 8.1](https://www.php.net/manual/en/install.php) and
