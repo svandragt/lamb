@@ -15,8 +15,8 @@ Barrier free super simple blogging, self-hosted.
 
 You can run this locally with the builtin PHP webserver:
 
-Setup requirements:
-[PHP 8.1](https://www.php.net/manual/en/install.php),
+Setup requirements: [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), or
+[PHP 8.1](https://www.php.net/manual/en/install.php) +
 [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 
 ```shell
