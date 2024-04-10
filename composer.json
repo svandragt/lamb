@@ -16,7 +16,7 @@
         "ext-sqlite3": "*",
         "erusev/parsedown": "^1.7",
         "gabordemooij/redbean": "^5.7",
-        "symfony/yaml": "^6.4"
+        "symfony/yaml": "^7.0"
     },
     "require-dev": {
         "roave/security-advisories": "dev-latest"
