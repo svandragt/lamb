@@ -30,7 +30,7 @@ function call_route( bool|string $action ) : array {
 	[ $callback, $args ] = $routes[ $action ];
 
 	if ( is_null( $callback ) ) {
-		return Response\response_404( [], true );
+		return Response\respond_404( [], true );
 	}
 
 	return $callback( $args );

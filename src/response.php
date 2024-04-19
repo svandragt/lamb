@@ -3,7 +3,6 @@
 namespace Svandragt\Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
-use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Svandragt\Lamb\Config;
@@ -11,7 +10,6 @@ use Svandragt\Lamb\Security;
 use function Svandragt\Lamb\Config\parse_matter;
 use function Svandragt\Lamb\Route\is_reserved_route;
 use function Svandragt\Lamb\transform;
-use function Svandragt\Lamb\get_tags;
 use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';
@@ -260,7 +258,7 @@ function respond_status( array $args ) : array {
 
 	$data = transform( $posts );
 	if ( empty( $data['items'] ) ) {
-		response_404( [], true );
+		respond_404( [], true );
 	}
 
 	return $data;
@@ -399,7 +397,7 @@ function respond_search( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		response_404( [], true );
+		respond_404( [], true );
 	}
 
 	return $data;
@@ -421,7 +419,7 @@ function respond_tag( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		response_404( [], true );
+		respond_404( [], true );
 	}
 
 	return $data;
