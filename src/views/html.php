@@ -9,7 +9,7 @@ use Svandragt\Lamb;
 use function Svandragt\Lamb\get_tags;
 
 function action_delete( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
@@ -18,7 +18,7 @@ function action_delete( $post ) : string {
 }
 
 function action_edit( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 

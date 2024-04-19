@@ -16,7 +16,7 @@ if ( ! empty( $data['items'] ) ):
             <h3>Related posts</h3>
 			<?php
 			foreach ( $data['items'] as $item ):
-				if ( in_array( $item['id'], $ids ) ):
+				if ( in_array( $item['id'], $ids, true ) ):
 					continue;
 				endif;
 				if ( ! isset( $item['title'] ) ):

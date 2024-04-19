@@ -24,7 +24,7 @@ const $$ = document.querySelectorAll.bind(document)
  * @param {function} func - The event handler function.
  * @returns {Node}
  */
-Node.prototype.on = HTMLDocument.prototype.on = function (event, func) {
+Node.prototype.on = Document.prototype.on = function (event, func) {
     this.addEventListener(event, func);
     return this;
 };
