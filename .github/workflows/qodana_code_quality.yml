@@ -6,7 +6,6 @@ on:
     branches:
       - release
       - main
-      - dev
 
 jobs:
   qodana:
