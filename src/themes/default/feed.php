@@ -3,8 +3,6 @@
 global $config;
 global $data;
 
-use Svandragt\Lamb;
-
 function escape( string $html ) : string {
 	return htmlspecialchars( $html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE );
 }

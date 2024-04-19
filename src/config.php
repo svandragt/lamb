@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb\Config;
+namespace Lamb\Config;
 
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;

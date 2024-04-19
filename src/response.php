@@ -1,16 +1,16 @@
 <?php /** @noinspection PhpUnused */
 
-namespace Svandragt\Lamb\Response;
+namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use Svandragt\Lamb\Config;
-use Svandragt\Lamb\Security;
-use function Svandragt\Lamb\Config\parse_matter;
-use function Svandragt\Lamb\Route\is_reserved_route;
-use function Svandragt\Lamb\transform;
+use Lamb\Config;
+use Lamb\Security;
+use function Lamb\Config\parse_matter;
+use function Lamb\Route\is_reserved_route;
+use function Lamb\transform;
 use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';
@@ -311,7 +311,7 @@ function respond_feed() : void {
 	$data['title'] = $config['site_title'];
 
 	$data = array_merge( $data, transform( $posts ) );
-	require_once( 'views/feed.php' );
+	require_once( 'themes/default/feed.php' );
 	die();
 }
 

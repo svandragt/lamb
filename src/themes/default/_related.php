@@ -1,13 +1,15 @@
 <?php
 global $data;
 global $template;
+
+use function Lamb\transform;
+
 if ( $template !== 'status' ) {
 	return;
 }
 $body = $data['items'][0]['body'];
 $related_posts = related_posts( $body );
-$data = \Svandragt\Lamb\transform( $related_posts );
-
+$data = transform( $related_posts );
 $ids = [];
 if ( ! empty( $data['items'] ) ):
 	?>
@@ -24,7 +26,7 @@ if ( ! empty( $data['items'] ) ):
 				endif;
 				if ( empty ( $item['is_menu_item'] ) ):
 					?>
-                    <li><?= date_created( $item ); ?> <?= substr( strip_tags( $item['title'] ), 0, 42 ) . '&hellip;' ?>
+                    <li><?= date_created( $item ) ?> <?= substr( strip_tags( $item['title'] ), 0, 42 ) . '&hellip;' ?>
                     </li>
 				<?php
 				endif;
