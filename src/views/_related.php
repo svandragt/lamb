@@ -9,20 +9,19 @@ $related_posts = related_posts( $body );
 $data = \Svandragt\Lamb\transform( $related_posts );
 
 $ids = [];
-?>
-<main>
-    <article>
-        <h3>Related posts</h3>
-		<?php
-		if ( empty( $data['items'] ) ):?><p>Sorry no items found.</p>
-		<?php else:
+if ( ! empty( $data['items'] ) ):
+	?>
+    <main>
+        <article>
+            <h3>Related posts</h3>
+			<?php
 			foreach ( $data['items'] as $item ):
-				if ( in_array( $item['id'], $ids ) ) {
+				if ( in_array( $item['id'], $ids ) ):
 					continue;
-				}
-				if ( ! isset( $item['title'] ) ) {
+				endif;
+				if ( ! isset( $item['title'] ) ):
 					$item['title'] = $item['body'];
-				}
+				endif;
 				if ( empty ( $item['is_menu_item'] ) ):
 					?>
                     <li><?= date_created( $item ); ?> <?= substr( strip_tags( $item['title'] ), 0, 42 ) . '&hellip;' ?>
@@ -31,6 +30,7 @@ $ids = [];
 				endif;
 				$ids[] = $item['id'];
 			endforeach;
-		endif;
-		?></article>
-</main>
+			?></article>
+    </main>
+<?php
+endif;
