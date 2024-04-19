@@ -1,11 +1,11 @@
 <?php
 
-namespace Svandragt\Lamb;
+namespace Lamb;
 
 require '../vendor/autoload.php';
 
 use RedBeanPHP\R;
-use function Svandragt\Lamb\Response\respond_404;
+use function Lamb\Response\respond_404;
 
 $root_url = ( isset( $_SERVER['HTTPS'] ) && $_SERVER['HTTPS'] === 'on' ? "https" : "http" ) . "://" . $_SERVER["HTTP_HOST"];
 define( 'HIDDEN_CSRF_NAME', 'csrf' );
@@ -171,6 +171,8 @@ if ( isset( $_SESSION['HTTP_USER_AGENT'] ) ) {
 }
 
 $config = Config\load();
+define( "THEME", $config['theme'] ?? 'default' );
+define( "THEME_DIR", __DIR__ . '/themes/' . THEME );
 
 # Routing
 $request_uri = Http\get_request_uri();
@@ -213,4 +215,4 @@ switch ( $action ) {
 }
 
 # Views
-require_once( "views/html.php" );
+require_once( "themes/default/html.php" );

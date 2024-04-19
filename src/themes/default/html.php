@@ -5,8 +5,6 @@ global $action;
 global $template;
 
 use RedBeanPHP\R;
-use Svandragt\Lamb;
-use function Svandragt\Lamb\get_tags;
 
 function action_delete( $post ) : string {
 	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
@@ -71,15 +69,19 @@ function page_intro() : string {
 }
 
 function related_posts( $body ) {
-	$tags = get_tags( $body );
+	$tags = \Lamb\get_tags( $body );
+
+	return get_posts_by_tags( $tags );
+}
+
+function get_posts_by_tags( $tags ) {
 	$related_posts = [];
 	foreach ( $tags as $tag ) {
-		$tag_posts = R::find( 'post', 'body LIKE ? OR body LIKE ?', [
-			"% #$tag%",
-			"%\n#$tag%",
-		], 'ORDER BY created DESC' );
-		foreach ( $tag_posts as $post ) {
-			$related_posts[] = $post;
+		$sql_query = 'body LIKE ? OR body LIKE ? ORDER BY created DESC';
+		$params = [ "% #$tag%", "%\n#$tag%" ];
+		$tag_posts = R::find( 'post', $sql_query, $params );
+		foreach ( $tag_posts as $tag_post ) {
+			$related_posts[] = $tag_post;
 		}
 	}
 
@@ -130,7 +132,7 @@ function the_styles() : void {
 	$styles = [
 		'' => [ 'styles.css' ],
 	];
-	$assets = asset_loader( $styles, 'css' );
+	$assets = asset_loader( $styles, 'themes/default/css' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<link rel='stylesheet' id='%s' href='%s'>", $id, $href );
 	}
@@ -252,6 +254,16 @@ function li_menu_items() {
 	return implode( PHP_EOL, $items );
 }
 
+function the_entry_form() {
+	if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
+        <form method="post" action="/" enctype="multipart/form-data">
+            <textarea placeholder="What's happening?" name="contents" required></textarea>
+            <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
+            <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
+        </form>
+	<?php endif;
+}
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
@@ -292,9 +304,9 @@ function li_menu_items() {
 		<?php
 		endwhile;
 	endif;
-	require( ROOT_DIR . "/views/actions/$template.php" ); ?>
+	require( ROOT_DIR . "/themes/default/actions/$template.php" ); ?>
 </main>
-<?php require( ROOT_DIR . "/views/_related.php" ); ?>
+<?php require( ROOT_DIR . "/themes/default/_related.php" ); ?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>

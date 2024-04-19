@@ -17,5 +17,5 @@ if ( isset( $_SESSION[ SESSION_LOGIN ] ) && $post->id > 0 ): ?>
     <small><?= action_delete( $post ); ?></small>
 <?php else:
 	$_SESSION['flash'][] = "Error: Status does not exist!";
-	Svandragt\Lamb\Response\respond_404();
+	Lamb\Response\respond_404();
 endif;

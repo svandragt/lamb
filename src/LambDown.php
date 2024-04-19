@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb;
+namespace Lamb;
 
 use Parsedown;
 

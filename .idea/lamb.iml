@@ -8,7 +8,7 @@
       <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default-6-link/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
       <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/src/Composer" isTestSource="false" packagePrefix="Composer\" />
       <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
-      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" packagePrefix="Svandragt\Lamb\" />
+      <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" packagePrefix="Lamb\" />
       <excludeFolder url="file://$MODULE_DIR$/.idea/dataSources" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/composer" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/erusev/parsedown" />
