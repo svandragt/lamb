@@ -36,7 +36,7 @@ function redirect_404( string $fallback ) : void {
  *
  * @return array An array containing the title, intro, and action of the 404 error page.
  */
-function respond_404( bool $use_fallback = false ) : array {
+function respond_404( array $args = [], bool $use_fallback = false ) : array {
 	global $config;
 	if ( $use_fallback ) {
 		if ( isset( $config['404_fallback'] ) ) {
@@ -260,7 +260,7 @@ function respond_status( array $args ) : array {
 
 	$data = transform( $posts );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		response_404( [], true );
 	}
 
 	return $data;
@@ -399,7 +399,7 @@ function respond_search( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		response_404( [], true );
 	}
 
 	return $data;
@@ -421,7 +421,7 @@ function respond_tag( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		response_404( [], true );
 	}
 
 	return $data;

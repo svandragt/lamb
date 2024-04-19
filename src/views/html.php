@@ -78,11 +78,12 @@ function related_posts( $body ) {
 			"% #$tag%",
 			"%\n#$tag%",
 		], 'ORDER BY created DESC' );
-		$related_posts = array_merge( $related_posts, $tag_posts );
+		foreach ( $tag_posts as $post ) {
+			$related_posts[] = $post;
+		}
 	}
 
-	// Deduplicate posts
-	return $related_posts;
+	return array_unique( $related_posts );
 }
 
 function the_opengraph() {
