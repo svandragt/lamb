@@ -3,7 +3,6 @@
 namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
-use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Lamb\Config;
@@ -11,7 +10,6 @@ use Lamb\Security;
 use function Lamb\Config\parse_matter;
 use function Lamb\Route\is_reserved_route;
 use function Lamb\transform;
-use function Lamb\get_tags;
 use const ROOT_DIR;
 
 const IMAGE_FILES = 'imageFiles';
@@ -36,7 +34,7 @@ function redirect_404( string $fallback ) : void {
  *
  * @return array An array containing the title, intro, and action of the 404 error page.
  */
-function respond_404( bool $use_fallback = false ) : array {
+function respond_404( array $args = [], bool $use_fallback = false ) : array {
 	global $config;
 	if ( $use_fallback ) {
 		if ( isset( $config['404_fallback'] ) ) {
@@ -73,7 +71,7 @@ function redirect_created() : ?array {
 	if ( $_POST['submit'] !== SUBMIT_CREATE ) {
 		return null;
 	}
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
+	$contents = trim( htmlspecialchars( $_POST['contents'] ?? '' ) );
 	if ( empty( $contents ) ) {
 		return null;
 	}
@@ -140,7 +138,7 @@ function redirect_edited() {
 		return null;
 	}
 
-	$contents = trim( filter_input( INPUT_POST, 'contents', FILTER_SANITIZE_STRING, FILTER_FLAG_NO_ENCODE_QUOTES ) );
+	$contents = trim( htmlspecialchars( $_POST['contents'] ) );
 	$id = trim( filter_input( INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT ) );
 	if ( empty( $contents ) || empty( $id ) ) {
 		return null;
@@ -260,7 +258,7 @@ function respond_status( array $args ) : array {
 
 	$data = transform( $posts );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		respond_404( [], true );
 	}
 
 	return $data;
@@ -381,9 +379,9 @@ function respond_post( array $args ) : array {
  */
 function respond_search( array $args ) : array {
 	[ $query ] = $args;
-	$query = filter_var( $query, FILTER_SANITIZE_STRING );
+	$query = htmlspecialchars( $query );
 	if ( empty( $query ) ) {
-		$query = filter_input( INPUT_GET, 's', FILTER_SANITIZE_STRING );
+		$query = htmlspecialchars( $_GET['s'] );
 		if ( empty( $query ) ) {
 			return [];
 		}
@@ -399,7 +397,7 @@ function respond_search( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		respond_404( [], true );
 	}
 
 	return $data;
@@ -421,7 +419,7 @@ function respond_tag( array $args ) : array {
 
 	$data = array_merge( $data, transform( $posts ) );
 	if ( empty( $data['items'] ) ) {
-		respond_404( true );
+		respond_404( [], true );
 	}
 
 	return $data;

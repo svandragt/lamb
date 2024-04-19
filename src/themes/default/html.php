@@ -85,7 +85,7 @@ function get_posts_by_tags( $tags ) {
 		}
 	}
 
-	return $related_posts;
+	return array_unique( $related_posts );
 }
 
 function the_opengraph() {

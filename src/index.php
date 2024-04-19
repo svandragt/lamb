@@ -204,11 +204,13 @@ if ( post_has_slug( $action ) === $action ) {
 	$template = 'status';
 }
 $data = Route\call_route( $action );
+$action = $data['action'] ?? $action;
 
 switch ( $action ) {
 	case false:
 	case '404':
 		$action = '404';
+		$template = '404';
 		break;
 }
 

@@ -1,0 +1,20 @@
+CONTRIBUTING
+
+Contributions are welcomed! Thank you for considering to contribute!
+
+To get started follow these steps:
+
+1. Fork the repository and clone your fork.
+2. Setup your environment using the README instructions.
+
+Basic advice can be found in the GitHub docs: https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project
+
+You can then start working on your fork.
+
+CONTRIBUTING CODE
+
+Please first open an issue to state the problem you'd like to address, and get agreement from the code owners that the feature aligns with the goals and aims of the project. 
+
+I wouldn't want you to spend a lot of effort building a feature that I'm unwilling to maintain or merge.
+
+Have fun!
