@@ -13,25 +13,36 @@ Barrier free super simple blogging, self-hosted.
 
 # Getting started
 
-You can run this locally with the builtin PHP webserver:
-
-Setup requirements:
-[PHP 8.1](https://www.php.net/manual/en/install.php),
-[composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
-
-```shell
-# Install required system packages
-sudo apt update
-sudo apt install php8.1 php8.1-gettext php8.1-mbstring php8.1-sqlite3 php8.1-yaml php8.1-xml composer
-
+```
 # checkout project
 git clone https://github.com/svandragt/lamb.git
 cd lamb
+```
+
+Lamb can be run locally with the builtin PHP webserver, here are two ways to set this up:
+
+1. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
+2. locally install [PHP 8.1](https://www.php.net/manual/en/install.php) and
+[composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
+
+## 1. Devbox
+```shell
+devbox shell
+composer install
+```
+
+## 2. Locally installed PHP and Composer
+
+```shell
+# Install required system packages, for example on Debian Linux derivates like Ubuntu
+sudo apt update
+sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php8.2-xml composer
 
 # install project packages
 composer install
 ```
 
+## 3. Run Lamb
 To Run:
 
 ```shell
@@ -69,3 +80,5 @@ Friction free post deletion:
 - Simple over complex.
 - Opinionated defaults over settings.
 - Assume success, communicate failure.
+
+[![Built with Devbox](https://jetpack.io/img/devbox/shield_moon.svg)](https://jetpack.io/devbox/docs/contributor-quickstart/)
