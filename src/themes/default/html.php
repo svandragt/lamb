@@ -5,6 +5,7 @@ global $action;
 global $template;
 
 use RedBeanPHP\R;
+use function Lamb\get_tags;
 
 function action_delete( $post ) : string {
 	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
@@ -69,7 +70,7 @@ function page_intro() : string {
 }
 
 function related_posts( $body ) {
-	$tags = \Lamb\get_tags( $body );
+	$tags = get_tags( $body );
 
 	return get_posts_by_tags( $tags );
 }
