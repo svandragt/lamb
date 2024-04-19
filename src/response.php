@@ -73,7 +73,7 @@ function redirect_created() : ?array {
 	if ( $_POST['submit'] !== SUBMIT_CREATE ) {
 		return null;
 	}
-	$contents = trim( htmlspecialchars( filter_input( INPUT_POST, 'contents', FILTER_FLAG_NO_ENCODE_QUOTES ) ) );
+	$contents = trim( htmlspecialchars( $_POST['contents'] ?? '' ) );
 	if ( empty( $contents ) ) {
 		return null;
 	}
