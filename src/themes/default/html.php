@@ -5,9 +5,10 @@ global $action;
 global $template;
 
 use RedBeanPHP\R;
+use function Lamb\get_tags;
 
 function action_delete( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
@@ -16,7 +17,7 @@ function action_delete( $post ) : string {
 }
 
 function action_edit( $post ) : string {
-	if ( ! isset( $post['id'] ) || ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
+	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
 		return '';
 	}
 
@@ -69,7 +70,7 @@ function page_intro() : string {
 }
 
 function related_posts( $body ) {
-	$tags = \Lamb\get_tags( $body );
+	$tags = get_tags( $body );
 
 	return get_posts_by_tags( $tags );
 }
@@ -257,7 +258,9 @@ function li_menu_items() {
 function the_entry_form() {
 	if ( isset( $_SESSION[ SESSION_LOGIN ] ) ): ?>
         <form method="post" action="/" enctype="multipart/form-data">
-            <textarea placeholder="What's happening?" name="contents" required></textarea>
+            <label>
+                <textarea placeholder="What's happening?" name="contents" required></textarea>
+            </label>
             <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
         </form>

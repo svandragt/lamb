@@ -3,6 +3,7 @@
 namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
+use JsonException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use Lamb\Config;
@@ -431,6 +432,7 @@ function respond_tag( array $args ) : array {
  * @param array $args The arguments for the upload request.
  *
  * @return void
+ * @throws JsonException
  */
 #[NoReturn]
 function respond_upload( array $args ) : void {
@@ -452,7 +454,7 @@ function respond_upload( array $args ) : void {
 	foreach ( $files as $f ) {
 		if ( $f['error'] !== UPLOAD_ERR_OK ) {
 			// File upload failed
-			echo json_encode( 'File upload error: ' . $f['error'] );
+			echo json_encode( 'File upload error: ' . $f['error'], JSON_THROW_ON_ERROR );
 			die();
 		}
 		// File upload successful
@@ -461,7 +463,7 @@ function respond_upload( array $args ) : void {
 		$new_fn = sha1( $f['name'] ) . ".$ext";
 		$new_fp = sprintf( "%s/%s", get_upload_dir(), $new_fn );
 		if ( ! move_uploaded_file( $temp_fp, $new_fp ) ) {
-			echo json_encode( 'Move upload error: ' . $temp_fp );
+			echo json_encode( 'Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR );
 			die();
 		}
 		$upload_url = str_replace( ROOT_DIR, ROOT_URL, get_upload_dir() );
