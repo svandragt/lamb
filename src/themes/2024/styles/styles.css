@@ -116,7 +116,7 @@ form {
 
 h1, h2, h3 {
     line-height: 1.25;
-    margin: 2rem 0 1rem 0;
+    margin: 1.5rem 0 1rem 0;
     font-weight: 600;
     color: var(--header-text);
 }
@@ -128,7 +128,8 @@ h1 {
 }
 
 article {
-    padding: 1em 2em 1px;
+    border-bottom: 1px solid var(--shadow);
+    padding: 2em 4em;
     margin: 1em 0;
 }
 
@@ -140,7 +141,14 @@ main a {
     color: var(--link);
 }
 
-article small {
+article header {
+    font-size: 0.75em;
+    margin-bottom: -1rem;
+    opacity: 0.8;
+}
+
+
+article footer {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
@@ -151,12 +159,11 @@ article small {
     align-self: flex-end;
 }
 
-article small a {
+article footer a {
     margin-right: 1em;
 }
 
-small form {
-    margin: auto;
+footer form {
     display: inline;
 }
 
