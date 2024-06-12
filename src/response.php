@@ -311,7 +311,7 @@ function respond_feed() : void {
 	$data['title'] = $config['site_title'];
 
 	$data = array_merge( $data, transform( $posts ) );
-	require_once( THEME_DIR . 'feed.php' );
+	require_once( THEME_DIR . "feed.php" );
 	die();
 }
 

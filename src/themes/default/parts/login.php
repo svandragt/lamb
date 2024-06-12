@@ -1,3 +1,9 @@
+<?php
+
+use function Lamb\Theme\csrf_token;
+use function Lamb\Theme\redirect_to;
+
+?>
 <form method="post" action="/login">
     <input type="password" name="password" autofocus / >
     <input type="submit" name="submit" value="<?php echo SUBMIT_LOGIN; ?>">

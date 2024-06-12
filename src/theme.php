@@ -3,8 +3,11 @@
  * Theme support functions
  */
 
+namespace Lamb\Theme;
+
 use RedBeanPHP\R;
 use function Lamb\get_tags;
+use function Lamb\permalink;
 
 function action_delete( $post ) : string {
 	if ( ! isset( $post['id'], $_SESSION[ SESSION_LOGIN ] ) ) {
@@ -68,13 +71,13 @@ function page_intro() : string {
 	return sprintf( '<p>%s</p>', $data['intro'] );
 }
 
-function related_posts( $body ) {
+function related_posts( $body ) : array {
 	$tags = get_tags( $body );
 
 	return get_posts_by_tags( $tags );
 }
 
-function get_posts_by_tags( $tags ) {
+function get_posts_by_tags( $tags ) : array {
 	$related_posts = [];
 	foreach ( $tags as $tag ) {
 		$sql_query = 'body LIKE ? OR body LIKE ? ORDER BY created DESC';
@@ -88,7 +91,7 @@ function get_posts_by_tags( $tags ) {
 	return array_unique( $related_posts );
 }
 
-function the_opengraph() {
+function the_opengraph() : void {
 	global $template;
 	global $config;
 	global $data;
@@ -109,12 +112,12 @@ function the_opengraph() {
 		'og:publisher' => ROOT_URL,
 		'og:site_name' => $config['site_title'],
 		'og:type' => 'article',
-		'og:url' => Lamb\permalink( $item ),
+		'og:url' => permalink( $item ),
 		'twitter:card' => 'summary',
 		'twitter:description' => $description,
 		'twitter:domain' => $_SERVER["HTTP_HOST"],
 		'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-		'twitter:url' => Lamb\permalink( $item ),
+		'twitter:url' => permalink( $item ),
 	];
 	if ( isset( $item['title'] ) ) {
 		$og_tags['og:title'] = $item['title'];
@@ -149,7 +152,7 @@ function the_scripts() : void {
 	}
 }
 
-function asset_loader( $assets, $asset_dir ) : Generator {
+function asset_loader( $assets, $asset_dir ) : \Generator {
 	foreach ( $assets as $dir => $files ) {
 		foreach ( $files as $file ) {
 			$is_admin_script = $dir === SESSION_LOGIN;

@@ -1,12 +1,14 @@
 <?php
 
+use function Lamb\Theme\escape;
+use function Lamb\Theme\li_menu_items;
+use function Lamb\Theme\part;
+use function Lamb\Theme\the_opengraph;
+use function Lamb\Theme\the_scripts;
+use function Lamb\Theme\the_styles;
+
 global $config;
-global $action;
 global $template;
-
-use RedBeanPHP\R;
-use function Lamb\get_tags;
-
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
@@ -49,7 +51,7 @@ use function Lamb\get_tags;
 	endif;
 	part( $template ); ?>
 </main>
-<?php part( '_related' ); ?>
+<?php part( "_related" ); ?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>

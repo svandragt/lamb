@@ -2,6 +2,8 @@
 global $data;
 global $template;
 
+use function Lamb\Theme\date_created;
+use function Lamb\Theme\related_posts;
 use function Lamb\transform;
 
 if ( $template !== 'status' ) {
@@ -11,6 +13,7 @@ $body = $data['items'][0]['body'];
 $related_posts = related_posts( $body );
 $data = transform( $related_posts );
 $ids = [];
+
 if ( ! empty( $data['items'] ) ):
 	?>
     <main>
