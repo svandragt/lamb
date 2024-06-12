@@ -1,5 +1,6 @@
 <?php
 
+use function Lamb\Theme\escape;
 use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\part;
 use function Lamb\Theme\the_opengraph;
