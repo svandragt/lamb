@@ -57,7 +57,7 @@ input[type='submit'], button {
 
 main {
     margin: 0 auto;
-    padding: 0 5%;
+    padding: 0 5vw;
     max-width: 85ch;
 }
 
@@ -129,7 +129,7 @@ h1 {
 
 article {
     border-bottom: 1px solid var(--shadow);
-    padding: 2em 4em;
+    padding: 2vw 4vw;
     margin: 1em 0;
 }
 
