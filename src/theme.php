@@ -154,7 +154,7 @@ function asset_loader( $assets, $asset_dir ) : Generator {
 		foreach ( $files as $file ) {
 			$is_admin_script = $dir === SESSION_LOGIN;
 			if ( empty( $dir ) || ( $is_admin_script && isset( $_SESSION[ SESSION_LOGIN ] ) ) ) {
-				$href = ROOT_URL . "/$asset_dir/$dir$file";
+				$href = ROOT_URL . "/$asset_dir/$dir/$file";
 				yield md5( $href ) => $href;
 			}
 		}
