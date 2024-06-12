@@ -132,7 +132,7 @@ function the_styles() : void {
 	$styles = [
 		'' => [ 'styles.css' ],
 	];
-	$assets = asset_loader( $styles, THEME_URL . 'css' );
+	$assets = asset_loader( $styles, THEME_URL . 'styles' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<link rel='stylesheet' id='%s' href='%s'>", $id, $href );
 	}
@@ -143,7 +143,7 @@ function the_scripts() : void {
 		'' => [ 'shorthand.js' ],
 		'logged_in' => [ 'growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js' ],
 	];
-	$assets = asset_loader( $scripts, 'js' );
+	$assets = asset_loader( $scripts, 'scripts' );
 	foreach ( $assets as $id => $href ) {
 		printf( "<script id='%s' src='%s'></script>", $id, $href );
 	}
