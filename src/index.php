@@ -172,7 +172,8 @@ if ( isset( $_SESSION['HTTP_USER_AGENT'] ) ) {
 
 $config = Config\load();
 define( "THEME", $config['theme'] ?? 'default' );
-define( "THEME_DIR", __DIR__ . '/themes/' . THEME );
+define( "THEME_DIR", __DIR__ . '/themes/' . THEME . '/' );
+define( "THEME_URL", 'themes/' . THEME . '/' );
 
 # Routing
 $request_uri = Http\get_request_uri();
@@ -215,4 +216,5 @@ switch ( $action ) {
 }
 
 # Views
-require_once( THEME_DIR . "/html.php" );
+require_once( 'theme.php' );
+require_once( THEME_DIR . "html.php" );

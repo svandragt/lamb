@@ -3,6 +3,10 @@
 global $config;
 global $action;
 global $template;
+
+use RedBeanPHP\R;
+use function Lamb\get_tags;
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
