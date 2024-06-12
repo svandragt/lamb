@@ -112,7 +112,7 @@ h1 {
 }
 
 article {
-    background: var(--bg-alt);
+    background: var(--bg-alt2);
     padding: 1em 2em 1px;
     border-bottom: 1px solid var(--bg2);
     border-top: 4px solid var(--info);
