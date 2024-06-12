@@ -47,9 +47,9 @@ use function Lamb\get_tags;
 		<?php
 		endwhile;
 	endif;
-	require( THEME_DIR . "parts/$template.php" ); ?>
+	part( $template ); ?>
 </main>
-<?php require( THEME_DIR . "_related.php" ); ?>
+<?php part( '_related' ); ?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>

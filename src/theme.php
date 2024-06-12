@@ -240,6 +240,20 @@ function og_escape( string $html ) : string {
 	return htmlspecialchars( htmlspecialchars_decode( $html ), ENT_COMPAT | ENT_HTML5 );
 }
 
+function part( string $name ) : void {
+	$name = sanitize_filename( $name );
+	$filename = THEME_DIR . "parts/$name.php";
+	if ( ! is_readable( $filename ) ) {
+		// Fallback to default
+		$filename = __DIR__ . "/themes/default/parts/$name.php";
+	}
+	if ( ! is_readable( $filename ) ) {
+		throw new RuntimeException( 'unreadable part: ' . $filename );
+	}
+
+	require $filename;
+}
+
 function li_menu_items() {
 	global $config;
 	$items = [];
@@ -252,6 +266,13 @@ function li_menu_items() {
 	}
 
 	return implode( PHP_EOL, $items );
+}
+
+function sanitize_filename( $filename ) : string {
+	// Remove any character that is not alphanumeric, a hyphen, or an underscore
+	$filename = preg_replace( '/[^a-zA-Z0-9-_]/', '_', $filename );
+
+	return (string) $filename;
 }
 
 function the_entry_form() {
