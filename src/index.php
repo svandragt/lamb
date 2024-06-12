@@ -215,4 +215,4 @@ switch ( $action ) {
 }
 
 # Views
-require_once( "themes/default/html.php" );
+require_once( THEME_DIR . "/html.php" );
