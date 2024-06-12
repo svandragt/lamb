@@ -6,7 +6,7 @@
     --bg-alt: #fefefe;
     --info: #fee684;
     --link: #027eab;
-    --text: #5d6889;
+    --text: #2f374f;
     --header-text: #2f374f;
 }
 
@@ -24,6 +24,8 @@ body {
     font: 16px/1.5 "Inter", sans-serif;
     color: var(--text);
     background: var(--bg-alt);
+    max-width: 140ch;
+    margin: 0 auto;
 }
 
 code {
@@ -45,6 +47,10 @@ img {
     max-width: 100%;
 }
 
+nav input {
+    max-width: 10vw;
+}
+
 input[type='submit'], button {
     cursor: pointer;
 }
@@ -52,7 +58,7 @@ input[type='submit'], button {
 main {
     margin: 0 auto;
     padding: 0 5%;
-    max-width: 75ch;
+    max-width: 85ch;
 }
 
 nav {
@@ -74,8 +80,12 @@ nav a {
     display: inline-block;
     text-decoration: none;
     color: var(--fg);
-    line-height: 2em;
-    padding: 1em 0.5em;
+    line-height: 1.5rem;
+    padding: 1em 1vw;
+}
+
+nav a:hover {
+    background: var(--info);
 }
 
 nav form {
@@ -105,7 +115,8 @@ form {
 
 
 h1, h2, h3 {
-    line-height: 1.5;
+    line-height: 1.25;
+    margin: 2rem 0 1rem 0;
     font-weight: 600;
     color: var(--header-text);
 }
@@ -129,17 +140,18 @@ main a {
     color: var(--link);
 }
 
-main small {
+article small {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
     margin: 1em -2em 0;
     width: 100%;
-    padding: 1px 2em;
+    padding: 0 2em;
+    line-height: 2rem;
     align-self: flex-end;
 }
 
-main small a {
+article small a {
     margin-right: 1em;
 }
 
