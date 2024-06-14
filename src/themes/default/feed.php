@@ -26,14 +26,12 @@ $Author->addChild( 'email', escape( $config['author_email'] ) );
 
 foreach ( $data['items'] as $item ) {
 	$Entry = $Xml->addChild( 'entry' );
-	# TODO assumed status
 	$Entry->addChild( 'id', Lamb\permalink( $item ) );
 	$Entry->addChild( 'title', escape( $item['title'] ?? '' ) );
 	$Entry->addChild( 'updated', date( DATE_ATOM, strtotime( $item['updated'] ) ) );
 	$Content = $Entry->addChild( 'content', Lamb\parse_tags( $item['body'] ) );
 	$Content->addAttribute( 'type', 'html' );
 	$Link = $Entry->addChild( 'link' );
-	# TODO assumed, store with item?
 	$Link->addAttribute( 'href', Lamb\permalink( $item ) );
 }
 echo $Xml->asXML();
