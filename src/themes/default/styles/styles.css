@@ -3,7 +3,8 @@
     --bg: #9a5f3d;
     --fg: #fefefe;
     --bg2: #86745c;
-    --bglight: #e2dcd7;
+    --bg-alt: #e2dcd7;
+    --bg-alt2: #fefefe;
     --info: #fee684;
     --link: #027eab;
 }
@@ -21,11 +22,11 @@ blockquote {
 body {
     font: 16px/1.4em "Inter", sans-serif;
     color: var(--shadow);
-    background: var(--bglight);
+    background: var(--bg-alt);
 }
 
 code {
-    box-shadow: inset 0 0 5.5em 0 var(--bglight);
+    box-shadow: inset 0 0 5.5em 0 var(--bg-alt);
     font: 0.875em/1.2em "JetBrains Mono", "Roboto Mono", monospace;
     padding: 0 0.25em;
     border-radius: 4px;
@@ -111,7 +112,7 @@ h1 {
 }
 
 article {
-    background: var(--fg);
+    background: var(--bg-alt2);
     padding: 1em 2em 1px;
     border-bottom: 1px solid var(--bg2);
     border-top: 4px solid var(--info);

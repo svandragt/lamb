@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<ruleset name="Lamb standard">
+    <description>PHP Coding Standards for Lamb</description>
+
+    <!-- Set the PHP version to use for PHP_CodeSniffer (and thus HM Linter) to PHP 8.0. -->
+    <config name="php_version" value="80200"/>
+
+    <!-- Set a minimum PHP version for PHPCompatibility. -->
+    <config name="testVersion" value="8.2-"/>
+
+    <!-- Show sniff codes in all reports. -->
+    <arg value="s"/>
+
+    <!-- Check PHP files only. -->
+    <arg name="extensions" value="php"/>
+
+    <!-- leave only src -->
+    <exclude-pattern>\.*/</exclude-pattern>
+    <exclude-pattern>vendor/</exclude-pattern>
+
+    <!-- Check for PHP cross-version compatibility. -->
+    <rule ref="PHPCompatibility"/>
+    <rule ref="PSR12">
+        <!-- Disable specific rules I don't like -->
+        <exclude name="Generic.Files.LineLength.TooLong"/>
+        <exclude name="PSR1.Files.SideEffects.FoundWithSymbols"/>
+    </rule>
+</ruleset>

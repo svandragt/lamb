@@ -13,9 +13,10 @@ use Lamb\Response;
  *
  * @return void
  */
-function register_route( bool|string $action, string $callback, mixed ...$args ) : void {
-	global $routes;
-	$routes[ $action ] = [ $callback, $args ];
+function register_route(bool|string $action, string $callback, mixed ...$args): void
+{
+    global $routes;
+    $routes[$action] = [$callback, $args];
 }
 
 /**
@@ -25,15 +26,16 @@ function register_route( bool|string $action, string $callback, mixed ...$args )
  *
  * @return array The result of the callback function.
  */
-function call_route( bool|string $action ) : array {
-	global $routes;
-	[ $callback, $args ] = $routes[ $action ] ?? [ null, [] ];
+function call_route(bool|string $action): array
+{
+    global $routes;
+    [$callback, $args] = $routes[$action] ?? [null, []];
 
-	if ( is_null( $callback ) ) {
-		return Response\respond_404( [], true );
-	}
+    if (is_null($callback)) {
+        return Response\respond_404([], true);
+    }
 
-	return $callback( $args );
+    return $callback($args);
 }
 
 /**
@@ -43,8 +45,9 @@ function call_route( bool|string $action ) : array {
  *
  * @return bool True if the route is reserved, false otherwise.
  */
-function is_reserved_route( string $name ) : bool {
-	global $routes;
+function is_reserved_route(string $name): bool
+{
+    global $routes;
 
-	return isset( $routes[ $name ] );
+    return isset($routes[$name]);
 }
