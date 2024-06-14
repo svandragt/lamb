@@ -1,7 +1,7 @@
 {
     "name": "svandragt/lamb",
     "description": "Micro blogging like an animal",
-    "license": "GPL",
+    "license": "GPL-3.0-or-later",
     "type": "project",
     "authors": [
         {
@@ -19,6 +19,8 @@
         "symfony/yaml": "^7.0"
     },
     "require-dev": {
+        "dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+        "phpcompatibility/php-compatibility": "^9.3",
         "roave/security-advisories": "dev-latest"
     },
     "autoload": {
@@ -26,7 +28,13 @@
             "Lamb\\": "src/"
         }
     },
+    "config": {
+        "allow-plugins": {
+            "dealerdirect/phpcodesniffer-composer-installer": true
+        }
+    },
     "scripts": {
+        "lint": "vendor/bin/phpcs .",
         "serve": [
             "Composer\\Config::disableProcessTimeout",
             "php -S 0.0.0.0:8747 -t src"

@@ -8,4 +8,5 @@ use function Lamb\Theme\part;
 <?= page_title(); ?>
 <?= page_intro(); ?>
 
-<?php part( '_items' ); ?>
+<?php
+part('_items');

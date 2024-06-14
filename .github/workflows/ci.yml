@@ -1,0 +1,36 @@
+name: CI
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
+on:
+  workflow_dispatch:
+  workflow_call:
+  push:
+    branches:
+      - production
+      - main
+  pull_request:
+    types:
+      - opened
+      - ready_for_review
+      - synchronize
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    uses: ./.github/workflows/node.yml
+    secrets: inherit
+
+  php:
+    uses: ./.github/workflows/php.yml
+    secrets: inherit
