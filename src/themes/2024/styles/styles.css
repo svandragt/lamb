@@ -24,8 +24,7 @@ body {
     font: 16px/1.5 "Inter", sans-serif;
     color: var(--text);
     background: var(--bg-alt);
-    max-width: 140ch;
-    margin: 0 auto;
+    margin: 0;
 }
 
 code {
@@ -63,8 +62,9 @@ main {
 
 nav {
     background: var(--bg);
+    background: #fee684ff;
     color: var(--fg);
-    margin: 0 auto;
+    margin: 0;
     padding: 0 5%;
     z-index: 10000;
     border-bottom: 1px solid var(--shadow)
@@ -85,7 +85,8 @@ nav a {
 }
 
 nav a:hover {
-    background: var(--info);
+    background: white;
+    color: black;
 }
 
 nav form {
@@ -96,6 +97,7 @@ nav form {
 
 nav ul {
     display: flow-root;
+    max-width: 140ch;
 }
 
 
