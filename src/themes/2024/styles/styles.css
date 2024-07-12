@@ -124,7 +124,6 @@ h1, h2, h3 {
 }
 
 h1 {
-    border-top: 2px solid var(--shadow);
     padding-top: 1em;
     font-weight: normal;
 }
