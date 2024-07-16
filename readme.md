@@ -21,17 +21,17 @@ cd lamb
 
 Lamb can be run locally with the builtin PHP webserver, here are two ways to set this up:
 
-1. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
-2. locally install [PHP 8.2](https://www.php.net/manual/en/install.php) and
+a. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
+b. locally install [PHP 8.2](https://www.php.net/manual/en/install.php) and
 [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 
-## 1. Devbox
+## a. Devbox
 ```shell
 devbox shell
 composer install
 ```
 
-## 2. Locally installed PHP and Composer
+## b. Locally installed PHP and Composer
 
 ```shell
 # Install required system packages, for example on Debian Linux derivates like Ubuntu
@@ -42,7 +42,7 @@ sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php
 composer install
 ```
 
-## 3. Run Lamb
+## Run Lamb
 To Run:
 
 ```shell
