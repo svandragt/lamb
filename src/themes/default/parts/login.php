@@ -1,6 +1,7 @@
 <?php
 
 use function Lamb\Theme\csrf_token;
+use function Lamb\Theme\escape;
 use function Lamb\Theme\redirect_to;
 
 ?>
