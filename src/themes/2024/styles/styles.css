@@ -1,5 +1,5 @@
 :root {
-    --shadow: #eee;
+    --shadow: #ddd;
     --bg: #fefefe;
     --fg: #444;
     --bg2: #aaa;
@@ -56,17 +56,17 @@ input[type='submit'], button {
 
 main {
     margin: 0 auto;
-    padding: 0 5vw;
-    max-width: 85ch;
+    max-width: 75ch;
+    border: 0 solid var(--shadow);
+    border-left-width: 1px;
+
 }
 
 nav {
-    background: var(--bg);
     background: #fee684ff;
     color: var(--fg);
     margin: 0;
     padding: 0 5%;
-    z-index: 10000;
     border-bottom: 1px solid var(--shadow)
 }
 
@@ -108,6 +108,8 @@ nav li.right {
 footer {
     text-align: center;
     opacity: 0.5;
+    border-top: 1px solid var(--shadow);
+
 }
 
 
@@ -130,8 +132,11 @@ h1 {
 
 article {
     border-bottom: 1px solid var(--shadow);
-    padding: 2vw 4vw;
-    margin: 1em 0;
+    padding: 2vw 1vw 1vw;
+}
+
+article:last-of-type {
+    border-bottom: none;
 }
 
 section:last-child {
