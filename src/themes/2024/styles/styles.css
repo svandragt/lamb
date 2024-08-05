@@ -54,12 +54,15 @@ input[type='submit'], button {
     cursor: pointer;
 }
 
+.container {
+    padding-left: 12rem;
+}
+
 main {
     margin: 0 auto;
     max-width: 75ch;
     border: 0 solid var(--shadow);
     border-left-width: 1px;
-
 }
 
 nav {
@@ -120,7 +123,7 @@ form {
 
 h1, h2, h3 {
     line-height: 1.25;
-    margin: 1.5rem 0 1rem 0;
+    margin: 1rem 0 1rem 0;
     font-weight: 600;
     color: var(--header-text);
 }
@@ -132,7 +135,7 @@ h1 {
 
 article {
     border-bottom: 1px solid var(--shadow);
-    padding: 2vw 1vw 1vw;
+    padding: 1vw 1vw 1vw;
 }
 
 article:last-of-type {
@@ -151,6 +154,15 @@ article header {
     font-size: 0.75em;
     margin-bottom: -1rem;
     opacity: 0.8;
+    width: 8rem;
+    position: absolute;
+    margin-left: -10rem;
+    margin-top: 1rem;
+    text-align: right;
+}
+
+article header span {
+    display: block;
 }
 
 
@@ -171,6 +183,10 @@ article footer a {
 
 footer form {
     display: inline;
+}
+
+p {
+    margin: 1rem 0;
 }
 
 textarea {
