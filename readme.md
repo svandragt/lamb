@@ -42,7 +42,7 @@ sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php
 composer install
 ```
 
-## 3. Run Lamb
+## Run Lamb
 To Run:
 
 ```shell
