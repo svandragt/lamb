@@ -35,7 +35,7 @@ global $template;
                 <input type="submit" value="🔎">
             </form>
             <?php
-            if (! isset($_SESSION[SESSION_LOGIN])) : ?>
+            if (! isset($_SESSION[ SESSION_LOGIN ])) : ?>
                 <a href="/login">Login</a>
                 <?php
             else : ?>
@@ -45,18 +45,20 @@ global $template;
         </li>
     </ul>
 </nav>
-<main>
-    <?php
-    if (isset($_SESSION['flash'])) :
-        while (count($_SESSION['flash']) > 0) :
-            $flash = array_pop($_SESSION['flash']);
-            ?>
-            <div class="flash">⚠️ <?= escape($flash) ?></div>
-            <?php
-        endwhile;
-    endif;
-    part($template); ?>
-</main>
+<div class="container">
+    <main>
+        <?php
+        if (isset($_SESSION['flash'])) :
+            while (count($_SESSION['flash']) > 0) :
+                $flash = array_pop($_SESSION['flash']);
+                ?>
+                <div class="flash">⚠️ <?= escape($flash) ?></div>
+                <?php
+            endwhile;
+        endif;
+        part($template); ?>
+    </main>
+</div>
 <?php
 part("_related"); ?>
 <footer>

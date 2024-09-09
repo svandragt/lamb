@@ -4,12 +4,12 @@ Lamb - Literally Another Micro Blog.
 
 Barrier free super simple blogging, self-hosted.
 
-- SQLite based portable single author blog
-- Twitter like interface
+- SQLite based portable single author blog.
 - Friction free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) entry, with drag and drop image support.
-- Generates a discoverable Atom feed (/feed)
-- Hashtags support, by just typing them.
-- 404 fallback url feature (redirects 404's relative urls to another site).
+- Generates a discoverable Atom feed (/feed) from recently published blogs.
+- Hashtags support, by just typing them `#ahyeah`.
+- 404 fallback redirection to your old site, optionally.
+- Friendly user theming, if you don't like my two shades of 2000s retro themes. ;)
 
 # Getting started
 
@@ -21,17 +21,17 @@ cd lamb
 
 Lamb can be run locally with the builtin PHP webserver, here are two ways to set this up:
 
-1. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
-2. locally install [PHP 8.1](https://www.php.net/manual/en/install.php) and
+a. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
+b. locally install [PHP 8.2](https://www.php.net/manual/en/install.php) and
 [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 
-## 1. Devbox
+## a. Devbox
 ```shell
 devbox shell
 composer install
 ```
 
-## 2. Locally installed PHP and Composer
+## b. Locally installed PHP and Composer
 
 ```shell
 # Install required system packages, for example on Debian Linux derivates like Ubuntu

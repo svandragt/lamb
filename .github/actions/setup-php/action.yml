@@ -1,0 +1,40 @@
+name: Set up PHP environment
+description: Set up the PHP environment to perform various actions in subsequent workflows.
+
+inputs:
+  cache_version:
+    description: Cache version. Gets appended to the cache key and will therefore invalidate the cache if it changes.
+    required: true
+  github_token:
+    description: GitHub OAuth token.
+    required: true
+
+runs:
+  using: composite
+
+  steps:
+    - name: Set up PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ matrix.php-version }}
+        coverage: none
+        tools: composer, parallel-lint
+      env:
+        GITHUB_TOKEN: ${{ inputs.github_token }}
+
+    - name: Get Composer cache directory
+      id: composer-cache
+      shell: bash
+      run: echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+
+    - name: Cache dependencies
+      id: cache-php-dependencies
+      uses: actions/cache@v3
+      with:
+        path: ${{ steps.composer-cache.outputs.dir }}
+        key: php-${{ runner.os }}-${{ matrix.php-version }}-${{ hashFiles('composer.lock') }}-${{ inputs.cache_version }}
+        restore-keys: |
+          php-${{ runner.os }}-${{ matrix.php-version }}-${{ hashFiles('composer.lock') }}
+          php-${{ runner.os }}-${{ matrix.php-version }}
+          php-${{ runner.os }}
+          php

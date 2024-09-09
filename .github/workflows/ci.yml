@@ -1,12 +1,22 @@
 name: CI
 
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
 on:
+  workflow_dispatch:
+  workflow_call:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "release" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "release" ]
 
 jobs:
+  php:
+    uses: ./.github/workflows/php.yml
+    secrets: inherit
 
   test:
     runs-on: ubuntu-latest
