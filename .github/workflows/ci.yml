@@ -33,4 +33,4 @@ jobs:
 
       - name: Run Codeception tests
         run: |
-          codecept run
+          php codecept run
