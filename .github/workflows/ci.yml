@@ -28,6 +28,14 @@ jobs:
       - name: Validate Composer
         run: composer validate
 
+      - name: Start PHP development server
+        run: php -S 0.0.0.0:8747 -t src &
+
+      - name: Check development server status
+        run: |
+          curl http://localhost:8747
+          echo "Development server is running"
+
       - name: Run Codeception tests
         run: |
           vendor/bin/codecept run
