@@ -1,14 +1,15 @@
 <?php
 
-namespace Tests\Functional;
+namespace Tests\Acceptance;
 
-use Tests\Support\FunctionalTester;
+use Tests\Support\AcceptanceTester;
 
-class HomePageCest {
-	protected function _before() {
+class FirstCest {
+	public function _before( AcceptanceTester $I ) {
 	}
 
-	public function tryToTestHomePage( FunctionalTester $I ) {
+	// tests
+	public function tryHomepage( AcceptanceTester $I ) {
 		// Open homepage
 		$I->amOnPage( '/' );
 
