@@ -13,10 +13,10 @@ class HomePageCest {
 		$I->amOnPage( '/' );
 
 		// Check if the title is correct
-		$I->seeInTitle( 'Sander van Dragt\'s Notes' );
+		$I->seeInTitle( 'My Microblog' );
 
 		// Check if the header is present
-		$I->see( 'Sander van Dragt\'s Note', 'h1' );
+		$I->see( 'My Microblog', 'h1' );
 
 		// Check if a specific link is present
 		$I->seeElement( 'a[href="/login"]' );
