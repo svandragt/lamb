@@ -30,4 +30,4 @@ jobs:
 
       - name: Run Codeception tests
         run: |
-          php codecept run
+          vendor/bin/codecept run
