@@ -10,6 +10,9 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [ '8.2', '8.3' ]
 
     steps:
       - uses: actions/checkout@v2
@@ -17,13 +20,7 @@ jobs:
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: ${{ steps.composer-json.outputs.php-version }}
-
-      - name: Get Composer PHP version
-        id: composer-json
-        run: |
-          composer validate --no-check-publish
-          echo "php-version=$(composer show -f json | jq -r '.require.php')" >> $GITHUB_OUTPUT
+          php-version: ${{ matrix.php-version }}
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
