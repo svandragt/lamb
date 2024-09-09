@@ -20,8 +20,7 @@ Containers:
 
 Devtools:
 
-- [DDev][ddev.md] local environments wrapper around Docker
--
+- [DDev](ddev.md) local environments wrapper around Docker
 
 ## Topics
 
