@@ -19,10 +19,10 @@
         "symfony/yaml": "^7.0"
     },
     "require-dev": {
-        "roave/security-advisories": "dev-latest",
         "codeception/codeception": "^5.1",
+        "codeception/module-asserts": "*",
         "codeception/module-phpbrowser": "*",
-        "codeception/module-asserts": "*"
+        "roave/security-advisories": "dev-latest"
     },
     "autoload": {
         "psr-4": {
