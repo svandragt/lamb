@@ -5,7 +5,9 @@ Lamb - Literally Another Micro Blog.
 Barrier free super simple blogging, self-hosted.
 
 - SQLite based portable single author blog.
-- Friction free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax) entry, with drag and drop image support.
+- Friction
+  free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
+  entry, with drag and drop image support.
 - Generates a discoverable Atom feed (/feed) from recently published blogs.
 - Hashtags support, by just typing them `#ahyeah`.
 - 404 fallback redirection to your old site, optionally.
