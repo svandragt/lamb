@@ -5,6 +5,7 @@ namespace Lamb;
 require '../vendor/autoload.php';
 
 use RedBeanPHP\R;
+use RuntimeException;
 use function Lamb\Response\respond_404;
 
 $root_url = ( isset( $_SERVER['HTTPS'] ) && $_SERVER['HTTPS'] === 'on' ? "https" : "http" ) . "://" . $_SERVER["HTTP_HOST"];
@@ -17,12 +18,6 @@ define( 'SUBMIT_CREATE', 'Create post' );
 define( 'SUBMIT_EDIT', 'Update post' );
 define( 'SUBMIT_LOGIN', 'Log in' );
 unset( $root_url );
-
-require_once( ROOT_DIR . '/config.php' );
-require_once( ROOT_DIR . '/http.php' );
-require_once( ROOT_DIR . '/response.php' );
-require_once( ROOT_DIR . '/routes.php' );
-require_once( ROOT_DIR . '/security.php' );
 
 /**
  * Retrieves the tags from the given HTML.
@@ -149,7 +144,7 @@ header( 'Cache-Control: max-age=300' );
 $data_dir = '../data';
 if ( ! is_dir( $data_dir ) ) {
 	if ( ! mkdir( $data_dir, 0777, true ) && ! is_dir( $data_dir ) ) {
-		throw new \RuntimeException( sprintf( 'Directory "%s" was not created', $data_dir ) );
+		throw new RuntimeException( sprintf( 'Directory "%s" was not created', $data_dir ) );
 	}
 }
 R::setup( 'sqlite:../data/lamb.db' );
