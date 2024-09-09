@@ -19,6 +19,9 @@
         "symfony/yaml": "^7.0"
     },
     "require-dev": {
+        "codeception/codeception": "^5.1",
+        "codeception/module-asserts": "*",
+        "codeception/module-phpbrowser": "*",
         "roave/security-advisories": "dev-latest"
     },
     "autoload": {

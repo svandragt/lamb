@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php-version: [ '8.2', '8.3' ]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php-version }}
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Validate Composer
+        run: composer validate
+
+      - name: Start PHP development server
+        run: php -S 0.0.0.0:8747 -t src &
+
+      - name: Check development server status
+        run: |
+          curl http://localhost:8747
+          echo "Development server is running"
+
+      - name: Run Codeception tests
+        run: |
+          vendor/bin/codecept run --steps
