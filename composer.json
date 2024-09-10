@@ -31,6 +31,7 @@
         "files": [
             "src/config.php",
             "src/http.php",
+            "src/lamb.php",
             "src/response.php",
             "src/routes.php",
             "src/security.php"
