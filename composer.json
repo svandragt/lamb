@@ -1,7 +1,7 @@
 {
     "name": "svandragt/lamb",
     "description": "Micro blogging like an animal",
-    "license": "GPL",
+    "license": "GPL-3.0-or-later",
     "type": "project",
     "authors": [
         {
