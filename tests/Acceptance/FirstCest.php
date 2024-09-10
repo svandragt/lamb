@@ -21,5 +21,9 @@ class FirstCest {
 
 		// Check if a specific link is present
 		$I->seeElement( 'a[href="/login"]' );
+
+		// Bottom of the page
+		$I->see( 'Powered by', 'small' );
+		$I->seeElement( 'small a[href="https://github.com/svandragt/lamb"]' );
 	}
 }
