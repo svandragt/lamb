@@ -7,28 +7,32 @@
 namespace Lamb\Theme;
 
 use Generator;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RuntimeException;
 
 use function Lamb\get_tags;
+use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\Config\is_menu_item as is_config_menu_item;
 
-function action_delete($post): string
+function action_delete(OODBBean $bean): string
 {
-    if (!isset($post['id'], $_SESSION[SESSION_LOGIN])) {
+    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
         return '';
     }
 
     return sprintf('<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>', $post['id'], $post['id'], csrf_token());
+</form>', $bean->id, $bean->id, csrf_token());
 }
 
-function action_edit($post): string
+function action_edit(OODBBean $bean): string
 {
-    if (!isset($post['id'], $_SESSION[SESSION_LOGIN])) {
+    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
         return '';
     }
 
-    return sprintf('<button class="button-edit" data-id="%s" type="button">Edit</button>', $post['id']);
+    return sprintf('<button class="button-edit" data-id="%s" type="button">Edit</button>', $bean->id);
 }
 
 function csrf_token(): string
@@ -38,20 +42,20 @@ function csrf_token(): string
     return $_SESSION[HIDDEN_CSRF_NAME];
 }
 
-function date_created($post): string
+function date_created(OODBBean $bean): string
 {
-    if (!isset($post['created'])) {
+    if (!isset($bean->created)) {
         return '';
     }
 
-    $human_created = human_time(strtotime($post['created']));
+    $human_created = human_time(strtotime($bean->created));
 
-    $slug = "/status/{$post['id']}";
-    if (!empty($post['slug'])) {
-        $slug = $post['slug'];
+    $slug = "/status/{$bean->id}";
+    if (!empty($bean->slug)) {
+        $slug = $bean->slug;
     }
 
-    return sprintf('<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $post['created'], $human_created);
+    return sprintf('<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bean->created, $human_created);
 }
 
 function site_title(): string
@@ -64,11 +68,11 @@ function site_title(): string
 function page_title(): string
 {
     global $data;
-    if (!isset($data['title'])) {
+    if (!isset($data->title)) {
         return '';
     }
 
-    return sprintf('<h1>%s</h1>', $data['title']);
+    return sprintf('<h1>%s</h1>', $data->title);
 }
 
 function page_intro(): string
@@ -111,8 +115,8 @@ function the_opengraph(): void
     if ($template !== 'status') {
         return;
     }
-    $item = $data['items'][0];
-    $description = $item['description'];
+    $bean = $data['posts'][0];
+    $description = $bean->description;
     $og_tags = [
         'og:description' => $description,
         'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
@@ -120,21 +124,21 @@ function the_opengraph(): void
         'og:image:type' => 'image/jpeg',
         'og:image:width' => '1200',
         'og:locale' => 'en_GB',
-        'og:modified_time' => $item['created'],
-        'og:published_time' => $item['updated'],
+        'og:modified_time' => $bean->created,
+        'og:published_time' => $bean->updated,
         'og:publisher' => ROOT_URL,
         'og:site_name' => $config['site_title'],
         'og:type' => 'article',
-        'og:url' => permalink($item),
+        'og:url' => permalink($bean),
         'twitter:card' => 'summary',
         'twitter:description' => $description,
         'twitter:domain' => $_SERVER["HTTP_HOST"],
         'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-        'twitter:url' => permalink($item),
+        'twitter:url' => permalink($bean),
     ];
-    if (isset($item['title'])) {
-        $og_tags['og:title'] = $item['title'];
-        $og_tags['twitter:title'] = $item['title'];
+    if (isset($bean->title)) {
+        $og_tags['og:title'] = $bean->title;
+        $og_tags['twitter:title'] = $bean->title;
     }
     foreach ($og_tags as $property => $content) {
         if (empty($content)) {
@@ -179,6 +183,33 @@ function asset_loader($assets, $asset_dir): Generator
             }
         }
     }
+}
+
+/**
+ * Checks if a given menu item exists in the configuration array.
+ *
+ * @param string $id The menu item slug to check.
+ *
+ * @return bool Returns true if the menu item exists in the configuration array, false otherwise.
+ */
+function is_menu_item(string $id): bool
+{
+    global $config;
+
+    // Checks array values for needle.
+    return is_config_menu_item($id);
+}
+
+function link_source(OODBBean $bean): string
+{
+    if (!isset($bean->feed_name)) {
+        return '';
+    }
+    $feeds = get_feeds();
+
+    $url = $feeds[$bean->feed_name];
+
+    return sprintf('Via <a href="%s" title="View feed">%s</a>', $url, $bean->feed_name);
 }
 
 /**
@@ -261,13 +292,13 @@ function og_escape(string $html): string
     return htmlspecialchars(htmlspecialchars_decode($html), ENT_COMPAT | ENT_HTML5);
 }
 
-function part(string $name): void
+function part(string $name, string $dir = 'parts'): void
 {
     $name = sanitize_filename($name);
-    $filename = THEME_DIR . "parts/$name.php";
+    $filename = THEME_DIR . "$dir/$name.php";
     if (!is_readable($filename)) {
         // Fallback to default
-        $filename = __DIR__ . "/themes/default/parts/$name.php";
+        $filename = __DIR__ . "/themes/default/$dir/$name.php";
     }
     if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);
@@ -276,7 +307,7 @@ function part(string $name): void
     require $filename;
 }
 
-function li_menu_items()
+function li_menu_items(): string
 {
     global $config;
     $items = [];

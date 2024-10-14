@@ -16,6 +16,7 @@
     "ext-sqlite3": "*",
     "erusev/parsedown": "^1.7",
     "gabordemooij/redbean": "^5.7",
+    "simplepie/simplepie": "^1.8",
     "symfony/yaml": "^7.0"
   },
   "require-dev": {
@@ -34,9 +35,12 @@
       "src/config.php",
       "src/http.php",
       "src/lamb.php",
-      "src/response.php",
       "src/routes.php",
-      "src/security.php"
+      "src/network.php",
+      "src/post.php",
+      "src/response.php",
+      "src/security.php",
+      "src/theme.php"
     ]
   },
   "config": {
