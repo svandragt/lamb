@@ -1,48 +1,58 @@
 {
-    "name": "svandragt/lamb",
-    "description": "Micro blogging like an animal",
-    "license": "GPL-3.0-or-later",
-    "type": "project",
-    "authors": [
-        {
-            "name": "Sander van Dragt",
-            "email": "sander@vandragt.com"
-        }
-    ],
-    "require": {
-        "php": ">=8.2",
-        "ext-gettext": "*",
-        "ext-simplexml": "*",
-        "ext-sqlite3": "*",
-        "erusev/parsedown": "^1.7",
-        "gabordemooij/redbean": "^5.7",
-        "symfony/yaml": "^7.0"
-    },
-    "require-dev": {
-        "codeception/codeception": "^5.1",
-        "codeception/module-asserts": "*",
-        "codeception/module-phpbrowser": "*",
-        "roave/security-advisories": "dev-latest"
-    },
-    "autoload": {
-        "psr-4": {
-            "Lamb\\": "src/"
-        },
-        "files": [
-            "src/config.php",
-            "src/http.php",
-            "src/lamb.php",
-            "src/response.php",
-            "src/routes.php",
-            "src/security.php"
-        ]
-    },
-    "scripts": {
-        "serve": [
-            "Composer\\Config::disableProcessTimeout",
-            "php -S 0.0.0.0:8747 -t src"
-        ],
-        "serve:caddy": "sudo caddy run",
-        "serve:nginx": "sudo systemctl nginx start"
+  "name": "svandragt/lamb",
+  "description": "Micro blogging like an animal",
+  "license": "GPL-3.0-or-later",
+  "type": "project",
+  "authors": [
+    {
+      "name": "Sander van Dragt",
+      "email": "sander@vandragt.com"
     }
+  ],
+  "require": {
+    "php": ">=8.2",
+    "ext-gettext": "*",
+    "ext-simplexml": "*",
+    "ext-sqlite3": "*",
+    "erusev/parsedown": "^1.7",
+    "gabordemooij/redbean": "^5.7",
+    "symfony/yaml": "^7.0"
+  },
+  "require-dev": {
+    "codeception/codeception": "^5.1",
+    "codeception/module-asserts": "*",
+    "codeception/module-phpbrowser": "*",
+    "phpcompatibility/php-compatibility": "^9.3",
+    "roave/security-advisories": "dev-latest",
+    "squizlabs/php_codesniffer": "^3.10"
+  },
+  "autoload": {
+    "psr-4": {
+      "Lamb\\": "src/"
+    },
+    "files": [
+      "src/config.php",
+      "src/http.php",
+      "src/lamb.php",
+      "src/response.php",
+      "src/routes.php",
+      "src/security.php"
+    ]
+  },
+  "config": {
+    "allow-plugins": {
+      "dealerdirect/phpcodesniffer-composer-installer": true
+    }
+  },
+  "scripts": {
+    "post-install-cmd": "vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
+    "post-update-cmd": "vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
+    "lint": "vendor/bin/phpcs .",
+    "serve": [
+      "Composer\\Config::disableProcessTimeout",
+      "php -S 0.0.0.0:8747 -t src"
+    ],
+    "serve:caddy": "sudo caddy run",
+    "serve:nginx": "sudo systemctl nginx start"
+  }
 }

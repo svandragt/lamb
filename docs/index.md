@@ -9,9 +9,21 @@ Barrier free super simple blogging, self-hosted.
 - Hashtags support, by just typing them.
 - 404 fallback url feature (redirects 404's relative urls to another site).
 
-Directions for: [Caddy](caddy.md), [Docker](docker.md), [Nginx](nginx.md).
+Webservers:
+
+- [Caddy](caddy.md)
+- [Nginx](nginx.md).
+
+Containers:
+
+- [Docker](docker.md)
+
+Devtools:
+
+- [DDev](ddev.md) local environments wrapper around Docker
 
 ## Topics
 
- * [Post Types](post-types.md)
- * [Menu Items](menu-items.md)
+* [Menu Items](menu-items.md)
+* [Post Types](post-types.md)
+* [Themes](themes.md)

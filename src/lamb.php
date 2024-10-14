@@ -11,10 +11,11 @@ use RedBeanPHP\R;
  *
  * @return array An array of tags found in the HTML.
  */
-function get_tags( $html ) : array {
-	preg_match_all( '/(^|[\s>])#(\w+)/', $html, $matches );
+function get_tags($html): array
+{
+    preg_match_all('/(^|[\s>])#(\w+)/', $html, $matches);
 
-	return $matches[2];
+    return $matches[2];
 }
 
 /**
@@ -28,8 +29,9 @@ function get_tags( $html ) : array {
  *
  * @return string The modified HTML string with tags converted into links.
  */
-function parse_tags( $html ) : string {
-	return (string) preg_replace( '/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html );
+function parse_tags($html): string
+{
+    return (string) preg_replace('/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html);
 }
 
 /**
@@ -44,12 +46,13 @@ function parse_tags( $html ) : string {
  *
  * @return string The generated permalink URL.
  */
-function permalink( $item ) : string {
-	if ( $item['slug'] ) {
-		return ROOT_URL . "/{$item['slug']}";
-	}
+function permalink($item): string
+{
+    if ($item['slug']) {
+        return ROOT_URL . "/{$item['slug']}";
+    }
 
-	return ROOT_URL . '/status/' . $item['id'];
+    return ROOT_URL . '/status/' . $item['id'];
 }
 
 /**
@@ -59,23 +62,24 @@ function permalink( $item ) : string {
  *
  * @return array The rendered post, including the front matter and the body.
  */
-function render( $post ) : array {
-	$parts = explode( '---', $post );
-	$front_matter = Config\parse_matter( $post );
+function render($post): array
+{
+    $parts = explode('---', $post);
+    $front_matter = Config\parse_matter($post);
 
-	$md_text = trim( $parts[ count( $parts ) - 1 ] );
-	$parser = new LambDown();
-	$parser->setSafeMode( true );
-	$markdown = $parser->text( $md_text );
+    $md_text = trim($parts[ count($parts) - 1 ]);
+    $parser = new LambDown();
+    $parser->setSafeMode(true);
+    $markdown = $parser->text($md_text);
 
-	$front_matter['description'] = strtok( strip_tags( $markdown ), "\n" );
+    $front_matter['description'] = strtok(strip_tags($markdown), "\n");
 
-	if ( isset( $front_matter['title'] ) ) {
-		# Only posts have titles
-		$markdown = $parser->text( "## {$front_matter['title']}" ) . PHP_EOL . $markdown;
-	}
+    if (isset($front_matter['title'])) {
+        # Only posts have titles
+        $markdown = $parser->text("## {$front_matter['title']}") . PHP_EOL . $markdown;
+    }
 
-	return array_merge( $front_matter, [ 'body' => $markdown ] );
+    return array_merge($front_matter, [ 'body' => $markdown ]);
 }
 
 /**
@@ -85,26 +89,27 @@ function render( $post ) : array {
  *
  * @return array The transformed data.
  */
-function transform( $posts ) : array {
-	if ( empty( $posts ) ) {
-		return [];
-	}
+function transform($posts): array
+{
+    if (empty($posts)) {
+        return [];
+    }
 
-	$data = [];
+    $data = [];
 
-	foreach ( $posts as $post ) {
-		if ( is_null( $post ) || $post->id === 0 ) {
-			continue;
-		}
-		$data['items'][] = array_merge( render( $post->body ), [
-			'created' => $post->created,
-			'id' => $post->id,
-			'slug' => $post->slug,
-			'updated' => $post->updated,
-		] );
-	}
+    foreach ($posts as $post) {
+        if (is_null($post) || $post->id === 0) {
+            continue;
+        }
+        $data['items'][] = array_merge(render($post->body), [
+            'created' => $post->created,
+            'id' => $post->id,
+            'slug' => $post->slug,
+            'updated' => $post->updated,
+        ]);
+    }
 
-	return $data;
+    return $data;
 }
 
 /**
@@ -114,11 +119,12 @@ function transform( $posts ) : array {
  *
  * @return string|null The slug of the post if it exists, otherwise null.
  */
-function post_has_slug( string $lookup ) : string|null {
-	$post = R::findOne( 'post', ' slug = ? ', [ $lookup ] );
-	if ( is_null( $post ) || $post->id === 0 ) {
-		return '';
-	}
+function post_has_slug(string $lookup): string|null
+{
+    $post = R::findOne('post', ' slug = ? ', [ $lookup ]);
+    if (is_null($post) || $post->id === 0) {
+        return '';
+    }
 
-	return $post->slug;
+    return $post->slug;
 }

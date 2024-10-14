@@ -1,10 +1,17 @@
 name: CI
 
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
 on:
+  workflow_dispatch:
+  workflow_call:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "release" ]
   pull_request:
-    branches: [ "main" ]
+    branches: [ "main", "release" ]
 
 jobs:
 
@@ -28,6 +35,10 @@ jobs:
       - name: Validate Composer
         run: composer validate
 
+      - name: Run PHPCS
+        run: |
+          composer run lint
+
       - name: Start PHP development server
         run: php -S 0.0.0.0:8747 -t src &
 
@@ -39,3 +50,5 @@ jobs:
       - name: Run Codeception tests
         run: |
           vendor/bin/codecept run --steps
+
+
