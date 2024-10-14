@@ -54,10 +54,6 @@ input[type='submit'], button {
     cursor: pointer;
 }
 
-.container {
-    padding-left: 12rem;
-}
-
 main {
     margin: 0 auto;
     max-width: 75ch;
@@ -152,19 +148,8 @@ main a {
 
 article header {
     font-size: 0.75em;
-    margin-bottom: -1rem;
-    opacity: 0.8;
-    width: 8rem;
-    position: absolute;
-    margin-left: -10rem;
     margin-top: 1rem;
-    text-align: right;
 }
-
-article header span {
-    display: block;
-}
-
 
 article footer {
     overflow: auto;
@@ -240,4 +225,26 @@ textarea {
     top: 5px;
     width: auto;
     z-index: 100000; /* Above WP toolbar. */
+}
+
+/* Desktop styles */
+@media (min-width: 600px) {
+    article header {
+        margin-bottom: -1rem;
+        opacity: 0.8;
+        width: 8rem;
+        position: absolute;
+        margin-left: -10rem;
+        text-align: right;
+    }
+
+    article header span {
+        display: block;
+    }
+
+    .container {
+        padding-left: 12rem;
+    }
+
+
 }
