@@ -8,28 +8,22 @@ namespace Lamb\Theme;
 
 use Generator;
 use RedBeanPHP\R;
-
 use function Lamb\get_tags;
 use function Lamb\permalink;
 
 function action_delete($post): string
 {
-    if (! isset($post['id'], $_SESSION[SESSION_LOGIN])) {
+    if (!isset($post['id'], $_SESSION[SESSION_LOGIN])) {
         return '';
     }
 
-    return sprintf(
-        '<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>',
-        $post['id'],
-        $post['id'],
-        csrf_token()
-    );
+    return sprintf('<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
+</form>', $post['id'], $post['id'], csrf_token());
 }
 
 function action_edit($post): string
 {
-    if (! isset($post['id'], $_SESSION[SESSION_LOGIN])) {
+    if (!isset($post['id'], $_SESSION[SESSION_LOGIN])) {
         return '';
     }
 
@@ -45,14 +39,14 @@ function csrf_token(): string
 
 function date_created($post): string
 {
-    if (! isset($post['created'])) {
+    if (!isset($post['created'])) {
         return '';
     }
 
     $human_created = human_time(strtotime($post['created']));
 
     $slug = "/status/{$post['id']}";
-    if (! empty($post['slug'])) {
+    if (!empty($post['slug'])) {
         $slug = $post['slug'];
     }
 
@@ -69,7 +63,7 @@ function site_title(): string
 function page_title(): string
 {
     global $data;
-    if (! isset($data['title'])) {
+    if (!isset($data['title'])) {
         return '';
     }
 
@@ -79,7 +73,7 @@ function page_title(): string
 function page_intro(): string
 {
     global $data;
-    if (! isset($data['intro'])) {
+    if (!isset($data['intro'])) {
         return '';
     }
 
@@ -178,7 +172,8 @@ function asset_loader($assets, $asset_dir): Generator
         foreach ($files as $file) {
             $is_admin_script = $dir === SESSION_LOGIN;
             if (empty($dir) || ($is_admin_script && isset($_SESSION[SESSION_LOGIN]))) {
-                $href = ROOT_URL . "/$asset_dir/$dir/$file";
+                // Empty dir
+                $href = ROOT_URL . str_replace('//', '/', "/$asset_dir/$dir/$file");
                 yield md5($href) => $href;
             }
         }
@@ -239,7 +234,7 @@ function human_time($timestamp): string
             $text = "Yesterday at " . date("g:i a", $timestamp);
         } elseif ($j === 3) { // Less than a week display -- Monday at 5:28pm
             $text = date("l \a\\t g:i a", $timestamp);
-        } elseif ($j < 6 && ! ($j === 5 && $difference === 12)) { // Less than a year display -- June 25 at 5:23am
+        } elseif ($j < 6 && !($j === 5 && $difference === 12)) { // Less than a year display -- June 25 at 5:23am
             $text = date("F j \a\\t g:i a", $timestamp);
         } else // if over a year or the same month one year ago -- June 30, 2010 at 5:34pm
         {
@@ -269,11 +264,11 @@ function part(string $name): void
 {
     $name = sanitize_filename($name);
     $filename = THEME_DIR . "parts/$name.php";
-    if (! is_readable($filename)) {
+    if (!is_readable($filename)) {
         // Fallback to default
         $filename = __DIR__ . "/themes/default/parts/$name.php";
     }
-    if (! is_readable($filename)) {
+    if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);
     }
 
@@ -313,6 +308,6 @@ function the_entry_form()
             <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
         </form>
-        <?php
+    <?php
     endif;
 }
