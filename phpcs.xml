@@ -17,9 +17,15 @@
     <!-- leave only src -->
     <exclude-pattern>\.*/</exclude-pattern>
     <exclude-pattern>vendor/</exclude-pattern>
+    <exclude-pattern>vendor/</exclude-pattern>
 
     <!-- Check for PHP cross-version compatibility. -->
     <rule ref="PHPCompatibility"/>
+    <rule ref="PSR2">
+        <!-- tests/-->
+        <exclude name="PSR2.Methods.MethodDeclaration.Underscore"/>
+        <exclude name="PSR2.Namespaces.UseDeclaration.SpaceAfterUse"/>
+    </rule>
     <rule ref="PSR12">
         <!-- Disable specific rules I don't like -->
         <exclude name="Generic.Files.LineLength.TooLong"/>

@@ -8,6 +8,7 @@ namespace Lamb\Theme;
 
 use Generator;
 use RedBeanPHP\R;
+
 use function Lamb\get_tags;
 use function Lamb\permalink;
 
@@ -308,6 +309,6 @@ function the_entry_form()
             <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
         </form>
-    <?php
+        <?php
     endif;
 }
