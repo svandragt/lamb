@@ -79,6 +79,11 @@
       <excludeFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/vendor/symfony/string" />
       <excludeFolder url="file://$MODULE_DIR$/.devbox" />
       <excludeFolder url="file://$MODULE_DIR$/src/assets" />
+      <excludeFolder url="file://$MODULE_DIR$/.ddev/.dbimageBuild" />
+      <excludeFolder url="file://$MODULE_DIR$/.ddev/.homeadditions" />
+      <excludeFolder url="file://$MODULE_DIR$/.ddev/.webimageBuild" />
+      <excludeFolder url="file://$MODULE_DIR$/.ddev/db_snapshots" />
+      <excludeFolder url="file://$MODULE_DIR$/.direnv" />
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
