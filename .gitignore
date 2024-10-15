@@ -4,6 +4,7 @@
 /src/assets/
 /vendor/
 /src/config.ini
+
 # Ignore custom themes by default
 /src/themes/
 !/src/themes/2024
