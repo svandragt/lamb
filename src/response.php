@@ -173,7 +173,6 @@ function redirect_edited()
     try {
         R::store($bean);
     } catch (SQL $e) {
-        die('fail to save');
         $_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
     }
     $redirect = $_SESSION['edit-referrer'];
