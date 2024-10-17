@@ -26,4 +26,4 @@ It's not possible to check more often than once every minute, and each feed indi
 to avoid spamming the endpoint.
 
 It is your responsibility to call the `_cron` endpoint, unlike other CMSes you might be used to. If you don't have a
-server you could setup a website monitor, a local scheduled task, maybe even IFTTT or Zapier. Be creative!
+server, you could setup a website monitor, a local scheduled task, maybe even IFTTT or Zapier. Be creative!
