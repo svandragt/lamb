@@ -14,6 +14,8 @@ theme = 2024
 ```
 
 Lamb also supports user themes in the same way. Simply create your own theme directory and assign it to the `theme` key.
+It's recommended to version control your theme as it's own git repo. This allows you to update Lamb and your theme
+separately using git.
 
 ## Screenshots
 
