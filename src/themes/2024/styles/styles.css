@@ -59,6 +59,7 @@ main {
     max-width: 75ch;
     border: 0 solid var(--shadow);
     border-left-width: 1px;
+    padding-left: 1vw;
 }
 
 nav {
@@ -113,7 +114,7 @@ footer {
 
 
 form {
-    margin: 2em 0;
+    margin: 2vw 0;
 }
 
 
@@ -131,7 +132,7 @@ h1 {
 
 article {
     border-bottom: 1px solid var(--shadow);
-    padding: 1vw 1vw 1vw;
+    padding: 1vw 1vw 1vw 0;
 }
 
 article:last-of-type {
@@ -204,12 +205,6 @@ textarea {
 .highlight {
     border: 4px solid orange;
 }
-
-/* Fix alignment entry form */
-#entry {
-    margin-left: 1em;
-}
-
 
 /* Text meant only for screen readers. */
 .screen-reader-text {
