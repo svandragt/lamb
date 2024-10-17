@@ -1,4 +1,4 @@
-localhost {
+:80 {
 	root * /srv/app/src
 	file_server
 	php_fastcgi php:9000
