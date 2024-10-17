@@ -1,6 +1,6 @@
 ![Lamb made out of circuitry](src/images/og-image-lamb.jpg)
 
-Lamb - Literally Another Micro Blog.
+Lamb — Literally Another Micro Blog.
 
 Barrier free super simple blogging, self-hosted.
 
@@ -51,7 +51,7 @@ composer install
 To Run:
 
 ```shell
-LAMB_LOGIN_PASSWORD=$(php make_password_hash.php hackme) composer serve
+LAMB_LOGIN_PASSWORD=$(php setup.php hackme) composer serve
 ```
 
 Change `hackme` to something more secure, this is the `/login` password!

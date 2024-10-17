@@ -25,12 +25,12 @@ services:
       dockerfile: .docker/Dockerfile
     container_name: lamb-app
     env_file:
-      - ./secrets.env
+      - ../.ddev/.env
     image: php:fpm
     volumes:
       - ../data:/srv/app/data
       - ../src:/srv/app/src
-      - ../make_password_hash.php:/srv/app/make_password_hash.php
+      - ../setup.php:/srv/app/setup.php
       - vendor:/srv/app/vendor
 
 volumes:

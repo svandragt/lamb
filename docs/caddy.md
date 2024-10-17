@@ -13,7 +13,7 @@ sudo chown $USER:www-data src/assets -R
 sudo chmod g+w src/assets -R
 ```
 
-To allow logins, add the output of `HIDDEN=1 php make_password_hash.php hackme` (don't use hackme) as an
+To allow logins, add the output of `HIDDEN=1 php setup.php hackme` (don't use hackme) as an
 environment variable
 to `/etc/php/8.2/fpm/pool.d/www.conf`:
 

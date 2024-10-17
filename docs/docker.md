@@ -8,13 +8,13 @@ The only requirement in this case is a working Docker setup!
 $ cd .docker
 
 # Bring up the application
-$ touch secrets.env; docker compose up --build -d
+$ touch ../.ddev/.env; docker compose up --build -d
 
 # To enable the admin role, generate a password hash. Replace hackme with your own password
-$ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php make_password_hash.php hackme')" > secrets.env
+$ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php setup.php hackme')"
 
 # Test the previous command. If output is "err(1)" please review your secrets file
-$ test "$(wc -c < secrets.env)" -ne 21 && echo "ok($?)" || echo 'err($?)'
+$ test "$(wc -c < ../.ddev/.env)" -ne 21 && echo "ok($?)" || echo 'err($?)'
 
 # Apple the secret
 $ docker compose up --build -d
