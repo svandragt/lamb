@@ -138,19 +138,18 @@ function redirect_deleted($args): void
  *
  * @return void
  */
-function redirect_edited()
+function redirect_edited(): void
 {
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_EDIT) {
-        die('missing submit');
-        return null;
+        return;
     }
 
-    $contents = trim(htmlspecialchars($_POST['contents']));
+    $contents = trim(($_POST['contents']));
     $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT));
     if (empty($contents) || empty($id)) {
-        return null;
+        return;
     }
 
     $matter = parse_matter($contents);
@@ -168,7 +167,7 @@ function redirect_edited()
     if (is_reserved_route($bean->slug)) {
         $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
 
-        return null;
+        return;
     }
 
     try {
@@ -389,7 +388,14 @@ function respond_post(array $args): array
     return $data;
 }
 
-function upgrade_posts(array &$posts)
+/**
+ * Upgrades the given posts by transforming the beans and storing them in the database if not already transformed.
+ *
+ * @param array &$posts The array of posts to be upgraded, passed by reference.
+ *
+ * @return void
+ */
+function upgrade_posts(array &$posts): void
 {
     foreach ($posts as &$bean) {
         if (empty($bean->transformed)) {

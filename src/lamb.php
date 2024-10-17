@@ -73,11 +73,6 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
-    // Don't reparse, just in case.
-    if (!$bean->isParsed) {
-        return;
-    }
-
     $parts = explode('---', $bean->body);
     $md_text = trim($parts[count($parts) - 1]);
     $parser = new LambDown();
@@ -90,12 +85,11 @@ function parse_bean(OODBBean $bean): void
         # Only posts have titles
         $markdown = $parser->text("## {$front_matter['title']}") . PHP_EOL . $markdown;
     }
-    $front_matter['transformed'] = parse_tags($markdown);
+    $front_matter['transformed'] = (parse_tags($markdown));
 
     foreach ($front_matter as $key => $value) {
         $bean->$key = $value;
     }
-    $bean->isParsed = true;
 }
 
 /**

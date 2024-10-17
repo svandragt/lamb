@@ -41,5 +41,10 @@ class FirstCest
         $text = "# Hello, World! #til";
         $expectedOutput = "<h1>Hello, World! #til</h1>";
         Assert::assertEquals($expectedOutput, parse_markdown($text));
+
+        // Code escaping markdown
+        $text = "test `<b>bold</b>`";
+        $expectedOutput = "<p>test <code>&lt;b&gt;bold&lt;/b&gt;</code></p>";
+        Assert::assertEquals($expectedOutput, parse_markdown($text));
     }
 }
