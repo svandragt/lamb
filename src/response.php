@@ -296,7 +296,7 @@ function respond_edit(array $args): array
 
     [$id] = $args;
 
-    $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'];
+    $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'] ?? null;
 
     return ['post' => R::load('post', (int)$id)];
 }
@@ -422,16 +422,28 @@ function upgrade_posts(array &$posts): void
  */
 function respond_search(array $args): array
 {
-    [$query] = $args;
-    $query = htmlspecialchars($query);
+    $query = urldecode($args[0]);
     if (empty($query)) {
-        $query = htmlspecialchars($_GET['s']);
+        $query = htmlspecialchars($_GET['s'] ?? '');
         if (empty($query)) {
             return [];
         }
         redirect_search($query);
     }
-    $posts = R::find('post', 'body LIKE ?', ["%$query%"], 'ORDER BY created DESC');
+
+    // Support multiple words filtering
+    $words = explode(' ', $query);
+    $where_clauses = [];
+    $params = [];
+    foreach ($words as $word) {
+        $where_clauses[] = 'body LIKE ?';
+        $params[] = "%$word%";
+    }
+    $whereSql = implode(' AND ', $where_clauses);
+    $sql = "$whereSql ORDER BY created DESC";
+    $posts = R::find('post', $sql, $params);
+
+    // Results
     $data['title'] = 'Searched for "' . $query . '"';
     $num_results = count($posts);
     if ($num_results > 0) {

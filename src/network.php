@@ -23,7 +23,7 @@ function get_feeds(): array
 {
     global $config;
 
-    return $config['network_feeds'] ?? [];
+    return $config['feeds'] ?? [];
 }
 
 /** @noinspection PhpUnused */
@@ -31,13 +31,13 @@ function get_feeds(): array
 {
     header('Content-Type: text/plain');
     // FIXME: Missing permalink and title
-
     $feeds = get_feeds();
 
     $cron_last_updated = get_option('last_processed_date', 0);
     if ((time() - $cron_last_updated->value) < MINUTE_IN_SECONDS) {
         die('Too often, try again later.');
     }
+    echo("Updating feeds..." . PHP_EOL);
     foreach ($feeds as $name => $url) {
         flush();
         $last_updated = get_option('last_processed_date_' . md5($name . $url), 0);
@@ -75,7 +75,7 @@ function get_feeds(): array
     }
 
     set_option($cron_last_updated, (int)date('U'));
-    exit();
+    exit('Done');
 }
 
 function update_item(SimplePieItem $item, string $name): void
@@ -192,11 +192,11 @@ function attributed_content(SimplePieItem $item, string $name): string
 {
     $contents = strip_tags($item->get_description());
     $lines = explode(PHP_EOL, $contents);
+    $lines = array_slice($lines, 0, 5); // Get only the first 5 lines
     foreach ($lines as &$line) {
         $line = "> $line";
     }
     unset($line);
-
     $contents = implode(PHP_EOL, $lines);
     $url = $item->get_permalink();
     return "Originally written on [$name]($url): " . PHP_EOL . PHP_EOL . $contents;
