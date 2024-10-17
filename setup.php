@@ -3,7 +3,7 @@
 if (empty($argv[1])) {
     die('Usage: php setup.php <password>');
 }
-$hash = base64_encode(password_hash($argv[1], PASSWORD_DEFAULT)) . PHP_EOL;
+$hash = base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));
 
 // Lamb admin
 $data = "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
