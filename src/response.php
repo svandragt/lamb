@@ -154,7 +154,7 @@ function redirect_edited()
     }
 
     $matter = parse_matter($contents);
-    $bean = R::load('bean', (int)$id);
+    $bean = R::load('post', (int)$id);
     $bean->body = $contents;
     parse_bean($bean);
     if (empty($bean->slug)) {
