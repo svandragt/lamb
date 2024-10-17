@@ -156,7 +156,9 @@ function redirect_edited()
     $matter = parse_matter($contents);
     $bean = R::load('post', (int)$id);
     $bean->body = $contents;
+
     parse_bean($bean);
+
     if (empty($bean->slug)) {
         # Good URLS don't change!
         $bean->slug = $matter['slug'] ?? '';
@@ -168,7 +170,6 @@ function redirect_edited()
 
         return null;
     }
-
 
     try {
         R::store($bean);

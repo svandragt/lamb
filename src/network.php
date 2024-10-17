@@ -102,17 +102,7 @@ function update_item(SimplePieItem $item, string $name): void
 
 function prepare_item(SimplePieItem $item, string $name, OODBBean $bean = null): ?OODBBean
 {
-    $contents = wrapped_contents($item, $name);
-    $title = addslashes($item->get_title());
-    if (!empty($title)) {
-        $contents = <<<MATTER
----
-title: {$title}
----
-
-{$contents}
-MATTER;
-    }
+    $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name, $bean);
     if (is_null($bean)) {
         $_SESSION['flash'][] = 'Failed to save post';
@@ -125,17 +115,7 @@ MATTER;
 
 function create_item(SimplePieItem $item, string $name)
 {
-    $contents = wrapped_contents($item, $name);
-    $title = addslashes($item->get_title());
-    if (!empty($title)) {
-        $contents = <<<MATTER
----
-title: {$title}
----
-
-{$contents}
-MATTER;
-    }
+    $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
     if (is_null($bean)) {
         $_SESSION['flash'][] = 'Failed to save post';
@@ -152,6 +132,27 @@ MATTER;
     } catch (SQL) {
         // continue
     }
+}
+
+/**
+ * @param SimplePieItem $item
+ * @param string $name
+ * @return string
+ */
+function get_structured_content(SimplePieItem $item, string $name): string
+{
+    $contents = attributed_content($item, $name);
+    $title = addslashes($item->get_title());
+    if (!empty($title)) {
+        $contents = <<<MATTER
+---
+title: {$title}
+---
+
+{$contents}
+MATTER;
+    }
+    return $contents;
 }
 
 function get_option(string $key, $default_value): OODBBean
@@ -179,7 +180,15 @@ function set_option(OODBBean $bean, $value): void
     R::store($bean);
 }
 
-function wrapped_contents(SimplePieItem $item, string $name): string
+/**
+ * Returns the description of a SimplePie item formatted as a quoted block,
+ * along with a citation to the original source.
+ *
+ * @param SimplePieItem $item The SimplePieItem instance from which to extract the description and URL.
+ * @param string $name The name to use in the citation.
+ * @return string The formatted description with a citation to the original source.
+ */
+function attributed_content(SimplePieItem $item, string $name): string
 {
     $contents = strip_tags($item->get_description());
     $lines = explode(PHP_EOL, $contents);

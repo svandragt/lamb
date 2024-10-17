@@ -11,13 +11,13 @@ use Symfony\Component\Yaml\Yaml;
 use function Lamb\parse_bean;
 
 /**
- * Return an unsaved dispensed bean.
+ * Populates and returns an OODBBean instance with the given text and optional feed information.
  *
- * @param string $text
- * @param Item|null $feed_item
- * @param string|null $feed_name
- *
- * @return OODBBean|null
+ * @param string $text The text content to be set in the bean.
+ * @param Item|null $feed_item An optional feed item to extract creation date and ID from.
+ * @param string|null $feed_name An optional feed name to prefix the slug and associate with the bean.
+ * @param OODBBean|null $bean An optional existing bean to populate. If null, a new 'post' bean is dispensed.
+ * @return OODBBean|null The populated bean instance, or null if input is insufficient.
  */
 function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
 {

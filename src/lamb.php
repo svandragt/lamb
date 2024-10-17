@@ -59,8 +59,24 @@ function permalink(OODBBean $bean): string
 }
 
 
+/**
+ * Parses the given bean to extract and transform its content.
+ *
+ * This method processes the content of an OODBBean object, typically containing
+ * a body with markdown text separated by '---'. It processes the markdown, extracts
+ * front matter, and updates the bean with the parsed and transformed content.
+ *
+ * @param OODBBean $bean The item whose body content is parsed and transformed.
+ *                       It must have a 'body' property containing the text to be processed.
+ *
+ * @return void This method does not return any value. It modifies the input bean directly.
+ */
 function parse_bean(OODBBean $bean): void
 {
+    // Don't reparse, just in case.
+    if (!$bean->isParsed) {
+        return;
+    }
 
     $parts = explode('---', $bean->body);
     $md_text = trim($parts[count($parts) - 1]);
@@ -79,6 +95,7 @@ function parse_bean(OODBBean $bean): void
     foreach ($front_matter as $key => $value) {
         $bean->$key = $value;
     }
+    $bean->isParsed = true;
 }
 
 /**
