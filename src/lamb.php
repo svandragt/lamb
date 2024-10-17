@@ -88,7 +88,15 @@ function parse_bean(OODBBean $bean): void
     $front_matter['transformed'] = (parse_tags($markdown));
 
     foreach ($front_matter as $key => $value) {
-        $bean->$key = $value;
+        /*
+        Posts should not change their slug one they have one. Only from ID to title is allowed.
+        Changing slugs breaks URLs as long as there are no redirects.
+        Also it breaks the after edit redirect.
+        TODO: remove check after redirects.
+        */
+        if ($key !== 'slug' || empty($bean->slug)) {
+            $bean->$key = $value;
+        }
     }
 }
 

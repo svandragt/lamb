@@ -72,7 +72,7 @@ function parse_matter(string $body): array
         return [];
     }
     if (isset($matter['title'])) {
-        $matter['slug'] = strtolower(preg_replace('/\W+/m', "-", $matter['title']));
+        $matter['slug'] = slugify($matter['title']);
     }
 
     return $matter;
