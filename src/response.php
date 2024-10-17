@@ -157,11 +157,6 @@ function redirect_edited(): void
     $bean->body = $contents;
 
     parse_bean($bean);
-
-    if (empty($bean->slug)) {
-        # Good URLS don't change!
-        $bean->slug = $matter['slug'] ?? '';
-    }
     $bean->updated = date("Y-m-d H:i:s");
 
     if (is_reserved_route($bean->slug)) {
