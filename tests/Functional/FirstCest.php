@@ -2,10 +2,16 @@
 
 namespace Tests\Functional;
 
+use Lamb\LambDown;
 use PHPUnit\Framework\Assert;
 use Tests\Support\FunctionalTester;
 
-use function Lamb\render;
+function parse_markdown(string $text): string
+{
+    $parser = new LambDown();
+    $parser->setSafeMode(true);
+    return $parser->text($text);
+}
 
 class FirstCest
 {
@@ -19,21 +25,21 @@ class FirstCest
         //  Text test
         $text = "Hello, World!";
         $expectedOutput = "<p>Hello, World!</p>";
-        Assert::assertEquals($expectedOutput, render($text)['body']);
+        Assert::assertEquals($expectedOutput, parse_markdown($text));
 
         // Basic markdown
         $text = "_Hello, World!_";
         $expectedOutput = "<p><em>Hello, World!</em></p>";
-        Assert::assertEquals($expectedOutput, render($text)['body']);
+        Assert::assertEquals($expectedOutput, parse_markdown($text));
 
         // Fake markdown
         $text = "#Hello, World! #til";
         $expectedOutput = "<p>#Hello, World! #til</p>";
-        Assert::assertEquals($expectedOutput, render($text)['body']);
+        Assert::assertEquals($expectedOutput, parse_markdown($text));
 
         // Headers markdown
         $text = "# Hello, World! #til";
         $expectedOutput = "<h1>Hello, World! #til</h1>";
-        Assert::assertEquals($expectedOutput, render($text)['body']);
+        Assert::assertEquals($expectedOutput, parse_markdown($text));
     }
 }
