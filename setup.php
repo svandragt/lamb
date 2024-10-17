@@ -9,7 +9,7 @@ $hash = base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));
 $data = "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
 $out = file_put_contents('.ddev/.env', $data);
 if ($out) {
-    echo $hash;
+    echo $hash . PHP_EOL;
 } else {
     user_error('Problem saving .ddev/.env', E_USER_WARNING);
 }
