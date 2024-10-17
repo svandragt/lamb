@@ -333,7 +333,7 @@ function sanitize_filename($filename): string
 function the_entry_form()
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>
-        <form method="post" action="/" enctype="multipart/form-data">
+        <form id="entry" method="post" action="/" enctype="multipart/form-data">
             <label>
                 <textarea placeholder="What's happening?" name="contents" required></textarea>
             </label>

@@ -146,6 +146,15 @@ main a {
     color: var(--link);
 }
 
+main small a {
+    margin-right: 1em;
+}
+
+small form {
+    margin: auto;
+    display: inline;
+}
+
 article header {
     font-size: 0.75em;
     margin-top: 1rem;
@@ -195,6 +204,12 @@ textarea {
 .highlight {
     border: 4px solid orange;
 }
+
+/* Fix alignment entry form */
+#entry {
+    margin-left: 1em;
+}
+
 
 /* Text meant only for screen readers. */
 .screen-reader-text {
