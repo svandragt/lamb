@@ -6,26 +6,26 @@ global $config;
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
 use function Lamb\Theme\date_created;
+use function Lamb\Theme\is_menu_item;
+use function Lamb\Theme\link_source;
 
-if (empty($data['items'])) :
+if (empty($data['posts'])) :
     ?><p>Sorry no items found.</p>
     <?php
 else :
-    foreach ($data['items'] as $item) :
-        if (empty($item['is_menu_item'])) :
-            ?>
-            <article>
-                <header><strong><?= $config['author_name'] ?></strong> @
-                    <span><?= date_created($item); ?></span></header>
-                <?= Lamb\parse_tags($item['body']); ?>
-
-                <?php
-                if (isset($_SESSION[SESSION_LOGIN])) : ?>
-                    <footer><?= action_edit($item); ?> <?= action_delete($item); ?></footer>
-                    <?php
-                endif; ?>
-            </article>
-            <?php
+    foreach ($data['posts'] as $bean) :
+        if (is_menu_item($bean->is_menu_item ?? $bean->id)) :
+            continue;
         endif;
+        ?>
+        <article>
+            <header><strong><?= $config['author_name'] ?></strong> @
+                <span><?= date_created($bean); ?></span></header>
+            <?= $bean->transformed ?>
+
+            <small><?= link_source($bean); ?> <?= action_edit($bean); ?> <?= action_delete($bean); ?></small>
+
+        </article>
+        <?php
     endforeach;
 endif;

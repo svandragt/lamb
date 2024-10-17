@@ -12,6 +12,7 @@ Barrier free super simple blogging, self-hosted.
 - Hashtags support, by just typing them `#ahyeah`.
 - 404 fallback redirection to your old site, optionally.
 - Friendly user theming, if you don't like my two shades of 2000s retro themes. ;)
+- Pull external content into the blog by subscribing to feeds.
 
 # Getting started
 
@@ -25,9 +26,10 @@ Lamb can be run locally with the builtin PHP webserver, here are two ways to set
 
 a. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
 b. locally install [PHP 8.2](https://www.php.net/manual/en/install.php) and
-   [composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
+[composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
 
 ## a. Devbox
+
 ```shell
 devbox shell
 composer install

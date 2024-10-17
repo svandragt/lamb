@@ -8,8 +8,8 @@ use Lamb\Response;
  * Registers a new route.
  *
  * @param bool|string $action The action to register. It can be a boolean or a string.
- * @param string      $callback The callback function to execute when the route is accessed.
- * @param mixed       ...$args Additional arguments to pass to the callback function.
+ * @param string $callback The callback function to execute when the route is accessed.
+ * @param mixed ...$args Additional arguments to pass to the callback function.
  *
  * @return void
  */

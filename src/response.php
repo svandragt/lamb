@@ -6,15 +6,16 @@ namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
+use Lamb\Security;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
-use Lamb\Config;
-use Lamb\Security;
 use RuntimeException;
 
-use function Lamb\Config\parse_matter;
+use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
-use function Lamb\transform;
+use function Lamb\Post\parse_matter;
+use function Lamb\Post\populate_bean;
+use function Lamb\Theme\part;
 
 use const ROOT_DIR;
 
@@ -85,21 +86,17 @@ function redirect_created(): ?array
         return null;
     }
 
-    $matter = parse_matter($contents);
-    $post = R::dispense('post');
-    $post->body = $contents;
-    $post->slug = $matter['slug'] ?? '';
-    $post->created = date("Y-m-d H:i:s");
-    $post->updated = date("Y-m-d H:i:s");
-
-    if (is_reserved_route($post->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
-
+    $bean = populate_bean($contents);
+    if (is_null($bean)) {
+        $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
         return null;
     }
 
     try {
-        R::store($post);
+        $id = R::store($bean);
+        if (is_reserved_route($bean->slug)) {
+            $bean->slug .= "-" . $id;
+        }
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
@@ -141,37 +138,35 @@ function redirect_deleted($args): void
  *
  * @return void
  */
-function redirect_edited()
+function redirect_edited(): void
 {
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_EDIT) {
-        return null;
+        return;
     }
 
-    $contents = trim(htmlspecialchars($_POST['contents']));
+    $contents = trim(($_POST['contents']));
     $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT));
     if (empty($contents) || empty($id)) {
-        return null;
+        return;
     }
 
     $matter = parse_matter($contents);
-    $post = R::load('post', (int)$id);
-    $post->body = $contents;
-    if (empty($post->slug)) {
-        # Good URLS don't change!
-        $post->slug = $matter['slug'] ?? '';
-    }
-    $post->updated = date("Y-m-d H:i:s");
+    $bean = R::load('post', (int)$id);
+    $bean->body = $contents;
 
-    if (is_reserved_route($post->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $post->slug . '</code>';
+    parse_bean($bean);
+    $bean->updated = date("Y-m-d H:i:s");
 
-        return null;
+    if (is_reserved_route($bean->slug)) {
+        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
+
+        return;
     }
 
     try {
-        R::store($post);
+        R::store($bean);
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
     }
@@ -214,14 +209,14 @@ function redirect_login(): ?array
         session_regenerate_id(true);
         redirect_uri('/');
     }
-    if (! isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
+    if (!isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
         // Show login page by returning a non empty array.
         return [];
     }
     Security\require_csrf();
 
     $user_pass = $_POST['password'];
-    if (! password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
+    if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         $_SESSION['flash'][] = 'Password is incorrect, please try again.';
         redirect_uri('/');
     }
@@ -272,10 +267,13 @@ function respond_status(array $args): array
     [$id] = $args;
     $posts = [R::load('post', (int)$id)];
 
-    $data = transform($posts);
-    if (empty($data['items'])) {
+    $data['posts'] = $posts;
+    if (empty($data['posts'])) {
         respond_404([], true);
     }
+
+    upgrade_posts($data['posts']);
+
 
     return $data;
 }
@@ -291,14 +289,14 @@ function respond_status(array $args): array
  */
 function respond_edit(array $args): array
 {
-    if (! empty($_POST)) {
+    if (!empty($_POST)) {
         redirect_edited();
     }
     Security\require_login();
 
     [$id] = $args;
 
-    $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'];
+    $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'] ?? null;
 
     return ['post' => R::load('post', (int)$id)];
 }
@@ -331,8 +329,10 @@ function respond_feed(): void
     $data['updated'] = $first_post['updated'];
     $data['title'] = $config['site_title'];
 
-    $data = array_merge($data, transform($posts));
-    require_once(THEME_DIR . "feed.php");
+    $data['posts'] = $posts;
+    upgrade_posts($posts);
+
+    part("feed", '');
     die();
 }
 
@@ -353,18 +353,14 @@ function respond_feed(): void
 function respond_home(): array
 {
     global $config;
-    if (! empty($_POST)) {
+    if (!empty($_POST)) {
         redirect_created();
     }
 
-    $posts = R::findAll('post', 'ORDER BY created DESC');
     $data['title'] = $config['site_title'];
+    $data['posts'] = R::findAll('post', 'ORDER BY created DESC LIMIT 99');
 
-    $data = array_merge($data, transform($posts));
-    $data['items'] = $data['items'] ?? [];
-    foreach ($data['items'] as &$item) {
-        $item['is_menu_item'] = Config\is_menu_item($item['slug'] ?? $item['id']);
-    }
+    upgrade_posts($data['posts']);
 
     return $data;
 }
@@ -380,9 +376,32 @@ function respond_home(): array
 function respond_post(array $args): array
 {
     [$slug] = $args;
-    $posts = [R::findOne('post', ' slug = ? ', [$slug])];
+    $data['posts'] = [R::findOne('post', ' slug = ? ', [$slug])];
 
-    return transform($posts);
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
+ * Upgrades the given posts by transforming the beans and storing them in the database if not already transformed.
+ *
+ * @param array &$posts The array of posts to be upgraded, passed by reference.
+ *
+ * @return void
+ */
+function upgrade_posts(array &$posts): void
+{
+    foreach ($posts as &$bean) {
+        if (empty($bean->transformed)) {
+            parse_bean($bean);
+            try {
+                $id = R::store($bean);
+            } catch (SQL $e) {
+                $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
+            }
+        }
+    }
 }
 
 # Search result (non-FTS)
@@ -403,16 +422,28 @@ function respond_post(array $args): array
  */
 function respond_search(array $args): array
 {
-    [$query] = $args;
-    $query = htmlspecialchars($query);
+    $query = urldecode($args[0]);
     if (empty($query)) {
-        $query = htmlspecialchars($_GET['s']);
+        $query = htmlspecialchars($_GET['s'] ?? '');
         if (empty($query)) {
             return [];
         }
         redirect_search($query);
     }
-    $posts = R::find('post', 'body LIKE ?', ["%$query%"], 'ORDER BY created DESC');
+
+    // Support multiple words filtering
+    $words = explode(' ', $query);
+    $where_clauses = [];
+    $params = [];
+    foreach ($words as $word) {
+        $where_clauses[] = 'body LIKE ?';
+        $params[] = "%$word%";
+    }
+    $whereSql = implode(' AND ', $where_clauses);
+    $sql = "$whereSql ORDER BY created DESC";
+    $posts = R::find('post', $sql, $params);
+
+    // Results
     $data['title'] = 'Searched for "' . $query . '"';
     $num_results = count($posts);
     if ($num_results > 0) {
@@ -420,10 +451,12 @@ function respond_search(array $args): array
         $data['intro'] = count($posts) . " $result found.";
     }
 
-    $data = array_merge($data, transform($posts));
-    if (empty($data['items'])) {
+    $data['posts'] = $posts;
+    if (empty($data['posts'])) {
         respond_404([], true);
     }
+
+    upgrade_posts($posts);
 
     return $data;
 }
@@ -443,8 +476,8 @@ function respond_tag(array $args): array
     $posts = R::find('post', 'body LIKE ? OR body LIKE ?', ["% #$tag%", "%\n#$tag%"], 'ORDER BY created DESC');
     $data['title'] = 'Tagged with #' . $tag;
 
-    $data = array_merge($data, transform($posts));
-    if (empty($data['items'])) {
+    $data['posts'] = $posts;
+    if (empty($data['posts'])) {
         respond_404([], true);
     }
 
@@ -488,7 +521,7 @@ function respond_upload(array $args): void
         $ext = pathinfo($f['name'])['extension'];
         $new_fn = sha1($f['name']) . ".$ext";
         $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
-        if (! move_uploaded_file($temp_fp, $new_fp)) {
+        if (!move_uploaded_file($temp_fp, $new_fp)) {
             echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
             die();
         }
@@ -514,8 +547,8 @@ function get_upload_dir(): string
 {
     // get an upload directory in the current directory based on YYYY/MM/filename.ext
     $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, date("Y/m"));
-    if (! is_dir($upload_dir)) {
-        if (! mkdir($upload_dir, 0777, true) && ! is_dir($upload_dir)) {
+    if (!is_dir($upload_dir)) {
+        if (!mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
             throw new RuntimeException(sprintf('Directory "%s" was not created', $upload_dir));
         }
     }

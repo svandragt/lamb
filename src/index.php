@@ -5,12 +5,13 @@ namespace Lamb;
 use RuntimeException;
 use RedBeanPHP\R;
 
+define('ROOT_DIR', __DIR__);
+
 require '../vendor/autoload.php';
 
-$root_url = ( isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http" ) . "://" . $_SERVER["HTTP_HOST"];
+$root_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
 define('HIDDEN_CSRF_NAME', 'csrf');
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
-define('ROOT_DIR', __DIR__);
 define('ROOT_URL', $root_url);
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
@@ -22,17 +23,17 @@ unset($root_url);
 header('Cache-Control: max-age=300');
 
 $data_dir = '../data';
-if (! is_dir($data_dir)) {
-    if (! mkdir($data_dir, 0777, true) && ! is_dir($data_dir)) {
+if (!is_dir($data_dir)) {
+    if (!mkdir($data_dir, 0777, true) && !is_dir($data_dir)) {
         throw new RuntimeException(sprintf('Directory "%s" was not created', $data_dir));
     }
 }
 R::setup('sqlite:../data/lamb.db');
-
+R::useWriterCache(true);
 // Make cookies inaccessible via JavaScript (XSS).
 ini_set("session.cookie_httponly", 1);
 // Prevent the browser from sending cookies along with cross-site requests (CSRF)
-session_set_cookie_params([ 'samesite' => 'Strict' ]); // or 'Lax'
+session_set_cookie_params(['samesite' => 'Strict']); // or 'Lax'
 session_start();
 
 // Validate user agents

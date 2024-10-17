@@ -2,7 +2,10 @@
 
 namespace Lamb;
 
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+
+use function Lamb\Post\parse_matter;
 
 /**
  * Retrieves the tags from the given HTML.
@@ -11,7 +14,7 @@ use RedBeanPHP\R;
  *
  * @return array An array of tags found in the HTML.
  */
-function get_tags($html): array
+function get_tags(string $html): array
 {
     preg_match_all('/(^|[\s>])#(\w+)/', $html, $matches);
 
@@ -29,9 +32,9 @@ function get_tags($html): array
  *
  * @return string The modified HTML string with tags converted into links.
  */
-function parse_tags($html): string
+function parse_tags(string $html): string
 {
-    return (string) preg_replace('/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html);
+    return (string)preg_replace('/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html);
 }
 
 /**
@@ -41,75 +44,60 @@ function parse_tags($html): string
  * If the item has a slug, it appends it to the root URL. Otherwise, it appends
  * the item's ID to the root URL with the "status" path.
  *
- * @param array $item The item for which the permalink is generated.
- *                    It should have the 'slug' and 'id' keys.
+ * @param OODBBean $bean The item for which the permalink is generated.
+ *                    It should have the 'slug' and 'id' properties.
  *
  * @return string The generated permalink URL.
  */
-function permalink($item): string
+function permalink(OODBBean $bean): string
 {
-    if ($item['slug']) {
-        return ROOT_URL . "/{$item['slug']}";
+    if ($bean->slug) {
+        return ROOT_URL . "/$bean->slug";
     }
 
-    return ROOT_URL . '/status/' . $item['id'];
+    return ROOT_URL . '/status/' . $bean->id;
 }
 
-/**
- * Renders a post.
- *
- * @param string $post The post to render.
- *
- * @return array The rendered post, including the front matter and the body.
- */
-function render($post): array
-{
-    $parts = explode('---', $post);
-    $front_matter = Config\parse_matter($post);
 
-    $md_text = trim($parts[ count($parts) - 1 ]);
+/**
+ * Parses the given bean to extract and transform its content.
+ *
+ * This method processes the content of an OODBBean object, typically containing
+ * a body with markdown text separated by '---'. It processes the markdown, extracts
+ * front matter, and updates the bean with the parsed and transformed content.
+ *
+ * @param OODBBean $bean The item whose body content is parsed and transformed.
+ *                       It must have a 'body' property containing the text to be processed.
+ *
+ * @return void This method does not return any value. It modifies the input bean directly.
+ */
+function parse_bean(OODBBean $bean): void
+{
+    $parts = explode('---', $bean->body);
+    $md_text = trim($parts[count($parts) - 1]);
     $parser = new LambDown();
     $parser->setSafeMode(true);
     $markdown = $parser->text($md_text);
 
+    $front_matter = parse_matter($bean->body);
     $front_matter['description'] = strtok(strip_tags($markdown), "\n");
-
     if (isset($front_matter['title'])) {
         # Only posts have titles
         $markdown = $parser->text("## {$front_matter['title']}") . PHP_EOL . $markdown;
     }
+    $front_matter['transformed'] = (parse_tags($markdown));
 
-    return array_merge($front_matter, [ 'body' => $markdown ]);
-}
-
-/**
- * Transforms an array of posts into a specific data format.
- *
- * @param array $posts The array of posts to transform.
- *
- * @return array The transformed data.
- */
-function transform($posts): array
-{
-    if (empty($posts)) {
-        return [];
-    }
-
-    $data = [];
-
-    foreach ($posts as $post) {
-        if (is_null($post) || $post->id === 0) {
-            continue;
+    foreach ($front_matter as $key => $value) {
+        /*
+        Posts should not change their slug one they have one. Only from ID to title is allowed.
+        Changing slugs breaks URLs as long as there are no redirects.
+        Also it breaks the after edit redirect.
+        TODO: remove check after redirects.
+        */
+        if ($key !== 'slug' || empty($bean->slug)) {
+            $bean->$key = $value;
         }
-        $data['items'][] = array_merge(render($post->body), [
-            'created' => $post->created,
-            'id' => $post->id,
-            'slug' => $post->slug,
-            'updated' => $post->updated,
-        ]);
     }
-
-    return $data;
 }
 
 /**
@@ -121,7 +109,7 @@ function transform($posts): array
  */
 function post_has_slug(string $lookup): string|null
 {
-    $post = R::findOne('post', ' slug = ? ', [ $lookup ]);
+    $post = R::findOne('post', ' slug = ? ', [$lookup]);
     if (is_null($post) || $post->id === 0) {
         return '';
     }

@@ -10,31 +10,30 @@ use function Lamb\transform;
 if ($template !== 'status') {
     return;
 }
-$body = $data['items'][0]['body'];
+$body = $data['posts'][0]['body'];
 $related_posts = related_posts($body);
-$data = transform($related_posts);
 $ids = [];
 
-if (! empty($data['items'])) :
+if (!empty($related_posts['posts'])) :
     ?>
     <main>
         <article>
             <h3>Related posts</h3>
             <?php
-            foreach ($data['items'] as $item) :
-                if (in_array($item['id'], $ids, true)) :
+            foreach ($related_posts['posts'] as $bean) :
+                if (in_array($bean->id, $ids, true)) :
                     continue;
                 endif;
-                if (! isset($item['title'])) :
-                    $item['title'] = $item['body'];
+                if (!isset($bean->title)) :
+                    $bean->title = $bean->body;
                 endif;
-                if (empty($item['is_menu_item'])) :
+                if (empty($bean->is_menu_item)) :
                     ?>
-                    <li><?= date_created($item) ?> <?= substr(strip_tags($item['title']), 0, 42) . '&hellip;' ?>
+                    <li><?= date_created($bean) ?> <?= substr(strip_tags($bean->title), 0, 42) . '&hellip;' ?>
                     </li>
                     <?php
                 endif;
-                $ids[] = $item['id'];
+                $ids[] = $bean->id;
             endforeach;
             ?></article>
     </main>
