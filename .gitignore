@@ -1,7 +1,11 @@
 *.db
 /.docker/*.env
 /data/cache/
-/vendor/
-src/config.ini
 /src/assets/
-/devbox.d/php/
+/vendor/
+/src/config.ini
+
+# Ignore custom themes by default
+/src/themes/
+!/src/themes/2024
+!/src/themes/default

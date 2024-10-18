@@ -6,7 +6,7 @@
  * @since 1.0.0
  */
 
-namespace Svandragt\Lamb\Security;
+namespace Lamb\Security;
 
 /**
  * Class Response
@@ -14,7 +14,7 @@ namespace Svandragt\Lamb\Security;
  * Represents a response returned by a controller action.
  */
 
-use    Svandragt\Lamb\Response;
+use    Lamb\Response;
 
 # Security
 /**
@@ -24,11 +24,12 @@ use    Svandragt\Lamb\Response;
  *
  * If the user is not logged in, a flash message "Please login" is added to the session and the user is redirected to the login page.
  */
-function require_login() : void {
-	if ( ! isset( $_SESSION[ SESSION_LOGIN ] ) ) {
-		$_SESSION['flash'][] = "Please login";
-		Response\redirect_uri( "/login" );
-	}
+function require_login(): void
+{
+    if (! isset($_SESSION[SESSION_LOGIN])) {
+        $_SESSION['flash'][] = "Please login";
+        Response\redirect_uri("/login");
+    }
 }
 
 /**
@@ -38,13 +39,14 @@ function require_login() : void {
  *
  * @return void
  */
-function require_csrf() : void {
-	$token = htmlspecialchars( $_POST[ HIDDEN_CSRF_NAME ] );
-	$csrf = $_SESSION[ HIDDEN_CSRF_NAME ] ?? null;
-	if ( ! $token || $token !== $csrf ) {
-		$txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
-		header( $txt );
-		die( $txt );
-	}
-	unset( $_SESSION[ HIDDEN_CSRF_NAME ] );
+function require_csrf(): void
+{
+    $token = htmlspecialchars($_POST[HIDDEN_CSRF_NAME]);
+    $csrf = $_SESSION[HIDDEN_CSRF_NAME] ?? null;
+    if (! $token || $token !== $csrf) {
+        $txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
+        header($txt);
+        die($txt);
+    }
+    unset($_SESSION[HIDDEN_CSRF_NAME]);
 }

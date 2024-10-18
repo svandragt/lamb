@@ -4,7 +4,7 @@ server {
 	access_log /var/log/nginx/lamb.test-access.log;
 	error_log /var/log/nginx/lamb.test-error.log;
 
-	include snippets/php-81.conf;
+	include snippets/php-82.conf;
 	include snippets/lamb.conf;
 
 	server_name lamb.test;

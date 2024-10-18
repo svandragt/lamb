@@ -1,6 +1,54 @@
 {
   "lockfile_version": "1",
   "packages": {
+    "php82Extensions.xdebug@latest": {
+      "last_modified": "2024-03-22T07:26:23-04:00",
+      "resolved": "github:NixOS/nixpkgs/a3ed7406349a9335cb4c2a71369b697cecd9d351#php82Extensions.xdebug",
+      "source": "devbox-search",
+      "version": "3.3.1",
+      "systems": {
+        "aarch64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/z47464ilpry3czl0vfrd9slrq4zjfayw-php-xdebug-3.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/z47464ilpry3czl0vfrd9slrq4zjfayw-php-xdebug-3.3.1"
+        },
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/wi9a3hr35fch5dwwcxa3c238l6ay42cj-php-xdebug-3.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/wi9a3hr35fch5dwwcxa3c238l6ay42cj-php-xdebug-3.3.1"
+        },
+        "x86_64-darwin": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/4gz2n5yy18gi0lwn3cq9xq51fhbv6jj5-php-xdebug-3.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/4gz2n5yy18gi0lwn3cq9xq51fhbv6jj5-php-xdebug-3.3.1"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/8ixgaygkvqrq218ndprbqb10z3amb7w3-php-xdebug-3.3.1",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/8ixgaygkvqrq218ndprbqb10z3amb7w3-php-xdebug-3.3.1"
+        }
+      }
+    },
     "php@8.2": {
       "last_modified": "2024-03-22T11:26:23Z",
       "plugin_version": "0.0.3",

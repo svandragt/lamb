@@ -1,6 +1,6 @@
 <?php
 
-namespace Svandragt\Lamb\Http;
+namespace Lamb\Http;
 
 /**
  * Retrieves the current request URI.
@@ -13,11 +13,12 @@ namespace Svandragt\Lamb\Http;
  *                     the method returns the string '/home'. If the URI cannot be determined,
  *                     the method returns false.
  */
-function get_request_uri() : string|false {
-	$request_uri = strtok( $_SERVER['REQUEST_URI'], '?' );
-	if ( $request_uri === '/' ) {
-		return '/home';
-	}
+function get_request_uri(): string|false
+{
+    $request_uri = strtok($_SERVER['REQUEST_URI'], '?');
+    if ($request_uri === '/') {
+        return '/home';
+    }
 
-	return $request_uri;
+    return $request_uri;
 }

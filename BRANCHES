@@ -1,0 +1,2 @@
+main: target branch for PRs. In development, unstable.
+release: branch from which releases are tagged. Least unstable.

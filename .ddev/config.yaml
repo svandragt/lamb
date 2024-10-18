@@ -1,0 +1,13 @@
+name: lamb
+type: php
+docroot: src
+php_version: "8.2"
+webserver_type: nginx-fpm
+xdebug_enabled: true
+additional_hostnames: [ ]
+additional_fqdns: [ ]
+use_dns_when_possible: true
+composer_version: "2"
+corepack_enable: false
+xhprof_enabled: true
+omit_containers: [ db ]

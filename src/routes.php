@@ -1,21 +1,22 @@
 <?php
 
-namespace Svandragt\Lamb\Route;
+namespace Lamb\Route;
 
-use Svandragt\Lamb\Response;
+use Lamb\Response;
 
 /**
  * Registers a new route.
  *
  * @param bool|string $action The action to register. It can be a boolean or a string.
- * @param string      $callback The callback function to execute when the route is accessed.
- * @param mixed       ...$args Additional arguments to pass to the callback function.
+ * @param string $callback The callback function to execute when the route is accessed.
+ * @param mixed ...$args Additional arguments to pass to the callback function.
  *
  * @return void
  */
-function register_route( bool|string $action, string $callback, mixed ...$args ) : void {
-	global $routes;
-	$routes[ $action ] = [ $callback, $args ];
+function register_route(bool|string $action, string $callback, mixed ...$args): void
+{
+    global $routes;
+    $routes[$action] = [$callback, $args];
 }
 
 /**
@@ -25,15 +26,16 @@ function register_route( bool|string $action, string $callback, mixed ...$args )
  *
  * @return array The result of the callback function.
  */
-function call_route( bool|string $action ) : array {
-	global $routes;
-	[ $callback, $args ] = $routes[ $action ];
+function call_route(bool|string $action): array
+{
+    global $routes;
+    [$callback, $args] = $routes[$action] ?? [null, []];
 
-	if ( is_null( $callback ) ) {
-		return Response\respond_404( true );
-	}
+    if (is_null($callback)) {
+        return Response\respond_404([], true);
+    }
 
-	return $callback( $args );
+    return $callback($args);
 }
 
 /**
@@ -43,8 +45,9 @@ function call_route( bool|string $action ) : array {
  *
  * @return bool True if the route is reserved, false otherwise.
  */
-function is_reserved_route( string $name ) : bool {
-	global $routes;
+function is_reserved_route(string $name): bool
+{
+    global $routes;
 
-	return isset( $routes[ $name ] );
+    return isset($routes[$name]);
 }
