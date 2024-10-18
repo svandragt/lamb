@@ -11,7 +11,7 @@ $ cd .docker
 $ docker compose up --build -d
 
 # To enable the admin role, generate a password hash. Replace hackme with your own password
-$ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php setup.php hackme')"
+$ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php make-password.php hackme')"
 ```
 
 Your site is now ready at http://localhost

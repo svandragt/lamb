@@ -1,7 +1,7 @@
 <?php
 
 if (empty($argv[1])) {
-    die('Usage: php setup.php <password>');
+    die('Usage: php make-password.php <password>');
 }
 $hash = base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));
 
@@ -15,7 +15,14 @@ if ($out) {
 }
 
 // Codeception
+// DDEV detection with local fallback
 $site_url = $_ENV['DDEV_PRIMARY_URL'] ?? 'http://0.0.0.0:8747';
+
+if ($_ENV['PWD'] === '/srv/app') {
+    // Docker override
+    $site_url = 'http://lamb-web';
+}
+
 $data = "SITE_URL='" . $site_url . "'" . PHP_EOL;
 file_put_contents('.env', $data);
 if (!$out) {
