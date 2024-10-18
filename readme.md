@@ -24,9 +24,9 @@ cd lamb
 
 Lamb can be run locally with the builtin PHP webserver, or with other tooling, here are two ways to set this up:
 
-a. [DDev](https://ddev.readthedocs.io/en/stable/) -- great for convenience,
-b. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/) — great for keeping a clean local system, OR
-c. locally install PHP 8.2 and composer — great for neckbeards.
+a. [DDev](https://ddev.readthedocs.io/en/stable/) -- great for convenience,<br>
+b. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/) — great for keeping a clean local system, OR<br>
+c. locally install PHP 8.2 and composer — great for neckbeards.<br>
 
 ## a. DDev
 
