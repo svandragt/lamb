@@ -49,6 +49,7 @@ jobs:
 
       - name: Run Codeception tests
         run: |
+          php make-password.php $GITHUB_REF 
           vendor/bin/codecept run --steps
 
 

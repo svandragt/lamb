@@ -6,8 +6,4 @@
 # Remove this suite if you don't use frameworks
 
 actor: FunctionalTester
-modules:
-  enabled:
-    - PhpBrowser:
-        url: http://0.0.0.0:8747/
 step_decorators: ~

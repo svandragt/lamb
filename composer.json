@@ -25,7 +25,8 @@
     "codeception/module-phpbrowser": "*",
     "phpcompatibility/php-compatibility": "^9.3",
     "roave/security-advisories": "dev-latest",
-    "squizlabs/php_codesniffer": "^3.10"
+    "squizlabs/php_codesniffer": "^3.10",
+    "vlucas/phpdotenv": "^5.6"
   },
   "autoload": {
     "psr-4": {
