@@ -16,74 +16,7 @@ Barrier free super simple blogging, self-hosted.
 
 # Getting started
 
-```
-# checkout project
-git clone https://github.com/svandragt/lamb.git
-cd lamb
-```
-
-Lamb can be run locally with the builtin PHP webserver, or with other tooling, here are two ways to set this up:
-
-a. [DDev](https://ddev.readthedocs.io/en/stable/) -- great for convenience,<br>
-b. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/) — great for keeping a clean local system, OR<br>
-c. locally install PHP 8.2 and composer — great for neckbeards.<br>
-
-## a. DDev
-
-Make sure the tool's installed, then it will install prerequisites:
-
-```shell
-ddev start
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-ddev php make-password.php hackme
-```
-
-For more information see the [DDev page](docs/ddev.md).
-
-## b. Devbox
-
-Make sure the tool's installed, then it will install prerequisites:
-
-```shell
-devbox shell
-
-# In the shell from now on
-composer install
-
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
-
-```
-
-## c. Locally installed PHP and Composer
-
-You make sure everything is installed:
-
-```shell
-# Install required system packages, for example on Debian Linux derivates like Ubuntu
-sudo apt update
-sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php8.2-xml composer
-
-# install project packages
-composer install
-
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
-```
-
-Support for [development environments and deployment options](docs/index.md) is provided in the docs.
-
-# Site Configuration (optional)
-
-Add a `src/config.ini` file with the following contents and update any of the following lines after
-uncommenting them:
-
-```ini
-;author_email = joe.sheeple@example.com
-;author_name = Joe Sheeple
-;site_title = My Microblog
-;404_fallback = https://my.oldsite.com
-```
+[Visit the wiki](https://github.com/svandragt/lamb/wiki) to get started.
 
 # Screenshots
 
