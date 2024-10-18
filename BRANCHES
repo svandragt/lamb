@@ -1,2 +1,3 @@
 main: target branch for PRs. In development, unstable.
 release: branch from which releases are tagged. Least unstable.
+next: allows targeting the next major version, when the next release is a bugfix one.
