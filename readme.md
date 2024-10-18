@@ -55,7 +55,7 @@ LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
 
 ```
 
-## b. Locally installed PHP and Composer
+## c. Locally installed PHP and Composer
 
 You make sure everything is installed:
 
