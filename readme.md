@@ -22,20 +22,42 @@ git clone https://github.com/svandragt/lamb.git
 cd lamb
 ```
 
-Lamb can be run locally with the builtin PHP webserver, here are two ways to set this up:
+Lamb can be run locally with the builtin PHP webserver, or with other tooling, here are two ways to set this up:
 
-a. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/), OR
-b. locally install [PHP 8.2](https://www.php.net/manual/en/install.php) and
-[composer](https://getcomposer.org/doc/00-intro.md#installation-linux-unix-macos).
+a. [DDev](https://ddev.readthedocs.io/en/stable/) -- great for convenience,
+b. [Devbox](https://jetpack.io/devbox/docs/contributor-quickstart/) — great for keeping a clean local system, OR
+c. locally install PHP 8.2 and composer — great for neckbeards.
 
-## a. Devbox
+## a. DDev
+
+Make sure the tool's installed, then it will install prerequisites:
+
+```shell
+ddev start
+# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
+ddev php make-password.php hackme
+```
+
+For more information see the [DDev page](docs/ddev.md).
+
+## b. Devbox
+
+Make sure the tool's installed, then it will install prerequisites:
 
 ```shell
 devbox shell
+
+# In the shell from now on
 composer install
+
+# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
+LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
+
 ```
 
 ## b. Locally installed PHP and Composer
+
+You make sure everything is installed:
 
 ```shell
 # Install required system packages, for example on Debian Linux derivates like Ubuntu
@@ -44,17 +66,10 @@ sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php
 
 # install project packages
 composer install
-```
 
-## Run Lamb
-
-To Run:
-
-```shell
+# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
 LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
 ```
-
-Change `hackme` to something more secure, this is the `/login` password!
 
 Support for [development environments and deployment options](docs/index.md) is provided in the docs.
 
