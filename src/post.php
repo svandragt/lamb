@@ -29,8 +29,10 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
     $bean->body = $text;
     $bean->slug = $matter['slug'] ?? '';
     $bean->created = date("Y-m-d H:i:s");
+    $bean->updated = date("Y-m-d H:i:s");
     if ($feed_item) {
         $bean->created = $feed_item->get_date("Y-m-d H:i:s");
+        $bean->updated = $feed_item->get_updated_date("Y-m-d H:i:s");
         if ($feed_name) {
             if ($bean->slug) {
                 // Prefix with feed name
@@ -40,7 +42,6 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
             $bean->feed_name = $feed_name;
         }
     }
-    $bean->updated = date("Y-m-d H:i:s");
 
     parse_bean($bean);
 

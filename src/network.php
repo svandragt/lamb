@@ -88,10 +88,10 @@ function update_item(SimplePieItem $item, string $name): void
     }
     $bean = prepare_item($item, $name, $bean);
     if (!$bean) {
-        // Record not found
+        // Record not found, should not happen as we already checked for existence.
         return;
     }
-    $bean->updated = date("Y-m-d H:i:s");
+    $bean->updated = $item->get_updated_date("Y-m-d H:i:s");
 
     try {
         R::store($bean);
