@@ -1,5 +1,7 @@
-main: target branch for PRs. In development, unstable.
-release: branch from which releases are tagged. Least unstable.
+Branching Structure:
+ - main branch: This is the main development branch where new features are implemented and merged.
+ - release branch: This is the branch used to create and manage releases.
 
-next: allows targeting the next major version, when the next release is a bugfix one.
-*-pinned: pinned branch, kept for reference reasons.
+Other Branches:
+ - next: allows targeting the next major version, when the next release is a bugfix one.
+ - *-pinned: pinned branch, kept for reference reasons.
