@@ -5,3 +5,16 @@ Branching Structure:
 Other Branches:
  - next: allows targeting the next major version, when the next release is a bugfix one.
  - *-pinned: pinned branch, kept for reference reasons.
+
+Default Branch:
+ - The default branch should be main, as this is the branch where the active development and feature work is happening.
+ - This allows for continuous integration and deployment of new changes, as the main branch represents the most up-to-date state of the project.
+
+Release Process:
+ - When you're ready to create a new release, you create a release branch from the main branch.
+ - This allows you to maintain a stable release branch while development continues on the main branch.
+ - After a release is made from the release branch, you may want to merge those changes back into the main branch to keep them in sync.
+
+Branching Strategy Alignment:
+ - This approach of using main for development and release for releases aligns with common Git branching strategies, such as Git Flow or GitHub Flow.
+ - It provides a clear separation between the development work and the release process, which can make the overall workflow more manageable.
