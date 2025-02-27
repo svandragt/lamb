@@ -2,9 +2,6 @@
 
 namespace Lamb\Config;
 
-use Symfony\Component\Yaml\Exception\ParseException;
-use Symfony\Component\Yaml\Yaml;
-
 /**
  * Loads the configuration settings.
  *
@@ -12,17 +9,17 @@ use Symfony\Component\Yaml\Yaml;
  */
 function load(): array
 {
-    $config = [
-        'author_email' => 'joe.sheeple@example.com',
-        'author_name' => 'Joe Sheeple',
-        'site_title' => 'My Microblog',
-    ];
-    $user_config = @parse_ini_file('config.ini', true);
-    if ($user_config) {
-        $config = array_merge($config, $user_config);
-    }
+	$config = [
+		'author_email' => 'joe.sheeple@example.com',
+		'author_name' => 'Joe Sheeple',
+		'site_title' => 'My Microblog',
+	];
+	$user_config = @parse_ini_file('config.ini', true);
+	if ($user_config) {
+		$config = array_merge($config, $user_config);
+	}
 
-    return $config;
+	return $config;
 }
 
 /**
@@ -34,8 +31,8 @@ function load(): array
  */
 function is_menu_item(string $slug): bool
 {
-    global $config;
+	global $config;
 
-    // Checks array values for needle.
-    return in_array($slug, $config['menu_items'] ?? [], true);
+	// Checks array values for needle.
+	return in_array($slug, $config['menu_items'] ?? [], true);
 }

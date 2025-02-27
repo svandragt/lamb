@@ -6,8 +6,8 @@ use function Lamb\Theme\site_title;
 use function Lamb\Theme\the_entry_form;
 
 the_entry_form(); ?>
-<?= site_title(); ?>
-<?= page_intro(); ?>
+<?= site_title() ?>
+<?= page_intro() ?>
 
 <?php
 part('_items');
