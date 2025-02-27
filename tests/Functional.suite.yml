@@ -7,3 +7,15 @@
 
 actor: FunctionalTester
 step_decorators: ~
+modules:
+  enabled:
+    - Db:
+        dsn: 'sqlite:tests/test.sqlite'
+        user: ''
+        password: ''
+        cleanup: true # Ensures database is cleaned after each test
+        populate: true
+        dump: tests/dump.sql
+    - PhpBrowser
+settings:
+  skip_cleanup_if_failed: true

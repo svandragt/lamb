@@ -1,4 +1,6 @@
 *.db
+*.sqlite
+*.sql
 /.docker/*.env
 /data/cache/
 /src/assets/

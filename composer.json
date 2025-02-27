@@ -22,6 +22,7 @@
   "require-dev": {
     "codeception/codeception": "^5.1",
     "codeception/module-asserts": "*",
+    "codeception/module-db": "^3.2",
     "codeception/module-phpbrowser": "*",
     "phpcompatibility/php-compatibility": "^9.3",
     "roave/security-advisories": "dev-latest",
@@ -58,6 +59,8 @@
       "php -S 0.0.0.0:8747 -t src"
     ],
     "serve:caddy": "sudo caddy run",
-    "serve:nginx": "sudo systemctl nginx start"
+    "serve:nginx": "sudo systemctl nginx start",
+    "test": "vendor/bin/codecept run --steps",
+    "test:dump": "[ ! -f tests/dump.sql ] && sqlite3 data/lamb.db .dump > tests/dump.sql"
   }
 }

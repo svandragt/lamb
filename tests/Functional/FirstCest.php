@@ -47,4 +47,14 @@ class FirstCest
         $expectedOutput = "<p>test <code>&lt;b&gt;bold&lt;/b&gt;</code></p>";
         Assert::assertEquals($expectedOutput, parse_markdown($text));
     }
+
+    public function testSearchFunctionality(FunctionalTester $I)
+    {
+        $I->haveInDatabase('post', ['body' => 'TIL test for tags']);
+        $I->amOnPage('/tag/til');
+        $I->seeInTitle('My Microblog');
+        // Assert that the search returns the correct result
+        $I->see('#TIL test for tags'); // Ensure the result is displayed on the page
+        $I->dontSee('no results found'); // Optionally check no errors show
+    }
 }
