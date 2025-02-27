@@ -20,8 +20,8 @@ if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) : ?>
     </form>
 
     <small><?= action_delete($post) ?></small>
-<?php
+    <?php
 else :
-	$_SESSION['flash'][] = "Error: Status does not exist!";
-	Lamb\Response\respond_404();
+    $_SESSION['flash'][] = "Error: Status does not exist!";
+    Lamb\Response\respond_404();
 endif;
