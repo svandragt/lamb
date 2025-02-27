@@ -5,7 +5,7 @@ onLoaded(() => {
     }
     ta.on('input', growing_input)
     growing_input({'target': ta})
-});
+})
 
 function growing_input(ev)
 {
