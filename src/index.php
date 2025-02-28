@@ -36,6 +36,7 @@ ini_set("session.cookie_secure", 1);
 ini_set("session.use_strict_mode", 1);
 // Prevent the browser from sending cookies along with cross-site requests (CSRF)
 session_set_cookie_params(['samesite' => 'Strict']); // or 'Lax'
+session_name('LAMBSESSID');
 session_start();
 // Validate user agents
 if (isset($_SESSION['HTTP_USER_AGENT'])) {
