@@ -47,10 +47,8 @@ const onLoaded = func => {
  *
  * @return {void}
  */
-function cancel(ev) {
+function cancel(ev)
+{
     ev.preventDefault()
     ev.stopPropagation()
 }
-
-
-onLoaded(() => console.debug('shorthand.js loaded.'))

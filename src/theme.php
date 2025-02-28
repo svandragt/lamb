@@ -166,7 +166,7 @@ function the_scripts(): void
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
-        printf("<script id='%s' src='%s'></script>", $id, $href);
+        printf("<script id='%s' defer src='%s'></script>", $id, $href);
     }
 }
 
