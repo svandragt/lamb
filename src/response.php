@@ -202,6 +202,11 @@ function redirect_uri($where): void
  */
 function redirect_login(): ?array
 {
+    // Prevent caching for this page
+    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+    header("Cache-Control: post-check=0, pre-check=0", false);
+    header("Pragma: no-cache");
+
     if (isset($_SESSION[SESSION_LOGIN])) {
         // Already logged in
         session_regenerate_id(true);
@@ -243,7 +248,7 @@ function redirect_login(): ?array
 function redirect_logout(): void
 {
     unset($_SESSION[SESSION_LOGIN]);
-    
+
     setcookie('lamb_logged_in', '', [
         'expires' => time() - 3600, // Set to the past to delete the cookie
         'path' => '/',
