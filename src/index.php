@@ -21,8 +21,6 @@ unset($root_url);
 
 # Bootstrap
 header('Cache-Control: max-age=300');
-header("X-Sander: set by bootstrap");
-
 
 $data_dir = '../data';
 if (!is_dir($data_dir)) {
