@@ -206,6 +206,7 @@ function redirect_login(): ?array
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Cache-Control: post-check=0, pre-check=0", false);
     header("Pragma: no-cache");
+    header("X-Sander: set by redirect_login()");
 
     if (isset($_SESSION[SESSION_LOGIN])) {
         // Already logged in
@@ -250,7 +251,7 @@ function redirect_logout(): void
     unset($_SESSION[SESSION_LOGIN]);
 
     setcookie('lamb_logged_in', '', [
-        'expires' => time() - 3600, // Set to the past to delete the cookie
+        'expires' => time() - 36000, // Set to the past to delete the cookie
         'path' => '/',
         'secure' => true, // Ensure the cookie is sent over HTTPS
         'httponly' => true, // Prevent JavaScript access
