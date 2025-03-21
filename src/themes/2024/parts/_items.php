@@ -2,6 +2,7 @@
 
 global $data;
 global $config;
+global $template;
 
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
@@ -14,7 +15,8 @@ if (empty($data['posts'])) :
     <?php
 else :
     foreach ($data['posts'] as $bean) :
-        if (is_menu_item($bean->is_menu_item ?? $bean->id)) :
+        if ($template !== 'status' && is_menu_item($bean->slug ?? $bean->id)) :
+            # Hide from timeline
             continue;
         endif;
         ?>
