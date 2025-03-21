@@ -33,6 +33,7 @@
       "Lamb\\": "src/"
     },
     "files": [
+      "src/bootstrap.php",
       "src/config.php",
       "src/http.php",
       "src/lamb.php",

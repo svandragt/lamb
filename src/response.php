@@ -20,6 +20,9 @@ use function Lamb\Theme\part;
 
 use const ROOT_DIR;
 
+define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
+
+
 const IMAGE_FILES = 'imageFiles';
 /**
  * Redirects the user to a 404 page with the provided fallback URL.
