@@ -65,7 +65,7 @@ function site_title($type = 'html'): string
     if ($type !== 'html') {
         return $config['site_title'];
     }
-    return sprintf('<h1 class="screen-reader-text">%s</h1>', $config['site_title']);
+    return sprintf('<h1>%s</h1>', $config['site_title']);
 }
 
 function site_or_page_title($type = 'html'): string

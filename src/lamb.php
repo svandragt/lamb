@@ -83,10 +83,7 @@ function parse_bean(OODBBean $bean): void
 
     $front_matter = parse_matter($bean->body);
     $front_matter['description'] = strtok(strip_tags($markdown), "\n");
-    if (isset($front_matter['title'])) {
-        # Only posts have titles
-        $markdown = $parser->text("## {$front_matter['title']}") . PHP_EOL . $markdown;
-    }
+
     $front_matter['transformed'] = (parse_tags($markdown));
 
     foreach ($front_matter as $key => $value) {

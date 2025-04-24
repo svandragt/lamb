@@ -14,20 +14,41 @@ if (empty($data['posts'])) :
     ?><p>Sorry no items found.</p>
     <?php
 else :
+    if (count($data['posts']) > 1) :
+        echo '<ul>';
+    endif;
     foreach ($data['posts'] as $bean) :
         if ($template !== 'status' && is_menu_item($bean->slug ?? $bean->id)) :
             # Hide from timeline
             continue;
         endif;
+        if (count($data['posts']) > 1) :
+            echo '<li>';
+        endif;
+
         ?>
+
         <article>
-            <header><strong><?= $config['author_name'] ?></strong> @
-                <span><?= date_created($bean) ?></span></header>
+            <header>
+                <?php
+                if ($template !== 'status') :?>
+                    <h2><?= $bean->title ?></h2>
+                <?php endif; ?>
+                <div class="meta">
+                    <strong><?= $config['author_name'] ?></strong> @
+                    <span><?= date_created($bean) ?></span>
+                </div>
+            </header>
             <?= $bean->transformed ?>
 
             <small><?= link_source($bean) ?> <?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
-
         </article>
         <?php
+        if (count($data['posts']) > 1) :
+            echo '</li>';
+        endif;
     endforeach;
+    if (count($data['posts']) > 1) :
+        echo '<ul>';
+    endif;
 endif;

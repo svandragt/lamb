@@ -420,13 +420,18 @@ function respond_post(array $args): array
 function upgrade_posts(array &$posts): void
 {
     foreach ($posts as $bean) {
-        if (empty($bean->transformed)) {
-            parse_bean($bean);
-            try {
-                R::store($bean);
-            } catch (SQL $e) {
-                $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
-            }
+        switch ($bean->version) {
+            case 1:
+                # Get all beans on the current version 1.
+                break;
+            default:
+                parse_bean($bean);
+                try {
+                    $bean->version = 1;
+                    R::store($bean);
+                } catch (SQL $e) {
+                    $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
+                }
         }
     }
 }
