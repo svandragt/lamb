@@ -15,7 +15,7 @@ global $template;
 <html lang="en-GB">
 <head>
     <meta charset="utf-8">
-    <meta name="author" content="<?= escape($config['site_author']) ?>">
+    <meta name="author" content="<?= escape($config['author_name'] ?? '') ?>">
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= escape(site_or_page_title('text')) ?></title>
@@ -40,10 +40,10 @@ global $template;
             <?php
             if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
-                <?php
+            <?php
             else : ?>
                 <a href="/logout">Logout</a>
-                <?php
+            <?php
             endif; ?>
         </li>
     </ul>
@@ -56,7 +56,7 @@ global $template;
                 $flash = array_pop($_SESSION['flash']);
                 ?>
                 <div class="flash">⚠️ <?= escape($flash) ?></div>
-                <?php
+            <?php
             endwhile;
         endif;
         part($template); ?>
