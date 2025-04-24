@@ -17,7 +17,6 @@ html, body {
 
 blockquote {
     font-style: italic;
-    opacity: 0.8
 }
 
 body {
@@ -107,9 +106,7 @@ nav li.right {
 
 footer {
     text-align: center;
-    opacity: 0.5;
     border-top: 1px solid var(--shadow);
-
 }
 
 
@@ -246,7 +243,6 @@ textarea {
 @media (min-width: 600px) {
     article header {
         margin-bottom: -1rem;
-        opacity: 0.8;
         width: 8rem;
         position: absolute;
         margin-left: -10rem;

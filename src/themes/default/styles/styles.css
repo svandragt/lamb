@@ -16,7 +16,6 @@ html, body {
 
 blockquote {
     font-style: italic;
-    opacity: 0.8
 }
 
 body {
@@ -90,7 +89,6 @@ nav li.right {
 
 footer {
     text-align: center;
-    opacity: 0.5;
 }
 
 
