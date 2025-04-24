@@ -57,21 +57,39 @@ function date_created(OODBBean $bean): string
     return sprintf('<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bean->created, $human_created);
 }
 
-function site_title(): string
+function site_title($type = 'html'): string
 {
     global $config;
 
+    // Support plain text use
+    if ($type !== 'html') {
+        return $config['site_title'];
+    }
     return sprintf('<h1 class="screen-reader-text">%s</h1>', $config['site_title']);
 }
 
-function page_title(): string
+function site_or_page_title($type = 'html'): string
+{
+    $page_title = page_title($type);
+    if (empty($page_title)) {
+        return site_title($type);
+    }
+    return $page_title;
+}
+
+function page_title(string $type = 'html'): string
 {
     global $data;
-    if (!isset($data->title)) {
+    if (!isset($data['title'])) {
         return '';
     }
 
-    return sprintf('<h1>%s</h1>', $data->title);
+    // Support plain text use
+    if ($type !== 'html') {
+        return $data['title'];
+    }
+
+    return sprintf('<h1>%s</h1>', $data['title']);
 }
 
 function page_intro(): string

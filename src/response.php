@@ -298,6 +298,7 @@ function respond_status(array $args): array
 
     upgrade_posts($data['posts']);
 
+    $data['title'] = $data['posts'][0]->title;
 
     return $data;
 }
@@ -403,6 +404,8 @@ function respond_post(array $args): array
     $data['posts'] = [R::findOne('post', ' slug = ? ', [$slug])];
 
     upgrade_posts($data['posts']);
+
+    $data['title'] = $data['posts'][0]->title;
 
     return $data;
 }

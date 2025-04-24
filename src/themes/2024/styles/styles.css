@@ -233,6 +233,15 @@ textarea {
     z-index: 100000; /* Above WP toolbar. */
 }
 
+.status, .post {
+    /* The h1 is the article header */
+
+    article header + h2 {
+        display: none
+    }
+}
+
+
 /* Desktop styles */
 @media (min-width: 600px) {
     article header {
