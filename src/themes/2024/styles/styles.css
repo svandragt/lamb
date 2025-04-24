@@ -122,8 +122,8 @@ h1, h2, h3 {
 }
 
 h1 {
-    margin-top: 0;
-    padding: 2vw 1vw;
+    margin: 0;
+    padding: 4vw 1vw 0;
     font-weight: normal;
 }
 
