@@ -34,7 +34,9 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return (string)preg_replace('/(^|[\s>])#(\w+)/', '$1<a href="/tag/$2">#$2</a>', $html);
+    return preg_replace_callback('/(^|[\s>])#(\w+)/', function ($matches) {
+        return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
+    }, $html);
 }
 
 /**
@@ -81,10 +83,7 @@ function parse_bean(OODBBean $bean): void
 
     $front_matter = parse_matter($bean->body);
     $front_matter['description'] = strtok(strip_tags($markdown), "\n");
-    if (isset($front_matter['title'])) {
-        # Only posts have titles
-        $markdown = $parser->text("## {$front_matter['title']}") . PHP_EOL . $markdown;
-    }
+
     $front_matter['transformed'] = (parse_tags($markdown));
 
     foreach ($front_matter as $key => $value) {

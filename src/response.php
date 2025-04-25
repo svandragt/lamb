@@ -12,12 +12,16 @@ use RedBeanPHP\RedException\SQL;
 use RuntimeException;
 
 use function Lamb\parse_bean;
+use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Theme\part;
 
 use const ROOT_DIR;
+
+define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
+
 
 const IMAGE_FILES = 'imageFiles';
 /**
@@ -42,15 +46,13 @@ function redirect_404(string $fallback): void
  *
  * @return array An array containing the title, intro, and action of the 404 error page.
  */
-function respond_404(array $args = [], bool $use_fallback = false): array
+function respond_404(array $_args = [], bool $use_fallback = false): array
 {
     global $config;
-    if ($use_fallback) {
-        if (isset($config['404_fallback'])) {
-            $fallback = $config['404_fallback'];
-            if (filter_var($fallback, FILTER_VALIDATE_URL)) {
-                redirect_404($fallback);
-            }
+    if ($use_fallback && isset($config['404_fallback'])) {
+        $fallback = $config['404_fallback'];
+        if (filter_var($fallback, FILTER_VALIDATE_URL)) {
+            redirect_404($fallback);
         }
     }
     $header = "HTTP/1.0 404 Not Found";
@@ -152,7 +154,6 @@ function redirect_edited(): void
         return;
     }
 
-    $matter = parse_matter($contents);
     $bean = R::load('post', (int)$id);
     $bean->body = $contents;
 
@@ -204,6 +205,11 @@ function redirect_uri($where): void
  */
 function redirect_login(): ?array
 {
+    // Prevent caching for this page
+    header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
+    header("Cache-Control: post-check=0, pre-check=0", false);
+    header("Pragma: no-cache");
+
     if (isset($_SESSION[SESSION_LOGIN])) {
         // Already logged in
         session_regenerate_id(true);
@@ -223,6 +229,15 @@ function redirect_login(): ?array
 
     $_SESSION[SESSION_LOGIN] = true;
     session_regenerate_id(true);
+
+    $uuid = bin2hex(random_bytes(16)); // Generate a UUID
+    setcookie('lamb_logged_in', $uuid, [
+        'expires' => time() + 3600, // Expires in 1 hour
+        'path' => '/',
+        'secure' => true, // Ensure the cookie is sent over HTTPS
+        'httponly' => true, // Prevent JavaScript access
+        'samesite' => 'Strict', // Limit cross-site behavior
+    ]);
     $where = filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL);
     redirect_uri($where);
 }
@@ -236,6 +251,15 @@ function redirect_login(): ?array
 function redirect_logout(): void
 {
     unset($_SESSION[SESSION_LOGIN]);
+
+    setcookie('lamb_logged_in', '', [
+        'expires' => time() - 3600, // Set to the past to delete the cookie
+        'path' => '/',
+        'secure' => true, // Ensure the cookie is sent over HTTPS
+        'httponly' => true, // Prevent JavaScript access
+        'samesite' => 'Strict', // Limit cross-site behavior
+    ]);
+
     session_regenerate_id(true);
     redirect_uri('/');
 }
@@ -274,6 +298,7 @@ function respond_status(array $args): array
 
     upgrade_posts($data['posts']);
 
+    $data['title'] = $data['posts'][0]->title;
 
     return $data;
 }
@@ -380,6 +405,8 @@ function respond_post(array $args): array
 
     upgrade_posts($data['posts']);
 
+    $data['title'] = $data['posts'][0]->title;
+
     return $data;
 }
 
@@ -392,14 +419,19 @@ function respond_post(array $args): array
  */
 function upgrade_posts(array &$posts): void
 {
-    foreach ($posts as &$bean) {
-        if (empty($bean->transformed)) {
-            parse_bean($bean);
-            try {
-                $id = R::store($bean);
-            } catch (SQL $e) {
-                $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
-            }
+    foreach ($posts as $bean) {
+        switch ($bean->version) {
+            case 1:
+                # Get all beans on the current version 1.
+                break;
+            default:
+                parse_bean($bean);
+                try {
+                    $bean->version = 1;
+                    R::store($bean);
+                } catch (SQL $e) {
+                    $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
+                }
         }
     }
 }
@@ -473,7 +505,7 @@ function respond_tag(array $args): array
 {
     [$tag] = $args;
     $tag = htmlspecialchars($tag);
-    $posts = R::find('post', 'body LIKE ? OR body LIKE ?', ["% #$tag%", "%\n#$tag%"], 'ORDER BY created DESC');
+    $posts = posts_by_tag($tag);
     $data['title'] = 'Tagged with #' . $tag;
 
     $data['posts'] = $posts;

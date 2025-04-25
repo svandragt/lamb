@@ -5,7 +5,6 @@ global $template;
 
 use function Lamb\Theme\date_created;
 use function Lamb\Theme\related_posts;
-use function Lamb\transform;
 
 if ($template !== 'status') {
     return;

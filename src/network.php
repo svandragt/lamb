@@ -13,8 +13,6 @@ use function Lamb\Route\register_route;
 use function Lamb\Route\is_reserved_route;
 use function Lamb\Post\populate_bean;
 
-use const ROOT_DIR;
-
 const MINUTE_IN_SECONDS = 60;
 
 register_route('_cron', __NAMESPACE__ . '\\process_feeds');
@@ -177,7 +175,12 @@ function get_option(string $key, $default_value): OODBBean
 function set_option(OODBBean $bean, $value): void
 {
     $bean->value = $value;
-    R::store($bean);
+    try {
+        R::store($bean);
+    } catch (SQL $e) {
+        user_error($e->getMessage(), E_USER_ERROR);
+        return;
+    }
 }
 
 /**

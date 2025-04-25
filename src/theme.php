@@ -14,7 +14,6 @@ use RuntimeException;
 use function Lamb\get_tags;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
-use function Lamb\Config\is_menu_item as is_config_menu_item;
 
 function action_delete(OODBBean $bean): string
 {
@@ -50,29 +49,55 @@ function date_created(OODBBean $bean): string
 
     $human_created = human_time(strtotime($bean->created));
 
-    $slug = "/status/{$bean->id}";
+    $slug = "/status/$bean->id";
     if (!empty($bean->slug)) {
         $slug = $bean->slug;
     }
 
-    return sprintf('<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bean->created, $human_created);
+    return sprintf(
+        '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
+        ltrim($slug, '/'),
+        $bean->created,
+        $human_created
+    );
 }
 
-function site_title(): string
+function site_title($type = 'html'): string
 {
     global $config;
 
-    return sprintf('<h1 class="screen-reader-text">%s</h1>', $config['site_title']);
+    // Support plain text use
+    if ($type !== 'html') {
+        return $config['site_title'];
+    }
+    return sprintf('<h1>%s</h1>', $config['site_title']);
 }
 
-function page_title(): string
+function site_or_page_title($type = 'html'): string
 {
+    $page_title = page_title($type);
+    if (empty($page_title)) {
+        return site_title($type);
+    }
+    return $page_title;
+}
+
+function page_title(string $type = 'html'): string
+{
+    global $config;
     global $data;
-    if (!isset($data->title)) {
-        return '';
+
+    $title = $config['site_title'];
+    if (!empty($data['title'])) {
+        $title = $data['title'];
     }
 
-    return sprintf('<h1>%s</h1>', $data->title);
+    // Support plain text use
+    if ($type !== 'html') {
+        return $title;
+    }
+
+    return sprintf('<h1>%s</h1>', $title);
 }
 
 function page_intro(): string
@@ -117,6 +142,9 @@ function the_opengraph(): void
     }
     $bean = $data['posts'][0];
     $description = $bean->description;
+
+    printf('<meta property="description" content="%s"/>' . PHP_EOL, og_escape($description));
+
     $og_tags = [
         'og:description' => $description,
         'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
@@ -167,7 +195,7 @@ function the_scripts(): void
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
-        printf("<script id='%s' src='%s'></script>", $id, $href);
+        printf("<script id='%s' defer src='%s'></script>", $id, $href);
     }
 }
 
@@ -183,21 +211,6 @@ function asset_loader($assets, $asset_dir): Generator
             }
         }
     }
-}
-
-/**
- * Checks if a given menu item exists in the configuration array.
- *
- * @param string $id The menu item slug to check.
- *
- * @return bool Returns true if the menu item exists in the configuration array, false otherwise.
- */
-function is_menu_item(string $id): bool
-{
-    global $config;
-
-    // Checks array values for needle.
-    return is_config_menu_item($id);
 }
 
 function link_source(OODBBean $bean): string
@@ -330,15 +343,15 @@ function sanitize_filename($filename): string
     return (string)$filename;
 }
 
-function the_entry_form()
+function the_entry_form(): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>
         <form id="entry" method="post" action="/" enctype="multipart/form-data">
             <label>
                 <textarea placeholder="What's happening?" name="contents" required></textarea>
             </label>
-            <input type="submit" name="submit" value="<?= SUBMIT_CREATE; ?>">
-            <input type="hidden" name="<?= HIDDEN_CSRF_NAME; ?>" value="<?= csrf_token(); ?>"/>
+            <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
+            <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
         </form>
         <?php
     endif;

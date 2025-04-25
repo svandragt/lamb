@@ -17,7 +17,6 @@ html, body {
 
 blockquote {
     font-style: italic;
-    opacity: 0.8
 }
 
 body {
@@ -59,7 +58,6 @@ main {
     max-width: 75ch;
     border: 0 solid var(--shadow);
     border-left-width: 1px;
-    padding-left: 1vw;
 }
 
 nav {
@@ -82,6 +80,19 @@ nav a {
     color: var(--fg);
     line-height: 1.5rem;
     padding: 1em 1vw;
+}
+
+.feed,
+nav a[href$="feed"] {
+    margin: 0;
+    background-size: 1.25rem !important;
+    display: inline-block;
+    user-select: none;
+    color: transparent !important;
+    background-repeat: no-repeat !important;
+    background-position: center !important;
+    background-color: transparent;
+    background-image: url("data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIj8+DQo8IURPQ1RZUEUgc3ZnIFBVQkxJQyAiLS8vVzNDLy9EVEQgU1ZHIDEuMS8vRU4iICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPiANCjxzdmcgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIiB2ZXJzaW9uPSIxLjEiIHdpZHRoPSIxMjhweCIgaGVpZ2h0PSIxMjhweCIgaWQ9IlJTU2ljb24iIHZpZXdCb3g9IjAgMCAyNTYgMjU2Ij4NCjxkZWZzPg0KPGxpbmVhckdyYWRpZW50IHgxPSIwLjA4NSIgeTE9IjAuMDg1IiB4Mj0iMC45MTUiIHkyPSIwLjkxNSIgaWQ9IlJTU2ciPg0KPHN0b3AgIG9mZnNldD0iMC4wIiBzdG9wLWNvbG9yPSIjRTM3MDJEIi8+PHN0b3AgIG9mZnNldD0iMC4xMDcxIiBzdG9wLWNvbG9yPSIjRUE3RDMxIi8+DQo8c3RvcCAgb2Zmc2V0PSIwLjM1MDMiIHN0b3AtY29sb3I9IiNGNjk1MzciLz48c3RvcCAgb2Zmc2V0PSIwLjUiIHN0b3AtY29sb3I9IiNGQjlFM0EiLz4NCjxzdG9wICBvZmZzZXQ9IjAuNzAxNiIgc3RvcC1jb2xvcj0iI0VBN0MzMSIvPjxzdG9wICBvZmZzZXQ9IjAuODg2NiIgc3RvcC1jb2xvcj0iI0RFNjQyQiIvPg0KPHN0b3AgIG9mZnNldD0iMS4wIiBzdG9wLWNvbG9yPSIjRDk1QjI5Ii8+DQo8L2xpbmVhckdyYWRpZW50Pg0KPC9kZWZzPg0KPHJlY3Qgd2lkdGg9IjI1NiIgaGVpZ2h0PSIyNTYiIHJ4PSI1NSIgcnk9IjU1IiB4PSIwIiAgeT0iMCIgIGZpbGw9IiNDQzVEMTUiLz4NCjxyZWN0IHdpZHRoPSIyNDYiIGhlaWdodD0iMjQ2IiByeD0iNTAiIHJ5PSI1MCIgeD0iNSIgIHk9IjUiICBmaWxsPSIjRjQ5QzUyIi8+DQo8cmVjdCB3aWR0aD0iMjM2IiBoZWlnaHQ9IjIzNiIgcng9IjQ3IiByeT0iNDciIHg9IjEwIiB5PSIxMCIgZmlsbD0idXJsKCNSU1NnKSIvPg0KPGNpcmNsZSBjeD0iNjgiIGN5PSIxODkiIHI9IjI0IiBmaWxsPSIjRkZGIi8+DQo8cGF0aCBkPSJNMTYwIDIxM2gtMzRhODIgODIgMCAwIDAgLTgyIC04MnYtMzRhMTE2IDExNiAwIDAgMSAxMTYgMTE2eiIgZmlsbD0iI0ZGRiIvPg0KPHBhdGggZD0iTTE4NCAyMTNBMTQwIDE0MCAwIDAgMCA0NCA3MyBWIDM4YTE3NSAxNzUgMCAwIDEgMTc1IDE3NXoiIGZpbGw9IiNGRkYiLz4NCjwvc3ZnPg0K") !important;
 }
 
 nav a:hover {
@@ -107,9 +118,7 @@ nav li.right {
 
 footer {
     text-align: center;
-    opacity: 0.5;
     border-top: 1px solid var(--shadow);
-
 }
 
 
@@ -126,13 +135,28 @@ h1, h2, h3 {
 }
 
 h1 {
-    padding-top: 1em;
+    margin: 0;
+    padding: 4vw 1vw 0;
     font-weight: normal;
 }
 
 article {
     border-bottom: 1px solid var(--shadow);
-    padding: 1vw 1vw 1vw 0;
+    padding: 0 1vw 1vw 1vw;
+
+    header {
+        margin-top: 0;
+        margin-left: -1vw;
+
+        h2 {
+            margin: .75rem 0;
+        }
+
+        .meta {
+            font-size: 0.75em;
+        }
+    }
+
 }
 
 article:last-of-type {
@@ -151,14 +175,20 @@ main small a {
     margin-right: 1em;
 }
 
+main > ul {
+    margin: 0;
+    padding: 0;
+
+    > li {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+}
+
 small form {
     margin: auto;
     display: inline;
-}
-
-article header {
-    font-size: 0.75em;
-    margin-top: 1rem;
 }
 
 article footer {
@@ -202,10 +232,6 @@ textarea {
     border-radius: 4px;
 }
 
-.highlight {
-    border: 4px solid orange;
-}
-
 /* Text meant only for screen readers. */
 .screen-reader-text {
     border: 0;
@@ -237,19 +263,38 @@ textarea {
     z-index: 100000; /* Above WP toolbar. */
 }
 
+.status, .post {
+    /* The h1 is the article title on post pages */
+
+    article header h2 {
+        display: none
+    }
+}
+
+
 /* Desktop styles */
 @media (min-width: 600px) {
     article header {
-        margin-bottom: -1rem;
-        opacity: 0.8;
-        width: 8rem;
+        position: relative;
+        /* keep the border to avoid layout shift */
+        border-top: 1px solid transparent;
+
+        h2 {
+            margin-left: 1vw;
+            margin-top: 2rem;
+        }
+    }
+
+    article .meta {
+        top: 2.125rem;
+        width: 9rem;
         position: absolute;
         margin-left: -10rem;
         text-align: right;
-    }
 
-    article header span {
-        display: block;
+        a {
+            display: block;
+        }
     }
 
     .container {

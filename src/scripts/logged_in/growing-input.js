@@ -2,10 +2,10 @@ onLoaded(() => {
     let ta = $('textarea')
     if (!ta) {
         return
-        ta.on('input', growing_input)
-        growing_input({'target': ta})
-    });
     }
+    ta.on('input', growing_input)
+    growing_input({'target': ta})
+})
 
 function growing_input(ev)
 {

@@ -2,65 +2,31 @@
 
 namespace Lamb;
 
-use RuntimeException;
-use RedBeanPHP\R;
-
 define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
 
-$root_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"];
+$config = Config\load();
+
 define('HIDDEN_CSRF_NAME', 'csrf');
-define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
-define('ROOT_URL', $root_url);
+define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');
 define('SUBMIT_LOGIN', 'Log in');
-unset($root_url);
+define("THEME", $config['theme'] ?? 'default');
+define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
+define("THEME_URL", 'themes/' . THEME . '/');
 
 # Bootstrap
 header('Cache-Control: max-age=300');
 
-$data_dir = '../data';
-if (!is_dir($data_dir)) {
-    if (!mkdir($data_dir, 0777, true) && !is_dir($data_dir)) {
-        throw new RuntimeException(sprintf('Directory "%s" was not created', $data_dir));
-    }
-}
-R::setup('sqlite:../data/lamb.db');
-R::useWriterCache(true);
-// Make cookies inaccessible via JavaScript (XSS).
-ini_set("session.cookie_httponly", 1);
-// Prevent the browser from sending cookies along with cross-site requests (CSRF)
-session_set_cookie_params(['samesite' => 'Strict']); // or 'Lax'
-session_start();
-
-// Validate user agents
-if (isset($_SESSION['HTTP_USER_AGENT'])) {
-    if ($_SESSION['HTTP_USER_AGENT'] !== md5($_SERVER['HTTP_USER_AGENT'])) {
-        /* Possible session hijacking attempt */
-        exit("Security fail");
-    }
-} else {
-    $_SESSION['HTTP_USER_AGENT'] = md5($_SERVER['HTTP_USER_AGENT']);
-}
-
-$config = Config\load();
-define("THEME", $config['theme'] ?? 'default');
-define("THEME_DIR", __DIR__ . '/themes/' . THEME . '/');
-define("THEME_URL", 'themes/' . THEME . '/');
+Bootstrap\bootstrap_db('../data');
+Bootstrap\bootstrap_session();
 
 # Routing
-$request_uri = Http\get_request_uri();
-$action = strtok($request_uri, '/');
+$action = strtok(Http\get_request_uri(), '/');
 $lookup = strtok('/');
-
-if ($action === 'favicon.ico') {
-    Response\respond_404();
-
-    return;
-}
 
 Route\register_route(false, __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
@@ -92,5 +58,4 @@ switch ($action) {
 }
 
 # Views
-require_once('theme.php');
 require_once(THEME_DIR . "html.php");

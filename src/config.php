@@ -2,9 +2,6 @@
 
 namespace Lamb\Config;
 
-use Symfony\Component\Yaml\Exception\ParseException;
-use Symfony\Component\Yaml\Yaml;
-
 /**
  * Loads the configuration settings.
  *

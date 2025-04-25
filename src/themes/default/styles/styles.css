@@ -16,7 +16,6 @@ html, body {
 
 blockquote {
     font-style: italic;
-    opacity: 0.8
 }
 
 body {
@@ -90,7 +89,6 @@ nav li.right {
 
 footer {
     text-align: center;
-    opacity: 0.5;
 }
 
 
@@ -163,10 +161,6 @@ textarea {
     border-radius: 4px;
 }
 
-.highlight {
-    border: 4px solid orange;
-}
-
 /* Text meant only for screen readers. */
 .screen-reader-text {
     border: 0;
@@ -196,4 +190,12 @@ textarea {
     top: 5px;
     width: auto;
     z-index: 100000; /* Above WP toolbar. */
+}
+
+.status, .post {
+    /* The h1 is the article header */
+
+    article header + h2 {
+        display: none
+    }
 }

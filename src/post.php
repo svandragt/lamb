@@ -18,6 +18,7 @@ use function Lamb\parse_bean;
  * @param string|null $feed_name An optional feed name to prefix the slug and associate with the bean.
  * @param OODBBean|null $bean An optional existing bean to populate. If null, a new 'post' bean is dispensed.
  * @return OODBBean|null The populated bean instance, or null if input is insufficient.
+ * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
 function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
 {
@@ -49,11 +50,10 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
 }
 
 /**
- * Parse YAML front matter from the given text and convert it into an associative array.
+ * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
- * @param string $text
- *
- * @return array
+ * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
+ * @return array An associative array of parsed YAML metadata. Returns an empty array if the YAML is invalid or absent.
  */
 function parse_matter(string $body): array
 {
@@ -82,4 +82,21 @@ function parse_matter(string $body): array
 function slugify(string $text): string
 {
     return strtolower(preg_replace('/\W+/m', "-", $text));
+}
+
+/**
+ * Retrieves posts that contain the specified tag within their body content.
+ *
+ * @param string $tag The tag to search for within post content.
+ *
+ * @return array An array of posts that match the specified tag.
+ */
+function posts_by_tag(string $tag): array
+{
+    return R::find(
+        'post',
+        'body LIKE ? OR body LIKE ? OR body LIKE ?',
+        ["%#$tag %", "%\n#$tag %", "%#$tag"],
+        'ORDER BY created DESC'
+    );
 }

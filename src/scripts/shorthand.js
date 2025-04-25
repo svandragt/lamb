@@ -5,7 +5,7 @@
  * @param {string} selector - The CSS selector used to select the element.
  * @returns {Element|null} The first element that matches the selector, or null if no elements are found.
  */
-let $ = document.querySelector.bind(document);
+let $ = document.querySelector.bind(document)
 
 /**
  * Returns a collection of elements that matches the specified CSS selector(s) within the document.
@@ -25,8 +25,8 @@ const $$ = document.querySelectorAll.bind(document)
  * @returns {Node}
  */
 Node.prototype.on = Document.prototype.on = function (event, func) {
-    this.addEventListener(event, func);
-    return this;
+    this.addEventListener(event, func)
+    return this
 };
 
 /**
@@ -47,10 +47,8 @@ const onLoaded = func => {
  *
  * @return {void}
  */
-function cancel(ev) {
+function cancel(ev)
+{
     ev.preventDefault()
     ev.stopPropagation()
 }
-
-
-onLoaded(() => console.debug('shorthand.js loaded.'))
