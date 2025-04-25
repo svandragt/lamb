@@ -95,7 +95,7 @@ function posts_by_tag(string $tag): array
 {
     return R::find(
         'post',
-        'body LIKE ? OR body LIKE ? OR body LIKE ?',
+        'body LIKE ? OR body LIKE ? OR body LIKE ? LIMIT 20',
         ["%#$tag %", "%\n#$tag %", "%#$tag"],
         'ORDER BY created DESC'
     );
