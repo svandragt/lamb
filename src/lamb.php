@@ -75,16 +75,23 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
-    $parts = explode('---', $bean->body);
-    $md_text = trim($parts[count($parts) - 1]);
     $parser = new LambDown();
     $parser->setSafeMode(true);
-    $markdown = $parser->text($md_text);
 
     $front_matter = parse_matter($bean->body);
-    $front_matter['description'] = strtok(strip_tags($markdown), "\n");
 
-    $front_matter['transformed'] = (parse_tags($markdown));
+    $parts = explode('---', $bean->body);
+    $md_text = trim($parts[count($parts) - 1]);
+
+    if (!isset($front_matter['title'])) {
+        $md_text = "### Status " . PHP_EOL . $md_text;
+    }
+
+    $markdown = $parser->text($md_text);
+
+    # Use the first linebreak as the description.
+    $front_matter['description'] = strtok(strip_tags($markdown), "\n");
+    $front_matter['transformed'] = parse_tags($markdown);
 
     foreach ($front_matter as $key => $value) {
         /*
