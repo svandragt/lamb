@@ -42,10 +42,10 @@ global $template;
             <?php
             if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
-            <?php
+                <?php
             else : ?>
                 <a href="/logout">Logout</a>
-            <?php
+                <?php
             endif; ?>
         </li>
     </ul>
@@ -58,7 +58,7 @@ global $template;
                 $flash = array_pop($_SESSION['flash']);
                 ?>
                 <div class="flash">⚠️ <?= escape($flash) ?></div>
-            <?php
+                <?php
             endwhile;
         endif;
         part($template); ?>
