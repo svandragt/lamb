@@ -142,6 +142,9 @@ function the_opengraph(): void
     }
     $bean = $data['posts'][0];
     $description = $bean->description;
+
+    printf('<meta property="description" content="%s"/>' . PHP_EOL, og_escape($description));
+
     $og_tags = [
         'og:description' => $description,
         'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
