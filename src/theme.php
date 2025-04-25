@@ -183,7 +183,7 @@ function the_styles(): void
     ];
     $assets = asset_loader($styles, THEME_URL . 'styles');
     foreach ($assets as $id => $href) {
-        printf("<link rel='stylesheet' id='%s' href='%s'>", $id, $href);
+        printf('<link rel="stylesheet" id="%1$s" href="%2$s?%1$s" />' . PHP_EOL, $id, $href);
     }
 }
 
@@ -199,7 +199,16 @@ function the_scripts(): void
     }
 }
 
-function asset_loader($assets, $asset_dir): Generator
+/**
+ * Loads and yields asset URLs for the application.
+ *
+ * @param array $assets An associative array where keys represent directory names
+ *                       and values are arrays of filenames to be loaded.
+ * @param string $asset_dir The base directory for the assets.
+ * @return Generator A generator that yields a hash (md5) of the asset URL as the key
+ *                   and the complete asset URL as the value.
+ */
+function asset_loader(array $assets, string $asset_dir): Generator
 {
     foreach ($assets as $dir => $files) {
         foreach ($files as $file) {
@@ -353,6 +362,6 @@ function the_entry_form(): void
             <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
         </form>
-        <?php
+    <?php
     endif;
 }
