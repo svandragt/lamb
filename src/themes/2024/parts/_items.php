@@ -35,8 +35,8 @@ else :
                     <h2><?= $bean->title ?></h2>
                 <?php endif; ?>
                 <div class="meta">
-                    <strong><?= $config['author_name'] ?></strong> @
-                    <span><?= date_created($bean) ?></span>
+                    <strong itemprop="author"><?= $config['author_name'] ?></strong> @
+                    <?= date_created($bean) ?>
                 </div>
             </header>
             <?= $bean->transformed ?>

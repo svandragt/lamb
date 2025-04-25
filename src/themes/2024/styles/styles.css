@@ -292,7 +292,7 @@ textarea {
         margin-left: -10rem;
         text-align: right;
 
-        span {
+        a {
             display: block;
         }
     }

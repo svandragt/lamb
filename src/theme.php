@@ -54,7 +54,12 @@ function date_created(OODBBean $bean): string
         $slug = $bean->slug;
     }
 
-    return sprintf('<a href="/%s" title="%s">%s</a>', ltrim($slug, '/'), $bean->created, $human_created);
+    return sprintf(
+        '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
+        ltrim($slug, '/'),
+        $bean->created,
+        $human_created
+    );
 }
 
 function site_title($type = 'html'): string
