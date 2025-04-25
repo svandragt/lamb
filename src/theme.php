@@ -84,17 +84,20 @@ function site_or_page_title($type = 'html'): string
 
 function page_title(string $type = 'html'): string
 {
+    global $config;
     global $data;
-    if (!isset($data['title'])) {
-        return '';
+
+    $title = $config['site_title'];
+    if (!empty($data['title'])) {
+        $title = $data['title'];
     }
 
     // Support plain text use
     if ($type !== 'html') {
-        return $data['title'];
+        return $title;
     }
 
-    return sprintf('<h1>%s</h1>', $data['title']);
+    return sprintf('<h1>%s</h1>', $title);
 }
 
 function page_intro(): string
