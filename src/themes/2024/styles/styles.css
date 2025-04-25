@@ -85,7 +85,7 @@ nav a {
 .feed,
 nav a[href$="feed"] {
     margin: 0;
-    background-size: 2rem !important;
+    background-size: 1.25rem !important;
     display: inline-block;
     user-select: none;
     color: transparent !important;
