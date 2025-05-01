@@ -362,6 +362,6 @@ function the_entry_form(): void
             <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
         </form>
-    <?php
+        <?php
     endif;
 }
