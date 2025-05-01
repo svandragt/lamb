@@ -6,7 +6,7 @@
   ],
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      "export PATH=vendor/bin:$PATH"
     ],
     "scripts": {
       "test": [
