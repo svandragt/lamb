@@ -58,4 +58,4 @@ switch ($action) {
 }
 
 # Views
-require_once(THEME_DIR . "html.php");
+Theme\part('html', '');

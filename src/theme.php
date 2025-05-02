@@ -317,10 +317,13 @@ function og_escape(string $html): string
 function part(string $name, string $dir = 'parts'): void
 {
     $name = sanitize_filename($name);
-    $filename = THEME_DIR . "$dir/$name.php";
+    if (!empty($dir)) {
+        $dir = sanitize_filename($dir) . '/';
+    }
+    $filename = THEME_DIR . "$dir$name.php";
     if (!is_readable($filename)) {
         // Fallback to default
-        $filename = __DIR__ . "/themes/default/$dir/$name.php";
+        $filename = __DIR__ . "/themes/default/$dir$name.php";
     }
     if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);
