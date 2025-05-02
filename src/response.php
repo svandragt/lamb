@@ -293,7 +293,7 @@ function respond_status(array $args): array
 
     $data['posts'] = $posts;
     if (empty($data['posts'])) {
-        respond_404([], true);
+        return respond_404([], true);
     }
 
     upgrade_posts($data['posts']);
@@ -485,12 +485,17 @@ function respond_search(array $args): array
 
     $data['posts'] = $posts;
     if (empty($data['posts'])) {
-        respond_404([], true);
+        return respond_404([], true);
     }
 
     upgrade_posts($posts);
 
     return $data;
+}
+
+function respond_settings(array $args): array
+{
+    return respond_404([], true);
 }
 
 # Tag pages
@@ -510,7 +515,7 @@ function respond_tag(array $args): array
 
     $data['posts'] = $posts;
     if (empty($data['posts'])) {
-        respond_404([], true);
+        return respond_404([], true);
     }
 
     return $data;
