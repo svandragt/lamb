@@ -6,7 +6,6 @@
   ],
   "shell": {
     "init_hook": [
-      "export PATH=vendor/bin:$PATH"
     ],
     "scripts": {
       "test": [
