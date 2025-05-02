@@ -2,6 +2,9 @@
 
 namespace Lamb;
 
+global $template, $action;
+
+
 define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
@@ -41,7 +44,6 @@ Route\register_route('settings', __NAMESPACE__ . '\\Response\respond_settings');
 Route\register_route('status', __NAMESPACE__ . '\\Response\respond_status', $lookup);
 Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
-
 $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);
