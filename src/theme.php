@@ -355,13 +355,15 @@ function sanitize_filename($filename): string
 function the_entry_form(): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>
-        <form id="entry" method="post" action="/" enctype="multipart/form-data">
-            <label>
-                <textarea placeholder="What's happening?" name="contents" required></textarea>
-            </label>
-            <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
-            <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
-        </form>
+        <section class="entry-form">
+            <form id="entry" method="post" action="/" enctype="multipart/form-data">
+                <label>
+                    <textarea placeholder="What's happening?" name="contents" required></textarea>
+                </label>
+                <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
+                <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
+            </form>
+        </section>
         <?php
     endif;
 }

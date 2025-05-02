@@ -58,6 +58,26 @@ main {
     max-width: 75ch;
     border: 0 solid var(--shadow);
     border-left-width: 1px;
+    padding: 0 0 1vw 0;
+
+    a {
+        color: var(--link);
+    }
+
+    small a {
+        margin-right: 1em;
+    }
+
+    > ul {
+        margin: 0;
+        padding: 0;
+
+        > li {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+    }
 }
 
 nav {
@@ -119,6 +139,8 @@ nav li.right {
 footer {
     text-align: center;
     border-top: 1px solid var(--shadow);
+    line-height: 2rem;
+
 }
 
 
@@ -136,7 +158,7 @@ h1, h2, h3 {
 
 h1 {
     margin: 0;
-    padding: 4vw 1vw 0;
+    padding: 3vw 1vw 0;
     font-weight: normal;
 }
 
@@ -157,6 +179,10 @@ article {
         }
     }
 
+    p {
+        margin-left: 0;
+    }
+
 }
 
 article:last-of-type {
@@ -167,24 +193,6 @@ section:last-child {
     border: none;
 }
 
-main a {
-    color: var(--link);
-}
-
-main small a {
-    margin-right: 1em;
-}
-
-main > ul {
-    margin: 0;
-    padding: 0;
-
-    > li {
-        list-style: none;
-        margin: 0;
-        padding: 0;
-    }
-}
 
 small form {
     margin: auto;
@@ -200,18 +208,29 @@ article footer {
     padding: 0 2em;
     line-height: 2rem;
     align-self: flex-end;
+
+    a {
+        margin-right: 1em;
+    }
 }
 
-article footer a {
-    margin-right: 1em;
-}
 
 footer form {
     display: inline;
 }
 
 p {
-    margin: 1rem 0;
+    margin: 1rem 1vw;
+}
+
+section {
+
+    &.entry-form {
+        margin-left: -11rem;
+        margin-bottom: -1vw;
+        background: white;
+        border-bottom: 1px solid var(--shadow);
+    }
 }
 
 textarea {

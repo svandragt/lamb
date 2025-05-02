@@ -6,6 +6,9 @@ use function Lamb\Theme\page_title;
 global $data;
 ?>
 <?= page_title() ?>
-<?= page_intro() ?>
+
+<section>
+    <?= page_intro() ?>
+</section>
 
 <p>Why not try <a href="/search/<?= $data['action'] ?>">searching for <?= $data['action'] ?> </a></p>
