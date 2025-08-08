@@ -100,3 +100,18 @@ function posts_by_tag(string $tag): array
         'ORDER BY created DESC'
     );
 }
+
+/**
+ * Fetch paginated posts.
+ * @param int $page The page number (1-based)
+ * @param int $perPage Number of posts per page
+ * @return array [posts, totalPages]
+ */
+function get_paginated_posts(int $page = 1, int $perPage = 10): array
+{
+    $offset = ($page - 1) * $perPage;
+    $total = R::count('post');
+    $totalPages = (int) ceil($total / $perPage);
+    $posts = R::findAll('post', 'ORDER BY created DESC LIMIT ? OFFSET ?', [$perPage, $offset]);
+    return [$posts, $totalPages];
+}

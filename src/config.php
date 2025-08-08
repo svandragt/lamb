@@ -45,6 +45,7 @@ function maybe_migrate(array $settings): array|false
         'author_email' => 'joe.sheeple@example.com',
         'author_name' => 'Joe Sheeple',
         'site_title' => 'My Microblog',
+        'posts_per_page' => 25,
     ];
     $user_config = @parse_ini_file('config.ini', true);
     if ($user_config) {
