@@ -4,6 +4,8 @@ global $data;
 global $config;
 global $template;
 
+use function Lamb\Post\get_paginated_posts;
+
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
 use function Lamb\Theme\date_created;
@@ -52,3 +54,24 @@ else :
         echo '<ul>';
     endif;
 endif;
+
+// Pagination controls
+$page = $_GET['page'] ?? 1;
+$page = max(1, (int)$page);
+global $config;
+
+
+$per_page = $config['posts_per_page'] ?? 25;
+[$posts, $total_pages] = get_paginated_posts($page, $per_page);
+
+if ($total_pages > 1) {
+    echo '<nav class="pagination">';
+    if ($page > 1) {
+        echo '<a href="?page=' . ($page - 1) . '">Previous</a> ';
+    }
+    echo 'Page ' . $page . ' of ' . $total_pages;
+    if ($page < $total_pages) {
+        echo ' <a href="?page=' . ($page + 1) . '">Next</a>';
+    }
+    echo '</nav>';
+}
