@@ -14,7 +14,6 @@ use RuntimeException;
 use function Lamb\parse_bean;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
-use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Theme\part;
 
@@ -116,7 +115,7 @@ function redirect_created(): ?array
  * @return void
  */
 #[NoReturn]
-function redirect_deleted($args): void
+function redirect_deleted(mixed $args): void
 {
     if (empty($_POST)) {
         redirect_uri('/');
@@ -184,7 +183,7 @@ function redirect_edited(): void
  * @return void
  */
 #[NoReturn]
-function redirect_uri($where): void
+function redirect_uri(string $where): void
 {
     if (empty($where)) {
         $where = '/';
@@ -299,7 +298,7 @@ function redirect_logout(): void
  * @return void
  */
 #[NoReturn]
-function redirect_search($query): void
+function redirect_search(string $query): void
 {
     header("Location: /search/$query");
     die("Redirecting to /search/$query");
@@ -416,7 +415,7 @@ function respond_post(array $args): array
  *
  * @return void
  */
-function upgrade_posts(array &$posts): void
+function upgrade_posts(array $posts): void
 {
     foreach ($posts as $bean) {
         switch ($bean->version) {
@@ -453,6 +452,8 @@ function upgrade_posts(array &$posts): void
  */
 function respond_search(array $args): array
 {
+    global $config;
+
     $query = urldecode($args[0]);
     if (empty($query)) {
         $query = htmlspecialchars($_GET['s'] ?? '');
@@ -471,21 +472,64 @@ function respond_search(array $args): array
         $params[] = "%$word%";
     }
     $whereSql = implode(' AND ', $where_clauses);
-    $sql = "$whereSql ORDER BY created DESC";
-    $posts = R::find('post', $sql, $params);
+
+    // Pagination settings
+    $perPage = $config['posts_per_page'] ?? 10;
+    $page = max(1, (int)($_GET['page'] ?? 1));
+
+    // Get total count for this query
+    $totalPosts = R::count('post', $whereSql, $params);
+    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
+    $page = min($page, $totalPages);
+    $offset = ($page - 1) * $perPage;
+
+    // Fetch only the requested page (append offset and limit to params)
+    $findParams = $params;
+    $findParams[] = (int)$offset;
+    $findParams[] = (int)$perPage;
+    $sql = $whereSql . ' ORDER BY created DESC LIMIT ?, ?';
+    $posts = R::find('post', $sql, $findParams);
 
     // Results
     $data['title'] = 'Searched for "' . $query . '"';
-    $num_results = count($posts);
-    if ($num_results > 0) {
-        $result = ngettext("result", "results", $num_results);
-        $data['intro'] = count($posts) . " $result found.";
+    return get_results($totalPosts, $data, $posts, $page, $perPage, $totalPages, $offset);
+}
+
+/**
+ * Processes the provided data, posts, and pagination details, returning a structured array with results and metadata.
+ *
+ * @param int $totalPosts The total number of posts available.
+ * @param array $data An array of additional data to be transformed or enriched.
+ * @param array $posts An array of posts to include in the output.
+ * @param mixed $page The current page number.
+ * @param mixed $perPage The number of posts per page.
+ * @param int $totalPages The total number of pages.
+ * @param float|int $offset The starting index for the posts on the current page.
+ *
+ * @return array The structured data array including posts, pagination metadata, and additional information.
+ */
+function get_results(int $totalPosts, array $data, array $posts, mixed $page, mixed $perPage, int $totalPages, float|int $offset): array
+{
+    if ($totalPosts > 0) {
+        $result = ngettext("result", "results", $totalPosts);
+        $data['intro'] = $totalPosts . " $result found.";
     }
 
     $data['posts'] = $posts;
     if (empty($data['posts'])) {
         respond_404([], true);
     }
+
+    // Pagination metadata (same shape as paginate_posts)
+    $data['pagination'] = [
+        'current' => $page,
+        'per_page' => $perPage,
+        'total_posts' => $totalPosts,
+        'total_pages' => $totalPages,
+        'prev_page' => $page > 1 ? $page - 1 : null,
+        'next_page' => $page < $totalPages ? $page + 1 : null,
+        'offset' => $offset,
+    ];
 
     upgrade_posts($posts);
 
@@ -502,17 +546,26 @@ function respond_search(array $args): array
  */
 function respond_tag(array $args): array
 {
+    global $config;
+
     [$tag] = $args;
     $tag = htmlspecialchars($tag);
-    $posts = posts_by_tag($tag);
+
+    // Get all posts for this tag and then paginate the array slice
+    $all_posts = posts_by_tag($tag);
+
+    $perPage = $config['posts_per_page'] ?? 10;
+    $page = max(1, (int)($_GET['page'] ?? 1));
+
+    $totalPosts = count($all_posts);
+    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
+    $page = min($page, $totalPages);
+    $offset = ($page - 1) * $perPage;
+
+    $posts = array_slice($all_posts, $offset, $perPage);
+
     $data['title'] = 'Tagged with #' . $tag;
-
-    $data['posts'] = $posts;
-    if (empty($data['posts'])) {
-        respond_404([], true);
-    }
-
-    return $data;
+    return get_results($totalPosts, $data, $posts, $page, $perPage, $totalPages, $offset);
 }
 
 /**
@@ -613,7 +666,7 @@ function paginate_posts(string $beanType, string $orderByClause = 'created DESC'
     $offset = ($page - 1) * $perPage;
 
     // Build safe LIMIT SQL (cast ints to avoid injection)
-    $limitSql = 'ORDER BY ' . $orderByClause . ' LIMIT ' . (int)$offset . ', ' . (int)$perPage;
+    $limitSql = 'ORDER BY ' . $orderByClause . ' LIMIT ' . (int)$offset . ', ' . $perPage;
     $items = R::findAll($beanType, $limitSql);
 
     return [
