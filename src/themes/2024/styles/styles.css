@@ -256,6 +256,12 @@ textarea {
     border-radius: 4px;
 }
 
+.pages {
+    .current {
+        font-weight: bold
+    }
+}
+
 /* Text meant only for screen readers. */
 .screen-reader-text {
     border: 0;
