@@ -26,7 +26,7 @@ if (!empty($pagination)) :
     ?>
     <nav class="pagination" role="navigation" aria-label="Pagination">
         <?php if (!empty($pagination['prev_page'])) : ?>
-            <a class="prev" href="<?= escape($buildUrl((int)$pagination['prev_page'])) ?>" rel="prev">« Prev</a>
+            <a class="prev" href="<?= escape($buildUrl((int)$pagination['prev_page'])) ?>" rel="prev">« Newer</a>
         <?php endif; ?>
 
         <span class="pages" aria-hidden="false">
@@ -40,7 +40,7 @@ if (!empty($pagination)) :
         </span>
 
         <?php if (!empty($pagination['next_page'])) : ?>
-            <a class="next" href="<?= escape($buildUrl((int)$pagination['next_page'])) ?>" rel="next">Next »</a>
+            <a class="next" href="<?= escape($buildUrl((int)$pagination['next_page'])) ?>" rel="next">Older »</a>
         <?php endif; ?>
     </nav>
 <?php
