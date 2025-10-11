@@ -42,7 +42,6 @@ global $template;
                 <a href="/login">Login</a>
                 <?php
             else : ?>
-                <a href="/settings">Settings</a>
                 <a href="/logout">Logout</a>
                 <?php
             endif; ?>

@@ -2,45 +2,13 @@
 
 namespace Lamb\Config;
 
-use RedBeanPHP\OODBBean;
-use RedBeanPHP\R;
-
 /**
- * Loads and processes settings from the database to generate a configuration array.
+ * Loads the configuration settings.
  *
- * @return array Returns an associative array representing the configuration,
- *               organized by sections and keys when applicable.
+ * @return array The configuration settings.
  */
 function load(): array
 {
-
-    $settings = R::findAll('setting');
-    $settings = maybe_migrate($settings);
-
-    foreach ($settings as $setting) {
-        if (!empty($setting->section)) {
-            $config[$setting->section][$setting->key] = $setting->value;
-            continue;
-        }
-        $config[$setting->key] = $setting->value;
-    }
-    return $config;
-}
-
-/**
- * Handles the migration of settings by merging predefined defaults with user configurations
- * and storing the updated settings. Returns the updated settings or the current database settings.
- *
- * @param array $settings An array of current settings to check and potentially migrate.
- *
- * @return array|false Returns the updated settings if migration is performed, the current database settings if no input is provided, or false on failure.
- */
-function maybe_migrate(array $settings): array|false
-{
-    if (!empty($settings)) {
-        return $settings;
-    }
-
     $config = [
         'author_email' => 'joe.sheeple@example.com',
         'author_name' => 'Joe Sheeple',
@@ -51,38 +19,7 @@ function maybe_migrate(array $settings): array|false
         $config = array_merge($config, $user_config);
     }
 
-    store_settings($config);
-    return R::findAll('setting');
-}
-
-/**
- * Stores configuration settings into the database.
- *
- * @param array $config An associative array of configuration settings where the key is the setting name
- *                      and the value is the setting value. Nested arrays represent grouped settings.
- * @param string|null $section The optional section name to associate with the settings group. Defaults to null.
- *
- * @return void
- */
-function store_settings(array $config, ?string $section = null): void
-{
-    foreach ($config as $key => $value) {
-        if (is_array($value)) {
-            store_settings($value, $key);
-        } else {
-            $setting = R::findOneOrDispense('setting', 'key = ? AND section = ?', [$key, $section]);
-            if ($setting->ID) {
-                // Setting exists
-                continue;
-            }
-            $setting->key = $key;
-            $setting->value = $value;
-            if ($section) {
-                $setting->section = $section;
-            }
-            R::store($setting);
-        }
-    }
+    return $config;
 }
 
 /**
