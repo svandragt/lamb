@@ -23,6 +23,7 @@ define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');
 define('SUBMIT_LOGIN', 'Log in');
+define('SUBMIT_SETTINGS', 'Save settings');
 define("THEME", $config['theme'] ?? 'default');
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');

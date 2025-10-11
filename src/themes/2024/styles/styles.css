@@ -146,6 +146,19 @@ footer {
 
 form {
     margin: 2vw 0;
+
+    table {
+        width: 100%;
+
+        th:last-child, input {
+            width: 100%;
+            text-align: left;
+        }
+
+        th {
+            text-align: left;
+        }
+    }
 }
 
 
@@ -230,6 +243,10 @@ section {
         margin-bottom: -1vw;
         background: white;
         border-bottom: 1px solid var(--shadow);
+    }
+
+    &.settings-form {
+        padding-left: 1vw;
     }
 }
 

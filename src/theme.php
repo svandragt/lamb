@@ -55,10 +55,10 @@ function date_created(OODBBean $bean): string
     }
 
     return sprintf(
-        '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
-        ltrim($slug, '/'),
-        $bean->created,
-        $human_created
+            '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
+            ltrim($slug, '/'),
+            $bean->created,
+            $human_created
     );
 }
 
@@ -82,14 +82,16 @@ function site_or_page_title($type = 'html'): string
     return $page_title;
 }
 
-function page_title(string $type = 'html'): string
+function page_title(string $type = 'html', string $title = null): string
 {
     global $config;
     global $data;
 
-    $title = $config['site_title'];
-    if (!empty($data['title'])) {
-        $title = $data['title'];
+    if (empty($title)) {
+        $title = $config['site_title'];
+        if (!empty($data['title'])) {
+            $title = $data['title'];
+        }
     }
 
     // Support plain text use
@@ -108,6 +110,62 @@ function page_intro(): string
     }
 
     return sprintf('<p>%s</p>', $data['intro']);
+}
+
+/**
+ * Render config rows grouped by the top-level $group key.
+ *
+ * This version collects rows into groups during traversal and then
+ * prints one HTML <tbody> section per group. Top-level (no group)
+ * entries are placed into a "global" section.
+ *
+ * Usage: call render_config_rows($config);
+ *
+ * Note: this prints directly. If you prefer returning the HTML string,
+ * change echo to concatenation and return the string.
+ */
+function render_config_rows(array $config, string $topGroup = ''): void
+{
+    // Collector for groups: groupName => array of rows (strings)
+    $groups = [];
+
+    $collect = static function (array $cfg, string $group) use (&$collect, &$groups): void {
+        foreach ($cfg as $key => $value) {
+            if (is_array($value)) {
+                // Recurse: for nested arrays, propagate current group as prefix if present
+                // If nested arrays should become subgroups, you could use "$group.$key" etc.
+                $collect($value, $key);
+                continue;
+            }
+
+            $groupName = $group !== '' ? $group : 'global';
+            $row = sprintf(
+                    '<tr><th><label for="%1$s">%1$s</label></th><td><input name="%1$s" value="%2$s"></td></tr>',
+                    htmlspecialchars((string)$key, ENT_QUOTES, 'UTF-8'),
+                    htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'),
+            );
+
+            $groups[$groupName][] = $row;
+        }
+    };
+
+    $collect($config, $topGroup);
+
+    // Print grouped sections. Order: groups in insertion order, with 'global' first if present.
+    if (isset($groups['global'])) {
+        echo '<h2>Global</h2>';
+        echo '<table class="config-table">';
+        echo implode("\n", $groups['global']);
+        echo '</table>';
+        unset($groups['global']);
+    }
+
+    foreach ($groups as $groupName => $rows) {
+        echo '<h2>' . htmlspecialchars(ucfirst($groupName), ENT_QUOTES, 'UTF-8') . '</h2>';
+        echo '<table class="config-table">';
+        echo implode("\n", $rows);
+        echo '</table>';
+    }
 }
 
 function related_posts($body): array
@@ -146,23 +204,23 @@ function the_opengraph(): void
     printf('<meta property="description" content="%s"/>' . PHP_EOL, og_escape($description));
 
     $og_tags = [
-        'og:description' => $description,
-        'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-        'og:image:height' => '630',
-        'og:image:type' => 'image/jpeg',
-        'og:image:width' => '1200',
-        'og:locale' => 'en_GB',
-        'og:modified_time' => $bean->created,
-        'og:published_time' => $bean->updated,
-        'og:publisher' => ROOT_URL,
-        'og:site_name' => $config['site_title'],
-        'og:type' => 'article',
-        'og:url' => permalink($bean),
-        'twitter:card' => 'summary',
-        'twitter:description' => $description,
-        'twitter:domain' => $_SERVER["HTTP_HOST"],
-        'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
-        'twitter:url' => permalink($bean),
+            'og:description' => $description,
+            'og:image' => ROOT_URL . '/images/og-image-lamb.jpg',
+            'og:image:height' => '630',
+            'og:image:type' => 'image/jpeg',
+            'og:image:width' => '1200',
+            'og:locale' => 'en_GB',
+            'og:modified_time' => $bean->created,
+            'og:published_time' => $bean->updated,
+            'og:publisher' => ROOT_URL,
+            'og:site_name' => $config['site_title'],
+            'og:type' => 'article',
+            'og:url' => permalink($bean),
+            'twitter:card' => 'summary',
+            'twitter:description' => $description,
+            'twitter:domain' => $_SERVER["HTTP_HOST"],
+            'twitter:image' => ROOT_URL . '/images/og-image-lamb.jpg',
+            'twitter:url' => permalink($bean),
     ];
     if (isset($bean->title)) {
         $og_tags['og:title'] = $bean->title;
@@ -179,7 +237,7 @@ function the_opengraph(): void
 function the_styles(): void
 {
     $styles = [
-        '' => ['styles.css'],
+            '' => ['styles.css'],
     ];
     $assets = asset_loader($styles, THEME_URL . 'styles');
     foreach ($assets as $id => $href) {
@@ -190,8 +248,8 @@ function the_styles(): void
 function the_scripts(): void
 {
     $scripts = [
-        '' => ['shorthand.js'],
-        'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js'],
+            '' => ['shorthand.js'],
+            'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js'],
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
@@ -367,6 +425,6 @@ function the_entry_form(): void
                 <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
             </form>
         </section>
-        <?php
+    <?php
     endif;
 }

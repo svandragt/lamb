@@ -14,7 +14,6 @@ use RuntimeException;
 use function Lamb\parse_bean;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
-use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Theme\part;
 
@@ -495,7 +494,8 @@ function respond_search(array $args): array
 
 function respond_settings(array $args): array
 {
-    return respond_404([], true);
+
+    return [];
 }
 
 # Tag pages
