@@ -40,10 +40,10 @@ global $template;
             <?php
             if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
-                <?php
+            <?php
             else : ?>
                 <a href="/logout">Logout</a>
-                <?php
+            <?php
             endif; ?>
         </li>
     </ul>
@@ -56,14 +56,16 @@ global $template;
                 $flash = array_pop($_SESSION['flash']);
                 ?>
                 <div class="flash">⚠️ <?= escape($flash) ?></div>
-                <?php
+            <?php
             endwhile;
         endif;
         part($template); ?>
     </main>
 </div>
 <?php
-part("_related"); ?>
+part("_related");
+part("_pagination");
+?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>

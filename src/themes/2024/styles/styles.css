@@ -85,7 +85,12 @@ nav {
     color: var(--fg);
     margin: 0;
     padding: 0 5%;
-    border-bottom: 1px solid var(--shadow)
+    border-bottom: 1px solid var(--shadow);
+
+    &.pagination {
+        margin: 0 auto;
+        text-align: center;
+    }
 }
 
 nav ul, nav li {

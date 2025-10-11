@@ -194,6 +194,33 @@ function redirect_uri($where): void
 }
 
 /**
+ * Retrieves and prepares the homepage data, including paginated posts and site title.
+ *
+ * @return array The prepared homepage data, including posts, pagination details, and the site title.
+ */
+function respond_home(): array
+{
+    global $config;
+    if (!empty($_POST)) {
+        redirect_created();
+    }
+
+    $data['title'] = $config['site_title'];
+
+    // Use the shared paginator for posts
+    $perPage = $config['posts_per_page'] ?? 10; // optional config override
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+
+    $paginated = paginate_posts('post', 'created DESC', (int)$perPage, $page);
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
  * Redirects the user to the login page if not already logged in.
  *
  * If the user is already logged in, their session is regenerated and they are redirected to the root URL.
@@ -361,34 +388,6 @@ function respond_feed(): void
     die();
 }
 
-# Index
-/**
- * Responds to the home page request and returns an array of data.
- *
- * If there is a POST request, it redirects the user to a created page.
- * Retrieves all posts from the database and transforms them into a structured format.
- * It also checks if each post is a menu item.
- *
- * @return array An array containing the transformed posts and additional data:
- *               - ['title']: The site title specified in the configuration.
- *               - ['items']: An array of transformed posts.
- *                             Each transformed post contains the following keys:
- *                             - ['is_menu_item']: A boolean indicating if the post is a menu item.
- */
-function respond_home(): array
-{
-    global $config;
-    if (!empty($_POST)) {
-        redirect_created();
-    }
-
-    $data['title'] = $config['site_title'];
-    $data['posts'] = R::findAll('post', 'ORDER BY created DESC LIMIT 99');
-
-    upgrade_posts($data['posts']);
-
-    return $data;
-}
 
 /**
  * Responds to a POST request by retrieving and transforming a single post.
@@ -587,3 +586,48 @@ function get_upload_dir(): string
 
     return $upload_dir;
 }
+
+/**
+ * Paginate a simple ORDER BY ... LIMIT query for a given bean type.
+ *
+ * Returns an array with:
+ *  - 'items' => array of beans
+ *  - 'pagination' => metadata (current, per_page, total_posts, total_pages, prev_page, next_page, offset)
+ *
+ * Usage:
+ *   $result = paginate_posts('post', 'created DESC', $perPage);
+ *   $data['posts'] = $result['items'];
+ *   $data['pagination'] = $result['pagination'];
+ *
+ * Note: this uses R::count() and R::findAll(). For very large tables consider keyset pagination.
+ */
+function paginate_posts(string $beanType, string $orderByClause = 'created DESC', int $perPage = 10, ?int $page = null): array
+{
+    $page = max(1, $page ?? (int)($_GET['page'] ?? 1));
+
+    $totalPosts = R::count($beanType);
+    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
+
+    $page = min($page, $totalPages);
+
+    $offset = ($page - 1) * $perPage;
+
+    // Build safe LIMIT SQL (cast ints to avoid injection)
+    $limitSql = 'ORDER BY ' . $orderByClause . ' LIMIT ' . (int)$offset . ', ' . (int)$perPage;
+    $items = R::findAll($beanType, $limitSql);
+
+    return [
+        'items' => $items,
+        'pagination' => [
+            'current' => $page,
+            'per_page' => $perPage,
+            'total_posts' => $totalPosts,
+            'total_pages' => $totalPages,
+            'prev_page' => $page > 1 ? $page - 1 : null,
+            'next_page' => $page < $totalPages ? $page + 1 : null,
+            'offset' => $offset,
+        ],
+    ];
+}
+
+
