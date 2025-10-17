@@ -206,11 +206,8 @@ function respond_home(): array
 
     $data['title'] = $config['site_title'];
 
-    // Use the shared paginator for posts
-    $perPage = $config['posts_per_page'] ?? 10; // optional config override
-    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-
-    $paginated = paginate_posts('post', 'created DESC', (int)$perPage, $page);
+    // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
+    $paginated = paginate_posts('post');
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -471,48 +468,43 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $whereSql = implode(' AND ', $where_clauses);
+    $where_sql = implode(' AND ', $where_clauses);
 
-    // Pagination settings
-    $perPage = $config['posts_per_page'] ?? 10;
-    $page = max(1, (int)($_GET['page'] ?? 1));
-
-    // Get total count for this query
-    $totalPosts = R::count('post', $whereSql, $params);
-    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
-    $page = min($page, $totalPages);
-    $offset = ($page - 1) * $perPage;
-
-    // Fetch only the requested page (append offset and limit to params)
-    $findParams = $params;
-    $findParams[] = (int)$offset;
-    $findParams[] = (int)$perPage;
-    $sql = $whereSql . ' ORDER BY created DESC LIMIT ?, ?';
-    $posts = R::find('post', $sql, $findParams);
+    // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
+    $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
     // Results
     $data['title'] = 'Searched for "' . $query . '"';
-    return get_results($totalPosts, $data, $posts, $page, $perPage, $totalPages, $offset);
+    $pagination = $paginated['pagination'];
+    return get_results(
+        $pagination['total_posts'],
+        $data,
+        $paginated['items'],
+        $pagination['current'],
+        $pagination['per_page'],
+        $pagination['total_pages'],
+        $pagination['offset']
+    );
 }
 
 /**
  * Processes the provided data, posts, and pagination details, returning a structured array with results and metadata.
  *
- * @param int $totalPosts The total number of posts available.
+ * @param int $total_posts The total number of posts available.
  * @param array $data An array of additional data to be transformed or enriched.
  * @param array $posts An array of posts to include in the output.
  * @param mixed $page The current page number.
  * @param mixed $perPage The number of posts per page.
- * @param int $totalPages The total number of pages.
+ * @param int $total_pages The total number of pages.
  * @param float|int $offset The starting index for the posts on the current page.
  *
  * @return array The structured data array including posts, pagination metadata, and additional information.
  */
-function get_results(int $totalPosts, array $data, array $posts, mixed $page, mixed $perPage, int $totalPages, float|int $offset): array
+function get_results(int $total_posts, array $data, array $posts, mixed $page, mixed $perPage, int $total_pages, float|int $offset): array
 {
-    if ($totalPosts > 0) {
-        $result = ngettext("result", "results", $totalPosts);
-        $data['intro'] = $totalPosts . " $result found.";
+    if ($total_posts > 0) {
+        $result = ngettext("result", "results", $total_posts);
+        $data['intro'] = $total_posts . " $result found.";
     }
 
     $data['posts'] = $posts;
@@ -524,10 +516,10 @@ function get_results(int $totalPosts, array $data, array $posts, mixed $page, mi
     $data['pagination'] = [
         'current' => $page,
         'per_page' => $perPage,
-        'total_posts' => $totalPosts,
-        'total_pages' => $totalPages,
+        'total_posts' => $total_posts,
+        'total_pages' => $total_pages,
         'prev_page' => $page > 1 ? $page - 1 : null,
-        'next_page' => $page < $totalPages ? $page + 1 : null,
+        'next_page' => $page < $total_pages ? $page + 1 : null,
         'offset' => $offset,
     ];
 
@@ -551,21 +543,23 @@ function respond_tag(array $args): array
     [$tag] = $args;
     $tag = htmlspecialchars($tag);
 
-    // Get all posts for this tag and then paginate the array slice
+    // Get all posts for this tag (in-memory array)
     $all_posts = posts_by_tag($tag);
 
-    $perPage = $config['posts_per_page'] ?? 10;
-    $page = max(1, (int)($_GET['page'] ?? 1));
-
-    $totalPosts = count($all_posts);
-    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
-    $page = min($page, $totalPages);
-    $offset = ($page - 1) * $perPage;
-
-    $posts = array_slice($all_posts, $offset, $perPage);
+    // Use the shared paginator which accepts an array source; omit per_page/page so helper reads config/$_GET
+    $paginated = paginate_posts($all_posts);
 
     $data['title'] = 'Tagged with #' . $tag;
-    return get_results($totalPosts, $data, $posts, $page, $perPage, $totalPages, $offset);
+    $pagination = $paginated['pagination'];
+    return get_results(
+        $pagination['total_posts'],
+        $data,
+        $paginated['items'],
+        $pagination['current'],
+        $pagination['per_page'],
+        $pagination['total_pages'],
+        $pagination['offset']
+    );
 }
 
 /**
@@ -641,43 +635,84 @@ function get_upload_dir(): string
 }
 
 /**
- * Paginate a simple ORDER BY ... LIMIT query for a given bean type.
+ * Paginates a collection of posts, either from an array or a database query.
  *
- * Returns an array with:
- *  - 'items' => array of beans
- *  - 'pagination' => metadata (current, per_page, total_posts, total_pages, prev_page, next_page, offset)
+ * @param mixed $source The source to paginate, either an array of items or a string representing a database bean type.
+ * @param string $order_by_clause The SQL order by clause to apply when querying the database. Defaults to 'created DESC'.
+ * @param string|null $where_sql Optional SQL WHERE clause for filtering database results (null by default).
+ * @param array $params Parameters to bind for the SQL WHERE clause, if provided.
  *
- * Usage:
- *   $result = paginate_posts('post', 'created DESC', $perPage);
- *   $data['posts'] = $result['items'];
- *   $data['pagination'] = $result['pagination'];
- *
- * Note: this uses R::count() and R::findAll(). For very large tables consider keyset pagination.
+ * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
  */
-function paginate_posts(string $beanType, string $orderByClause = 'created DESC', int $perPage = 10, ?int $page = null): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = []): array
 {
-    $page = max(1, $page ?? (int)($_GET['page'] ?? 1));
+    // If caller did not provide per_page, read from global config (centralize default)
+    global $config;
+    $per_page = $config['posts_per_page'] ?? 3;
 
-    $totalPosts = R::count($beanType);
-    $totalPages = $totalPosts > 0 ? (int)ceil($totalPosts / $perPage) : 1;
+    // determine page now (same behavior for all cases)
+    $page = max(1, (int)($_GET['page'] ?? 1));
 
-    $page = min($page, $totalPages);
+    // If source is an array, do array pagination
+    if (is_array($source)) {
+        $values = array_values($source);
+        $total_posts = count($values);
+        $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+        $page = min($page, $total_pages);
+        $offset = ($page - 1) * $per_page;
 
-    $offset = ($page - 1) * $perPage;
+        $items = array_slice($values, $offset, $per_page);
 
-    // Build safe LIMIT SQL (cast ints to avoid injection)
-    $limitSql = 'ORDER BY ' . $orderByClause . ' LIMIT ' . (int)$offset . ', ' . $perPage;
-    $items = R::findAll($beanType, $limitSql);
+        return [
+            'items' => $items,
+            'pagination' => [
+                'current' => $page,
+                'per_page' => $per_page,
+                'total_posts' => $total_posts,
+                'total_pages' => $total_pages,
+                'prev_page' => $page > 1 ? $page - 1 : null,
+                'next_page' => $page < $total_pages ? $page + 1 : null,
+                'offset' => $offset,
+            ],
+        ];
+    }
+
+    // Otherwise expect a bean type string and run DB pagination.
+    $bean_type = (string)$source;
+
+    // Count posts (with or without WHERE/params)
+    if (!empty($where_sql)) {
+        $total_posts = R::count($bean_type, $where_sql, $params);
+    } else {
+        $total_posts = R::count($bean_type);
+    }
+
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $page = min($page, $total_pages);
+    $offset = ($page - 1) * $per_page;
+
+    if (!empty($where_sql)) {
+        // When params are provided, use R::find with param binding and append offset/limit
+        $find_params = $params;
+        $find_params[] = (int)$offset;
+        $find_params[] = (int)$per_page;
+        $sql = $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?';
+        $items = R::find($bean_type, $sql, $find_params);
+    } else {
+        // No params: safe to use the simpler findAll with a constructed LIMIT
+        $limit_sql = 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page;
+        $items = R::findAll($bean_type, $limit_sql);
+    }
 
     return [
         'items' => $items,
         'pagination' => [
             'current' => $page,
-            'per_page' => $perPage,
-            'total_posts' => $totalPosts,
-            'total_pages' => $totalPages,
+            'per_page' => $per_page,
+            'total_posts' => $total_posts,
+            'total_pages' => $total_pages,
             'prev_page' => $page > 1 ? $page - 1 : null,
-            'next_page' => $page < $totalPages ? $page + 1 : null,
+            'next_page' => $page < $total_pages ? $page + 1 : null,
             'offset' => $offset,
         ],
     ];
