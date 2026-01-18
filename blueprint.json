@@ -22,6 +22,10 @@
         "ref": "playground-support",
         "refType": "branch"
       }
-    }
+    },
+        {
+            "step": "runPHP",
+            "code": "<?php exec('composer install'); ?>"
+        }
   ]
 }
