@@ -7,7 +7,7 @@
   "features": {
     "networking": true
   },
-  "landingPage": "/lamb/src/index.php",
+  "landingPage": "/lamb/src/tindex.php",
   "steps": [
     {
       "step": "mkdir",
@@ -18,7 +18,7 @@
       "writeToPath": "/wordpress/lamb",
       "filesTree": {
         "resource": "git:directory",
-        "url": "https://github.com/svandragt/lamb/blueprint.json",
+        "url": "https://github.com/svandragt/lamb",
         "ref": "playground-support",
         "refType": "branch"
       }
