@@ -7,7 +7,7 @@
   "features": {
     "networking": true
   },
-  "landingPage": "/lamb/src/tindex.php",
+  "landingPage": "/lamb/src/index.php",
   "steps": [
     {
       "step": "mkdir",
