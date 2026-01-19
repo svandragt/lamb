@@ -32,29 +32,29 @@ if (!empty($pagination)) :
         <span class="pages" aria-hidden="false">
             <?php
                 $ellips = false;
-                for ($i = 1; $i <= $totalPages; $i++) :
-                    // Define which pages to show: first two, last two, and current
-                    $should_show = ($i <= 2 || $i > $totalPages - 2 || $i === $current);
+            for ($i = 1; $i <= $totalPages; $i++) :
+                // Define which pages to show: first two, last two, and current
+                $should_show = ($i <= 2 || $i > $totalPages - 2 || $i === $current);
 
-                    if ($should_show) :
-                        $ellips = false; // Reset ellipsis for next gap
-                        if ($i === $current) : ?>
+                if ($should_show) :
+                    $ellips = false; // Reset ellipsis for next gap
+                    if ($i === $current) : ?>
                             <span class="current" aria-current="page"><?= escape((string)$i) ?></span>
-                        <?php else : ?>
+                    <?php else : ?>
                             <a href="<?= escape($build_url($i)) ?>"><?= escape((string)$i) ?></a>
-                        <?php endif;
-                    elseif (!$ellips) :
+                    <?php endif;
+                elseif (!$ellips) :
                         // Show ellipsis once for the gap
                         echo '<span class="gap">…</span>';
                         $ellips = true;
-                    endif;
-                endfor;
-                ?>
+                endif;
+            endfor;
+            ?>
             </span>
 
             <?php if (!empty($pagination['next_page'])) : ?>
             <a class="next" href="<?= escape($build_url((int)$pagination['next_page'])) ?>" rel="next">Older »</a>
-        <?php endif; ?>
+            <?php endif; ?>
     </nav>
-<?php
+    <?php
 endif;
