@@ -17,7 +17,7 @@ if (!empty($pagination)) :
     $parts = parse_url($uri);
     parse_str($parts['query'] ?? '', $qs);
 
-    $buildUrl = static function (int $page) use ($parts, $qs): string {
+    $build_url = static function (int $page) use ($parts, $qs): string {
         $qs['page'] = $page;
         $query = http_build_query($qs);
         $path = $parts['path'] ?? '/';
@@ -26,21 +26,34 @@ if (!empty($pagination)) :
     ?>
     <nav class="pagination" role="navigation" aria-label="Pagination">
         <?php if (!empty($pagination['prev_page'])) : ?>
-            <a class="prev" href="<?= escape($buildUrl((int)$pagination['prev_page'])) ?>" rel="prev">« Newer</a>
+            <a class="prev" href="<?= escape($build_url((int)$pagination['prev_page'])) ?>" rel="prev">« Newer</a>
         <?php endif; ?>
 
         <span class="pages" aria-hidden="false">
-            <?php for ($i = 1; $i <= $totalPages; $i++) : ?>
-                <?php if ($i === $current) : ?>
-                    <span class="current" aria-current="page"><?= escape((string)$i) ?></span>
-                <?php else : ?>
-                    <a href="<?= escape($buildUrl($i)) ?>"><?= escape((string)$i) ?></a>
-                <?php endif; ?>
-            <?php endfor; ?>
-        </span>
+            <?php
+                $ellips = false;
+                for ($i = 1; $i <= $totalPages; $i++) :
+                    // Define which pages to show: first two, last two, and current
+                    $should_show = ($i <= 2 || $i > $totalPages - 2 || $i === $current);
 
-        <?php if (!empty($pagination['next_page'])) : ?>
-            <a class="next" href="<?= escape($buildUrl((int)$pagination['next_page'])) ?>" rel="next">Older »</a>
+                    if ($should_show) :
+                        $ellips = false; // Reset ellipsis for next gap
+                        if ($i === $current) : ?>
+                            <span class="current" aria-current="page"><?= escape((string)$i) ?></span>
+                        <?php else : ?>
+                            <a href="<?= escape($build_url($i)) ?>"><?= escape((string)$i) ?></a>
+                        <?php endif;
+                    elseif (!$ellips) :
+                        // Show ellipsis once for the gap
+                        echo '<span class="gap">…</span>';
+                        $ellips = true;
+                    endif;
+                endfor;
+                ?>
+            </span>
+
+            <?php if (!empty($pagination['next_page'])) : ?>
+            <a class="next" href="<?= escape($build_url((int)$pagination['next_page'])) ?>" rel="next">Older »</a>
         <?php endif; ?>
     </nav>
 <?php

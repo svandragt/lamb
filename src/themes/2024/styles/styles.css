@@ -99,7 +99,7 @@ nav ul, nav li {
     padding: 0;
 }
 
-nav a {
+nav a, nav .current {
     display: inline-block;
     text-decoration: none;
     color: var(--fg);
