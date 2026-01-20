@@ -648,7 +648,7 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
 {
     // If caller did not provide per_page, read from global config (centralize default)
     global $config;
-    $per_page = $config['posts_per_page'] ?? 3;
+    $per_page = $config['posts_per_page'] ?? 10;
 
     // determine page now (same behavior for all cases)
     $page = max(1, (int)($_GET['page'] ?? 1));
