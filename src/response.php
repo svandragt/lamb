@@ -717,5 +717,3 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         ],
     ];
 }
-
-
