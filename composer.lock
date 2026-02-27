@@ -495,16 +495,16 @@
         },
         {
             "name": "codeception/codeception",
-            "version": "5.3.4",
+            "version": "5.3.5",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Codeception/Codeception.git",
-                "reference": "cb4c200ec0a7fe21964f51872bb403701f53f35b"
+                "reference": "83c2986ec2abe594cee2f706d9ec7aca2878fbe0"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Codeception/Codeception/zipball/cb4c200ec0a7fe21964f51872bb403701f53f35b",
-                "reference": "cb4c200ec0a7fe21964f51872bb403701f53f35b",
+                "url": "https://api.github.com/repos/Codeception/Codeception/zipball/83c2986ec2abe594cee2f706d9ec7aca2878fbe0",
+                "reference": "83c2986ec2abe594cee2f706d9ec7aca2878fbe0",
                 "shasum": ""
             },
             "require": {
@@ -515,13 +515,13 @@
                 "ext-json": "*",
                 "ext-mbstring": "*",
                 "php": "^8.2",
-                "phpunit/php-code-coverage": "^9.2 | ^10.0 | ^11.0 | ^12.0",
-                "phpunit/php-text-template": "^2.0 | ^3.0 | ^4.0 | ^5.0",
-                "phpunit/php-timer": "^5.0.3 | ^6.0 | ^7.0 | ^8.0",
-                "phpunit/phpunit": "^9.5.20 | ^10.0 | ^11.0 | ^12.0",
+                "phpunit/php-code-coverage": "^9.2 | ^10.0 | ^11.0 | ^12.0 | ^13.0",
+                "phpunit/php-text-template": "^2.0 | ^3.0 | ^4.0 | ^5.0 | ^6.0",
+                "phpunit/php-timer": "^5.0.3 | ^6.0 | ^7.0 | ^8.0 | ^9.0",
+                "phpunit/phpunit": "^9.5.20 | ^10.0 | ^11.0 | ^12.0 | ^13.0",
                 "psy/psysh": "^0.11.2 | ^0.12",
-                "sebastian/comparator": "^4.0.5 | ^5.0 | ^6.0 | ^7.0",
-                "sebastian/diff": "^4.0.3 | ^5.0 | ^6.0 | ^7.0",
+                "sebastian/comparator": "^4.0.5 | ^5.0 | ^6.0 | ^7.0 | ^8.0",
+                "sebastian/diff": "^4.0.3 | ^5.0 | ^6.0 | ^7.0 | ^8.0",
                 "symfony/console": ">=5.4.24 <9.0",
                 "symfony/css-selector": ">=5.4.24 <9.0",
                 "symfony/event-dispatcher": ">=5.4.24 <9.0",
@@ -540,7 +540,7 @@
             "require-dev": {
                 "codeception/lib-innerbrowser": "*@dev",
                 "codeception/lib-web": "*@dev",
-                "codeception/module-asserts": "*@dev",
+                "codeception/module-asserts": "dev-master",
                 "codeception/module-cli": "*@dev",
                 "codeception/module-db": "*@dev",
                 "codeception/module-filesystem": "*@dev",
@@ -610,7 +610,7 @@
             ],
             "support": {
                 "issues": "https://github.com/Codeception/Codeception/issues",
-                "source": "https://github.com/Codeception/Codeception/tree/5.3.4"
+                "source": "https://github.com/Codeception/Codeception/tree/5.3.5"
             },
             "funding": [
                 {
@@ -618,26 +618,26 @@
                     "type": "open_collective"
                 }
             ],
-            "time": "2026-01-14T11:55:19+00:00"
+            "time": "2026-02-18T06:18:00+00:00"
         },
         {
             "name": "codeception/lib-asserts",
-            "version": "3.1.0",
+            "version": "3.2.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Codeception/lib-asserts.git",
-                "reference": "8e161f38a71cdf3dc638c5427df21c0f01f12d13"
+                "reference": "f161e5d3a9e5ae573ca01cfb3b5601ff5303df03"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Codeception/lib-asserts/zipball/8e161f38a71cdf3dc638c5427df21c0f01f12d13",
-                "reference": "8e161f38a71cdf3dc638c5427df21c0f01f12d13",
+                "url": "https://api.github.com/repos/Codeception/lib-asserts/zipball/f161e5d3a9e5ae573ca01cfb3b5601ff5303df03",
+                "reference": "f161e5d3a9e5ae573ca01cfb3b5601ff5303df03",
                 "shasum": ""
             },
             "require": {
                 "ext-dom": "*",
                 "php": "^8.2 || ^8.3 || ^8.4 || ^8.5",
-                "phpunit/phpunit": "^11.5 || ^12.0"
+                "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0"
             },
             "type": "library",
             "autoload": {
@@ -670,9 +670,9 @@
             ],
             "support": {
                 "issues": "https://github.com/Codeception/lib-asserts/issues",
-                "source": "https://github.com/Codeception/lib-asserts/tree/3.1.0"
+                "source": "https://github.com/Codeception/lib-asserts/tree/3.2.0"
             },
-            "time": "2025-12-22T08:25:07+00:00"
+            "time": "2026-02-06T15:19:32+00:00"
         },
         {
             "name": "codeception/lib-innerbrowser",
@@ -912,27 +912,27 @@
         },
         {
             "name": "codeception/stub",
-            "version": "4.2.1",
+            "version": "4.3.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Codeception/Stub.git",
-                "reference": "0c573cd5c62a828dadadc41bc56f8434860bb7bb"
+                "reference": "6305b97eaf6ea9bdaed29a5bd4d6f2948f577d8f"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Codeception/Stub/zipball/0c573cd5c62a828dadadc41bc56f8434860bb7bb",
-                "reference": "0c573cd5c62a828dadadc41bc56f8434860bb7bb",
+                "url": "https://api.github.com/repos/Codeception/Stub/zipball/6305b97eaf6ea9bdaed29a5bd4d6f2948f577d8f",
+                "reference": "6305b97eaf6ea9bdaed29a5bd4d6f2948f577d8f",
                 "shasum": ""
             },
             "require": {
                 "php": "^8.1",
-                "phpunit/phpunit": "^8.4 | ^9.0 | ^10.0 | ^11 | ^12"
+                "phpunit/phpunit": "^8.4 | ^9.0 | ^10.0 | ^11 | ^12 | ^13"
             },
             "conflict": {
                 "codeception/codeception": "<5.0.6"
             },
             "require-dev": {
-                "consolidation/robo": "^3.0"
+                "consolidation/robo": "^4.0"
             },
             "type": "library",
             "autoload": {
@@ -947,9 +947,9 @@
             "description": "Flexible Stub wrapper for PHPUnit's Mock Builder",
             "support": {
                 "issues": "https://github.com/Codeception/Stub/issues",
-                "source": "https://github.com/Codeception/Stub/tree/4.2.1"
+                "source": "https://github.com/Codeception/Stub/tree/4.3.0"
             },
-            "time": "2025-12-05T13:37:14+00:00"
+            "time": "2026-02-06T15:19:04+00:00"
         },
         {
             "name": "graham-campbell/result-type",
@@ -1870,28 +1870,28 @@
         },
         {
             "name": "phpunit/php-file-iterator",
-            "version": "5.1.0",
+            "version": "5.1.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/php-file-iterator.git",
-                "reference": "118cfaaa8bc5aef3287bf315b6060b1174754af6"
+                "reference": "2f3a64888c814fc235386b7387dd5b5ed92ad903"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/php-file-iterator/zipball/118cfaaa8bc5aef3287bf315b6060b1174754af6",
-                "reference": "118cfaaa8bc5aef3287bf315b6060b1174754af6",
+                "url": "https://api.github.com/repos/sebastianbergmann/php-file-iterator/zipball/2f3a64888c814fc235386b7387dd5b5ed92ad903",
+                "reference": "2f3a64888c814fc235386b7387dd5b5ed92ad903",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.2"
             },
             "require-dev": {
-                "phpunit/phpunit": "^11.0"
+                "phpunit/phpunit": "^11.3"
             },
             "type": "library",
             "extra": {
                 "branch-alias": {
-                    "dev-main": "5.0-dev"
+                    "dev-main": "5.1-dev"
                 }
             },
             "autoload": {
@@ -1919,15 +1919,27 @@
             "support": {
                 "issues": "https://github.com/sebastianbergmann/php-file-iterator/issues",
                 "security": "https://github.com/sebastianbergmann/php-file-iterator/security/policy",
-                "source": "https://github.com/sebastianbergmann/php-file-iterator/tree/5.1.0"
+                "source": "https://github.com/sebastianbergmann/php-file-iterator/tree/5.1.1"
             },
             "funding": [
                 {
                     "url": "https://github.com/sebastianbergmann",
                     "type": "github"
+                },
+                {
+                    "url": "https://liberapay.com/sebastianbergmann",
+                    "type": "liberapay"
+                },
+                {
+                    "url": "https://thanks.dev/u/gh/sebastianbergmann",
+                    "type": "thanks_dev"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/phpunit/php-file-iterator",
+                    "type": "tidelift"
                 }
             ],
-            "time": "2024-08-27T05:02:59+00:00"
+            "time": "2026-02-02T13:52:54+00:00"
         },
         {
             "name": "phpunit/php-invoker",
@@ -2115,16 +2127,16 @@
         },
         {
             "name": "phpunit/phpunit",
-            "version": "11.5.50",
+            "version": "11.5.55",
             "source": {
                 "type": "git",
                 "url": "https://github.com/sebastianbergmann/phpunit.git",
-                "reference": "fdfc727f0fcacfeb8fcb30c7e5da173125b58be3"
+                "reference": "adc7262fccc12de2b30f12a8aa0b33775d814f00"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/fdfc727f0fcacfeb8fcb30c7e5da173125b58be3",
-                "reference": "fdfc727f0fcacfeb8fcb30c7e5da173125b58be3",
+                "url": "https://api.github.com/repos/sebastianbergmann/phpunit/zipball/adc7262fccc12de2b30f12a8aa0b33775d814f00",
+                "reference": "adc7262fccc12de2b30f12a8aa0b33775d814f00",
                 "shasum": ""
             },
             "require": {
@@ -2139,7 +2151,7 @@
                 "phar-io/version": "^3.2.1",
                 "php": ">=8.2",
                 "phpunit/php-code-coverage": "^11.0.12",
-                "phpunit/php-file-iterator": "^5.1.0",
+                "phpunit/php-file-iterator": "^5.1.1",
                 "phpunit/php-invoker": "^5.0.1",
                 "phpunit/php-text-template": "^4.0.1",
                 "phpunit/php-timer": "^7.0.1",
@@ -2151,6 +2163,7 @@
                 "sebastian/exporter": "^6.3.2",
                 "sebastian/global-state": "^7.0.2",
                 "sebastian/object-enumerator": "^6.0.1",
+                "sebastian/recursion-context": "^6.0.3",
                 "sebastian/type": "^5.1.3",
                 "sebastian/version": "^5.0.2",
                 "staabm/side-effects-detector": "^1.0.5"
@@ -2196,7 +2209,7 @@
             "support": {
                 "issues": "https://github.com/sebastianbergmann/phpunit/issues",
                 "security": "https://github.com/sebastianbergmann/phpunit/security/policy",
-                "source": "https://github.com/sebastianbergmann/phpunit/tree/11.5.50"
+                "source": "https://github.com/sebastianbergmann/phpunit/tree/11.5.55"
             },
             "funding": [
                 {
@@ -2220,7 +2233,7 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-01-27T05:59:18+00:00"
+            "time": "2026-02-18T12:37:06+00:00"
         },
         {
             "name": "psr/container",
@@ -2487,16 +2500,16 @@
         },
         {
             "name": "psy/psysh",
-            "version": "v0.12.18",
+            "version": "v0.12.20",
             "source": {
                 "type": "git",
                 "url": "https://github.com/bobthecow/psysh.git",
-                "reference": "ddff0ac01beddc251786fe70367cd8bbdb258196"
+                "reference": "19678eb6b952a03b8a1d96ecee9edba518bb0373"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/bobthecow/psysh/zipball/ddff0ac01beddc251786fe70367cd8bbdb258196",
-                "reference": "ddff0ac01beddc251786fe70367cd8bbdb258196",
+                "url": "https://api.github.com/repos/bobthecow/psysh/zipball/19678eb6b952a03b8a1d96ecee9edba518bb0373",
+                "reference": "19678eb6b952a03b8a1d96ecee9edba518bb0373",
                 "shasum": ""
             },
             "require": {
@@ -2560,9 +2573,9 @@
             ],
             "support": {
                 "issues": "https://github.com/bobthecow/psysh/issues",
-                "source": "https://github.com/bobthecow/psysh/tree/v0.12.18"
+                "source": "https://github.com/bobthecow/psysh/tree/v0.12.20"
             },
-            "time": "2025-12-17T14:35:46+00:00"
+            "time": "2026-02-11T15:05:28+00:00"
         },
         {
             "name": "ralouphie/getallheaders",
