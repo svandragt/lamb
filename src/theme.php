@@ -336,12 +336,16 @@ function li_menu_items(): string
 {
     global $config;
     $items = [];
-    $format = '<li><a href="%s/%s">%s</a></li>';
+    $format = '<li><a href="%s">%s</a></li>';
     if (empty($config['menu_items'])) {
         return '';
     }
-    foreach ($config['menu_items'] as $label => $slug) {
-        $items[] = sprintf($format, ROOT_URL, escape($slug), escape($label));
+    foreach ($config['menu_items'] as $label => $url) {
+        if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
+            $items[] = sprintf($format, escape($url), escape($label));
+        } else {
+            $items[] = sprintf($format, ROOT_URL . '/' . escape($url), escape($label));
+        }
     }
 
     return implode(PHP_EOL, $items);

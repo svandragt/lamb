@@ -9,6 +9,9 @@ define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
 
+Bootstrap\bootstrap_db('../data');
+Bootstrap\bootstrap_session();
+
 $config = Config\load();
 
 define('HIDDEN_CSRF_NAME', 'csrf');
@@ -24,9 +27,6 @@ define("THEME_URL", 'themes/' . THEME . '/');
 # Bootstrap
 header('Cache-Control: max-age=300');
 
-Bootstrap\bootstrap_db('../data');
-Bootstrap\bootstrap_session();
-
 # Routing
 $action = strtok(Http\get_request_uri(), '/');
 $lookup = strtok('/');
@@ -40,6 +40,7 @@ Route\register_route('home', __NAMESPACE__ . '\\Response\respond_home');
 Route\register_route('login', __NAMESPACE__ . '\\Response\redirect_login');
 Route\register_route('logout', __NAMESPACE__ . '\\Response\redirect_logout');
 Route\register_route('search', __NAMESPACE__ . '\\Response\respond_search', $lookup);
+Route\register_route('settings', __NAMESPACE__ . '\\Response\respond_settings');
 Route\register_route('status', __NAMESPACE__ . '\\Response\respond_status', $lookup);
 Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);

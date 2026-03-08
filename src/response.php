@@ -6,7 +6,10 @@ namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
+use Lamb\Config;
 use Lamb\Security;
+use Lamb\Theme;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use RuntimeException;
@@ -309,6 +312,49 @@ function redirect_search(string $query): void
  *
  * @return array The transformed data representing the post's status.
  */
+/**
+ * Handles the settings page.
+ *
+ * @return array The data for the settings page.
+ */
+function respond_settings(): array
+{
+    Security\require_login();
+
+    $data = [
+        'title' => 'Settings',
+        'ini_text' => Config\get_ini_text(),
+    ];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        Security\require_csrf();
+
+        if (isset($_POST['action']) && $_POST['action'] === 'reset') {
+            $default_ini = Config\get_default_ini_text();
+            Config\save_ini_text($default_ini);
+            $_SESSION['flash'][] = "Settings reset to defaults.";
+            redirect_uri('/settings');
+        }
+
+        $submitted_ini = $_POST['ini_text'] ?? '';
+        $validation = Config\validate_ini($submitted_ini);
+
+        if ($validation['valid']) {
+            Config\save_ini_text($submitted_ini);
+            $_SESSION['flash'][] = "Settings saved successfully.";
+            redirect_uri('/settings');
+        } else {
+            $_SESSION['flash'][] = "Invalid INI syntax. Your changes were not saved.";
+            if ($validation['error']) {
+                $_SESSION['flash'][] = $validation['error'];
+            }
+            $data['ini_text'] = $submitted_ini; // Preserve typed content
+        }
+    }
+
+    return $data;
+}
+
 function respond_status(array $args): array
 {
     [$id] = $args;
