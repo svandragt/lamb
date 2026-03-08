@@ -46,5 +46,10 @@ class FirstCest
         $text = "test `<b>bold</b>`";
         $expectedOutput = "<p>test <code>&lt;b&gt;bold&lt;/b&gt;</code></p>";
         Assert::assertEquals($expectedOutput, parse_markdown($text));
+
+        // Emoji tags
+        $text = "Hello #🐑 #world";
+        $expectedOutput = "<p>Hello <a href=\"/tag/🐑\">#🐑</a> <a href=\"/tag/world\">#world</a></p>";
+        Assert::assertEquals($expectedOutput, \Lamb\parse_tags(parse_markdown($text)));
     }
 }

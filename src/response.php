@@ -497,14 +497,15 @@ function respond_search(array $args): array
 {
     global $config;
 
-    $query = urldecode($args[0]);
+    $query = urldecode($args[0] ?? '');
     if (empty($query)) {
-        $query = htmlspecialchars($_GET['s'] ?? '');
+        $query = $_GET['s'] ?? '';
         if (empty($query)) {
             return [];
         }
         redirect_search($query);
     }
+    $query = htmlspecialchars($query);
 
     // Support multiple words filtering
     $words = explode(' ', $query);
@@ -551,12 +552,11 @@ function get_results(int $total_posts, array $data, array $posts, mixed $page, m
     if ($total_posts > 0) {
         $result = ngettext("result", "results", $total_posts);
         $data['intro'] = $total_posts . " $result found.";
+    } else {
+        $data['intro'] = "No results found.";
     }
 
     $data['posts'] = $posts;
-    if (empty($data['posts'])) {
-        respond_404([], true);
-    }
 
     // Pagination metadata (same shape as paginate_posts)
     $data['pagination'] = [
@@ -587,6 +587,7 @@ function respond_tag(array $args): array
     global $config;
 
     [$tag] = $args;
+    $tag = urldecode($tag);
     $tag = htmlspecialchars($tag);
 
     // Get all posts for this tag (in-memory array)

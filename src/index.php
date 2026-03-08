@@ -28,8 +28,11 @@ define("THEME_URL", 'themes/' . THEME . '/');
 header('Cache-Control: max-age=300');
 
 # Routing
-$action = strtok(Http\get_request_uri(), '/');
+$request_uri = Http\get_request_uri();
+$action = strtok($request_uri, '/');
 $lookup = strtok('/');
+
+$request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 
 Route\register_route(false, __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
