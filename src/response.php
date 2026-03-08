@@ -82,7 +82,7 @@ function redirect_created(): ?array
     if ($_POST['submit'] !== SUBMIT_CREATE) {
         return null;
     }
-    $contents = trim(htmlspecialchars($_POST['contents'] ?? ''));
+    $contents = trim($_POST['contents'] ?? '');
     if (empty($contents)) {
         return null;
     }
