@@ -1,0 +1,31 @@
+// For format details, see https://aka.ms/devcontainer.json. For config options, see README at: https://github.com/devcontainers/templates/tree/main/src/php
+{
+	"name": "PHP",
+	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
+	"image": "mcr.microsoft.com/devcontainers/php:1-8.2-bullseye",
+
+	"features": {
+		"ghcr.io/devcontainers/features/php:1": {
+			"installComposer": true,
+			"version": "8.2"
+		}
+	},
+
+	"customizations" : {
+		"jetbrains" : {
+			"backend" : "PhpStorm"
+		}
+	},
+
+	// Forward both app and Xdebug ports
+	"forwardPorts": [8080, 9003],
+
+	// Install and configure Xdebug after container creation
+	"postCreateCommand": "pecl install xdebug && docker-php-ext-enable xdebug && cp .devcontainer/xdebug.ini /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini"
+
+	// Set Xdebug configuration via environment
+	"containerEnv": {
+		"XDEBUG_MODE": "debug",
+		"XDEBUG_CONFIG": "client_host=host.docker.internal"
+	}
+}
