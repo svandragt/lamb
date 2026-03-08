@@ -51,7 +51,7 @@ INI;
 function load(): array
 {
     $ini_text = get_ini_text();
-    $config = @parse_ini_string($ini_text, true);
+    $config = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
 
     // Hardcoded defaults as fallback for missing keys
     $defaults = [
@@ -122,7 +122,7 @@ function validate_ini(string $ini_text): array
     });
 
     try {
-        $parsed = parse_ini_string($ini_text, true);
+        $parsed = parse_ini_string($ini_text, true, INI_SCANNER_RAW);
         if ($parsed === false) {
             return ['valid' => false, 'error' => 'Invalid INI syntax.'];
         }
