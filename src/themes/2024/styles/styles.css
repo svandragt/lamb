@@ -256,6 +256,10 @@ textarea {
     border-radius: 4px;
 }
 
+.home h1 {
+    display:none;
+}
+
 .pages {
     .current {
         font-weight: bold
