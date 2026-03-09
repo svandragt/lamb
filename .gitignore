@@ -4,6 +4,7 @@
 /src/assets/
 /vendor/
 /src/config.ini
+/todos.md
 
 # Ignore custom themes by default
 /src/themes/
