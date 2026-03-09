@@ -135,6 +135,42 @@ function validate_ini(string $ini_text): array
 }
 
 /**
+ * Retrieves a list of slugs derived from menu items that should be excluded from the timeline.
+ *
+ * @return array An array of slugs to exclude.
+ */
+function get_menu_slugs(): array
+{
+    global $config;
+
+    $menu_items = $config['menu_items'] ?? [];
+    $slugs = [];
+
+    foreach ($menu_items as $value) {
+        // "The home link must never match slugs."
+        if ($value === '/') {
+            continue;
+        }
+
+        // If it starts with a slash, we take the part after it.
+        if (str_starts_with($value, '/')) {
+            $slug = trim($value, '/');
+            if ($slug !== '') {
+                $slugs[] = $slug;
+            }
+            continue;
+        }
+
+        // Otherwise, if it's not a full URL, we treat it as a slug.
+        if (!filter_var($value, FILTER_VALIDATE_URL)) {
+            $slugs[] = $value;
+        }
+    }
+
+    return array_unique($slugs);
+}
+
+/**
  * Checks if a given menu item exists in the configuration array.
  *
  * @param string $slug The menu item slug to check.
@@ -143,8 +179,5 @@ function validate_ini(string $ini_text): array
  */
 function is_menu_item(string $slug): bool
 {
-    global $config;
-
-    // Checks array values for needle.
-    return in_array($slug, $config['menu_items'] ?? [], true);
+    return in_array($slug, get_menu_slugs(), true);
 }

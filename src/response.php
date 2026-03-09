@@ -4,20 +4,20 @@
 
 namespace Lamb\Response;
 
+use Exception;
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
 use Lamb\Config;
 use Lamb\Security;
-use Lamb\Theme;
-use RedBeanPHP\OODBBean;
+use Random\RandomException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use RuntimeException;
 
 use function Lamb\parse_bean;
+use function Lamb\Post\populate_bean;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
-use function Lamb\Post\populate_bean;
 use function Lamb\Theme\part;
 
 use const ROOT_DIR;
@@ -210,7 +210,17 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
-    $paginated = paginate_posts('post');
+    $exclude_slugs = Config\get_menu_slugs();
+    if (!empty($exclude_slugs)) {
+        $paginated = paginate_posts(
+            'post',
+            'created DESC',
+            sprintf(' slug NOT IN (%s) ', R::genSlots($exclude_slugs)),
+            $exclude_slugs
+        );
+    } else {
+        $paginated = paginate_posts('post');
+    }
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -228,6 +238,7 @@ function respond_home(): array
  * If the login is successful, it sets the SESSION_LOGIN session variable to true, regenerates the session ID, and redirects to the specified URL.
  *
  * @return array|null
+ * @throws RandomException
  */
 function redirect_login(): ?array
 {
@@ -242,7 +253,7 @@ function redirect_login(): ?array
         redirect_uri('/');
     }
     if (!isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
-        // Show login page by returning a non empty array.
+        // Show login page by returning a non-empty array.
         return [];
     }
     Security\require_csrf();
@@ -306,16 +317,10 @@ function redirect_search(string $query): void
 
 # Single
 /**
- * Responds with the status of a post.
+ * Handles the settings page logic, including displaying, validating, and saving settings.
  *
- * @param array $args An array containing the post ID.
- *
- * @return array The transformed data representing the post's status.
- */
-/**
- * Handles the settings page.
- *
- * @return array The data for the settings page.
+ * @return array An array containing the page title and the current or updated INI configuration text.
+ * @throws Exception
  */
 function respond_settings(): array
 {
@@ -355,6 +360,13 @@ function respond_settings(): array
     return $data;
 }
 
+/**
+ * Responds with the status of a post.
+ *
+ * @param array $args An array containing the post ID.
+ *
+ * @return array The transformed data representing the post's status.
+ */
 function respond_status(array $args): array
 {
     [$id] = $args;
@@ -412,15 +424,19 @@ function respond_feed(): void
     global $data;
 
     // Exclude pages with slugs
-    $menu_items = array_values($config['menu_items'] ?? []);
-    $posts = R::find(
-        'post',
-        sprintf(' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots($menu_items)),
-        $menu_items
-    );
+    $exclude_slugs = Config\get_menu_slugs();
+    if (!empty($exclude_slugs)) {
+        $posts = R::find(
+            'post',
+            sprintf(' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots($exclude_slugs)),
+            $exclude_slugs
+        );
+    } else {
+        $posts = R::findAll('post', ' ORDER BY updated DESC LIMIT 20 ');
+    }
 
     $first_post = reset($posts);
-    $data['updated'] = $first_post['updated'];
+    $data['updated'] = $first_post['updated'] ?? date('Y-m-d H:i:s');
     $data['title'] = $config['site_title'];
 
     $data['posts'] = $posts;
@@ -495,8 +511,6 @@ function upgrade_posts(array $posts): void
  */
 function respond_search(array $args): array
 {
-    global $config;
-
     $query = urldecode($args[0] ?? '');
     if (empty($query)) {
         $query = $_GET['s'] ?? '';
@@ -584,8 +598,6 @@ function get_results(int $total_posts, array $data, array $posts, mixed $page, m
  */
 function respond_tag(array $args): array
 {
-    global $config;
-
     [$tag] = $args;
     $tag = urldecode($tag);
     $tag = htmlspecialchars($tag);
@@ -612,13 +624,13 @@ function respond_tag(array $args): array
 /**
  * Responds to an upload request by processing the uploaded files.
  *
- * @param array $args The arguments for the upload request.
+ * @param array $_args The arguments for the upload request.
  *
  * @return void
  * @throws JsonException
  */
 #[NoReturn]
-function respond_upload(array $args): void
+function respond_upload(array $_args): void
 {
     if (empty($_FILES[IMAGE_FILES])) {
         // invalid request http status code
