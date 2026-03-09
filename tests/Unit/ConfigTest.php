@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+
 use function Lamb\Config\get_menu_slugs;
 
 // Since we need to test a function that depends on global $config, we'll mock it or set it.
