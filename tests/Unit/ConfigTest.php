@@ -23,12 +23,6 @@ class ConfigTest extends TestCase
             'Feed' => '/feed'
         ];
 
-        // Expected slugs to exclude: 'about', 'about-us', 'contact', 'feed'
-        // Wait, should '/feed' be excluded? It's a reserved route.
-        // The issue says: "A configuration menu item with the value that matches a page slug results correctly in the page not being shown in the timeline."
-        // "Home=/" should never match slugs.
-        // "About us=/about" should match a post with slug "about".
-
         $slugs = get_menu_slugs();
 
         $this->assertNotContains('/', $slugs);
