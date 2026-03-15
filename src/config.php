@@ -4,6 +4,9 @@ namespace Lamb\Config;
 
 use RedBeanPHP\R;
 
+use function Lamb\get_option;
+use function Lamb\set_option;
+
 /**
  * Returns the default INI configuration text.
  *
@@ -70,8 +73,8 @@ function load(): array
  */
 function get_ini_text(): string
 {
-    $option = R::findOne('option', ' name = ? ', ['site_config_ini']);
-    if ($option) {
+    $option = get_option('site_config_ini', '');
+    if ($option->id > 0) {
         return $option->value;
     }
 
@@ -99,13 +102,8 @@ function get_ini_text(): string
  */
 function save_ini_text(string $ini_text): void
 {
-    $option = R::findOne('option', ' name = ? ', ['site_config_ini']);
-    if (! $option) {
-        $option = R::dispense('option');
-        $option->name = 'site_config_ini';
-    }
-    $option->value = $ini_text;
-    R::store($option);
+    $option = get_option('site_config_ini', '');
+    set_option($option, $ini_text);
 }
 
 /**

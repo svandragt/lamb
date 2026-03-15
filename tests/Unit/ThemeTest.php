@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Theme\escape;
+use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\og_escape;
 use function Lamb\Theme\sanitize_filename;
@@ -94,6 +95,47 @@ class ThemeTest extends TestCase
     public function testSanitizeFilenameHandlesEmptyString()
     {
         $this->assertSame('', sanitize_filename(''));
+    }
+
+    // format_past_date
+
+    public function testFormatPastDateYesterdayWhenJIs3AndDiffIs1()
+    {
+        $ts = mktime(10, 0, 0, 1, 1, 2020);
+        $result = format_past_date(3, 1, $ts);
+        $this->assertStringContainsString('Yesterday', $result);
+    }
+
+    public function testFormatPastDateDayNameWhenJIs3AndDiffIsNot1()
+    {
+        $ts = mktime(10, 0, 0, 1, 1, 2020);
+        $result = format_past_date(3, 3, $ts);
+        // Should be a day-of-week name like "Wednesday at ..."
+        $this->assertMatchesRegularExpression('/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/', $result);
+    }
+
+    public function testFormatPastDateMonthDayFormatWhenJIs4()
+    {
+        $ts = mktime(10, 0, 0, 6, 15, 2020);
+        $result = format_past_date(4, 3, $ts);
+        // "June 15 at ..." format (no year)
+        $this->assertStringContainsString('June 15', $result);
+        $this->assertStringNotContainsString('2020', $result);
+    }
+
+    public function testFormatPastDateFullDateWithYearWhenJIs6()
+    {
+        $ts = mktime(10, 0, 0, 6, 30, 2010);
+        $result = format_past_date(6, 2, $ts);
+        $this->assertStringContainsString('2010', $result);
+    }
+
+    public function testFormatPastDateFullDateWhenJIs5AndDiffIs12()
+    {
+        $ts = mktime(10, 0, 0, 6, 30, 2010);
+        $result = format_past_date(5, 12, $ts);
+        // 12 months = 1 year ago, so should show year
+        $this->assertStringContainsString('2010', $result);
     }
 
     // human_time

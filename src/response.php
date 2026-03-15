@@ -24,8 +24,24 @@ use const ROOT_DIR;
 
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 
+// IMAGE_FILES is defined in constants.php
 
-const IMAGE_FILES = 'imageFiles';
+/**
+ * Returns cookie options with the given expiry timestamp.
+ *
+ * @param int $expires Unix timestamp for cookie expiry.
+ * @return array Cookie options array.
+ */
+function get_cookie_options(int $expires): array
+{
+    return [
+        'expires'  => $expires,
+        'path'     => '/',
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ];
+}
 
 /**
  * Builds a SQL NOT IN clause for excluding posts by slug.
@@ -132,7 +148,7 @@ function redirect_created(): ?array
     }
 
     $bean = populate_bean($contents);
-    if (is_null($bean)) {
+    if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
         return null;
     }
@@ -304,13 +320,7 @@ function redirect_login(): ?array
     session_regenerate_id(true);
 
     $uuid = bin2hex(random_bytes(16)); // Generate a UUID
-    setcookie('lamb_logged_in', $uuid, [
-        'expires' => time() + 3600, // Expires in 1 hour
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', $uuid, get_cookie_options(time() + 3600));
     $where = filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL);
     redirect_uri($where);
 }
@@ -325,13 +335,7 @@ function redirect_logout(): void
 {
     unset($_SESSION[SESSION_LOGIN]);
 
-    setcookie('lamb_logged_in', '', [
-        'expires' => time() - 3600, // Set to the past to delete the cookie
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', '', get_cookie_options(time() - 3600));
 
     session_regenerate_id(true);
     redirect_uri('/');

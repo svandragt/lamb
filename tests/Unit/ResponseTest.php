@@ -6,10 +6,53 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\build_exclude_slugs_clause;
 use function Lamb\Response\build_pagination_meta;
+use function Lamb\Response\get_cookie_options;
 use function Lamb\Response\paginate_posts;
 
 class ResponseTest extends TestCase
 {
+    // get_cookie_options
+
+    public function testGetCookieOptionsReturnsArray()
+    {
+        $this->assertIsArray(get_cookie_options(time() + 3600));
+    }
+
+    public function testGetCookieOptionsHasRequiredKeys()
+    {
+        $opts = get_cookie_options(time() + 3600);
+        foreach (['expires', 'path', 'secure', 'httponly', 'samesite'] as $key) {
+            $this->assertArrayHasKey($key, $opts);
+        }
+    }
+
+    public function testGetCookieOptionsUsesProvidedExpiry()
+    {
+        $expiry = time() + 1234;
+        $opts = get_cookie_options($expiry);
+        $this->assertSame($expiry, $opts['expires']);
+    }
+
+    public function testGetCookieOptionsPathIsRoot()
+    {
+        $this->assertSame('/', get_cookie_options(time())['path']);
+    }
+
+    public function testGetCookieOptionsSameSiteIsStrict()
+    {
+        $this->assertSame('Strict', get_cookie_options(time())['samesite']);
+    }
+
+    public function testGetCookieOptionsSecureIsTrue()
+    {
+        $this->assertTrue(get_cookie_options(time())['secure']);
+    }
+
+    public function testGetCookieOptionsHttponlyIsTrue()
+    {
+        $this->assertTrue(get_cookie_options(time())['httponly']);
+    }
+
     // build_exclude_slugs_clause
 
     public function testBuildExcludeSlugClauseReturnsNullForEmptyArray()
