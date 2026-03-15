@@ -28,13 +28,13 @@ test('atom feed is accessible', async ({ page }) => {
 test('login page has password form', async ({ page }) => {
     await page.goto('/login');
     await expect(page.locator('input[type="password"][name="password"]')).toBeVisible();
-    await expect(page.locator('input[type="submit"]')).toBeVisible();
+    await expect(page.locator('input[name="submit"]')).toBeVisible();
 });
 
 test('wrong password is rejected', async ({ page }) => {
     await page.goto('/login');
     await page.locator('input[name="password"]').fill('wrongpassword');
-    await page.locator('input[type="submit"]').click();
+    await page.locator('input[name="submit"]').click();
     // Bad credentials redirect to home but user remains logged out
     await expect(page.getByRole('link', { name: 'Login' })).toBeVisible();
 });
