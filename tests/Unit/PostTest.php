@@ -4,11 +4,60 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\slugify;
 
 class PostTest extends TestCase
 {
+    // get_tag_search_conditions
+
+    public function testGetTagSearchConditionsReturnsSqlAndParamsKeys()
+    {
+        $result = get_tag_search_conditions('php');
+        $this->assertArrayHasKey('sql', $result);
+        $this->assertArrayHasKey('params', $result);
+    }
+
+    public function testGetTagSearchConditionsSqlContainsBodyLike()
+    {
+        $result = get_tag_search_conditions('php');
+        $this->assertStringContainsString('body LIKE', $result['sql']);
+    }
+
+    public function testGetTagSearchConditionsParamsAllContainTag()
+    {
+        $result = get_tag_search_conditions('php');
+        foreach ($result['params'] as $param) {
+            $this->assertStringContainsString('php', $param);
+        }
+    }
+
+    public function testGetTagSearchConditionsMatchesTagWithTrailingSpace()
+    {
+        $result = get_tag_search_conditions('php');
+        $this->assertContains('%#php %', $result['params']);
+    }
+
+    public function testGetTagSearchConditionsMatchesTagAtEndOfString()
+    {
+        $result = get_tag_search_conditions('php');
+        $this->assertContains('%#php', $result['params']);
+    }
+
+    public function testGetTagSearchConditionsMatchesNewlineBeforeTag()
+    {
+        $result = get_tag_search_conditions('php');
+        $found = false;
+        foreach ($result['params'] as $param) {
+            if (str_contains($param, "\n#php")) {
+                $found = true;
+                break;
+            }
+        }
+        $this->assertTrue($found, 'Expected a param containing newline before #tag');
+    }
+
     // slugify
 
     public function testSlugifyLowercasesText()
