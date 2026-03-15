@@ -26,6 +26,47 @@ define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 
 
 const IMAGE_FILES = 'imageFiles';
+
+/**
+ * Builds a SQL NOT IN clause for excluding posts by slug.
+ *
+ * @param array $slugs Slugs to exclude.
+ * @return array{sql: string, params: array}|null Clause and params, or null when list is empty.
+ */
+function build_exclude_slugs_clause(array $slugs): ?array
+{
+    if (empty($slugs)) {
+        return null;
+    }
+    $slots = implode(', ', array_fill(0, count($slugs), '?'));
+    return [
+        'sql'    => " slug NOT IN ($slots) ",
+        'params' => $slugs,
+    ];
+}
+
+/**
+ * Builds the pagination metadata array from pre-computed values.
+ *
+ * @param int $page         Current page number (1-based).
+ * @param int $per_page     Items per page.
+ * @param int $total_posts  Total number of matching posts.
+ * @param int $offset       Row offset for the current page.
+ * @return array
+ */
+function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
+{
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    return [
+        'current'     => $page,
+        'per_page'    => $per_page,
+        'total_posts' => $total_posts,
+        'total_pages' => $total_pages,
+        'prev_page'   => $page > 1 ? $page - 1 : null,
+        'next_page'   => $page < $total_pages ? $page + 1 : null,
+        'offset'      => $offset,
+    ];
+}
 /**
  * Redirects the user to a 404 page with the provided fallback URL.
  *
@@ -210,14 +251,9 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
-    $exclude_slugs = Config\get_menu_slugs();
-    if (!empty($exclude_slugs)) {
-        $paginated = paginate_posts(
-            'post',
-            'created DESC',
-            sprintf(' slug NOT IN (%s) ', R::genSlots($exclude_slugs)),
-            $exclude_slugs
-        );
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
+        $paginated = paginate_posts('post', 'created DESC', $clause['sql'], $clause['params']);
     } else {
         $paginated = paginate_posts('post');
     }
@@ -424,12 +460,12 @@ function respond_feed(): void
     global $data;
 
     // Exclude pages with slugs
-    $exclude_slugs = Config\get_menu_slugs();
-    if (!empty($exclude_slugs)) {
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
         $posts = R::find(
             'post',
-            sprintf(' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots($exclude_slugs)),
-            $exclude_slugs
+            $clause['sql'] . ' ORDER BY updated DESC LIMIT 20',
+            $clause['params']
         );
     } else {
         $posts = R::findAll('post', ' ORDER BY updated DESC LIMIT 20 ');
@@ -703,11 +739,13 @@ function get_upload_dir(): string
  *
  * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
  */
-function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = []): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null): array
 {
-    // If caller did not provide per_page, read from global config (centralize default)
-    global $config;
-    $per_page = $config['posts_per_page'] ?? 10;
+    // Explicit $per_page avoids the global; fall back to config only when not provided.
+    if ($per_page === null) {
+        global $config;
+        $per_page = (int)($config['posts_per_page'] ?? 10);
+    }
 
     // determine page now (same behavior for all cases)
     $page = max(1, (int)($_GET['page'] ?? 1));
@@ -720,19 +758,9 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         $page = min($page, $total_pages);
         $offset = ($page - 1) * $per_page;
 
-        $items = array_slice($values, $offset, $per_page);
-
         return [
-            'items' => $items,
-            'pagination' => [
-                'current' => $page,
-                'per_page' => $per_page,
-                'total_posts' => $total_posts,
-                'total_pages' => $total_pages,
-                'prev_page' => $page > 1 ? $page - 1 : null,
-                'next_page' => $page < $total_pages ? $page + 1 : null,
-                'offset' => $offset,
-            ],
+            'items'      => array_slice($values, $offset, $per_page),
+            'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
         ];
     }
 
@@ -764,15 +792,7 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
     }
 
     return [
-        'items' => $items,
-        'pagination' => [
-            'current' => $page,
-            'per_page' => $per_page,
-            'total_posts' => $total_posts,
-            'total_pages' => $total_pages,
-            'prev_page' => $page > 1 ? $page - 1 : null,
-            'next_page' => $page < $total_pages ? $page + 1 : null,
-            'offset' => $offset,
-        ],
+        'items'      => $items,
+        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
     ];
 }
