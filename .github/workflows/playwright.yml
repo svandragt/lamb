@@ -1,22 +1,32 @@
 name: Playwright Tests
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, '0.7.0/*' ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, '0.7.0/*' ]
 jobs:
   test:
     timeout-minutes: 60
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.2'
+        extensions: sqlite3, gettext, simplexml
+    - name: Install Composer dependencies
+      run: composer install --no-dev --no-interaction
     - uses: actions/setup-node@v4
       with:
         node-version: lts/*
+    - uses: pnpm/action-setup@v4
+      with:
+        version: latest
     - name: Install dependencies
-      run: npm install -g pnpm && pnpm install
+      run: pnpm install
     - name: Install Playwright Browsers
-      run: pnpm exec playwright install --with-deps
+      run: pnpm exec playwright install --with-deps chromium
     - name: Run Playwright tests
       run: pnpm exec playwright test
     - uses: actions/upload-artifact@v4
