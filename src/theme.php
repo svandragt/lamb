@@ -176,6 +176,18 @@ function the_opengraph(): void
     }
 }
 
+function the_preconnect(): void
+{
+    global $config;
+    if (empty($config['preconnect'])) {
+        return;
+    }
+    foreach ($config['preconnect'] as $origin) {
+        printf('<link rel="preconnect" href="%s">' . PHP_EOL, escape($origin));
+        printf('<link rel="dns-prefetch" href="%s">' . PHP_EOL, escape($origin));
+    }
+}
+
 function the_styles(): void
 {
     $styles = [

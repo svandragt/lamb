@@ -43,6 +43,12 @@ function get_default_ini_text(): string
 ;; Each item is in the format of <name>=<url>  where URL is a link to an RSS or Atom feed.
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
+
+[preconnect]
+;; List external origins to preconnect to, improving load time for external resources.
+;; Each item is in the format of <label>=<origin>.
+;google-fonts = https://fonts.googleapis.com
+;google-fonts-static = https://fonts.gstatic.com
 INI;
 }
 
