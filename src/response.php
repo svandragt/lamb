@@ -438,6 +438,43 @@ function respond_feed(): void
     $first_post = reset($posts);
     $data['updated'] = $first_post['updated'] ?? date('Y-m-d H:i:s');
     $data['title'] = $config['site_title'];
+    $data['feed_url'] = ROOT_URL . '/feed';
+
+    $data['posts'] = $posts;
+    upgrade_posts($posts);
+
+    part("feed", '');
+    die();
+}
+
+/**
+ * Responds to a tag feed request by rendering an Atom feed for posts with a specific tag.
+ *
+ * @param array $args An array where the first element is the tag name.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_tag_feed(array $args): void
+{
+    global $config;
+    global $data;
+
+    [$tag] = $args;
+    $tag = urldecode($tag);
+    $tag = htmlspecialchars($tag);
+
+    $all_posts = posts_by_tag($tag);
+
+    // Sort by updated DESC and limit to 20
+    $posts = array_values($all_posts);
+    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
+    $posts = array_slice($posts, 0, 20);
+
+    $first_post = reset($posts);
+    $data['updated'] = $first_post ? $first_post->updated : date('Y-m-d H:i:s');
+    $data['title'] = $config['site_title'] . ' — #' . $tag;
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
 
     $data['posts'] = $posts;
     upgrade_posts($posts);
@@ -609,6 +646,7 @@ function respond_tag(array $args): array
     $paginated = paginate_posts($all_posts);
 
     $data['title'] = 'Tagged with #' . $tag;
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
     $pagination = $paginated['pagination'];
     return get_results(
         $pagination['total_posts'],

@@ -9,7 +9,7 @@ function escape(string $html): string
 }
 
 header('Content-type: application/atom+xml');
-$channel_link = ROOT_URL . '/feed';
+$channel_link = $data['feed_url'] ?? ROOT_URL . '/feed';
 
 $Xml = new SimpleXMLElement('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
 $Xml->addChild('title', escape($config['site_title']));
