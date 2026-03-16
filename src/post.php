@@ -22,6 +22,8 @@ use function Lamb\parse_bean;
  */
 function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
 {
+    global $config;
+
     $matter = parse_matter($text);
 
     if (is_null($bean)) {
@@ -45,6 +47,12 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
     }
 
     parse_bean($bean);
+
+    // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
+    // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
+    if ($feed_item && filter_var($config['feeds_draft'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+        $bean->draft = 1;
+    }
 
     return $bean;
 }
@@ -95,8 +103,7 @@ function posts_by_tag(string $tag): array
 {
     return R::find(
         'post',
-        'body LIKE ? OR body LIKE ? OR body LIKE ?',
-        ["%#$tag %", "%\n#$tag %", "%#$tag"],
-        'ORDER BY created DESC'
+        '(body LIKE ? OR body LIKE ? OR body LIKE ?) AND draft != 1 ORDER BY created DESC',
+        ["%#$tag %", "%\n#$tag %", "%#$tag"]
     );
 }
