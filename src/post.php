@@ -118,7 +118,7 @@ function posts_by_tag(string $tag): array
     $conditions = get_tag_search_conditions($tag);
     return R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND draft != 1 ORDER BY created DESC',
+        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) ORDER BY created DESC',
         $conditions['params']
     );
 }
