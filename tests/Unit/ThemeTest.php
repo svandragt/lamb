@@ -9,9 +9,73 @@ use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\og_escape;
 use function Lamb\Theme\sanitize_filename;
+use function Lamb\Theme\the_preconnect;
 
 class ThemeTest extends TestCase
 {
+    // the_preconnect
+
+    public function testPreconnectOutputsNothingWhenNotConfigured()
+    {
+        global $config;
+        $original = $config;
+        $config['preconnect'] = [];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        $this->assertSame('', $output);
+        $config = $original;
+    }
+
+    public function testPreconnectOutputsPreconnectAndDnsPrefetchLinks()
+    {
+        global $config;
+        $original = $config;
+        $config['preconnect'] = ['google-fonts' => 'https://fonts.googleapis.com'];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('<link rel="preconnect" href="https://fonts.googleapis.com">', $output);
+        $this->assertStringContainsString('<link rel="dns-prefetch" href="https://fonts.googleapis.com">', $output);
+        $config = $original;
+    }
+
+    public function testPreconnectOutputsAllConfiguredOrigins()
+    {
+        global $config;
+        $original = $config;
+        $config['preconnect'] = [
+            'fonts' => 'https://fonts.googleapis.com',
+            'static' => 'https://fonts.gstatic.com',
+        ];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('fonts.googleapis.com', $output);
+        $this->assertStringContainsString('fonts.gstatic.com', $output);
+        $config = $original;
+    }
+
+    public function testPreconnectEscapesOrigins()
+    {
+        global $config;
+        $original = $config;
+        $config['preconnect'] = ['xss' => 'https://example.com"><script>alert(1)</script>'];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        $this->assertStringNotContainsString('<script>', $output);
+        $config = $original;
+    }
+
     // escape
 
     public function testEscapeConvertsAngleBrackets()
