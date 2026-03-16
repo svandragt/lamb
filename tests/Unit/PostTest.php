@@ -94,4 +94,25 @@ class PostTest extends TestCase
         $this->assertArrayNotHasKey('slug', $result);
         $this->assertSame('Someone', $result['author']);
     }
+
+    public function testParseMatterExtractsDraftTrue()
+    {
+        $body = "---\ntitle: My Draft\ndraft: true\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertTrue((bool)$result['draft']);
+    }
+
+    public function testParseMatterExtractsDraftFalse()
+    {
+        $body = "---\ntitle: My Post\ndraft: false\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertFalse((bool)$result['draft']);
+    }
+
+    public function testParseMatterHasNoDraftKeyWhenAbsent()
+    {
+        $body = "---\ntitle: My Post\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertArrayNotHasKey('draft', $result);
+    }
 }
