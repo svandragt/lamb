@@ -10,6 +10,7 @@ use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
 
 global $config;
+global $data;
 global $template;
 ?>
 <!DOCTYPE html>
@@ -22,6 +23,10 @@ global $template;
     <title><?= escape(site_or_page_title('text')) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape($config['site_title']) ?>">
+    <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>
+    <link rel="alternate" type="application/atom+xml" href="<?= escape($data['feed_url']) ?>"
+          title="<?= escape($data['title'] ?? $config['site_title']) ?>">
+    <?php endif; ?>
     <?php
     the_preconnect(); ?>
     <?php

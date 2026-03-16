@@ -267,12 +267,38 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
+    $where_parts = [' draft != 1 '];
+    $where_params = [];
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
-        $paginated = paginate_posts('post', 'created DESC', $clause['sql'], $clause['params']);
-    } else {
-        $paginated = paginate_posts('post');
+        $where_parts[] = $clause['sql'];
+        $where_params = $clause['params'];
     }
+    $paginated = paginate_posts(
+        'post',
+        'created DESC',
+        implode(' AND ', $where_parts),
+        $where_params
+    );
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
+ * Responds with the drafts page showing all draft posts (login required).
+ *
+ * @return array The drafts page data including posts and pagination.
+ */
+function respond_drafts(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Drafts';
+    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 ');
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -463,21 +489,58 @@ function respond_feed(): void
     global $config;
     global $data;
 
-    // Exclude pages with slugs
+    // Exclude pages with slugs and drafts
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' ORDER BY updated DESC LIMIT 20',
+            $clause['sql'] . ' AND draft != 1 ORDER BY updated DESC LIMIT 20',
             $clause['params']
         );
     } else {
-        $posts = R::findAll('post', ' ORDER BY updated DESC LIMIT 20 ');
+        $posts = R::findAll('post', ' draft != 1 ORDER BY updated DESC LIMIT 20 ');
     }
 
     $first_post = reset($posts);
     $data['updated'] = $first_post['updated'] ?? date('Y-m-d H:i:s');
     $data['title'] = $config['site_title'];
+    $data['feed_url'] = ROOT_URL . '/feed';
+
+    $data['posts'] = $posts;
+    upgrade_posts($posts);
+
+    part("feed", '');
+    die();
+}
+
+/**
+ * Responds to a tag feed request by rendering an Atom feed for posts with a specific tag.
+ *
+ * @param array $args An array where the first element is the tag name.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_tag_feed(array $args): void
+{
+    global $config;
+    global $data;
+
+    [$tag] = $args;
+    $tag = urldecode($tag);
+    $tag = htmlspecialchars($tag);
+
+    $all_posts = posts_by_tag($tag);
+
+    // Sort by updated DESC and limit to 20
+    $posts = array_values($all_posts);
+    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
+    $posts = array_slice($posts, 0, 20);
+
+    $first_post = reset($posts);
+    $data['updated'] = $first_post ? $first_post->updated : date('Y-m-d H:i:s');
+    $data['title'] = $config['site_title'] . ' — #' . $tag;
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
 
     $data['posts'] = $posts;
     upgrade_posts($posts);
@@ -498,7 +561,7 @@ function respond_feed(): void
 function respond_post(array $args): array
 {
     [$slug] = $args;
-    $data['posts'] = [R::findOne('post', ' slug = ? ', [$slug])];
+    $data['posts'] = [R::findOne('post', ' slug = ? AND draft != 1 ', [$slug])];
 
     upgrade_posts($data['posts']);
 
@@ -569,7 +632,7 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = implode(' AND ', $where_clauses);
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND draft != 1';
 
     // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
@@ -649,6 +712,7 @@ function respond_tag(array $args): array
     $paginated = paginate_posts($all_posts);
 
     $data['title'] = 'Tagged with #' . $tag;
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
     $pagination = $paginated['pagination'];
     return get_results(
         $pagination['total_posts'],

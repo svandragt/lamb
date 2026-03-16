@@ -44,6 +44,9 @@ function get_default_ini_text(): string
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
 
+;; When set to true, feed-ingested posts are saved as drafts for editorial review before publishing.
+;feeds_draft = false
+
 [preconnect]
 ;; List external origins to preconnect to, improving load time for external resources.
 ;; Each item is in the format of <label>=<origin>.

@@ -98,6 +98,10 @@ function parse_bean(OODBBean $bean): void
             $bean->$key = $value;
         }
     }
+
+    // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
+    // This ensures removing "draft: true" from frontmatter publishes the post on next save.
+    $bean->draft = !empty($front_matter['draft']) ? 1 : 0;
 }
 
 /**
