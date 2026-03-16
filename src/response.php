@@ -24,8 +24,65 @@ use const ROOT_DIR;
 
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 
+// IMAGE_FILES is defined in constants.php
 
-const IMAGE_FILES = 'imageFiles';
+/**
+ * Returns cookie options with the given expiry timestamp.
+ *
+ * @param int $expires Unix timestamp for cookie expiry.
+ * @return array Cookie options array.
+ */
+function get_cookie_options(int $expires): array
+{
+    return [
+        'expires'  => $expires,
+        'path'     => '/',
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ];
+}
+
+/**
+ * Builds a SQL NOT IN clause for excluding posts by slug.
+ *
+ * @param array $slugs Slugs to exclude.
+ * @return array{sql: string, params: array}|null Clause and params, or null when list is empty.
+ */
+function build_exclude_slugs_clause(array $slugs): ?array
+{
+    if (empty($slugs)) {
+        return null;
+    }
+    $slots = implode(', ', array_fill(0, count($slugs), '?'));
+    return [
+        'sql'    => " slug NOT IN ($slots) ",
+        'params' => $slugs,
+    ];
+}
+
+/**
+ * Builds the pagination metadata array from pre-computed values.
+ *
+ * @param int $page         Current page number (1-based).
+ * @param int $per_page     Items per page.
+ * @param int $total_posts  Total number of matching posts.
+ * @param int $offset       Row offset for the current page.
+ * @return array
+ */
+function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
+{
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    return [
+        'current'     => $page,
+        'per_page'    => $per_page,
+        'total_posts' => $total_posts,
+        'total_pages' => $total_pages,
+        'prev_page'   => $page > 1 ? $page - 1 : null,
+        'next_page'   => $page < $total_pages ? $page + 1 : null,
+        'offset'      => $offset,
+    ];
+}
 /**
  * Redirects the user to a 404 page with the provided fallback URL.
  *
@@ -91,7 +148,7 @@ function redirect_created(): ?array
     }
 
     $bean = populate_bean($contents);
-    if (is_null($bean)) {
+    if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
         return null;
     }
@@ -210,12 +267,12 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
-    $exclude_slugs = Config\get_menu_slugs();
     $where_parts = [' draft != 1 '];
     $where_params = [];
-    if (!empty($exclude_slugs)) {
-        $where_parts[] = sprintf(' slug NOT IN (%s) ', R::genSlots($exclude_slugs));
-        $where_params = $exclude_slugs;
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
+        $where_parts[] = $clause['sql'];
+        $where_params = $clause['params'];
     }
     $paginated = paginate_posts(
         'post',
@@ -289,13 +346,7 @@ function redirect_login(): ?array
     session_regenerate_id(true);
 
     $uuid = bin2hex(random_bytes(16)); // Generate a UUID
-    setcookie('lamb_logged_in', $uuid, [
-        'expires' => time() + 3600, // Expires in 1 hour
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', $uuid, get_cookie_options(time() + 3600));
     $where = filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL);
     redirect_uri($where);
 }
@@ -310,13 +361,7 @@ function redirect_logout(): void
 {
     unset($_SESSION[SESSION_LOGIN]);
 
-    setcookie('lamb_logged_in', '', [
-        'expires' => time() - 3600, // Set to the past to delete the cookie
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', '', get_cookie_options(time() - 3600));
 
     session_regenerate_id(true);
     redirect_uri('/');
@@ -445,12 +490,12 @@ function respond_feed(): void
     global $data;
 
     // Exclude pages with slugs and drafts
-    $exclude_slugs = Config\get_menu_slugs();
-    if (!empty($exclude_slugs)) {
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
         $posts = R::find(
             'post',
-            sprintf(' slug NOT IN (%s) AND draft != 1 ORDER BY updated DESC LIMIT 20', R::genSlots($exclude_slugs)),
-            $exclude_slugs
+            $clause['sql'] . ' AND draft != 1 ORDER BY updated DESC LIMIT 20',
+            $clause['params']
         );
     } else {
         $posts = R::findAll('post', ' draft != 1 ORDER BY updated DESC LIMIT 20 ');
@@ -762,11 +807,13 @@ function get_upload_dir(): string
  *
  * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
  */
-function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = []): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null): array
 {
-    // If caller did not provide per_page, read from global config (centralize default)
-    global $config;
-    $per_page = $config['posts_per_page'] ?? 10;
+    // Explicit $per_page avoids the global; fall back to config only when not provided.
+    if ($per_page === null) {
+        global $config;
+        $per_page = (int)($config['posts_per_page'] ?? 10);
+    }
 
     // determine page now (same behavior for all cases)
     $page = max(1, (int)($_GET['page'] ?? 1));
@@ -779,19 +826,9 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         $page = min($page, $total_pages);
         $offset = ($page - 1) * $per_page;
 
-        $items = array_slice($values, $offset, $per_page);
-
         return [
-            'items' => $items,
-            'pagination' => [
-                'current' => $page,
-                'per_page' => $per_page,
-                'total_posts' => $total_posts,
-                'total_pages' => $total_pages,
-                'prev_page' => $page > 1 ? $page - 1 : null,
-                'next_page' => $page < $total_pages ? $page + 1 : null,
-                'offset' => $offset,
-            ],
+            'items'      => array_slice($values, $offset, $per_page),
+            'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
         ];
     }
 
@@ -823,15 +860,7 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
     }
 
     return [
-        'items' => $items,
-        'pagination' => [
-            'current' => $page,
-            'per_page' => $per_page,
-            'total_posts' => $total_posts,
-            'total_pages' => $total_pages,
-            'prev_page' => $page > 1 ? $page - 1 : null,
-            'next_page' => $page < $total_pages ? $page + 1 : null,
-            'offset' => $offset,
-        ],
+        'items'      => $items,
+        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
     ];
 }

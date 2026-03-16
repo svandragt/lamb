@@ -165,11 +165,21 @@ Slugs are immutable once set (changing a slug would break URLs).
 
 Tests use **Codeception 5** with PHPUnit underneath.
 
-- **Unit** (`tests/Unit/`): pure PHP, no HTTP. Currently tests `Config\get_menu_slugs()`.
+- **Unit** (`tests/Unit/`): pure PHP, no HTTP.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
 Config in `codeception.yml` reads env from `.ddev/.env` and `.env`.
+
+### Red-Green TDD
+
+Always follow red-green TDD when adding or changing behaviour:
+
+1. **Write the test first** — it must fail (`vendor/bin/codecept run Unit`) before any implementation is written.
+2. **Write the minimum implementation** to make the test pass.
+3. **Run again** to confirm green.
+
+Never write implementation code before a failing test exists for it.
 
 ## Environment Setup
 

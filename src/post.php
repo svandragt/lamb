@@ -26,7 +26,7 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
 
     $matter = parse_matter($text);
 
-    if (is_null($bean)) {
+    if ($bean === null) {
         $bean = R::dispense('post');
     }
     $bean->body = $text;
@@ -93,6 +93,20 @@ function slugify(string $text): string
 }
 
 /**
+ * Returns SQL conditions and parameters for matching posts that contain the given tag.
+ *
+ * @param string $tag The tag to match.
+ * @return array{sql: string, params: array}
+ */
+function get_tag_search_conditions(string $tag): array
+{
+    return [
+        'sql'    => 'body LIKE ? OR body LIKE ? OR body LIKE ?',
+        'params' => ["%#$tag %", "%\n#$tag %", "%#$tag"],
+    ];
+}
+
+/**
  * Retrieves posts that contain the specified tag within their body content.
  *
  * @param string $tag The tag to search for within post content.
@@ -101,9 +115,10 @@ function slugify(string $text): string
  */
 function posts_by_tag(string $tag): array
 {
+    $conditions = get_tag_search_conditions($tag);
     return R::find(
         'post',
-        '(body LIKE ? OR body LIKE ? OR body LIKE ?) AND draft != 1 ORDER BY created DESC',
-        ["%#$tag %", "%\n#$tag %", "%#$tag"]
+        '(' . $conditions['sql'] . ') AND draft != 1 ORDER BY created DESC',
+        $conditions['params']
     );
 }

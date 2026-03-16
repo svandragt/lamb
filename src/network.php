@@ -9,11 +9,13 @@ use RedBeanPHP\RedException\SQL;
 use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
+use function Lamb\get_option;
 use function Lamb\Route\register_route;
 use function Lamb\Route\is_reserved_route;
 use function Lamb\Post\populate_bean;
+use function Lamb\set_option;
 
-const MINUTE_IN_SECONDS = 60;
+// MINUTE_IN_SECONDS is defined in constants.php
 
 register_route('_cron', __NAMESPACE__ . '\\process_feeds');
 
@@ -102,7 +104,7 @@ function prepare_item(SimplePieItem $item, string $name, OODBBean $bean = null):
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name, $bean);
-    if (is_null($bean)) {
+    if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to save post';
 
         return null;
@@ -115,7 +117,7 @@ function create_item(SimplePieItem $item, string $name)
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
-    if (is_null($bean)) {
+    if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to save post';
 
         return;
@@ -151,36 +153,6 @@ title: {$title}
 MATTER;
     }
     return $contents;
-}
-
-function get_option(string $key, $default_value): OODBBean
-{
-    $bean = R::findOneOrDispense('option', ' key = ? ', [$key]);
-    $bean->key = $key;
-    if ($bean->id === 0) {
-        $bean->value = $default_value;
-    }
-
-    return $bean;
-}
-
-/**
- * Sets an option in the given OODBBean object and stores it.
- *
- * @param OODBBean $bean The OODBBean instance where the option will be set.
- * @param mixed $value The value to set in the OODBBean.
- * @return void No value is returned.
- * @throws SQL Exception when option can't be stored.
- */
-function set_option(OODBBean $bean, $value): void
-{
-    $bean->value = $value;
-    try {
-        R::store($bean);
-    } catch (SQL $e) {
-        user_error($e->getMessage(), E_USER_ERROR);
-        return;
-    }
 }
 
 /**

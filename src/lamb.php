@@ -4,6 +4,7 @@ namespace Lamb;
 
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\parse_matter;
 
@@ -104,6 +105,42 @@ function parse_bean(OODBBean $bean): void
 }
 
 /**
+ * Retrieves a named option bean from the database, dispensing a new one with the
+ * given default value when the key does not yet exist.
+ *
+ * @param string $name          The option name (key).
+ * @param mixed  $default_value Value to use when the option does not exist.
+ * @return OODBBean             Existing or freshly dispensed (unsaved) bean.
+ */
+function get_option(string $name, mixed $default_value): OODBBean
+{
+    $bean = R::findOneOrDispense('option', ' name = ? ', [$name]);
+    $bean->name = $name;
+    if ($bean->id === 0) {
+        $bean->value = $default_value;
+    }
+
+    return $bean;
+}
+
+/**
+ * Persists the given value into an option bean.
+ *
+ * @param OODBBean $bean  The option bean to update.
+ * @param mixed    $value New value to store.
+ * @return void
+ */
+function set_option(OODBBean $bean, mixed $value): void
+{
+    $bean->value = $value;
+    try {
+        R::store($bean);
+    } catch (SQL $e) {
+        user_error($e->getMessage(), E_USER_ERROR);
+    }
+}
+
+/**
  * Checks if a post with the given slug exists in the database.
  *
  * @param string $lookup The slug of the post to look up.
@@ -113,7 +150,7 @@ function parse_bean(OODBBean $bean): void
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if (is_null($post) || $post->id === 0) {
+    if ($post === null || $post->id === 0) {
         return '';
     }
 

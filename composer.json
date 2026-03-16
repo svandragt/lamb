@@ -59,6 +59,8 @@
       "php -S 0.0.0.0:8747 -t src"
     ],
     "serve:caddy": "sudo caddy run",
-    "serve:nginx": "sudo systemctl nginx start"
+    "serve:nginx": "sudo systemctl nginx start",
+    "test": "vendor/bin/codecept run",
+    "e2e": "pnpm exec playwright test"
   }
 }

@@ -2,10 +2,17 @@
   "$schema": "https://raw.githubusercontent.com/jetpack-io/devbox/0.10.1/.schema/devbox.schema.json",
   "packages": [
     "php@8.2",
-    "php82Extensions.xdebug@latest"
+    "php82Extensions.xdebug@latest",
+    "nodejs@24"
   ],
+  "env": {
+    "DEVBOX_COREPACK_ENABLED":  "true"
+
+  },
   "shell": {
     "init_hook": [
+      "composer install",
+      "pnpm install"
     ],
     "scripts": {
       "test": [

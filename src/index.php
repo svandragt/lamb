@@ -8,18 +8,14 @@ global $template, $action;
 define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
+require __DIR__ . '/constants.php';
 
 Bootstrap\bootstrap_db('../data');
 Bootstrap\bootstrap_session();
 
 $config = Config\load();
 
-define('HIDDEN_CSRF_NAME', 'csrf');
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
-define('SESSION_LOGIN', 'logged_in');
-define('SUBMIT_CREATE', 'Create post');
-define('SUBMIT_EDIT', 'Update post');
-define('SUBMIT_LOGIN', 'Log in');
 define("THEME", $config['theme'] ?? 'default');
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
