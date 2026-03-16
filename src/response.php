@@ -211,16 +211,37 @@ function respond_home(): array
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
     $exclude_slugs = Config\get_menu_slugs();
+    $where_parts = [' draft != 1 '];
+    $where_params = [];
     if (!empty($exclude_slugs)) {
-        $paginated = paginate_posts(
-            'post',
-            'created DESC',
-            sprintf(' slug NOT IN (%s) ', R::genSlots($exclude_slugs)),
-            $exclude_slugs
-        );
-    } else {
-        $paginated = paginate_posts('post');
+        $where_parts[] = sprintf(' slug NOT IN (%s) ', R::genSlots($exclude_slugs));
+        $where_params = $exclude_slugs;
     }
+    $paginated = paginate_posts(
+        'post',
+        'created DESC',
+        implode(' AND ', $where_parts),
+        $where_params
+    );
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
+ * Responds with the drafts page showing all draft posts (login required).
+ *
+ * @return array The drafts page data including posts and pagination.
+ */
+function respond_drafts(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Drafts';
+    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 ');
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -423,16 +444,16 @@ function respond_feed(): void
     global $config;
     global $data;
 
-    // Exclude pages with slugs
+    // Exclude pages with slugs and drafts
     $exclude_slugs = Config\get_menu_slugs();
     if (!empty($exclude_slugs)) {
         $posts = R::find(
             'post',
-            sprintf(' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots($exclude_slugs)),
+            sprintf(' slug NOT IN (%s) AND draft != 1 ORDER BY updated DESC LIMIT 20', R::genSlots($exclude_slugs)),
             $exclude_slugs
         );
     } else {
-        $posts = R::findAll('post', ' ORDER BY updated DESC LIMIT 20 ');
+        $posts = R::findAll('post', ' draft != 1 ORDER BY updated DESC LIMIT 20 ');
     }
 
     $first_post = reset($posts);
@@ -458,7 +479,7 @@ function respond_feed(): void
 function respond_post(array $args): array
 {
     [$slug] = $args;
-    $data['posts'] = [R::findOne('post', ' slug = ? ', [$slug])];
+    $data['posts'] = [R::findOne('post', ' slug = ? AND draft != 1 ', [$slug])];
 
     upgrade_posts($data['posts']);
 
@@ -529,7 +550,7 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = implode(' AND ', $where_clauses);
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND draft != 1';
 
     // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);

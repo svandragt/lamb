@@ -40,6 +40,9 @@ function get_default_ini_text(): string
 ;; Each item is in the format of <name>=<url>  where URL is a link to an RSS or Atom feed.
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
+
+;; When set to true, feed-ingested posts are saved as drafts for editorial review before publishing.
+;feeds_draft = false
 INI;
 }
 

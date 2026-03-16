@@ -37,6 +37,7 @@ $request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 Route\register_route(false, __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('delete', __NAMESPACE__ . '\\Response\redirect_deleted', $lookup);
+Route\register_route('drafts', __NAMESPACE__ . '\\Response\respond_drafts');
 Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
 Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');
 Route\register_route('home', __NAMESPACE__ . '\\Response\respond_home');
