@@ -61,6 +61,10 @@
     "serve:caddy": "sudo caddy run",
     "serve:nginx": "sudo systemctl nginx start",
     "test": "vendor/bin/codecept run",
+    "coverage": [
+      "vendor/bin/codecept run Unit --coverage-xml",
+      "php check-coverage.php tests/_output/coverage.xml 80"
+    ],
     "e2e": "pnpm exec playwright test"
   }
 }
