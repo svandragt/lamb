@@ -17,3 +17,9 @@ modules:
 params:
   - .ddev/.env
   - .env
+coverage:
+  enabled: true
+  include:
+    - src/*.php
+  exclude:
+    - src/index.php

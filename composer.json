@@ -33,6 +33,7 @@
       "Lamb\\": "src/"
     },
     "files": [
+      "src/constants.php",
       "src/bootstrap.php",
       "src/config.php",
       "src/http.php",
@@ -61,6 +62,10 @@
     "serve:caddy": "sudo caddy run",
     "serve:nginx": "sudo systemctl nginx start",
     "test": "vendor/bin/codecept run",
+    "coverage": [
+      "vendor/bin/codecept run Unit --coverage-xml",
+      "php check-coverage.php tests/_output/coverage.xml 40"
+    ],
     "e2e": "pnpm exec playwright test"
   }
 }
