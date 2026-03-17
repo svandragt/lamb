@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Security\get_login_url;
 use function Lamb\Security\require_csrf;
 use function Lamb\Security\require_login;
 
@@ -23,6 +24,23 @@ class SecurityTest extends TestCase
         require_login();
         // No redirect — we get here only if the if-branch was skipped
         $this->assertTrue(isset($_SESSION[SESSION_LOGIN]));
+    }
+
+    // get_login_url
+
+    public function testGetLoginUrlWithNoUriReturnsLoginPath(): void
+    {
+        $this->assertSame('/login', get_login_url(''));
+    }
+
+    public function testGetLoginUrlWithUriAppendsRedirectTo(): void
+    {
+        $this->assertSame('/login?redirect_to=%2Fdrafts', get_login_url('/drafts'));
+    }
+
+    public function testGetLoginUrlEncodesSpecialCharacters(): void
+    {
+        $this->assertSame('/login?redirect_to=%2Ftag%2Ffoo+bar', get_login_url('/tag/foo bar'));
     }
 
     // require_csrf

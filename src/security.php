@@ -24,11 +24,19 @@ use    Lamb\Response;
  *
  * If the user is not logged in, a flash message "Please login" is added to the session and the user is redirected to the login page.
  */
+function get_login_url(string $current_uri): string
+{
+    if (empty($current_uri)) {
+        return '/login';
+    }
+    return '/login?redirect_to=' . urlencode($current_uri);
+}
+
 function require_login(): void
 {
     if (! isset($_SESSION[SESSION_LOGIN])) {
         $_SESSION['flash'][] = "Please login";
-        Response\redirect_uri("/login");
+        Response\redirect_uri(get_login_url($_SERVER['REQUEST_URI'] ?? ''));
     }
 }
 
