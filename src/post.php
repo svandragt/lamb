@@ -47,6 +47,7 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
     }
 
     parse_bean($bean);
+    $bean->version = 1;
 
     // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
     // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
