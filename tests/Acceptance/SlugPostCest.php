@@ -10,7 +10,7 @@ class SlugPostCest
     {
         // Log in
         $I->amOnPage('/login');
-        $I->fillField('password', 'hackme');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
         $I->click('Log in');
 
         // Create a post with a title (which generates a slug)
