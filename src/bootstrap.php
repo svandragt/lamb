@@ -21,6 +21,11 @@ function bootstrap_db(string $data_dir): void
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
     R::useWriterCache(true);
+
+    // One-time migration: mark pre-versioning posts as version 1.
+    // transformed is already populated for these posts (parse_bean ran at creation/edit time);
+    // we only need to stamp the version column so upgrade_posts() never writes them again.
+    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
 }
 
 /**
@@ -37,21 +42,30 @@ function bootstrap_session(): void
 {
     // Make cookies inaccessible via JavaScript (XSS).
     ini_set("session.cookie_httponly", 1);
-    ini_set("session.cookie_secure", 1);
+    $secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
+    ini_set("session.cookie_secure", $secure ? 1 : 0);
     ini_set("session.use_strict_mode", 1);
 
     // Prevent the browser from sending cookies along with cross-site requests (CSRF)
-    session_set_cookie_params(['samesite' => 'Strict']); // or 'Lax'
+    $cookie_params = [
+        'samesite' => 'Strict',
+        'path' => '/',
+        'httponly' => true,
+    ];
+    if ($secure) {
+        $cookie_params['secure'] = true;
+    }
+    session_set_cookie_params($cookie_params);
     session_name('LAMBSESSID');
     session_start();
 
     // Validate user agents
     if (isset($_SESSION['HTTP_USER_AGENT'])) {
-        if ($_SESSION['HTTP_USER_AGENT'] !== md5($_SERVER['HTTP_USER_AGENT'])) {
+        if (isset($_SERVER['HTTP_USER_AGENT']) && $_SESSION['HTTP_USER_AGENT'] !== md5($_SERVER['HTTP_USER_AGENT'])) {
             /* Possible session hijacking attempt */
             exit("Security fail");
         }
     } else {
-        $_SESSION['HTTP_USER_AGENT'] = md5($_SERVER['HTTP_USER_AGENT']);
+        $_SESSION['HTTP_USER_AGENT'] = md5($_SERVER['HTTP_USER_AGENT'] ?? '');
     }
 }

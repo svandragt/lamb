@@ -1,0 +1,10 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="Debug Localhost" type="PhpBuiltInWebServerConfigurationType" factoryName="PHP Built-in Web Server" document_root="$PROJECT_DIR$/src/" port="8747">
+    <CommandLine workingDirectory="$PROJECT_DIR$/src/">
+      <envs>
+        <env name="LAMB_LOGIN_PASSWORD" value="JDJ5JDEwJFhTWlFmbEtyNkNhQnBwYmZoaDlINnVCSEpySlhZWEhXS2J6aXQ4OXpIZzlnY1FqcHo0Y1dp%" />
+      </envs>
+    </CommandLine>
+    <method v="2" />
+  </configuration>
+</component>

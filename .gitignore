@@ -4,8 +4,18 @@
 /src/assets/
 /vendor/
 /src/config.ini
+/todos.md
 
 # Ignore custom themes by default
 /src/themes/
 !/src/themes/2024
 !/src/themes/default
+.env
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

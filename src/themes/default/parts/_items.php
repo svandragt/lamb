@@ -18,9 +18,16 @@ else :
         endif;
         ?>
         <article>
+            <header>
+                <?php if (!empty($bean->title)) : ?>
+                <h2><?= $bean->title ?></h2>
+                <?php endif; ?>
+                <small><?= date_created($bean) ?><?= link_source($bean) ?></small>
+            </header>
             <?= $bean->transformed ?>
-
-            <small><?= date_created($bean) ?><?= link_source($bean) ?> <?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+            <footer>
+                <small><?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+            </footer>
         </article>
         <?php
     endforeach;

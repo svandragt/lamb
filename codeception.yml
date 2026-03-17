@@ -15,5 +15,10 @@ modules:
     PhpBrowser:
       url: "%SITE_URL%"
 params:
-  - .ddev/.env
   - .env
+coverage:
+  enabled: true
+  include:
+    - src/*.php
+  exclude:
+    - src/index.php

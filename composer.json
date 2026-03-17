@@ -26,13 +26,15 @@
     "phpcompatibility/php-compatibility": "^9.3",
     "roave/security-advisories": "dev-latest",
     "squizlabs/php_codesniffer": "^3.10",
-    "vlucas/phpdotenv": "^5.6"
+    "vlucas/phpdotenv": "^5.6",
+    "symfony/process": "^7.4"
   },
   "autoload": {
     "psr-4": {
       "Lamb\\": "src/"
     },
     "files": [
+      "src/constants.php",
       "src/bootstrap.php",
       "src/config.php",
       "src/http.php",
@@ -59,6 +61,12 @@
       "php -S 0.0.0.0:8747 -t src"
     ],
     "serve:caddy": "sudo caddy run",
-    "serve:nginx": "sudo systemctl nginx start"
+    "serve:nginx": "sudo systemctl nginx start",
+    "test": "vendor/bin/codecept run",
+    "coverage": [
+      "vendor/bin/codecept run Unit --coverage-xml",
+      "php check-coverage.php tests/_output/coverage.xml 40"
+    ],
+    "e2e": "pnpm exec playwright test"
   }
 }

@@ -5,10 +5,12 @@ use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\part;
 use function Lamb\Theme\site_or_page_title;
 use function Lamb\Theme\the_opengraph;
+use function Lamb\Theme\the_preconnect;
 use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
 
 global $config;
+global $data;
 global $template;
 ?>
 <!DOCTYPE html>
@@ -21,6 +23,12 @@ global $template;
     <title><?= escape(site_or_page_title('text')) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape($config['site_title']) ?>">
+    <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>
+    <link rel="alternate" type="application/atom+xml" href="<?= escape($data['feed_url']) ?>"
+          title="<?= escape($data['title'] ?? $config['site_title']) ?>">
+    <?php endif; ?>
+    <?php
+    the_preconnect(); ?>
     <?php
     the_styles(); ?>
     <?php
@@ -42,6 +50,7 @@ global $template;
                 <a href="/login">Login</a>
                 <?php
             else : ?>
+                <a href="/settings">Settings</a>
                 <a href="/logout">Logout</a>
                 <?php
             endif; ?>
@@ -63,7 +72,9 @@ global $template;
     </main>
 </div>
 <?php
-part("_related"); ?>
+part("_related");
+part("_pagination");
+?>
 <footer>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>

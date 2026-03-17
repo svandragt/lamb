@@ -2,9 +2,8 @@
 <module type="WEB_MODULE" version="4">
   <component name="NewModuleRootManager">
     <content url="file://$MODULE_DIR$">
-      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/src/Composer" isTestSource="false" packagePrefix="Composer\" />
-      <sourceFolder url="file://$MODULE_DIR$/.devbox/nix/profile/default/share/php/composer/tests/Composer/Test" isTestSource="true" packagePrefix="Composer\Test\" />
       <sourceFolder url="file://$MODULE_DIR$/src" isTestSource="false" packagePrefix="Lamb\" />
+      <sourceFolder url="file://$MODULE_DIR$/tests" isTestSource="true" />
       <excludeFolder url="file://$MODULE_DIR$/.idea/dataSources" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/composer" />
       <excludeFolder url="file://$MODULE_DIR$/vendor/erusev/parsedown" />

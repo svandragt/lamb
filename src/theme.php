@@ -14,6 +14,7 @@ use RuntimeException;
 use function Lamb\get_tags;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\Post\get_tag_search_conditions;
 
 function action_delete(OODBBean $bean): string
 {
@@ -121,9 +122,8 @@ function get_posts_by_tags($tags): array
 {
     $related_posts = [];
     foreach ($tags as $tag) {
-        $sql_query = 'body LIKE ? OR body LIKE ? ORDER BY created DESC';
-        $params = ["% #$tag%", "%\n#$tag%"];
-        $tag_posts = R::find('post', $sql_query, $params);
+        $conditions = get_tag_search_conditions($tag);
+        $tag_posts = R::find('post', $conditions['sql'] . ' ORDER BY created DESC', $conditions['params']);
         foreach ($tag_posts as $tag_post) {
             $related_posts[] = $tag_post;
         }
@@ -176,6 +176,18 @@ function the_opengraph(): void
     }
 }
 
+function the_preconnect(): void
+{
+    global $config;
+    if (empty($config['preconnect'])) {
+        return;
+    }
+    foreach ($config['preconnect'] as $origin) {
+        printf('<link rel="preconnect" href="%s">' . PHP_EOL, escape($origin));
+        printf('<link rel="dns-prefetch" href="%s">' . PHP_EOL, escape($origin));
+    }
+}
+
 function the_styles(): void
 {
     $styles = [
@@ -183,7 +195,7 @@ function the_styles(): void
     ];
     $assets = asset_loader($styles, THEME_URL . 'styles');
     foreach ($assets as $id => $href) {
-        printf("<link rel='stylesheet' id='%s' href='%s'>", $id, $href);
+        printf('<link rel="stylesheet" id="%1$s" href="%2$s?%1$s" />' . PHP_EOL, $id, $href);
     }
 }
 
@@ -199,7 +211,16 @@ function the_scripts(): void
     }
 }
 
-function asset_loader($assets, $asset_dir): Generator
+/**
+ * Loads and yields asset URLs for the application.
+ *
+ * @param array $assets An associative array where keys represent directory names
+ *                       and values are arrays of filenames to be loaded.
+ * @param string $asset_dir The base directory for the assets.
+ * @return Generator A generator that yields a hash (md5) of the asset URL as the key
+ *                   and the complete asset URL as the value.
+ */
+function asset_loader(array $assets, string $asset_dir): Generator
 {
     foreach ($assets as $dir => $files) {
         foreach ($files as $file) {
@@ -226,17 +247,37 @@ function link_source(OODBBean $bean): string
 }
 
 /**
+ * Returns a human-readable date string for a past timestamp (j > 2).
+ *
+ * @param int $j         Period index after the time-difference loop.
+ * @param int $difference Rounded number of periods elapsed.
+ * @param int $timestamp  Original Unix timestamp.
+ * @return string
+ */
+function format_past_date(int $j, int $difference, int $timestamp): string
+{
+    switch (true) {
+        case $j === 3 && $difference === 1:
+            return "Yesterday at " . date("g:i a", $timestamp);
+        case $j === 3:
+            return date("l \a\\t g:i a", $timestamp);
+        case $j < 6 && !($j === 5 && $difference === 12):
+            return date("F j \a\\t g:i a", $timestamp);
+        default:
+            return date("F j, Y \a\\t g:i a", $timestamp);
+    }
+}
+
+/**
  * Thanks to Rose Perrone
  * @link https://stackoverflow.com/a/11813996
  */
 function human_time($timestamp): string
 {
-    // Get time difference and setup arrays
     $difference = time() - $timestamp;
     $periods = ["second", "minute", "hour", "day", "week", "month", "years"];
     $lengths = ["60", "60", "24", "7", "4.35", "12"];
 
-    // Past or present
     if ($difference >= 0) {
         $ending = "ago";
     } else {
@@ -244,50 +285,29 @@ function human_time($timestamp): string
         $ending = "to go";
     }
 
-    // Figure out difference by looping while less than array length
-    // and difference is larger than lengths.
     $arr_len = count($lengths);
     for ($j = 0; $j < $arr_len && $difference >= $lengths[$j]; $j++) {
         $difference /= $lengths[$j];
     }
 
-    // Round up
     $difference = (int)round($difference);
 
-    // Make plural if needed
     if ($difference !== 1) {
         $periods[$j] .= "s";
     }
 
-    // Default format
-    $text = "$difference $periods[$j] $ending";
-
-    // over 24 hours
-    if ($j > 2) {
-        // future date over a day format with year
-        if ($ending === "to go") {
-            if ($j === 3 && $difference === 1) {
-                $text = "Tomorrow at " . date("g:i a", $timestamp);
-            } else {
-                $text = date("F j, Y \a\\t g:i a", $timestamp);
-            }
-
-            return $text;
-        }
-
-        if ($j === 3 && $difference === 1) { // Yesterday
-            $text = "Yesterday at " . date("g:i a", $timestamp);
-        } elseif ($j === 3) { // Less than a week display -- Monday at 5:28pm
-            $text = date("l \a\\t g:i a", $timestamp);
-        } elseif ($j < 6 && !($j === 5 && $difference === 12)) { // Less than a year display -- June 25 at 5:23am
-            $text = date("F j \a\\t g:i a", $timestamp);
-        } else // if over a year or the same month one year ago -- June 30, 2010 at 5:34pm
-        {
-            $text = date("F j, Y \a\\t g:i a", $timestamp);
-        }
+    if ($j <= 2) {
+        return "$difference $periods[$j] $ending";
     }
 
-    return $text;
+    if ($ending === "to go") {
+        if ($j === 3 && $difference === 1) {
+            return "Tomorrow at " . date("g:i a", $timestamp);
+        }
+        return date("F j, Y \a\\t g:i a", $timestamp);
+    }
+
+    return format_past_date($j, $difference, $timestamp);
 }
 
 function redirect_to(): string
@@ -308,10 +328,13 @@ function og_escape(string $html): string
 function part(string $name, string $dir = 'parts'): void
 {
     $name = sanitize_filename($name);
-    $filename = THEME_DIR . "$dir/$name.php";
+    if (!empty($dir)) {
+        $dir = sanitize_filename($dir) . '/';
+    }
+    $filename = THEME_DIR . "$dir$name.php";
     if (!is_readable($filename)) {
         // Fallback to default
-        $filename = __DIR__ . "/themes/default/$dir/$name.php";
+        $filename = __DIR__ . "/themes/default/$dir$name.php";
     }
     if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);
@@ -324,12 +347,16 @@ function li_menu_items(): string
 {
     global $config;
     $items = [];
-    $format = '<li><a href="%s/%s">%s</a></li>';
+    $format = '<li><a href="%s">%s</a></li>';
     if (empty($config['menu_items'])) {
         return '';
     }
-    foreach ($config['menu_items'] as $label => $slug) {
-        $items[] = sprintf($format, ROOT_URL, escape($slug), escape($label));
+    foreach ($config['menu_items'] as $label => $url) {
+        if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
+            $items[] = sprintf($format, escape($url), escape($label));
+        } else {
+            $items[] = sprintf($format, ROOT_URL . '/' . escape($url), escape($label));
+        }
     }
 
     return implode(PHP_EOL, $items);
@@ -343,16 +370,23 @@ function sanitize_filename($filename): string
     return (string)$filename;
 }
 
+function preload_text(): string
+{
+    return htmlspecialchars($_GET['text'] ?? '', ENT_QUOTES, 'UTF-8');
+}
+
 function the_entry_form(): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>
-        <form id="entry" method="post" action="/" enctype="multipart/form-data">
-            <label>
-                <textarea placeholder="What's happening?" name="contents" required></textarea>
-            </label>
-            <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
-            <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
-        </form>
+        <section class="entry-form">
+            <form id="entry" method="post" action="/" enctype="multipart/form-data">
+                <label>
+                    <textarea placeholder="What's happening?" name="contents" required><?= preload_text() ?></textarea>
+                </label>
+                <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
+                <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
+            </form>
+        </section>
         <?php
     endif;
 }

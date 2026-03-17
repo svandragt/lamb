@@ -4,26 +4,85 @@
 
 namespace Lamb\Response;
 
+use Exception;
 use JetBrains\PhpStorm\NoReturn;
 use JsonException;
+use Lamb\Config;
 use Lamb\Security;
+use Random\RandomException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use RuntimeException;
 
 use function Lamb\parse_bean;
+use function Lamb\Post\populate_bean;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
-use function Lamb\Post\parse_matter;
-use function Lamb\Post\populate_bean;
 use function Lamb\Theme\part;
 
 use const ROOT_DIR;
 
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
 
+// IMAGE_FILES is defined in constants.php
 
-const IMAGE_FILES = 'imageFiles';
+/**
+ * Returns cookie options with the given expiry timestamp.
+ *
+ * @param int $expires Unix timestamp for cookie expiry.
+ * @return array Cookie options array.
+ */
+function get_cookie_options(int $expires): array
+{
+    return [
+        'expires'  => $expires,
+        'path'     => '/',
+        'secure'   => true,
+        'httponly' => true,
+        'samesite' => 'Strict',
+    ];
+}
+
+/**
+ * Builds a SQL NOT IN clause for excluding posts by slug.
+ *
+ * @param array $slugs Slugs to exclude.
+ * @return array{sql: string, params: array}|null Clause and params, or null when list is empty.
+ */
+function build_exclude_slugs_clause(array $slugs): ?array
+{
+    if (empty($slugs)) {
+        return null;
+    }
+    $slots = implode(', ', array_fill(0, count($slugs), '?'));
+    return [
+        'sql'    => " slug NOT IN ($slots) ",
+        'params' => $slugs,
+    ];
+}
+
+/**
+ * Builds the pagination metadata array from pre-computed values.
+ *
+ * @param int $page         Current page number (1-based).
+ * @param int $per_page     Items per page.
+ * @param int $total_posts  Total number of matching posts.
+ * @param int $offset       Row offset for the current page.
+ * @return array
+ */
+function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
+{
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    return [
+        'current'     => $page,
+        'per_page'    => $per_page,
+        'total_posts' => $total_posts,
+        'total_pages' => $total_pages,
+        'prev_page'   => $page > 1 ? $page - 1 : null,
+        'next_page'   => $page < $total_pages ? $page + 1 : null,
+        'offset'      => $offset,
+    ];
+}
 /**
  * Redirects the user to a 404 page with the provided fallback URL.
  *
@@ -83,13 +142,13 @@ function redirect_created(): ?array
     if ($_POST['submit'] !== SUBMIT_CREATE) {
         return null;
     }
-    $contents = trim(htmlspecialchars($_POST['contents'] ?? ''));
+    $contents = trim($_POST['contents'] ?? '');
     if (empty($contents)) {
         return null;
     }
 
     $bean = populate_bean($contents);
-    if (is_null($bean)) {
+    if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
         return null;
     }
@@ -116,7 +175,7 @@ function redirect_created(): ?array
  * @return void
  */
 #[NoReturn]
-function redirect_deleted($args): void
+function redirect_deleted(mixed $args): void
 {
     if (empty($_POST)) {
         redirect_uri('/');
@@ -158,6 +217,7 @@ function redirect_edited(): void
     $bean->body = $contents;
 
     parse_bean($bean);
+    $bean->version = 1;
     $bean->updated = date("Y-m-d H:i:s");
 
     if (is_reserved_route($bean->slug)) {
@@ -184,13 +244,68 @@ function redirect_edited(): void
  * @return void
  */
 #[NoReturn]
-function redirect_uri($where): void
+function redirect_uri(string $where): void
 {
     if (empty($where)) {
         $where = '/';
     }
     header("Location: $where");
     die("Redirecting to $where");
+}
+
+/**
+ * Retrieves and prepares the homepage data, including paginated posts and site title.
+ *
+ * @return array The prepared homepage data, including posts, pagination details, and the site title.
+ */
+function respond_home(): array
+{
+    global $config;
+    if (!empty($_POST)) {
+        redirect_created();
+    }
+
+    $data['title'] = $config['site_title'];
+
+    // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
+    $where_parts = [' (draft IS NULL OR draft != 1) '];
+    $where_params = [];
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
+        $where_parts[] = $clause['sql'];
+        $where_params = $clause['params'];
+    }
+    $paginated = paginate_posts(
+        'post',
+        'created DESC',
+        implode(' AND ', $where_parts),
+        $where_params
+    );
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
+ * Responds with the drafts page showing all draft posts (login required).
+ *
+ * @return array The drafts page data including posts and pagination.
+ */
+function respond_drafts(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Drafts';
+    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 ');
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
 }
 
 /**
@@ -202,6 +317,7 @@ function redirect_uri($where): void
  * If the login is successful, it sets the SESSION_LOGIN session variable to true, regenerates the session ID, and redirects to the specified URL.
  *
  * @return array|null
+ * @throws RandomException
  */
 function redirect_login(): ?array
 {
@@ -216,7 +332,7 @@ function redirect_login(): ?array
         redirect_uri('/');
     }
     if (!isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
-        // Show login page by returning a non empty array.
+        // Show login page by returning a non-empty array.
         return [];
     }
     Security\require_csrf();
@@ -231,13 +347,7 @@ function redirect_login(): ?array
     session_regenerate_id(true);
 
     $uuid = bin2hex(random_bytes(16)); // Generate a UUID
-    setcookie('lamb_logged_in', $uuid, [
-        'expires' => time() + 3600, // Expires in 1 hour
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', $uuid, get_cookie_options(time() + 3600));
     $where = filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL);
     redirect_uri($where);
 }
@@ -252,13 +362,7 @@ function redirect_logout(): void
 {
     unset($_SESSION[SESSION_LOGIN]);
 
-    setcookie('lamb_logged_in', '', [
-        'expires' => time() - 3600, // Set to the past to delete the cookie
-        'path' => '/',
-        'secure' => true, // Ensure the cookie is sent over HTTPS
-        'httponly' => true, // Prevent JavaScript access
-        'samesite' => 'Strict', // Limit cross-site behavior
-    ]);
+    setcookie('lamb_logged_in', '', get_cookie_options(time() - 3600));
 
     session_regenerate_id(true);
     redirect_uri('/');
@@ -272,13 +376,57 @@ function redirect_logout(): void
  * @return void
  */
 #[NoReturn]
-function redirect_search($query): void
+function redirect_search(string $query): void
 {
     header("Location: /search/$query");
     die("Redirecting to /search/$query");
 }
 
 # Single
+/**
+ * Handles the settings page logic, including displaying, validating, and saving settings.
+ *
+ * @return array An array containing the page title and the current or updated INI configuration text.
+ * @throws Exception
+ */
+function respond_settings(): array
+{
+    Security\require_login();
+
+    $data = [
+        'title' => 'Settings',
+        'ini_text' => Config\get_ini_text(),
+    ];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        Security\require_csrf();
+
+        if (isset($_POST['action']) && $_POST['action'] === 'reset') {
+            $default_ini = Config\get_default_ini_text();
+            Config\save_ini_text($default_ini);
+            $_SESSION['flash'][] = "Settings reset to defaults.";
+            redirect_uri('/settings');
+        }
+
+        $submitted_ini = $_POST['ini_text'] ?? '';
+        $validation = Config\validate_ini($submitted_ini);
+
+        if ($validation['valid']) {
+            Config\save_ini_text($submitted_ini);
+            $_SESSION['flash'][] = "Settings saved successfully.";
+            redirect_uri('/settings');
+        } else {
+            $_SESSION['flash'][] = "Invalid INI syntax. Your changes were not saved.";
+            if ($validation['error']) {
+                $_SESSION['flash'][] = $validation['error'];
+            }
+            $data['ini_text'] = $submitted_ini; // Preserve typed content
+        }
+    }
+
+    return $data;
+}
+
 /**
  * Responds with the status of a post.
  *
@@ -326,7 +474,48 @@ function respond_edit(array $args): array
     return ['post' => R::load('post', (int)$id)];
 }
 
+/**
+ * Returns the updated timestamp for the feed.
+ *
+ * @param array $posts List of post beans.
+ * @return string Date string suitable for strtotime(), falls back to current time when empty.
+ */
+function get_feed_updated_date(array $posts): string
+{
+    $first = reset($posts);
+    return $first !== false ? $first->updated : date('Y-m-d H:i:s');
+}
+
 # Atom feed
+/**
+ * Returns the data needed to render the main Atom feed.
+ *
+ * @return array{posts: array, title: string, feed_url: string, updated: string}
+ */
+function get_feed_data(): array
+{
+    global $config;
+
+    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
+    if ($clause !== null) {
+        $posts = R::find(
+            'post',
+            $clause['sql'] . ' AND (draft IS NULL OR draft != 1) ORDER BY updated DESC LIMIT 20',
+            $clause['params']
+        );
+    } else {
+        $posts = R::findAll('post', ' (draft IS NULL OR draft != 1) ORDER BY updated DESC LIMIT 20 ');
+    }
+
+    $first_post = reset($posts);
+    return [
+        'updated'  => $first_post['updated'] ?? date('Y-m-d H:i:s'),
+        'title'    => $config['site_title'],
+        'feed_url' => ROOT_URL . '/feed',
+        'posts'    => $posts,
+    ];
+}
+
 /**
  * Responds to a feed request by fetching and rendering the necessary data.
  *
@@ -339,56 +528,69 @@ function respond_edit(array $args): array
 #[NoReturn]
 function respond_feed(): void
 {
-    global $config;
     global $data;
 
-    // Exclude pages with slugs
-    $menu_items = array_values($config['menu_items'] ?? []);
-    $posts = R::find(
-        'post',
-        sprintf(' slug NOT IN (%s) ORDER BY updated DESC LIMIT 20', R::genSlots($menu_items)),
-        $menu_items
-    );
-
-    $first_post = reset($posts);
-    $data['updated'] = $first_post['updated'];
-    $data['title'] = $config['site_title'];
-
-    $data['posts'] = $posts;
-    upgrade_posts($posts);
+    $feed_data = get_feed_data();
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    upgrade_posts($data['posts']);
 
     part("feed", '');
     die();
 }
 
-# Index
 /**
- * Responds to the home page request and returns an array of data.
+ * Returns the data needed to render a tag Atom feed.
  *
- * If there is a POST request, it redirects the user to a created page.
- * Retrieves all posts from the database and transforms them into a structured format.
- * It also checks if each post is a menu item.
- *
- * @return array An array containing the transformed posts and additional data:
- *               - ['title']: The site title specified in the configuration.
- *               - ['items']: An array of transformed posts.
- *                             Each transformed post contains the following keys:
- *                             - ['is_menu_item']: A boolean indicating if the post is a menu item.
+ * @param string $tag The already-sanitised tag name.
+ * @return array{posts: array, title: string, feed_url: string, updated: string}
  */
-function respond_home(): array
+function get_tag_feed_data(string $tag): array
 {
     global $config;
-    if (!empty($_POST)) {
-        redirect_created();
+
+    $all_posts = posts_by_tag($tag);
+
+    // Sort by updated DESC and limit to 20
+    $posts = array_values($all_posts);
+    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
+    $posts = array_slice($posts, 0, 20);
+
+    return [
+        'updated'  => get_feed_updated_date($posts),
+        'title'    => $config['site_title'] . ' — #' . $tag,
+        'feed_url' => ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed',
+        'posts'    => $posts,
+    ];
+}
+
+/**
+ * Responds to a tag feed request by rendering an Atom feed for posts with a specific tag.
+ *
+ * @param array $args An array where the first element is the tag name.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_tag_feed(array $args): void
+{
+    global $data;
+
+    [$tag] = $args;
+    $tag = urldecode($tag);
+    $tag = htmlspecialchars($tag);
+
+    $feed_data = get_tag_feed_data($tag);
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
     }
-
-    $data['title'] = $config['site_title'];
-    $data['posts'] = R::findAll('post', 'ORDER BY created DESC LIMIT 99');
-
     upgrade_posts($data['posts']);
 
-    return $data;
+    part("feed", '');
+    die();
 }
+
 
 /**
  * Responds to a POST request by retrieving and transforming a single post.
@@ -401,7 +603,11 @@ function respond_home(): array
 function respond_post(array $args): array
 {
     [$slug] = $args;
-    $data['posts'] = [R::findOne('post', ' slug = ? ', [$slug])];
+    $post = R::findOne('post', ' slug = ? ', [$slug]);
+    if ($post === null || $post->draft == 1) {
+        return respond_404([]);
+    }
+    $data['posts'] = [$post];
 
     upgrade_posts($data['posts']);
 
@@ -417,9 +623,12 @@ function respond_post(array $args): array
  *
  * @return void
  */
-function upgrade_posts(array &$posts): void
+function upgrade_posts(array $posts): void
 {
     foreach ($posts as $bean) {
+        if ($bean === null) {
+            continue;
+        }
         switch ($bean->version) {
             case 1:
                 # Get all beans on the current version 1.
@@ -454,14 +663,15 @@ function upgrade_posts(array &$posts): void
  */
 function respond_search(array $args): array
 {
-    $query = urldecode($args[0]);
+    $query = urldecode($args[0] ?? '');
     if (empty($query)) {
-        $query = htmlspecialchars($_GET['s'] ?? '');
+        $query = $_GET['s'] ?? '';
         if (empty($query)) {
             return [];
         }
         redirect_search($query);
     }
+    $query = htmlspecialchars($query);
 
     // Support multiple words filtering
     $words = explode(' ', $query);
@@ -471,22 +681,59 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $whereSql = implode(' AND ', $where_clauses);
-    $sql = "$whereSql ORDER BY created DESC";
-    $posts = R::find('post', $sql, $params);
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND (draft IS NULL OR draft != 1)';
+
+    // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
+    $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
     // Results
     $data['title'] = 'Searched for "' . $query . '"';
-    $num_results = count($posts);
-    if ($num_results > 0) {
-        $result = ngettext("result", "results", $num_results);
-        $data['intro'] = count($posts) . " $result found.";
+    $pagination = $paginated['pagination'];
+    return get_results(
+        $pagination['total_posts'],
+        $data,
+        $paginated['items'],
+        $pagination['current'],
+        $pagination['per_page'],
+        $pagination['total_pages'],
+        $pagination['offset']
+    );
+}
+
+/**
+ * Processes the provided data, posts, and pagination details, returning a structured array with results and metadata.
+ *
+ * @param int $total_posts The total number of posts available.
+ * @param array $data An array of additional data to be transformed or enriched.
+ * @param array $posts An array of posts to include in the output.
+ * @param mixed $page The current page number.
+ * @param mixed $perPage The number of posts per page.
+ * @param int $total_pages The total number of pages.
+ * @param float|int $offset The starting index for the posts on the current page.
+ *
+ * @return array The structured data array including posts, pagination metadata, and additional information.
+ */
+function get_results(int $total_posts, array $data, array $posts, mixed $page, mixed $perPage, int $total_pages, float|int $offset): array
+{
+    if ($total_posts > 0) {
+        $result = ngettext("result", "results", $total_posts);
+        $data['intro'] = $total_posts . " $result found.";
+    } else {
+        $data['intro'] = "No results found.";
     }
 
     $data['posts'] = $posts;
-    if (empty($data['posts'])) {
-        respond_404([], true);
-    }
+
+    // Pagination metadata (same shape as paginate_posts)
+    $data['pagination'] = [
+        'current' => $page,
+        'per_page' => $perPage,
+        'total_posts' => $total_posts,
+        'total_pages' => $total_pages,
+        'prev_page' => $page > 1 ? $page - 1 : null,
+        'next_page' => $page < $total_pages ? $page + 1 : null,
+        'offset' => $offset,
+    ];
 
     upgrade_posts($posts);
 
@@ -504,28 +751,39 @@ function respond_search(array $args): array
 function respond_tag(array $args): array
 {
     [$tag] = $args;
+    $tag = urldecode($tag);
     $tag = htmlspecialchars($tag);
-    $posts = posts_by_tag($tag);
+
+    // Get all posts for this tag (in-memory array)
+    $all_posts = posts_by_tag($tag);
+
+    // Use the shared paginator which accepts an array source; omit per_page/page so helper reads config/$_GET
+    $paginated = paginate_posts($all_posts);
+
     $data['title'] = 'Tagged with #' . $tag;
-
-    $data['posts'] = $posts;
-    if (empty($data['posts'])) {
-        respond_404([], true);
-    }
-
-    return $data;
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
+    $pagination = $paginated['pagination'];
+    return get_results(
+        $pagination['total_posts'],
+        $data,
+        $paginated['items'],
+        $pagination['current'],
+        $pagination['per_page'],
+        $pagination['total_pages'],
+        $pagination['offset']
+    );
 }
 
 /**
  * Responds to an upload request by processing the uploaded files.
  *
- * @param array $args The arguments for the upload request.
+ * @param array $_args The arguments for the upload request.
  *
  * @return void
  * @throws JsonException
  */
 #[NoReturn]
-function respond_upload(array $args): void
+function respond_upload(array $_args): void
 {
     if (empty($_FILES[IMAGE_FILES])) {
         // invalid request http status code
@@ -586,4 +844,72 @@ function get_upload_dir(): string
     }
 
     return $upload_dir;
+}
+
+/**
+ * Paginates a collection of posts, either from an array or a database query.
+ *
+ * @param mixed $source The source to paginate, either an array of items or a string representing a database bean type.
+ * @param string $order_by_clause The SQL order by clause to apply when querying the database. Defaults to 'created DESC'.
+ * @param string|null $where_sql Optional SQL WHERE clause for filtering database results (null by default).
+ * @param array $params Parameters to bind for the SQL WHERE clause, if provided.
+ *
+ * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
+ */
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
+{
+    // Explicit $per_page avoids the global; fall back to config only when not provided.
+    if ($per_page === null) {
+        global $config;
+        $per_page = (int)($config['posts_per_page'] ?? 10);
+    }
+
+    // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
+    $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
+
+    // If source is an array, do array pagination
+    if (is_array($source)) {
+        $values = array_values($source);
+        $total_posts = count($values);
+        $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+        $page = min($page, $total_pages);
+        $offset = ($page - 1) * $per_page;
+
+        return [
+            'items'      => array_slice($values, $offset, $per_page),
+            'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+        ];
+    }
+
+    // Otherwise expect a bean type string and run DB pagination.
+    $bean_type = (string)$source;
+
+    // Count posts (with or without WHERE/params)
+    if (!empty($where_sql)) {
+        $total_posts = R::count($bean_type, $where_sql, $params);
+    } else {
+        $total_posts = R::count($bean_type);
+    }
+
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $page = min($page, $total_pages);
+    $offset = ($page - 1) * $per_page;
+
+    if (!empty($where_sql)) {
+        // When params are provided, use R::find with param binding and append offset/limit
+        $find_params = $params;
+        $find_params[] = (int)$offset;
+        $find_params[] = (int)$per_page;
+        $sql = $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?';
+        $items = R::find($bean_type, $sql, $find_params);
+    } else {
+        // No params: safe to use the simpler findAll with a constructed LIMIT
+        $limit_sql = 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page;
+        $items = R::findAll($bean_type, $limit_sql);
+    }
+
+    return [
+        'items'      => $items,
+        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+    ];
 }

@@ -11,7 +11,6 @@ on:
   push:
     branches: [ "main", "release" ]
   pull_request:
-    branches: [ "main", "release" ]
 
 jobs:
 
@@ -28,6 +27,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
+          coverage: pcov
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
@@ -39,17 +39,12 @@ jobs:
         run: |
           composer run lint
 
-      - name: Start PHP development server
-        run: php -S 0.0.0.0:8747 -t src &
-
-      - name: Check development server status
-        run: |
-          curl http://localhost:8747
-          echo "Development server is running"
-
       - name: Run Codeception tests
         run: |
-          php make-password.php $GITHUB_REF 
+          php make-password.php $GITHUB_REF
           vendor/bin/codecept run --steps
+
+      - name: Check code coverage
+        run: composer coverage
 
 

@@ -49,6 +49,6 @@ else :
         endif;
     endforeach;
     if (count($data['posts']) > 1) :
-        echo '<ul>';
+        echo '</ul>';
     endif;
 endif;

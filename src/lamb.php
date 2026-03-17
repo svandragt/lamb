@@ -4,6 +4,7 @@ namespace Lamb;
 
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\parse_matter;
 
@@ -16,7 +17,7 @@ use function Lamb\Post\parse_matter;
  */
 function get_tags(string $html): array
 {
-    preg_match_all('/(^|[\s>])#(\w+)/', $html, $matches);
+    preg_match_all('/(^|[\s>])#([^\s#.,!?;:()\[\]{}<]+)/u', $html, $matches);
 
     return $matches[2];
 }
@@ -34,7 +35,7 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback('/(^|[\s>])#(\w+)/', function ($matches) {
+    return preg_replace_callback('/(^|[\s>])#([^\s#.,!?;:()\[\]{}<]+)/u', function ($matches) {
         return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
     }, $html);
 }
@@ -97,6 +98,46 @@ function parse_bean(OODBBean $bean): void
             $bean->$key = $value;
         }
     }
+
+    // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
+    // This ensures removing "draft: true" from frontmatter publishes the post on next save.
+    $bean->draft = !empty($front_matter['draft']) ? 1 : 0;
+}
+
+/**
+ * Retrieves a named option bean from the database, dispensing a new one with the
+ * given default value when the key does not yet exist.
+ *
+ * @param string $name          The option name (key).
+ * @param mixed  $default_value Value to use when the option does not exist.
+ * @return OODBBean             Existing or freshly dispensed (unsaved) bean.
+ */
+function get_option(string $name, mixed $default_value): OODBBean
+{
+    $bean = R::findOneOrDispense('option', ' name = ? ', [$name]);
+    $bean->name = $name;
+    if ($bean->id === 0) {
+        $bean->value = $default_value;
+    }
+
+    return $bean;
+}
+
+/**
+ * Persists the given value into an option bean.
+ *
+ * @param OODBBean $bean  The option bean to update.
+ * @param mixed    $value New value to store.
+ * @return void
+ */
+function set_option(OODBBean $bean, mixed $value): void
+{
+    $bean->value = $value;
+    try {
+        R::store($bean);
+    } catch (SQL $e) {
+        user_error($e->getMessage(), E_USER_ERROR);
+    }
 }
 
 /**
@@ -109,7 +150,7 @@ function parse_bean(OODBBean $bean): void
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if (is_null($post) || $post->id === 0) {
+    if ($post === null || $post->id === 0 || $post->draft == 1) {
         return '';
     }
 

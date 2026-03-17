@@ -22,9 +22,11 @@ use function Lamb\parse_bean;
  */
 function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
 {
+    global $config;
+
     $matter = parse_matter($text);
 
-    if (is_null($bean)) {
+    if ($bean === null) {
         $bean = R::dispense('post');
     }
     $bean->body = $text;
@@ -45,6 +47,13 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
     }
 
     parse_bean($bean);
+    $bean->version = 1;
+
+    // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
+    // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
+    if ($feed_item && !$bean->id && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
+        $bean->draft = 1;
+    }
 
     return $bean;
 }
@@ -85,6 +94,20 @@ function slugify(string $text): string
 }
 
 /**
+ * Returns SQL conditions and parameters for matching posts that contain the given tag.
+ *
+ * @param string $tag The tag to match.
+ * @return array{sql: string, params: array}
+ */
+function get_tag_search_conditions(string $tag): array
+{
+    return [
+        'sql'    => 'body LIKE ? OR body LIKE ? OR body LIKE ?',
+        'params' => ["%#$tag %", "%\n#$tag %", "%#$tag"],
+    ];
+}
+
+/**
  * Retrieves posts that contain the specified tag within their body content.
  *
  * @param string $tag The tag to search for within post content.
@@ -93,10 +116,10 @@ function slugify(string $text): string
  */
 function posts_by_tag(string $tag): array
 {
+    $conditions = get_tag_search_conditions($tag);
     return R::find(
         'post',
-        'body LIKE ? OR body LIKE ? OR body LIKE ?',
-        ["%#$tag %", "%\n#$tag %", "%#$tag"],
-        'ORDER BY created DESC'
+        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) ORDER BY created DESC',
+        $conditions['params']
     );
 }
