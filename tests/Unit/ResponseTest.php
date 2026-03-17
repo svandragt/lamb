@@ -167,4 +167,19 @@ class ResponseTest extends TestCase
         $this->assertSame(1, $result['pagination']['total_pages']);
         $this->assertSame(0, $result['pagination']['total_posts']);
     }
+
+    public function testPaginatePostsExplicitPageSelectsCorrectSlice()
+    {
+        $items = array_map(fn($i) => "post$i", range(1, 15));
+        $result = paginate_posts($items, 'created DESC', null, [], 5, 2);
+        $this->assertSame(['post6', 'post7', 'post8', 'post9', 'post10'], $result['items']);
+    }
+
+    public function testPaginatePostsExplicitPageReflectedInPaginationMeta()
+    {
+        $items = range(1, 15);
+        $result = paginate_posts($items, 'created DESC', null, [], 5, 3);
+        $this->assertSame(3, $result['pagination']['current']);
+        $this->assertNull($result['pagination']['next_page']);
+    }
 }

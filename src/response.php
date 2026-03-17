@@ -475,21 +475,14 @@ function respond_edit(array $args): array
 
 # Atom feed
 /**
- * Responds to a feed request by fetching and rendering the necessary data.
+ * Returns the data needed to render the main Atom feed.
  *
- * This method fetches the feed data by excluding pages with slugs and ordering the posts by the most recent updates.
- * It limits the number of posts returned to 20.
- * After fetching the data, it merges it with the existing data array and renders the feed view.
- *
- * @return void
+ * @return array{posts: array, title: string, feed_url: string, updated: string}
  */
-#[NoReturn]
-function respond_feed(): void
+function get_feed_data(): array
 {
     global $config;
-    global $data;
 
-    // Exclude pages with slugs and drafts
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
@@ -502,15 +495,62 @@ function respond_feed(): void
     }
 
     $first_post = reset($posts);
-    $data['updated'] = $first_post['updated'] ?? date('Y-m-d H:i:s');
-    $data['title'] = $config['site_title'];
-    $data['feed_url'] = ROOT_URL . '/feed';
+    return [
+        'updated'  => $first_post['updated'] ?? date('Y-m-d H:i:s'),
+        'title'    => $config['site_title'],
+        'feed_url' => ROOT_URL . '/feed',
+        'posts'    => $posts,
+    ];
+}
 
-    $data['posts'] = $posts;
-    upgrade_posts($posts);
+/**
+ * Responds to a feed request by fetching and rendering the necessary data.
+ *
+ * This method fetches the feed data by excluding pages with slugs and ordering the posts by the most recent updates.
+ * It limits the number of posts returned to 20.
+ * After fetching the data, it merges it with the existing data array and renders the feed view.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_feed(): void
+{
+    global $data;
+
+    $feed_data = get_feed_data();
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    upgrade_posts($data['posts']);
 
     part("feed", '');
     die();
+}
+
+/**
+ * Returns the data needed to render a tag Atom feed.
+ *
+ * @param string $tag The already-sanitised tag name.
+ * @return array{posts: array, title: string, feed_url: string, updated: string}
+ */
+function get_tag_feed_data(string $tag): array
+{
+    global $config;
+
+    $all_posts = posts_by_tag($tag);
+
+    // Sort by updated DESC and limit to 20
+    $posts = array_values($all_posts);
+    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
+    $posts = array_slice($posts, 0, 20);
+
+    $first_post = reset($posts);
+    return [
+        'updated'  => $first_post ? $first_post->updated : date('Y-m-d H:i:s'),
+        'title'    => $config['site_title'] . ' — #' . $tag,
+        'feed_url' => ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed',
+        'posts'    => $posts,
+    ];
 }
 
 /**
@@ -523,27 +563,17 @@ function respond_feed(): void
 #[NoReturn]
 function respond_tag_feed(array $args): void
 {
-    global $config;
     global $data;
 
     [$tag] = $args;
     $tag = urldecode($tag);
     $tag = htmlspecialchars($tag);
 
-    $all_posts = posts_by_tag($tag);
-
-    // Sort by updated DESC and limit to 20
-    $posts = array_values($all_posts);
-    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
-    $posts = array_slice($posts, 0, 20);
-
-    $first_post = reset($posts);
-    $data['updated'] = $first_post ? $first_post->updated : date('Y-m-d H:i:s');
-    $data['title'] = $config['site_title'] . ' — #' . $tag;
-    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
-
-    $data['posts'] = $posts;
-    upgrade_posts($posts);
+    $feed_data = get_tag_feed_data($tag);
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    upgrade_posts($data['posts']);
 
     part("feed", '');
     die();
@@ -807,7 +837,7 @@ function get_upload_dir(): string
  *
  * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
  */
-function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
 {
     // Explicit $per_page avoids the global; fall back to config only when not provided.
     if ($per_page === null) {
@@ -815,8 +845,8 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         $per_page = (int)($config['posts_per_page'] ?? 10);
     }
 
-    // determine page now (same behavior for all cases)
-    $page = max(1, (int)($_GET['page'] ?? 1));
+    // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
+    $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
 
     // If source is an array, do array pagination
     if (is_array($source)) {
