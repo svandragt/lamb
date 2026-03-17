@@ -181,4 +181,10 @@ class PopulateBeanTest extends TestCase
 
         $this->assertNotSame(1, $bean->draft);
     }
+
+    public function testPopulateBeanSetsVersionOne(): void
+    {
+        $bean = populate_bean('Hello world');
+        $this->assertSame(1, $bean->version);
+    }
 }

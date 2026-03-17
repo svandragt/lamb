@@ -217,6 +217,7 @@ function redirect_edited(): void
     $bean->body = $contents;
 
     parse_bean($bean);
+    $bean->version = 1;
     $bean->updated = date("Y-m-d H:i:s");
 
     if (is_reserved_route($bean->slug)) {

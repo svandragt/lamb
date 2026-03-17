@@ -21,6 +21,11 @@ function bootstrap_db(string $data_dir): void
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
     R::useWriterCache(true);
+
+    // One-time migration: mark pre-versioning posts as version 1.
+    // transformed is already populated for these posts (parse_bean ran at creation/edit time);
+    // we only need to stamp the version column so upgrade_posts() never writes them again.
+    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
 }
 
 /**
