@@ -7,7 +7,11 @@ actor: AcceptanceTester
 modules:
   enabled:
     - PhpBrowser
-# Add Codeception\Step\Retry trait to AcceptanceTester to enable retries
+extensions:
+  enabled:
+    - Codeception\Extension\RunProcess:
+        0: env LAMB_DATA_DIR=../tests/Support/Data php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
+        sleep: 1
 step_decorators:
   - Codeception\Step\ConditionalAssertion
   - Codeception\Step\TryTo

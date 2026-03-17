@@ -9,7 +9,7 @@ define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
 
-Bootstrap\bootstrap_db('../data');
+Bootstrap\bootstrap_db(getenv('LAMB_DATA_DIR') ?: '../data');
 Bootstrap\bootstrap_session();
 
 $config = Config\load();
