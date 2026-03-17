@@ -1,0 +1,506 @@
+:root {
+    color-scheme: dark;
+    --bg: #0d0f1a;
+    --surface: rgba(255, 255, 255, 0.035);
+    --surface-hover: rgba(255, 255, 255, 0.06);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --fg: #e2e8f0;
+    --fg-muted: #64748b;
+    --accent: #818cf8;
+    --accent-light: #a5b4fc;
+    --accent-glow: rgba(129, 140, 248, 0.12);
+    --nav-bg: rgba(13, 15, 26, 0.85);
+    --link: #a5b4fc;
+    --info: rgba(129, 140, 248, 0.18);
+    --radius: 14px;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+html, body {
+    padding: 0;
+    margin: 0;
+}
+
+body {
+    font: clamp(15px, 1.05vw, 17px) / 1.65 system-ui, "Inter", sans-serif;
+    color: var(--fg);
+    background-color: var(--bg);
+    background-image:
+        radial-gradient(ellipse 60% 40% at 15% 0%, rgba(99, 102, 241, 0.09) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 50% at 85% 100%, rgba(139, 92, 246, 0.07) 0%, transparent 60%);
+    min-height: 100vh;
+}
+
+blockquote {
+    border-left: 3px solid var(--accent);
+    margin: 1.5em 0;
+    padding: 0.5em 1.25em;
+    color: var(--fg-muted);
+    font-style: italic;
+    background: var(--surface);
+    border-radius: 0 var(--radius) var(--radius) 0;
+}
+
+code {
+    font: 0.85em / 1.4 "JetBrains Mono", "Fira Code", monospace;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid var(--border);
+    padding: 0.1em 0.4em;
+    border-radius: 5px;
+    color: var(--accent-light);
+}
+
+pre code {
+    display: block;
+    padding: 1em 1.25em;
+    max-width: 100%;
+    word-wrap: break-word;
+    white-space: pre-wrap;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    color: var(--fg);
+}
+
+img {
+    max-width: 100%;
+    border-radius: 8px;
+}
+
+input[type='submit'], button {
+    cursor: pointer;
+}
+
+/* ── Layout ─────────────────────────────────────── */
+
+.container {
+    padding: 0 1rem 3rem;
+}
+
+main {
+    margin: 0 auto;
+    max-width: 68ch;
+    padding-top: 2rem;
+}
+
+/* ── Navigation ──────────────────────────────────── */
+
+nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--nav-bg);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-bottom: 1px solid var(--border);
+
+    &.pagination {
+        position: static;
+        backdrop-filter: none;
+        background: transparent;
+        border: none;
+        text-align: center;
+        margin: 2rem auto;
+        max-width: 68ch;
+    }
+}
+
+nav ul, nav li {
+    display: inline;
+    margin: 0;
+    padding: 0;
+}
+
+nav ul {
+    display: flow-root;
+    max-width: none;
+    padding: 0 1rem;
+}
+
+nav a, nav .current {
+    display: inline-block;
+    text-decoration: none;
+    color: var(--fg-muted);
+    line-height: 2.75rem;
+    padding: 0 0.75em;
+    font-size: 0.9em;
+    font-weight: 500;
+    transition: color 0.15s ease;
+
+    &:hover {
+        color: var(--fg);
+    }
+}
+
+nav a.current,
+nav a[href="/"] {
+    color: var(--accent-light);
+}
+
+nav form {
+    display: inline-block;
+    margin: 0 0.5em;
+    vertical-align: middle;
+}
+
+nav input[type='text'] {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--fg);
+    padding: 0.25em 0.75em;
+    font-size: 0.85em;
+    outline: none;
+    max-width: 12ch;
+    transition: border-color 0.15s, background 0.15s, max-width 0.2s;
+
+    &:focus {
+        border-color: var(--accent);
+        background: rgba(129, 140, 248, 0.08);
+        max-width: 22ch;
+    }
+}
+
+nav input[type='submit'] {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: 1em;
+    opacity: 0.6;
+
+    &:hover {
+        opacity: 1;
+    }
+}
+
+nav li.right {
+    float: right;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* ── Typography ──────────────────────────────────── */
+
+h1, h2, h3 {
+    line-height: 1.25;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--fg) 0%, var(--accent-light) 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+h1 {
+    font-size: clamp(1.5rem, 3vw, 2.25rem);
+    font-weight: 800;
+    margin: 0 0 1.5rem;
+    padding: 0;
+}
+
+h2 {
+    font-size: clamp(1.1rem, 2vw, 1.35rem);
+    margin: 0 0 0.5rem;
+}
+
+h3 {
+    font-size: 1.05rem;
+}
+
+/* ── Articles ────────────────────────────────────── */
+
+article {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin: 1rem 0;
+    box-shadow: var(--shadow);
+    transition: border-color 0.2s ease, background 0.2s ease;
+
+    &:hover {
+        border-color: var(--border-strong);
+        background: var(--surface-hover);
+    }
+
+    header {
+        margin-bottom: 0.75rem;
+    }
+
+    .meta {
+        font-size: 0.8em;
+        color: var(--fg-muted);
+
+        a {
+            color: var(--fg-muted);
+            text-decoration: none;
+
+            &:hover {
+                color: var(--accent-light);
+            }
+        }
+    }
+
+    .entry-content {
+        p:first-child {
+            margin-top: 0;
+        }
+
+        p:last-child {
+            margin-bottom: 0;
+        }
+    }
+
+    footer {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid var(--border);
+        font-size: 0.8em;
+        color: var(--fg-muted);
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+
+        a, form {
+            color: var(--fg-muted);
+            text-decoration: none;
+            transition: color 0.15s;
+
+            &:hover {
+                color: var(--accent-light);
+            }
+        }
+
+        form {
+            margin: 0;
+            display: inline;
+        }
+    }
+}
+
+/* ── Links ───────────────────────────────────────── */
+
+main a {
+    color: var(--link);
+    text-decoration: underline;
+    text-decoration-color: rgba(165, 180, 252, 0.35);
+    text-underline-offset: 3px;
+    transition: text-decoration-color 0.15s;
+
+    &:hover {
+        text-decoration-color: var(--link);
+    }
+}
+
+/* ── Forms ───────────────────────────────────────── */
+
+form {
+    margin: 1.5rem 0;
+}
+
+textarea {
+    font: 13px / 1.5 "JetBrains Mono", "Fira Code", monospace;
+    width: 100%;
+    max-width: 100%;
+    min-height: 10em;
+    display: block;
+    margin: 0.75rem 0;
+    box-sizing: border-box;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--fg);
+    padding: 0.75rem 1rem;
+    resize: vertical;
+    outline: none;
+    transition: border-color 0.15s;
+
+    &:focus {
+        border-color: var(--accent);
+    }
+}
+
+input[type='submit'], button {
+    background: linear-gradient(135deg, var(--accent) 0%, #6d28d9 100%);
+    border: none;
+    border-radius: 8px;
+    color: #fff;
+    font-size: 0.9em;
+    font-weight: 600;
+    padding: 0.5em 1.25em;
+    transition: opacity 0.15s, transform 0.1s;
+
+    &:hover {
+        opacity: 0.9;
+        transform: translateY(-1px);
+    }
+
+    &:active {
+        transform: translateY(0);
+    }
+}
+
+/* ── Flash ───────────────────────────────────────── */
+
+.flash {
+    margin: 1rem 0;
+    padding: 0.6em 1em;
+    background: var(--info);
+    border: 1px solid rgba(129, 140, 248, 0.3);
+    border-radius: var(--radius);
+    font-size: 0.9em;
+}
+
+/* ── Footer ──────────────────────────────────────── */
+
+footer {
+    text-align: center;
+    padding: 2rem 1rem;
+    color: var(--fg-muted);
+    font-size: 0.85em;
+    border-top: 1px solid var(--border);
+
+    a {
+        color: var(--fg-muted);
+        text-decoration: none;
+
+        &:hover {
+            color: var(--accent-light);
+        }
+    }
+}
+
+/* ── Section: entry form ─────────────────────────── */
+
+section.entry-form {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+/* ── Pagination ──────────────────────────────────── */
+
+.pages {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    justify-content: center;
+    padding: 1rem 0;
+
+    a, .current {
+        display: inline-block;
+        padding: 0.3em 0.7em;
+        border-radius: 6px;
+        font-size: 0.85em;
+        text-decoration: none;
+        color: var(--fg-muted);
+        border: 1px solid var(--border);
+        transition: all 0.15s;
+
+        &:hover {
+            border-color: var(--accent);
+            color: var(--accent-light);
+        }
+    }
+
+    .current {
+        background: var(--accent-glow);
+        border-color: var(--accent);
+        color: var(--accent-light);
+        font-weight: 600;
+    }
+}
+
+/* ── Screen reader ───────────────────────────────── */
+
+.screen-reader-text {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    word-wrap: normal !important;
+}
+
+.screen-reader-text:focus {
+    background-color: var(--bg);
+    clip: auto !important;
+    clip-path: none;
+    color: var(--fg);
+    display: block;
+    font-size: 1em;
+    height: auto;
+    left: 5px;
+    line-height: normal;
+    padding: 15px 23px 14px;
+    text-decoration: none;
+    top: 5px;
+    width: auto;
+    z-index: 100000;
+}
+
+/* ── Status / Post single page ───────────────────── */
+
+.status article header h2,
+.post article header h2 {
+    display: none;
+}
+
+/* ── Home page ───────────────────────────────────── */
+
+.home h1 {
+    display: none;
+}
+
+/* ── Related posts ───────────────────────────────── */
+
+#related {
+    max-width: 68ch;
+    margin: 0 auto;
+    padding: 0 1rem 2rem;
+
+    h3 {
+        font-size: 0.8em;
+        text-transform: uppercase;
+        letter-spacing: 0.1em;
+        color: var(--fg-muted);
+        margin-bottom: 0.5rem;
+        -webkit-text-fill-color: var(--fg-muted);
+        background: none;
+    }
+
+    ul {
+        padding: 0;
+        margin: 0;
+        list-style: none;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+
+        li {
+            a {
+                display: inline-block;
+                padding: 0.25em 0.75em;
+                border: 1px solid var(--border);
+                border-radius: 20px;
+                font-size: 0.82em;
+                text-decoration: none;
+                color: var(--fg-muted);
+                transition: all 0.15s;
+
+                &:hover {
+                    border-color: var(--accent);
+                    color: var(--accent-light);
+                    background: var(--accent-glow);
+                }
+            }
+        }
+    }
+}
