@@ -9,6 +9,7 @@ use function Lamb\Response\build_pagination_meta;
 use function Lamb\Response\get_cookie_options;
 use function Lamb\Response\get_feed_updated_date;
 use function Lamb\Response\paginate_posts;
+use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
 {
@@ -217,5 +218,14 @@ class ResponseTest extends TestCase
         $result = get_feed_updated_date([$first, $second]);
 
         $this->assertSame('2024-06-15 12:00:00', $result);
+    }
+
+    // upgrade_posts
+
+    public function testUpgradePostsHandlesNullWithoutError(): void
+    {
+        // R::findOne returns null when no post is found; upgrade_posts must not crash
+        $this->expectNotToPerformAssertions();
+        upgrade_posts([null]);
     }
 }

@@ -8,7 +8,6 @@ global $template, $action;
 define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
-require __DIR__ . '/constants.php';
 
 Bootstrap\bootstrap_db('../data');
 Bootstrap\bootstrap_session();

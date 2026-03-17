@@ -603,7 +603,11 @@ function respond_tag_feed(array $args): void
 function respond_post(array $args): array
 {
     [$slug] = $args;
-    $data['posts'] = [R::findOne('post', ' slug = ? AND (draft IS NULL OR draft != 1) ', [$slug])];
+    $post = R::findOne('post', ' slug = ? ', [$slug]);
+    if ($post === null || $post->draft == 1) {
+        return respond_404([]);
+    }
+    $data['posts'] = [$post];
 
     upgrade_posts($data['posts']);
 
@@ -622,6 +626,9 @@ function respond_post(array $args): array
 function upgrade_posts(array $posts): void
 {
     foreach ($posts as $bean) {
+        if ($bean === null) {
+            continue;
+        }
         switch ($bean->version) {
             case 1:
                 # Get all beans on the current version 1.

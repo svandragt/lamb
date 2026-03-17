@@ -113,4 +113,15 @@ class LambHelpersTest extends TestCase
         $result = post_has_slug($bean->slug);
         $this->assertSame($bean->slug, $result);
     }
+
+    public function testPostHasSlugReturnEmptyForDraftPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->slug = 'draft-slug-' . uniqid();
+        $bean->draft = 1;
+        R::store($bean);
+
+        $result = post_has_slug($bean->slug);
+        $this->assertSame('', $result);
+    }
 }

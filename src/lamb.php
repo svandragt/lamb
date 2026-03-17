@@ -150,7 +150,7 @@ function set_option(OODBBean $bean, mixed $value): void
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if ($post === null || $post->id === 0) {
+    if ($post === null || $post->id === 0 || $post->draft == 1) {
         return '';
     }
 
