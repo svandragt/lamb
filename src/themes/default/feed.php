@@ -14,7 +14,7 @@ $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed';
 $Xml = new SimpleXMLElement('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
 $Xml->addChild('title', escape($data['title'] ?? $config['site_title']));
 $Xml->addChild('id', escape($channel_link));
-$Xml->addChild('updated', date(DATE_ATOM, strtotime(reset($data['posts'])->updated)));
+$Xml->addChild('updated', date(DATE_ATOM, strtotime($data['updated'])));
 $Xml->addChild('generator', 'Lamb');
 
 $Link = $Xml->addChild('atom:link');

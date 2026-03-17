@@ -473,6 +473,18 @@ function respond_edit(array $args): array
     return ['post' => R::load('post', (int)$id)];
 }
 
+/**
+ * Returns the updated timestamp for the feed.
+ *
+ * @param array $posts List of post beans.
+ * @return string Date string suitable for strtotime(), falls back to current time when empty.
+ */
+function get_feed_updated_date(array $posts): string
+{
+    $first = reset($posts);
+    return $first !== false ? $first->updated : date('Y-m-d H:i:s');
+}
+
 # Atom feed
 /**
  * Returns the data needed to render the main Atom feed.
@@ -544,9 +556,8 @@ function get_tag_feed_data(string $tag): array
     usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
     $posts = array_slice($posts, 0, 20);
 
-    $first_post = reset($posts);
     return [
-        'updated'  => $first_post ? $first_post->updated : date('Y-m-d H:i:s'),
+        'updated'  => get_feed_updated_date($posts),
         'title'    => $config['site_title'] . ' — #' . $tag,
         'feed_url' => ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed',
         'posts'    => $posts,
