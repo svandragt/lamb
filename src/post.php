@@ -50,7 +50,7 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
 
     // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
     // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
-    if ($feed_item && filter_var($config['feeds_draft'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+    if ($feed_item && !$bean->id && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
         $bean->draft = 1;
     }
 
