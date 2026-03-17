@@ -134,4 +134,51 @@ class PopulateBeanTest extends TestCase
 
         $this->assertNotSame(1, $bean->draft);
     }
+
+    private function makeStoredPublishedBean(): \RedBeanPHP\OODBBean
+    {
+        $bean = \RedBeanPHP\R::dispense('post');
+        $bean->body = 'Existing post';
+        $bean->draft = 0;
+        \RedBeanPHP\R::store($bean);
+        return $bean;
+    }
+
+    public function testExistingPublishedFeedItemStaysPublishedOnCronUpdate(): void
+    {
+        global $config;
+        $saved = $config;
+        unset($config['feeds_draft']);
+
+        $bean = $this->makeStoredPublishedBean();
+
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn('test-id-3');
+
+        $bean = populate_bean("Hello feed", $item, 'test-feed', $bean);
+        $config = $saved;
+
+        $this->assertNotSame(1, $bean->draft);
+    }
+
+    public function testExistingPublishedFeedItemStaysPublishedWhenFeedsDraftTrue(): void
+    {
+        global $config;
+        $saved = $config;
+        $config['feeds_draft'] = 'true';
+
+        $bean = $this->makeStoredPublishedBean();
+
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn('test-id-4');
+
+        $bean = populate_bean("Hello feed", $item, 'test-feed', $bean);
+        $config = $saved;
+
+        $this->assertNotSame(1, $bean->draft);
+    }
 }
