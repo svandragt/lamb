@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Response\build_exclude_slugs_clause;
 use function Lamb\Response\build_pagination_meta;
 use function Lamb\Response\get_cookie_options;
+use function Lamb\Response\get_feed_updated_date;
 use function Lamb\Response\paginate_posts;
 
 class ResponseTest extends TestCase
@@ -181,5 +182,40 @@ class ResponseTest extends TestCase
         $result = paginate_posts($items, 'created DESC', null, [], 5, 3);
         $this->assertSame(3, $result['pagination']['current']);
         $this->assertNull($result['pagination']['next_page']);
+    }
+
+    // get_feed_updated_date
+
+    public function testGetFeedUpdatedDateReturnsCurrentDateWhenPostsEmpty()
+    {
+        $before = time();
+        $result = get_feed_updated_date([]);
+        $after = time();
+
+        $ts = strtotime($result);
+        $this->assertGreaterThanOrEqual($before, $ts);
+        $this->assertLessThanOrEqual($after, $ts);
+    }
+
+    public function testGetFeedUpdatedDateReturnsUpdatedFromFirstPost()
+    {
+        $bean = new \stdClass();
+        $bean->updated = '2024-06-15 12:00:00';
+
+        $result = get_feed_updated_date([$bean]);
+
+        $this->assertSame('2024-06-15 12:00:00', $result);
+    }
+
+    public function testGetFeedUpdatedDateUsesFirstPostNotLast()
+    {
+        $first = new \stdClass();
+        $first->updated = '2024-06-15 12:00:00';
+        $second = new \stdClass();
+        $second->updated = '2024-01-01 00:00:00';
+
+        $result = get_feed_updated_date([$first, $second]);
+
+        $this->assertSame('2024-06-15 12:00:00', $result);
     }
 }
