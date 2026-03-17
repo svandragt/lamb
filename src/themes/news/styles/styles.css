@@ -1,0 +1,720 @@
+/* News Theme — inspired by news.stv.tv */
+
+:root {
+    --red: #e4002b;
+    --red-dark: #b8001f;
+    --dark: #1a1a1a;
+    --text: #222222;
+    --text-muted: #666666;
+    --bg: #f0f0f0;
+    --card-bg: #ffffff;
+    --border: #dcdcdc;
+    --nav-bg: #1a1a1a;
+    --nav-fg: #ffffff;
+    --header-bg: #e4002b;
+    --info: #fff3cd;
+    --link: #c8001e;
+    --focus: #0057b8;
+}
+
+/* ── Reset & Base ── */
+
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+html, body {
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font: 16px/1.5 "Georgia", "Times New Roman", serif;
+    color: var(--text);
+    background: var(--bg);
+}
+
+img {
+    max-width: 100%;
+    display: block;
+}
+
+a {
+    color: var(--link);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+a:focus-visible {
+    outline: 3px solid var(--focus);
+    outline-offset: 2px;
+}
+
+/* ── Typography ── */
+
+h1, h2, h3, h4 {
+    font-family: "Georgia", "Times New Roman", serif;
+    font-weight: 700;
+    line-height: 1.2;
+    margin: 0 0 0.5rem;
+    color: var(--dark);
+}
+
+h1 { font-size: 2rem; }
+h2 { font-size: 1.35rem; }
+h3 { font-size: 1.1rem; }
+
+blockquote {
+    border-left: 4px solid var(--red);
+    margin: 1rem 0;
+    padding: 0.5rem 1rem;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+code {
+    font-family: "JetBrains Mono", "Roboto Mono", monospace;
+    font-size: 0.875em;
+    background: #f4f4f4;
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+}
+
+pre code {
+    display: block;
+    padding: 1em;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* ── Screen Reader Utility ── */
+
+.screen-reader-text {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    word-wrap: normal !important;
+}
+
+.screen-reader-text:focus {
+    background: #eee;
+    clip: auto !important;
+    clip-path: none;
+    color: #444;
+    display: block;
+    font-size: 1em;
+    height: auto;
+    left: 5px;
+    outline: 3px solid var(--focus);
+    padding: 14px 23px;
+    text-decoration: none;
+    top: 5px;
+    width: auto;
+    z-index: 100000;
+}
+
+/* ── Site Header ── */
+
+.site-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+}
+
+.header-top {
+    background: var(--header-bg);
+    color: #fff;
+}
+
+.header-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0.6rem 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.site-branding {
+    flex-shrink: 0;
+}
+
+.site-name {
+    color: #fff;
+    font-family: "Georgia", serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.site-name:hover {
+    text-decoration: none;
+    opacity: 0.9;
+}
+
+.header-utils {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.form-search {
+    display: flex;
+    align-items: center;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.form-search input[type="text"] {
+    background: transparent;
+    border: none;
+    color: #fff;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.5rem;
+    width: 14ch;
+    outline: none;
+}
+
+.form-search input[type="text"]::placeholder {
+    color: rgba(255,255,255,0.7);
+}
+
+.form-search button {
+    background: rgba(255,255,255,0.2);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-size: 0.9rem;
+    padding: 0.3rem 0.6rem;
+}
+
+.form-search button:hover {
+    background: rgba(255,255,255,0.35);
+}
+
+.util-link {
+    color: rgba(255,255,255,0.9);
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border: 1px solid rgba(255,255,255,0.4);
+    padding: 0.25rem 0.6rem;
+    border-radius: 2px;
+}
+
+.util-link:hover {
+    background: rgba(255,255,255,0.15);
+    text-decoration: none;
+}
+
+/* ── Primary Nav ── */
+
+.site-nav {
+    background: var(--nav-bg);
+}
+
+.nav-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+.site-nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    gap: 0;
+}
+
+.site-nav li a {
+    color: var(--nav-fg);
+    display: block;
+    font-family: sans-serif;
+    font-size: 0.85rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    padding: 0.65rem 1rem;
+    text-transform: uppercase;
+    text-decoration: none;
+    border-bottom: 3px solid transparent;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.site-nav li a:hover {
+    border-bottom-color: var(--red);
+    background: rgba(255,255,255,0.06);
+    text-decoration: none;
+}
+
+.site-nav li a.feed-link {
+    color: #f90;
+}
+
+/* ── Container & Layout ── */
+
+.site-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem 1rem;
+}
+
+/* ── Flash Messages ── */
+
+.flash {
+    background: var(--info);
+    border: 1px solid #f0c040;
+    border-left: 4px solid #f0a000;
+    border-radius: 3px;
+    font-family: sans-serif;
+    margin: 0 0 1.5rem;
+    padding: 0.6rem 1rem;
+}
+
+/* ── Main Content ── */
+
+main {
+    width: 100%;
+}
+
+/* ── Article Cards (list view) ── */
+
+.news-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+}
+
+.news-grid article {
+    background: var(--card-bg);
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    border-top: 3px solid transparent;
+    transition: border-color 0.15s;
+}
+
+.news-grid article:hover {
+    border-top-color: var(--red);
+}
+
+.news-grid article h2 {
+    font-size: 1.15rem;
+    margin: 0;
+}
+
+.news-grid article h2 a {
+    color: var(--dark);
+}
+
+.news-grid article h2 a:hover {
+    color: var(--red);
+    text-decoration: none;
+}
+
+.news-grid article .article-body {
+    color: var(--text);
+    font-size: 0.95rem;
+}
+
+.news-grid article .article-body p:first-child {
+    margin-top: 0;
+}
+
+.news-grid .article-meta {
+    font-family: sans-serif;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: auto;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border);
+}
+
+.news-grid .article-meta a {
+    color: var(--text-muted);
+}
+
+.news-grid .article-meta a:hover {
+    color: var(--red);
+}
+
+.news-grid .article-actions {
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+/* ── Hero (featured first article on home) ── */
+
+.news-hero {
+    background: var(--card-bg);
+    border-top: 4px solid var(--red);
+    margin-bottom: 1px;
+    padding: 1.5rem;
+}
+
+.news-hero h2 {
+    font-size: 1.75rem;
+    line-height: 1.15;
+    margin: 0 0 0.75rem;
+}
+
+.news-hero h2 a {
+    color: var(--dark);
+}
+
+.news-hero h2 a:hover {
+    color: var(--red);
+    text-decoration: none;
+}
+
+.news-hero .article-body {
+    font-size: 1.05rem;
+    color: var(--text);
+    max-width: 70ch;
+}
+
+.news-hero .article-meta {
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.news-hero .article-meta a {
+    color: var(--text-muted);
+}
+
+.news-hero .article-actions {
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* ── Single Post / Status view ── */
+
+.status main article,
+.post main article {
+    background: var(--card-bg);
+    border-top: 4px solid var(--red);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+}
+
+.status main article header h2,
+.post main article header h2 {
+    display: none;
+}
+
+.status main article h1,
+.post main article h1 {
+    font-size: 2rem;
+    margin-bottom: 1rem;
+}
+
+/* ── Page title (non-home) ── */
+
+main > h1 {
+    font-family: sans-serif;
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #fff;
+    background: var(--red);
+    display: inline-block;
+    padding: 0.3rem 0.8rem;
+    margin: 0 0 1rem;
+}
+
+/* ── Forms (edit/settings/login) ── */
+
+form {
+    margin: 1.5rem 0;
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+textarea,
+select {
+    font: 1rem/1.4 sans-serif;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 0.4rem 0.6rem;
+    width: 100%;
+    max-width: 100%;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+textarea:focus {
+    border-color: var(--red);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(228, 0, 43, 0.2);
+}
+
+textarea {
+    font: 13px/1.4 "JetBrains Mono", "DejaVu Sans Mono", monospace;
+    min-height: 10em;
+    display: block;
+    margin: 0.5em 0;
+    resize: vertical;
+}
+
+input[type="submit"], button {
+    cursor: pointer;
+    background: var(--red);
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    font: 600 0.9rem/1 sans-serif;
+    letter-spacing: 0.03em;
+    padding: 0.5rem 1.25rem;
+    text-transform: uppercase;
+}
+
+input[type="submit"]:hover, button:hover {
+    background: var(--red-dark);
+}
+
+button.button-edit {
+    background: #555;
+}
+
+button.button-edit:hover {
+    background: #333;
+}
+
+/* Delete form inline */
+.form-delete {
+    display: inline;
+    margin: 0;
+}
+
+.form-delete input[type="submit"] {
+    background: transparent;
+    border: 1px solid #ccc;
+    color: #888;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.form-delete input[type="submit"]:hover {
+    background: #fee;
+    border-color: var(--red);
+    color: var(--red);
+}
+
+/* ── Entry Form (logged-in quick post) ── */
+
+section.entry-form {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-top: 3px solid var(--red);
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+section.entry-form textarea {
+    min-height: 6em;
+}
+
+/* ── Pagination ── */
+
+nav.pagination {
+    background: transparent;
+    font-family: sans-serif;
+    font-size: 0.9rem;
+    margin: 1.5rem 0;
+    padding: 1rem 0;
+    text-align: center;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--border);
+}
+
+nav.pagination a,
+nav.pagination .current {
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.7rem;
+    border-radius: 2px;
+    display: inline-block;
+    text-decoration: none;
+}
+
+nav.pagination a:hover {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+    text-decoration: none;
+}
+
+nav.pagination .current {
+    background: var(--red);
+    border-color: var(--red);
+    color: #fff;
+    font-weight: 700;
+}
+
+nav.pagination .gap {
+    color: var(--text-muted);
+    padding: 0.35rem 0.2rem;
+}
+
+nav.pagination .prev,
+nav.pagination .next {
+    font-weight: 600;
+}
+
+/* ── Related Posts ── */
+
+main.related-section {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem 1rem;
+}
+
+main.related-section article {
+    background: var(--card-bg);
+    border-top: 3px solid var(--border);
+    padding: 1rem 1.25rem;
+}
+
+main.related-section h3 {
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+main.related-section li {
+    font-size: 0.9rem;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid var(--border);
+    list-style: none;
+}
+
+/* ── Footer ── */
+
+.site-footer {
+    background: var(--nav-bg);
+    color: rgba(255,255,255,0.6);
+    font-family: sans-serif;
+    font-size: 0.8rem;
+    margin-top: 3rem;
+    padding: 1.25rem 0;
+}
+
+.footer-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 1rem;
+}
+
+.site-footer p {
+    margin: 0;
+}
+
+.site-footer a {
+    color: rgba(255,255,255,0.75);
+}
+
+.site-footer a:hover {
+    color: #fff;
+}
+
+/* ── Source / via attribution ── */
+
+.via-source {
+    font-style: italic;
+}
+
+/* ── Responsive: 2 columns at 600px ── */
+
+@media (min-width: 600px) {
+    .news-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ── Responsive: 3 columns at 900px ── */
+
+@media (min-width: 900px) {
+    .news-grid {
+        grid-template-columns: 1fr 1fr 1fr;
+    }
+
+    .news-hero {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    .news-hero .hero-text {
+        grid-column: 1 / -1;
+    }
+
+    h1 { font-size: 2.25rem; }
+}
+
+/* ── Home: hide the h1 title (shown via branding) ── */
+
+.home main > h1 {
+    display: none;
+}
+
+/* ── Tag page section intro ── */
+
+main > p {
+    font-family: sans-serif;
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    margin: 0 0 1rem;
+}
