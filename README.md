@@ -12,7 +12,7 @@ Barrier free super simple blogging, self-hosted.
 - Hashtags support, by just typing them `#ahyeah`.
 - 404 fallback redirection to your old site, optionally.
 - Friendly user theming, if you don't like my two shades of 2000s retro themes. ;)
-- Pull external content into the blog by subscribing to feeds.
+- Pull external content into the blog by subscribing to feeds; ingested posts land as drafts by default.
 
 # Getting started
 

@@ -44,7 +44,8 @@ function get_default_ini_text(): string
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
 
-;; When set to true, feed-ingested posts are saved as drafts for editorial review before publishing.
+;; Feed-ingested posts are saved as drafts by default for editorial review before publishing.
+;; Set to false to publish feed items directly without review.
 ;feeds_draft = false
 
 [preconnect]
