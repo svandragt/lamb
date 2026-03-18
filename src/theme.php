@@ -234,6 +234,14 @@ function asset_loader(array $assets, string $asset_dir): Generator
     }
 }
 
+function title_link(OODBBean $bean): string
+{
+    if (empty($bean->title)) {
+        return '';
+    }
+    return sprintf('<a class="title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
+}
+
 function link_source(OODBBean $bean): string
 {
     if (!isset($bean->feed_name)) {

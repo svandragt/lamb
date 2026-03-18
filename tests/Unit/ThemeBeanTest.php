@@ -10,6 +10,7 @@ use function Lamb\Theme\action_edit;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\date_created;
 use function Lamb\Theme\li_menu_items;
+use function Lamb\Theme\title_link;
 
 class ThemeBeanTest extends TestCase
 {
@@ -265,5 +266,81 @@ class ThemeBeanTest extends TestCase
         $this->assertStringContainsString(ROOT_URL . '/archive', $result);
 
         $config = $original;
+    }
+
+    // title_link
+
+    public function testTitleLinkReturnsAnchorWithTitleLinkClass(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = 'My Post';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertStringContainsString('class="title-link"', $result);
+        $this->assertStringContainsString('<a ', $result);
+    }
+
+    public function testTitleLinkUsesSlugInHrefWhenSlugSet(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = 'My Post';
+        $bean->slug = 'my-post';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertStringContainsString('href="' . ROOT_URL . '/my-post"', $result);
+    }
+
+    public function testTitleLinkUsesStatusIdInHrefWhenNoSlug(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = 'My Post';
+        $bean->slug = '';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertStringContainsString('href="' . ROOT_URL . '/status/' . $bean->id . '"', $result);
+    }
+
+    public function testTitleLinkEscapesTitle(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = '<script>xss</script>';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertStringNotContainsString('<script>', $result);
+        $this->assertStringContainsString('&lt;script&gt;', $result);
+    }
+
+    public function testTitleLinkContainsTitleText(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = 'Hello World';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertStringContainsString('Hello World', $result);
+    }
+
+    public function testTitleLinkReturnsEmptyStringWhenTitleIsNull(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = null;
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertSame('', $result);
+    }
+
+    public function testTitleLinkReturnsEmptyStringWhenTitleIsEmpty(): void
+    {
+        $bean = R::dispense('post');
+        $bean->title = '';
+        R::store($bean);
+
+        $result = title_link($bean);
+        $this->assertSame('', $result);
     }
 }
