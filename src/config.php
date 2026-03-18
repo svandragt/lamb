@@ -53,6 +53,12 @@ function get_default_ini_text(): string
 ;; Each item is in the format of <label>=<origin>.
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
+
+[redirections]
+;; Add 301 redirects for old URL path segments.
+;; Format: <old-slug> = <destination>
+;; Destination can be a root-relative URL, a bare slug, or a full external URL.
+;old-post = /new-post
 INI;
 }
 

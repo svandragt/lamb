@@ -44,7 +44,7 @@ lamb/
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
 │   ├── routes.php        # register_route() / call_route() helpers
-│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink
+│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, find_redirect, delete_redirect_for_slug
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify
 │   ├── response.php      # All route handlers (respond_*, redirect_*)
 │   ├── security.php      # require_login(), require_csrf()
@@ -106,6 +106,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
+- `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 
 **Post versioning:** `upgrade_posts()` in `response.php` migrates posts without a `version` field to version 1 by re-running `parse_bean()`.
 
@@ -113,7 +114,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
 
-Config keys: `author_email`, `author_name`, `site_title`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`.
+Config keys: `author_email`, `author_name`, `site_title`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `[redirections]`.
 
 ### Post Content Format
 
