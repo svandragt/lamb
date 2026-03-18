@@ -164,4 +164,11 @@ class PostTest extends TestCase
         $result = parse_matter($body);
         $this->assertArrayNotHasKey('draft', $result);
     }
+
+    public function testParseMatterUsesExplicitSlugOverTitle()
+    {
+        $body = "---\ntitle: My Post Title\nslug: custom-slug\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('custom-slug', $result['slug']);
+    }
 }
