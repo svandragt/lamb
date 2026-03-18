@@ -81,7 +81,7 @@ function parse_matter(string $body): array
     if (!is_array($matter)) {
         return [];
     }
-    if (isset($matter['title'])) {
+    if (isset($matter['title']) && !isset($matter['slug'])) {
         $matter['slug'] = slugify($matter['title']);
     }
 
