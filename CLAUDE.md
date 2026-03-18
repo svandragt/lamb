@@ -33,6 +33,15 @@ vendor/bin/codecept run Acceptance
 
 # Generate password hash and write .ddev/.env + .env
 php make-password.php <your-password>
+
+# Static analysis
+composer analyse
+
+# Auto-fix coding standard violations
+composer fix
+
+# Install pre-commit hook (one-time, after cloning)
+printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ```
 
 ## Project Structure
