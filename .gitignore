@@ -1,3 +1,4 @@
+/docs-wiki/
 *.db
 /.docker/*.env
 /data/cache/

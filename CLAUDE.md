@@ -2,6 +2,14 @@
 
 Lamb is a self-hosted, single-author microblog. It uses PHP 8.2+, SQLite (via RedBeanPHP ORM), and a procedural-with-namespaces architecture. There is no MVC framework — routing, responses, and views are handled by small namespaced PHP files.
 
+## Wiki (End-User Documentation)
+
+The GitHub wiki lives in `docs-wiki/` (cloned from `svandragt/lamb.wiki.git`, listed in `.gitignore`). It is the end-user manual. When working on user-facing features:
+
+- Check whether a wiki page exists for the feature and update it if needed.
+- When adding new user-facing behaviour, consider whether a new wiki page is warranted.
+- Ensure wiki pages that are topically related link to each other via a "Related" section.
+
 ## Key Commands
 
 ```bash
