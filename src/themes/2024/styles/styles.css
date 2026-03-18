@@ -45,10 +45,6 @@ img {
     max-width: 100%;
 }
 
-nav input {
-    max-width: 10vw;
-}
-
 input[type='submit'], button {
     cursor: pointer;
 }
@@ -66,6 +62,21 @@ main {
 
     small a {
         margin-right: 1em;
+    }
+
+    h2 a.title-link {
+        color: var(--link);
+        text-decoration: none;
+    }
+
+    h2 a.title-link:visited {
+        color: color-mix(in srgb, var(--link), purple 30%);
+    }
+
+    h2 a.title-link:hover,
+    h2 a.title-link:focus {
+        color: color-mix(in srgb, var(--link), blue 25%);
+        text-decoration: underline;
     }
 
     > ul {
@@ -208,8 +219,7 @@ article footer {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
-    margin: 1em -2em 0;
-    width: 100%;
+    margin: 1em 0 0;
     padding: 0 2em;
     line-height: 2rem;
     align-self: flex-end;
@@ -231,7 +241,7 @@ p {
 section {
 
     &.entry-form {
-        margin-left: -11rem;
+        margin-left: 0;
         margin-bottom: -1vw;
         background: white;
         border-bottom: 1px solid var(--shadow);
@@ -308,6 +318,19 @@ textarea {
 
 /* Desktop styles */
 @media (min-width: 600px) {
+    nav input {
+        max-width: 10vw;
+    }
+
+    article footer {
+        margin: 1em -2em 0;
+        width: 100%;
+    }
+
+    section.entry-form {
+        margin-left: -11rem;
+    }
+
     article header {
         position: relative;
         /* keep the border to avoid layout shift */
