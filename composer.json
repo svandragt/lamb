@@ -65,7 +65,7 @@
     "test": "vendor/bin/codecept run",
     "coverage": [
       "vendor/bin/codecept run Unit --coverage-xml",
-      "php check-coverage.php tests/_output/coverage.xml 40"
+      "php check-coverage.php tests/_output/coverage.xml 60"
     ],
     "e2e": "pnpm exec playwright test"
   }
