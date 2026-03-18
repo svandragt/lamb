@@ -30,7 +30,6 @@ function get_feeds(): array
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
-    // FIXME: Missing permalink and title
     $feeds = get_feeds();
 
     $cron_last_updated = get_option('last_processed_date', 0);

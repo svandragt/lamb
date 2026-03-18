@@ -249,9 +249,9 @@ function link_source(OODBBean $bean): string
     }
     $feeds = get_feeds();
 
-    $url = $feeds[$bean->feed_name];
+    $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
 
-    return sprintf('Via <a href="%s" title="View feed">%s</a>', $url, $bean->feed_name);
+    return sprintf('Via <a href="%s" title="View %s">%s</a>', escape($url), escape($bean->feed_name), escape($bean->feed_name));
 }
 
 /**

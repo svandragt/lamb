@@ -10,6 +10,7 @@ use function Lamb\Theme\action_edit;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\date_created;
 use function Lamb\Theme\li_menu_items;
+use function Lamb\Theme\link_source;
 use function Lamb\Theme\title_link;
 
 class ThemeBeanTest extends TestCase
@@ -342,5 +343,45 @@ class ThemeBeanTest extends TestCase
 
         $result = title_link($bean);
         $this->assertSame('', $result);
+    }
+
+    // link_source
+
+    public function testLinkSourceReturnsEmptyWhenNoFeedName(): void
+    {
+        $bean = R::dispense('post');
+        $this->assertSame('', link_source($bean));
+    }
+
+    public function testLinkSourceUsesSourceUrlWhenAvailable(): void
+    {
+        global $config;
+        $original = $config;
+        $config['feeds'] = ['TestFeed' => 'https://example.com/feed.rss'];
+
+        $bean = R::dispense('post');
+        $bean->feed_name = 'TestFeed';
+        $bean->source_url = 'https://example.com/original-article';
+
+        $result = link_source($bean);
+        $config = $original;
+
+        $this->assertStringContainsString('https://example.com/original-article', $result);
+        $this->assertStringContainsString('TestFeed', $result);
+    }
+
+    public function testLinkSourceFallsBackToFeedUrlWhenNoSourceUrl(): void
+    {
+        global $config;
+        $original = $config;
+        $config['feeds'] = ['TestFeed' => 'https://example.com/feed.rss'];
+
+        $bean = R::dispense('post');
+        $bean->feed_name = 'TestFeed';
+
+        $result = link_source($bean);
+        $config = $original;
+
+        $this->assertStringContainsString('https://example.com/feed.rss', $result);
     }
 }
