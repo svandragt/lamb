@@ -9,6 +9,7 @@ use function Lamb\Theme\action_edit;
 use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
+use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
     ?><p>Sorry no items found.</p>
@@ -30,9 +31,8 @@ else :
 
         <article>
             <header>
-                <?php
-                if ($template !== 'status') :?>
-                    <h2><?= $bean->title ?></h2>
+                <?php if ($template !== 'status' && !empty($bean->title)) : ?>
+                    <h2><?= title_link($bean) ?></h2>
                 <?php endif; ?>
                 <div class="meta">
                     <strong itemprop="author"><?= $config['author_name'] ?></strong> @

@@ -68,6 +68,21 @@ main {
         margin-right: 1em;
     }
 
+    h2 a.title-link {
+        color: var(--link);
+        text-decoration: none;
+    }
+
+    h2 a.title-link:visited {
+        color: color-mix(in srgb, var(--link), purple 30%);
+    }
+
+    h2 a.title-link:hover,
+    h2 a.title-link:focus {
+        color: color-mix(in srgb, var(--link), blue 25%);
+        text-decoration: underline;
+    }
+
     > ul {
         margin: 0;
         padding: 0;
