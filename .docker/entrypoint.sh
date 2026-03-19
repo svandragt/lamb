@@ -4,6 +4,7 @@ echo "Checking USER ID"
 
 APP_ROOT=/srv/app/src
 APP_DATA=/srv/app/data
+APP_ASSETS=/srv/app/src/assets
 
 WWW_UID=`stat -c "%u" "$APP_ROOT"`
 WWW_GID=`stat -c "%g" "$APP_ROOT"`
@@ -17,7 +18,9 @@ if [ ! $WWW_UID -eq 0 ]; then
 fi
 
 mkdir -p "$APP_DATA"
+mkdir -p "$APP_ASSETS"
 chown www-data:www-data "$APP_DATA"
+chown www-data:www-data "$APP_ASSETS"
 
 # Any parameters to this script will now be executed (parent entrypoint)
 exec "$@"
