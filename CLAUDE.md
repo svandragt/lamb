@@ -31,7 +31,7 @@ vendor/bin/codecept run Unit
 # Run acceptance tests (requires SITE_URL in .env)
 vendor/bin/codecept run Acceptance
 
-# Generate password hash and write .ddev/.env + .env
+# Generate password hash and write .env
 php make-password.php <your-password>
 ```
 
@@ -64,7 +64,7 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
-└── make-password.php     # CLI utility: hash password → .ddev/.env
+└── make-password.php     # CLI utility: hash password → .env
 ```
 
 ## Architecture Overview
@@ -371,7 +371,7 @@ Tests use **Codeception 5** with PHPUnit underneath.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
-Config in `codeception.yml` reads env from `.ddev/.env` and `.env`.
+Config in `codeception.yml` reads env from `.env`.
 
 ### Red-Green TDD
 
@@ -389,8 +389,7 @@ Authentication password is stored hashed in the `LAMB_LOGIN_PASSWORD` environmen
 
 ```bash
 php make-password.php mysecretpassword
-# writes LAMB_LOGIN_PASSWORD to .ddev/.env
-# writes SITE_URL to .env
+# writes LAMB_LOGIN_PASSWORD, LAMB_MICROPUB_TOKEN, SITE_URL to .env
 ```
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
