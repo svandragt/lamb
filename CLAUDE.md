@@ -61,6 +61,7 @@ lamb/
 │   ├── network.php       # Feed ingestion via SimplePie (_cron route)
 │   ├── http.php          # get_request_uri() — normalises / → /home
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
+│   ├── assets/           # Runtime upload storage (created under YYYY/MM)
 │   ├── themes/
 │   │   ├── default/      # Default theme (HTML, parts, feed, CSS)
 │   │   └── 2024/         # Alternative theme (overrides parts as needed)
@@ -116,13 +117,15 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
 
-**Post versioning:** `upgrade_posts()` in `response.php` migrates posts without a `version` field to version 1 by re-running `parse_bean()`.
+**Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
 
 ### Configuration
 
 Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
 
-Config keys: `author_email`, `author_name`, `site_title`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`.
+Config keys currently documented in code/defaults: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`.
+
+The wiki also documents a planned `[redirections]` section, but that is still work in progress and is not implemented on `main`/`release`.
 
 ### Post Content Format
 
@@ -136,11 +139,11 @@ title: My Post Title
 Post content here. Use #hashtags inline.
 ```
 
-`parse_matter()` extracts YAML → sets `slug` from `title` via `slugify()`.
-`parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, `slug` on the bean.
+`parse_matter()` extracts YAML. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
-Slugs are immutable once set (changing a slug would break URLs).
+On `main`/`release`, slugs are effectively immutable after creation: editing a post will not overwrite an existing slug from changed front matter or title. New page-like posts get their slug at creation time; status posts keep the numeric `/status/<id>` permalink.
 
 ### Theming
 
@@ -231,7 +234,7 @@ index.php
 |----------|-------------|
 | `$bean->id` | Integer primary key |
 | `$bean->title` | Post title (may be empty for status posts) |
-| `$bean->slug` | URL slug (immutable once set; empty for status posts) |
+| `$bean->slug` | URL slug for page-style posts; created from front matter/title on first save and preserved on later edits on `main`/`release` |
 | `$bean->body` | Raw Markdown source |
 | `$bean->transformed` | Pre-rendered HTML (use this in templates — never re-render `body`) |
 | `$bean->description` | Plain-text excerpt (auto-generated) |
@@ -274,7 +277,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `action_delete($bean)` | `string` | Delete form (logged-in only), or `''` |
 | `the_entry_form()` | `void` | Renders the quick-post `<form>` (logged-in only) |
 | `the_styles()` | `void` | Emits `<link rel="stylesheet">` for `styles/styles.css` in the active theme |
-| `the_scripts()` | `void` | Emits `<script defer>` for `scripts/shorthand.js` + admin scripts |
+| `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` for `$config['preconnect']` origins |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
@@ -305,9 +308,30 @@ Additional helper from `Lamb\Config`:
 
 ### CSS asset loading
 
-`the_styles()` always loads `styles/styles.css` from the active theme. There is no multi-file or concatenation mechanism — put everything in one CSS file per theme.
+`the_styles()` takes no arguments and always loads `styles/styles.css` from the active theme. There is no multi-file or concatenation mechanism — put everything in one CSS file per theme.
 
 The URL served is `THEME_URL . 'styles/styles.css'` with a cache-buster query string (`?<md5-of-url>`).
+
+### JavaScript asset loading
+
+`the_scripts()` takes no arguments. It does not load scripts from the active theme directory.
+
+It always loads:
+
+- `src/scripts/shorthand.js`
+
+When the user is logged in, it also loads:
+
+- `src/scripts/logged_in/growing-input.js`
+- `src/scripts/logged_in/confirm-delete.js`
+- `src/scripts/logged_in/link-edit-buttons.js`
+- `src/scripts/logged_in/upload-image.js`
+
+### Upload asset storage
+
+User-uploaded files live under `src/assets/`, not under theme directories.
+
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 
@@ -322,7 +346,7 @@ This only un-ignores the directory entry; files inside are still matched by the 
 
 ### Minimal new theme checklist
 
-A theme only needs to override the files that differ from `default`. The absolute minimum:
+A theme only needs to override the files that differ from `default`. The absolute minimum is a stylesheet:
 
 ```
 src/themes/<name>/
@@ -330,7 +354,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `default` automatically.
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the default feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `default` automatically.
 
 ### Typical file set (for a full redesign)
 
@@ -407,12 +431,12 @@ The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
 
 ## Branching
 
-- `main` — active development
-- `release` — stable releases cut from main
+- `release` — stable branch for end users running a blog; check out this branch if you want the latest released version
+- `main` — active development branch for contributors; branch from this for new feature or fix work
 - `next` — next major version targeting
 - `*-pinned` — pinned reference branches
 
-Always branch from `main` for new features. Open an issue first; get agreement from maintainers before building features.
+For contributors: always branch from `main` for new features. Open an issue first; get agreement from maintainers before building features.
 
 ## Philosophy (from README)
 
