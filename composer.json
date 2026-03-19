@@ -45,7 +45,8 @@
       "src/post.php",
       "src/response.php",
       "src/security.php",
-      "src/theme.php"
+      "src/theme.php",
+      "src/micropub.php"
     ]
   },
   "config": {
