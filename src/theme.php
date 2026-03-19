@@ -16,6 +16,12 @@ use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\get_tag_search_conditions;
 
+/**
+ * Returns a delete form for the given post bean, or '' if not logged in.
+ *
+ * @param OODBBean $bean The post bean to delete.
+ * @return string HTML delete form, or '' when the user is not authenticated.
+ */
 function action_delete(OODBBean $bean): string
 {
     if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
@@ -26,6 +32,12 @@ function action_delete(OODBBean $bean): string
 </form>', $bean->id, $bean->id, csrf_token());
 }
 
+/**
+ * Returns an edit button for the given post bean, or '' if not logged in.
+ *
+ * @param OODBBean $bean The post bean to edit.
+ * @return string HTML button element, or '' when the user is not authenticated.
+ */
 function action_edit(OODBBean $bean): string
 {
     if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
@@ -35,6 +47,11 @@ function action_edit(OODBBean $bean): string
     return sprintf('<button class="button-edit" data-id="%s" type="button">Edit</button>', $bean->id);
 }
 
+/**
+ * Returns the current session CSRF token, creating one if it does not exist yet.
+ *
+ * @return string SHA-256 hex CSRF token stored in the session.
+ */
 function csrf_token(): string
 {
     $_SESSION[HIDDEN_CSRF_NAME] = $_SESSION[HIDDEN_CSRF_NAME] ?? hash('sha256', uniqid(mt_rand(), true));
@@ -42,6 +59,12 @@ function csrf_token(): string
     return $_SESSION[HIDDEN_CSRF_NAME];
 }
 
+/**
+ * Returns an anchor wrapping a <time> element linking to the post permalink, or '' if no created date.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string HTML anchor/time element, or '' when the bean has no created date.
+ */
 function date_created(OODBBean $bean): string
 {
     if (!isset($bean->created)) {
@@ -63,6 +86,12 @@ function date_created(OODBBean $bean): string
     );
 }
 
+/**
+ * Returns the site title as an <h1> element, or plain text when $type !== 'html'.
+ *
+ * @param string $type Output format: 'html' (default) wraps in <h1>, anything else returns plain text.
+ * @return string HTML or plain-text site title.
+ */
 function site_title($type = 'html'): string
 {
     global $config;
@@ -74,6 +103,12 @@ function site_title($type = 'html'): string
     return sprintf('<h1>%s</h1>', $config['site_title']);
 }
 
+/**
+ * Returns the page title if set, otherwise falls back to the site title.
+ *
+ * @param string $type Output format: 'html' (default) wraps in <h1>, anything else returns plain text.
+ * @return string HTML or plain-text page or site title.
+ */
 function site_or_page_title($type = 'html'): string
 {
     $page_title = page_title($type);
@@ -83,6 +118,13 @@ function site_or_page_title($type = 'html'): string
     return $page_title;
 }
 
+/**
+ * Returns the current page title (from $data['title']) as an <h1>, or plain text when $type !== 'html'.
+ * Falls back to the site title when no page title is set.
+ *
+ * @param string $type Output format: 'html' (default) wraps in <h1>, anything else returns plain text.
+ * @return string HTML or plain-text page title.
+ */
 function page_title(string $type = 'html'): string
 {
     global $config;
@@ -101,6 +143,11 @@ function page_title(string $type = 'html'): string
     return sprintf('<h1>%s</h1>', $title);
 }
 
+/**
+ * Returns the current page intro (from $data['intro']) wrapped in a <p>, or '' if not set.
+ *
+ * @return string HTML paragraph containing the intro text, or '' when no intro is available.
+ */
 function page_intro(): string
 {
     global $data;
@@ -111,6 +158,12 @@ function page_intro(): string
     return sprintf('<p>%s</p>', $data['intro']);
 }
 
+/**
+ * Returns posts that share hashtags with the given body text.
+ *
+ * @param string $body Post body Markdown text to extract hashtags from.
+ * @return array Associative array with a 'posts' key containing matching OODBBean objects.
+ */
 function related_posts($body): array
 {
     $tags = get_tags($body);
@@ -118,6 +171,12 @@ function related_posts($body): array
     return get_posts_by_tags($tags);
 }
 
+/**
+ * Finds all posts that contain at least one of the given tags, ordered by created date descending.
+ *
+ * @param array $tags List of tag strings to search for.
+ * @return array Unique OODBBean post objects matching any of the tags.
+ */
 function get_posts_by_tags($tags): array
 {
     $related_posts = [];
@@ -132,6 +191,12 @@ function get_posts_by_tags($tags): array
     return array_unique($related_posts);
 }
 
+/**
+ * Emits OpenGraph and Twitter Card <meta> tags for the current status post.
+ * Does nothing when the current template is not 'status'.
+ *
+ * @return void
+ */
 function the_opengraph(): void
 {
     global $template;
@@ -176,6 +241,12 @@ function the_opengraph(): void
     }
 }
 
+/**
+ * Emits <link rel="preconnect"> and <link rel="dns-prefetch"> tags for origins in $config['preconnect'].
+ * Does nothing when no preconnect origins are configured.
+ *
+ * @return void
+ */
 function the_preconnect(): void
 {
     global $config;
@@ -188,6 +259,11 @@ function the_preconnect(): void
     }
 }
 
+/**
+ * Emits a <link rel="stylesheet"> tag for the active theme's styles/styles.css with a cache-busting hash.
+ *
+ * @return void
+ */
 function the_styles(): void
 {
     $styles = [
@@ -199,6 +275,11 @@ function the_styles(): void
     }
 }
 
+/**
+ * Emits <script defer> tags for shorthand.js and, when logged in, the admin-only JS files.
+ *
+ * @return void
+ */
 function the_scripts(): void
 {
     $scripts = [
@@ -234,6 +315,12 @@ function asset_loader(array $assets, string $asset_dir): Generator
     }
 }
 
+/**
+ * Returns a linked title anchor for the given post bean, or '' if the bean has no title.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string HTML anchor element wrapping the post title, or ''.
+ */
 function title_link(OODBBean $bean): string
 {
     if (empty($bean->title)) {
@@ -242,6 +329,13 @@ function title_link(OODBBean $bean): string
     return sprintf('<a class="title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
 }
 
+/**
+ * Returns a "Via <a>" attribution link for feed-ingested posts, or '' for regular posts.
+ * Prefers $bean->source_url; falls back to the feed URL from config.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string HTML attribution link, or '' when the bean has no feed_name.
+ */
 function link_source(OODBBean $bean): string
 {
     if (!isset($bean->feed_name)) {
@@ -249,9 +343,9 @@ function link_source(OODBBean $bean): string
     }
     $feeds = get_feeds();
 
-    $url = $feeds[$bean->feed_name];
+    $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
 
-    return sprintf('Via <a href="%s" title="View feed">%s</a>', $url, $bean->feed_name);
+    return sprintf('Via <a href="%s" title="View %s">%s</a>', escape($url), escape($bean->feed_name), escape($bean->feed_name));
 }
 
 /**
@@ -277,7 +371,11 @@ function format_past_date(int $j, int $difference, int $timestamp): string
 }
 
 /**
- * Thanks to Rose Perrone
+ * Returns a human-readable relative time string for the given Unix timestamp.
+ * Thanks to Rose Perrone.
+ *
+ * @param int $timestamp Unix timestamp to format.
+ * @return string Relative string such as "3 hours ago", "Yesterday at 2:15 pm", or an absolute date.
  * @link https://stackoverflow.com/a/11813996
  */
 function human_time($timestamp): string
@@ -318,21 +416,47 @@ function human_time($timestamp): string
     return format_past_date($j, $difference, $timestamp);
 }
 
+/**
+ * Returns the sanitised value of the ?redirect_to= query parameter, or '' if absent.
+ *
+ * @return string Sanitised URL string from the query parameter.
+ */
 function redirect_to(): string
 {
     return (string)filter_input(INPUT_GET, 'redirect_to', FILTER_SANITIZE_URL);
 }
 
+/**
+ * Escapes a string for safe HTML5 output using htmlspecialchars.
+ *
+ * @param string $html The raw string to escape.
+ * @return string HTML-safe escaped string.
+ */
 function escape(string $html): string
 {
     return htmlspecialchars($html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE);
 }
 
+/**
+ * Escapes a string for use in OpenGraph meta attribute values.
+ * Decodes any existing HTML entities first to avoid double-encoding.
+ *
+ * @param string $html The raw or partially-encoded string to escape.
+ * @return string Escaped string safe for use in HTML attribute values.
+ */
 function og_escape(string $html): string
 {
     return htmlspecialchars(htmlspecialchars_decode($html), ENT_COMPAT | ENT_HTML5);
 }
 
+/**
+ * Includes a theme part file, falling back to the default theme when the active theme does not override it.
+ *
+ * @param string $name Part name without extension (e.g. 'home', '_items').
+ * @param string $dir  Subdirectory within the theme folder. Defaults to 'parts'. Pass '' for top-level files.
+ * @return void
+ * @throws RuntimeException When the part file cannot be found in either the active or default theme.
+ */
 function part(string $name, string $dir = 'parts'): void
 {
     $name = sanitize_filename($name);
@@ -351,6 +475,11 @@ function part(string $name, string $dir = 'parts'): void
     require $filename;
 }
 
+/**
+ * Returns <li><a> HTML for each item in $config['menu_items'], or '' when none are configured.
+ *
+ * @return string Newline-separated HTML list item strings.
+ */
 function li_menu_items(): string
 {
     global $config;
@@ -370,6 +499,12 @@ function li_menu_items(): string
     return implode(PHP_EOL, $items);
 }
 
+/**
+ * Strips any character that is not alphanumeric, a hyphen, or an underscore from a filename string.
+ *
+ * @param string $filename The filename to sanitize.
+ * @return string Sanitized filename safe for use in file paths.
+ */
 function sanitize_filename($filename): string
 {
     // Remove any character that is not alphanumeric, a hyphen, or an underscore
@@ -378,11 +513,21 @@ function sanitize_filename($filename): string
     return (string)$filename;
 }
 
+/**
+ * Returns the HTML-escaped value of the ?text= query parameter, used to pre-fill the entry form textarea.
+ *
+ * @return string Escaped text string, or '' when the parameter is absent.
+ */
 function preload_text(): string
 {
     return htmlspecialchars($_GET['text'] ?? '', ENT_QUOTES, 'UTF-8');
 }
 
+/**
+ * Renders the quick-post entry form. Does nothing when the user is not logged in.
+ *
+ * @return void
+ */
 function the_entry_form(): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>

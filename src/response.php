@@ -241,10 +241,10 @@ function redirect_edited(): void
  *
  * @param string $where The URL to redirect to. If empty, redirects to the root URL.
  *
- * @return void
+ * @return never
  */
 #[NoReturn]
-function redirect_uri(string $where): void
+function redirect_uri(string $where): never
 {
     if (empty($where)) {
         $where = '/';

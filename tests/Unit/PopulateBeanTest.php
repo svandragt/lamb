@@ -187,4 +187,17 @@ class PopulateBeanTest extends TestCase
         $bean = populate_bean('Hello world');
         $this->assertSame(1, $bean->version);
     }
+
+    public function testPopulateBeanSetsSourceUrlFromFeedItem(): void
+    {
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn('test-id-src');
+        $item->method('get_permalink')->willReturn('https://example.com/article');
+
+        $bean = populate_bean("Feed content", $item, 'test-feed');
+
+        $this->assertSame('https://example.com/article', $bean->source_url);
+    }
 }

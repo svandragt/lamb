@@ -33,6 +33,15 @@ vendor/bin/codecept run Acceptance
 
 # Generate password hash and write .ddev/.env + .env
 php make-password.php <your-password>
+
+# Static analysis
+composer analyse
+
+# Auto-fix coding standard violations
+composer fix
+
+# Install pre-commit hook (one-time, after cloning)
+printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 ```
 
 ## Project Structure
@@ -105,7 +114,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
 
 **Tables used:**
-- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`
+- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
@@ -233,6 +242,7 @@ index.php
 | `$bean->updated` | Datetime string |
 | `$bean->feed_name` | Source feed name (only present for ingested feed items) |
 | `$bean->feeditem_uuid` | MD5 dedup key (only for feed items) |
+| `$bean->source_url` | Permalink of the original feed item (only for feed items; used by `link_source()`) |
 | `$bean->is_menu_item` | Truthy if the post is pinned as a menu item |
 
 **`$data['pagination']`** shape (when present):
@@ -262,7 +272,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `page_intro()` | `string` | `<p>` wrapping `$data['intro']`, or `''` |
 | `li_menu_items()` | `string` | `<li><a>` tags from `$config['menu_items']` |
 | `date_created($bean)` | `string` | `<a><time>` linking to the post permalink with human-readable timestamp |
-| `link_source($bean)` | `string` | "Via <a>" attribution link for feed-ingested posts, or `''` |
+| `link_source($bean)` | `string` | "Via <a>" attribution link for feed-ingested posts, or `''`. Uses `$bean->source_url` when set, falling back to the feed URL from config |
 | `action_edit($bean)` | `string` | Edit button (logged-in only), or `''` |
 | `action_delete($bean)` | `string` | Delete form (logged-in only), or `''` |
 | `the_entry_form()` | `void` | Renders the quick-post `<form>` (logged-in only) |

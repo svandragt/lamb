@@ -350,10 +350,11 @@
   </component>
   <component name="PhpStan">
     <PhpStan_settings>
-      <PhpStanConfiguration asDefaultInterpreter="true" />
+      <PhpStanConfiguration asDefaultInterpreter="true" tool_path="$PROJECT_DIR$/vendor/bin/phpstan" />
     </PhpStan_settings>
   </component>
   <component name="PhpStanOptionsConfiguration">
+    <option name="config" value="$PROJECT_DIR$/phpstan.neon" />
     <option name="transferred" value="true" />
   </component>
   <component name="PhpUnit">
