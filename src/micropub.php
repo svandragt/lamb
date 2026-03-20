@@ -12,22 +12,67 @@ use function Lamb\Post\populate_bean;
 class LambMicropubAdapter extends MicropubAdapter
 {
     /**
-     * Verify the bearer token against LAMB_MICROPUB_TOKEN env var.
+     * Verify the bearer token by introspecting it against the configured token endpoint.
      *
      * @param string $token
      * @return array|false
      */
     public function verifyAccessTokenCallback(string $token)
     {
-        $expected = getenv('LAMB_MICROPUB_TOKEN');
-        if (empty($expected) || !hash_equals($expected, $token)) {
+        global $config;
+        $endpoint = $config['token_endpoint'] ?? 'https://tokens.indieauth.com/token';
+
+        $data = $this->introspectToken($token, $endpoint);
+        if ($data === null || empty($data['me'])) {
             return false;
         }
 
+        if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+            return false;
+        }
+
+        $scope = isset($data['scope']) ? explode(' ', $data['scope']) : [];
+
         return [
-            'me'    => ROOT_URL,
-            'scope' => ['create'],
+            'me'    => $data['me'],
+            'scope' => $scope,
         ];
+    }
+
+    /**
+     * Call the token endpoint to introspect a bearer token.
+     * Returns the parsed JSON response or null on failure.
+     *
+     * @param string $token
+     * @param string $endpoint
+     * @return array|null
+     */
+    protected function introspectToken(string $token, string $endpoint): ?array
+    {
+        $context = stream_context_create([
+            'http' => [
+                'method'  => 'GET',
+                'header'  => implode("\r\n", [
+                    'Authorization: Bearer ' . $token,
+                    'Accept: application/json',
+                ]),
+                'timeout' => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $response = @file_get_contents($endpoint, false, $context);
+        if ($response === false) {
+            return null;
+        }
+
+        $statusLine = $http_response_header[0] ?? '';
+        if (!str_contains($statusLine, ' 200 ')) {
+            return null;
+        }
+
+        $data = json_decode($response, true);
+        return is_array($data) ? $data : null;
     }
 
     /**

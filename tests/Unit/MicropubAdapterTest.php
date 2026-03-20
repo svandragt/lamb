@@ -6,10 +6,21 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use Lamb\Micropub\LambMicropubAdapter;
 
+/**
+ * Subclass that stubs out the HTTP token introspection call.
+ */
+class StubMicropubAdapter extends LambMicropubAdapter
+{
+    public ?array $stubResponse = null;
+
+    protected function introspectToken(string $token, string $endpoint): ?array
+    {
+        return $this->stubResponse;
+    }
+}
+
 class MicropubAdapterTest extends TestCase
 {
-    private string $testToken = 'test-micropub-token-abc123';
-
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -23,46 +34,64 @@ class MicropubAdapterTest extends TestCase
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
         }
-
-        putenv("LAMB_MICROPUB_TOKEN={$this->testToken}");
-    }
-
-    protected function tearDown(): void
-    {
-        putenv('LAMB_MICROPUB_TOKEN=');
     }
 
     // --- verifyAccessTokenCallback ---
 
-    public function testVerifyTokenReturnsFalseWhenEnvNotSet(): void
+    public function testVerifyTokenReturnsFalseWhenIntrospectionFails(): void
     {
-        putenv('LAMB_MICROPUB_TOKEN=');
-        $adapter = new LambMicropubAdapter();
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = null;
         $result = $adapter->verifyAccessTokenCallback('any-token');
         $this->assertFalse($result);
     }
 
-    public function testVerifyTokenReturnsFalseForWrongToken(): void
+    public function testVerifyTokenReturnsFalseWhenMeDoesNotMatchSite(): void
     {
-        $adapter = new LambMicropubAdapter();
-        $result = $adapter->verifyAccessTokenCallback('wrong-token');
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => 'https://other.example.com/',
+            'scope' => 'create',
+        ];
+        $result = $adapter->verifyAccessTokenCallback('some-token');
         $this->assertFalse($result);
     }
 
     public function testVerifyTokenReturnsUserDataForValidToken(): void
     {
-        $adapter = new LambMicropubAdapter();
-        $result = $adapter->verifyAccessTokenCallback($this->testToken);
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create update',
+        ];
+        $result = $adapter->verifyAccessTokenCallback('valid-jwt');
         $this->assertIsArray($result);
         $this->assertArrayHasKey('me', $result);
         $this->assertArrayHasKey('scope', $result);
     }
 
-    public function testVerifyTokenScopeIncludesCreate(): void
+    public function testVerifyTokenScopeIsParsedFromSpaceSeparatedString(): void
     {
-        $adapter = new LambMicropubAdapter();
-        $result = $adapter->verifyAccessTokenCallback($this->testToken);
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create update delete',
+        ];
+        $result = $adapter->verifyAccessTokenCallback('valid-jwt');
+        $this->assertIsArray($result['scope']);
         $this->assertContains('create', $result['scope']);
+        $this->assertContains('update', $result['scope']);
+    }
+
+    public function testVerifyTokenHandlesMissingTrailingSlash(): void
+    {
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL,  // no trailing slash
+            'scope' => 'create',
+        ];
+        $result = $adapter->verifyAccessTokenCallback('valid-jwt');
+        $this->assertIsArray($result);
     }
 
     // --- createCallback ---
