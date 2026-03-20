@@ -179,3 +179,9 @@ parameters:
 			identifier: property.notFound
 			count: 1
 			path: src/micropub.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/micropub.php

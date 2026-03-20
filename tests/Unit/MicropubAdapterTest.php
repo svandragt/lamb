@@ -333,6 +333,78 @@ class MicropubAdapterTest extends TestCase
         $this->assertNotNull($post);
     }
 
+    // --- sourceQueryCallback ---
+
+    public function testSourceQueryReturnsFalseForUnknownUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/999999');
+        $this->assertFalse($result);
+    }
+
+    public function testSourceQueryReturnsContentForStatusPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Source query content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $result = $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('properties', $result);
+        $this->assertStringContainsString('Source query content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsContentForSluggedPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Slugged source content';
+        $bean->slug = 'source-test-slug';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/source-test-slug');
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Slugged source content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsCategoriesFromHashtags(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Tagged post #micropub #test';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertContains('micropub', $result['properties']['category']);
+        $this->assertContains('test', $result['properties']['category']);
+    }
+
+    public function testSourceQueryFiltersToRequestedProperties(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Filtered content #tag1';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id, ['content']);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('content', $result['properties']);
+        $this->assertArrayNotHasKey('category', $result['properties']);
+    }
+
     public function testCreateCallbackPublishedSetsCreatedDate(): void
     {
         $adapter = new LambMicropubAdapter();

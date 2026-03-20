@@ -3,14 +3,89 @@
 namespace Lamb\Micropub;
 
 use Nyholm\Psr7\ServerRequest;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Taproot\Micropub\MicropubAdapter;
 
+use function Lamb\get_tags;
 use function Lamb\permalink;
 use function Lamb\Post\populate_bean;
 
 class LambMicropubAdapter extends MicropubAdapter
 {
+    /**
+     * Return the source properties of a post identified by URL.
+     *
+     * @param string $url
+     * @param array|null $properties Specific properties to return; null means all.
+     * @return array|false
+     */
+    public function sourceQueryCallback(string $url, array $properties = null)
+    {
+        $bean = $this->findPostByUrl($url);
+        if ($bean === null) {
+            return false;
+        }
+
+        $props = $this->beanToMf2Properties($bean);
+
+        if ($properties !== null) {
+            $props = array_intersect_key($props, array_flip($properties));
+        }
+
+        return ['type' => ['h-entry'], 'properties' => $props];
+    }
+
+    /**
+     * Find a post bean by its permalink URL.
+     *
+     * @param string $url
+     * @return OODBBean|null
+     */
+    private function findPostByUrl(string $url): ?OODBBean
+    {
+        $path = parse_url($url, PHP_URL_PATH) ?? '';
+
+        if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
+            $bean = R::load('post', (int) $matches[1]);
+            return $bean->id ? $bean : null;
+        }
+
+        $slug = trim($path, '/');
+        if ($slug !== '') {
+            $bean = R::findOne('post', ' slug = ? ', [$slug]);
+            return $bean ?: null;
+        }
+
+        return null;
+    }
+
+    /**
+     * Convert a post bean to a flat MF2 properties array.
+     *
+     * @param OODBBean $bean
+     * @return array
+     */
+    private function beanToMf2Properties(OODBBean $bean): array
+    {
+        $body = $bean->body ?? '';
+        $parts = explode('---', $body, 3);
+        $content = trim(count($parts) === 3 ? $parts[2] : $body);
+
+        $props = ['content' => [$content]];
+
+        if (!empty($bean->title)) {
+            $props['name'] = [$bean->title];
+        }
+
+        $tags = get_tags($body);
+        if (!empty($tags)) {
+            $props['category'] = $tags;
+        }
+
+        return $props;
+    }
+
     /**
      * Verify the bearer token by introspecting it against the configured token endpoint.
      *
