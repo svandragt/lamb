@@ -215,7 +215,16 @@ class LambMicropubAdapter extends MicropubAdapter
             return '';
         }
 
-        return implode("\n", array_map(fn($url) => '![](' . $url . ')', $photos));
+        return implode("\n", array_map(function ($photo) {
+            if (is_array($photo)) {
+                $url = $photo['value'] ?? '';
+                $alt = $photo['alt'] ?? '';
+            } else {
+                $url = $photo;
+                $alt = '';
+            }
+            return '![' . $alt . '](' . $url . ')';
+        }, $photos));
     }
 
     /**

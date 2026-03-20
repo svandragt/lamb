@@ -298,6 +298,22 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('![](https://example.com/sunset.jpg)', $post->body);
     }
 
+    public function testCreateCallbackPhotoObjectWithAltUsesAltText(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['A post with an alt photo'],
+                'photo'   => [['value' => 'https://example.com/sunset.jpg', 'alt' => 'Photo of a sunset']],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%alt photo%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('![Photo of a sunset](https://example.com/sunset.jpg)', $post->body);
+    }
+
     public function testCreateCallbackMultiplePhotosAppendMultipleImages(): void
     {
         $adapter = new LambMicropubAdapter();
