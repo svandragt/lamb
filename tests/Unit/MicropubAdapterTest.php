@@ -5,19 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use Lamb\Micropub\LambMicropubAdapter;
-
-/**
- * Subclass that stubs out the HTTP token introspection call.
- */
-class StubMicropubAdapter extends LambMicropubAdapter
-{
-    public ?array $stubResponse = null;
-
-    protected function introspectToken(string $token, string $endpoint): ?array
-    {
-        return $this->stubResponse;
-    }
-}
+use Tests\Support\StubMicropubAdapter;
 
 class MicropubAdapterTest extends TestCase
 {

@@ -51,7 +51,7 @@ A Micropub `h-entry` with a `content` property creates a status post (no title, 
 
 ## How to test
 
-Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site.
+Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's implementation report is available at [micropub.rocks/implementation-reports/servers/962](https://micropub.rocks/implementation-reports/servers/962/GYKIHp3O03m9vNil9Qcq).
 
 ## Related
 
