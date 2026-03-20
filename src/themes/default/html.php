@@ -23,6 +23,9 @@ global $template;
     <title><?= escape(site_or_page_title('text')) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape($config['site_title']) ?>">
+    <?php foreach ($config['me'] ?? [] as $url) : ?>
+    <link rel="me" href="<?= escape($url) ?>">
+    <?php endforeach; ?>
     <link rel="authorization_endpoint" href="<?= escape($config['authorization_endpoint']) ?>">
     <link rel="token_endpoint" href="<?= escape($config['token_endpoint']) ?>">
     <link rel="micropub" href="<?= ROOT_URL ?>/micropub">

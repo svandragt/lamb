@@ -58,6 +58,12 @@ function get_default_ini_text(): string
 ;; Override to use your own IndieAuth server.
 ;authorization_endpoint = https://indieauth.com/auth
 ;token_endpoint = https://tokens.indieauth.com/token
+
+[me]
+;; Add rel="me" identity links for IndieAuth verification.
+;; Each entry is <label>=<url>. Links appear as <link rel="me"> in the HTML head.
+;Github = https://github.com/yourusername
+;Email = mailto:you@example.com
 INI;
 }
 

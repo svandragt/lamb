@@ -126,4 +126,20 @@ class ConfigLoadTest extends TestCase
         $config = load();
         $this->assertSame('https://my.token.example.com/token', $config['token_endpoint']);
     }
+
+    public function testLoadMeSectionParsesIntoArray(): void
+    {
+        save_ini_text("[me]\nGithub = https://github.com/aaronpk\nEmail = mailto:me@example.com\n");
+        $config = load();
+        $this->assertArrayHasKey('me', $config);
+        $this->assertSame('https://github.com/aaronpk', $config['me']['Github']);
+        $this->assertSame('mailto:me@example.com', $config['me']['Email']);
+    }
+
+    public function testLoadMeSectionAbsentWhenNotConfigured(): void
+    {
+        save_ini_text("site_title = No Me Section\n");
+        $config = load();
+        $this->assertEmpty($config['me'] ?? []);
+    }
 }
