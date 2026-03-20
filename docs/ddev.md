@@ -18,7 +18,7 @@ ddev php make-password.php hackme
 ddev restart
 ```
 
-## Worfklow
+## Workflow
 
 - Run `ddev start`. The output will tell you where you can open the project.
-- Runn `ddev stop` when finished.
+- Run `ddev stop` when finished.
