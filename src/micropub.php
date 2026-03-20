@@ -132,11 +132,31 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $title = $props['name'][0] ?? null;
 
+        $tags = $this->buildTags($props['category'] ?? []);
+        if ($tags !== '') {
+            $content = $content . ' ' . $tags;
+        }
+
         if ($title === null) {
             return $content;
         }
 
         return "---\ntitle: $title\n---\n$content";
+    }
+
+    /**
+     * Convert an array of category strings to space-separated hashtags.
+     *
+     * @param array $categories
+     * @return string
+     */
+    private function buildTags(array $categories): string
+    {
+        if (empty($categories)) {
+            return '';
+        }
+
+        return implode(' ', array_map(fn($c) => '#' . $c, $categories));
     }
 }
 

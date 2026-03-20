@@ -11,13 +11,10 @@ if (($_ENV['PWD'] ?? '') === '/srv/app') {
     $site_url = 'http://lamb-web';
 }
 
-$micropub_token = bin2hex(random_bytes(32));
-
 $data  = "SITE_URL='" . $site_url . "'" . PHP_EOL;
 $data .= "LAMB_TEST_PORT='" . $test_port . "'" . PHP_EOL;
 $data .= "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
 $data .= "LAMB_TEST_PASSWORD='" . $argv[1] . "'" . PHP_EOL;
-$data .= "LAMB_MICROPUB_TOKEN='" . $micropub_token . "'" . PHP_EOL;
 $env_out = file_put_contents('.env', $data);
 if (!$env_out) {
     user_error('Problem saving .env', E_USER_WARNING);

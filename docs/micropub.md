@@ -26,17 +26,7 @@ Each entry is rendered as a `<link rel="me">` tag in the HTML `<head>` — invis
 
 Make sure each linked profile (e.g. GitHub) has your site URL in its profile page so IndieAuth can verify the two-way link.
 
-### 2. Generate a Micropub token
-
-The Micropub endpoint uses a static bearer token stored in the `LAMB_MICROPUB_TOKEN` environment variable. Generate it by running:
-
-```bash
-php make-password.php <your-login-password>
-```
-
-This writes `LAMB_MICROPUB_TOKEN` (along with `LAMB_LOGIN_PASSWORD` and `SITE_URL`) to your `.env` file.
-
-### 3. Configure your Micropub client
+### 2. Configure your Micropub client
 
 Point your client at your site URL. It will auto-discover the endpoints from your home page `<head>`:
 

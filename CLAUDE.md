@@ -423,7 +423,7 @@ Authentication password is stored hashed in the `LAMB_LOGIN_PASSWORD` environmen
 
 ```bash
 php make-password.php mysecretpassword
-# writes LAMB_LOGIN_PASSWORD, LAMB_MICROPUB_TOKEN, SITE_URL to .env
+# writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.

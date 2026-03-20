@@ -188,6 +188,37 @@ class MicropubAdapterTest extends TestCase
         $this->assertNotNull($post);
     }
 
+    public function testCreateCallbackCategoriesAppendedAsHashtags(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'  => ['A post with categories'],
+                'category' => ['test1', 'test2'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%#test1%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('#test1', $post->body);
+        $this->assertStringContainsString('#test2', $post->body);
+    }
+
+    public function testCreateCallbackNoCategoriesLeavesBodyUnchanged(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['No categories here'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body = ? ', ['No categories here']);
+        $this->assertNotNull($post);
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();
