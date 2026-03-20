@@ -20,7 +20,7 @@ use    Lamb\Response;
 /**
  * Checks if the user is logged in.
  *
- * @return void
+ * @return string
  *
  * If the user is not logged in, a flash message "Please login" is added to the session and the user is redirected to the login page.
  */

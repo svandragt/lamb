@@ -1,0 +1,169 @@
+parameters:
+	ignoreErrors:
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/config.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/config.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$draft\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 3
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/lamb.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/network.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$updated\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/network.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$value\.$#'
+			identifier: property.notFound
+			count: 3
+			path: src/network.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$created\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$draft\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$feed_name\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$feeditem_uuid\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$source_url\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$updated\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$version\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/post.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$body\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$draft\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$slug\.$#'
+			identifier: property.notFound
+			count: 4
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$title\.$#'
+			identifier: property.notFound
+			count: 2
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$updated\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$version\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/theme.php
