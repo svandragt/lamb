@@ -70,6 +70,10 @@
       "vendor/bin/codecept run Unit --coverage-xml",
       "php check-coverage.php tests/_output/coverage.xml 60"
     ],
-    "e2e": "pnpm exec playwright test"
+    "e2e": "pnpm exec playwright test",
+    "docs": [
+      "Composer\\Config::disableProcessTimeout",
+      "docker run --rm -v \"$PWD/docs:/site\" -v \"$PWD/.jekyll-bundle:/usr/local/bundle\" -p 4000:4000 bretfisher/jekyll-serve"
+    ]
   }
 }
