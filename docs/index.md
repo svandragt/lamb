@@ -4,6 +4,8 @@ title: Lamb
 
 # Lamb — Literally Another Micro Blog.
 
+<img src="https://github.com/svandragt/lamb/blob/main/src/images/og-image-lamb.jpg?raw=true" alt="Lamb made out of circuitry" />
+
 Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
 
 ## Getting started
