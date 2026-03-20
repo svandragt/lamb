@@ -72,6 +72,9 @@ class LambMicropubAdapter extends MicropubAdapter
         $parts = explode('---', $body, 3);
         $content = trim(count($parts) === 3 ? $parts[2] : $body);
 
+        // Strip trailing hashtags — categories appended by buildBody during creation.
+        $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content));
+
         $props = ['content' => [$content]];
 
         if (!empty($bean->title)) {

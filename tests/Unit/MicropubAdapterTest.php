@@ -373,6 +373,22 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('Slugged source content', $result['properties']['content'][0]);
     }
 
+    public function testSourceQueryContentExcludesAppendedCategoryHashtags(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Source content #micropub #test';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertSame('Source content', $result['properties']['content'][0]);
+        $this->assertContains('micropub', $result['properties']['category']);
+        $this->assertContains('test', $result['properties']['category']);
+    }
+
     public function testSourceQueryReturnsCategoriesFromHashtags(): void
     {
         $bean = R::dispense('post');
