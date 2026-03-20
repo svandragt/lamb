@@ -53,6 +53,11 @@ function get_default_ini_text(): string
 ;; Each item is in the format of <label>=<origin>.
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
+
+;; IndieAuth endpoints used for Micropub discovery.
+;; Override to use your own IndieAuth server.
+;authorization_endpoint = https://indieauth.com/auth
+;token_endpoint = https://tokens.indieauth.com/token
 INI;
 }
 
@@ -68,9 +73,11 @@ function load(): array
 
     // Hardcoded defaults as fallback for missing keys
     $defaults = [
-        'author_email' => 'joe.sheeple@example.com',
-        'author_name' => 'Joe Sheeple',
-        'site_title' => 'My Microblog',
+        'author_email'           => 'joe.sheeple@example.com',
+        'author_name'            => 'Joe Sheeple',
+        'site_title'             => 'My Microblog',
+        'authorization_endpoint' => 'https://indieauth.com/auth',
+        'token_endpoint'         => 'https://tokens.indieauth.com/token',
     ];
 
     return array_merge($defaults, $config ?: []);
