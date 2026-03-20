@@ -1,3 +1,7 @@
+---
+title: Milestones
+---
+
 # Milestones
 
 [Milestone](https://github.com/svandragt/lamb/milestones) goals can be generated using the following commands:

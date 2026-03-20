@@ -65,5 +65,5 @@ Once the post exists, the config entry has no effect and can be safely deleted f
 
 ## Related
 
-*   [Site Configuration](./site-configuration.md)
-*   [Post Types](./post-types.md)
+*   [Site Configuration]({% link site-configuration.md %})
+*   [Post Types]({% link post-types.md %})

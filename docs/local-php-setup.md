@@ -1,3 +1,7 @@
+---
+title: Local PHP setup
+---
+
 # Local PHP setup
 
 Make sure everything is installed:

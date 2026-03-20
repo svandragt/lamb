@@ -1,3 +1,9 @@
 title: Lamb Documentation
 description: Literally Another Micro Blog — end-user documentation
 theme: jekyll-theme-minimal
+permalink: pretty
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: default

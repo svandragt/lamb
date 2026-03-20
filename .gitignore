@@ -19,3 +19,7 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Docs
+/.jekyll-bundle/
+/docs/_site/

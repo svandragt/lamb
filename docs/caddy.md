@@ -1,3 +1,7 @@
+---
+title: Caddy
+---
+
 # Caddy
 
 A working Caddyfile is provided in the project root.

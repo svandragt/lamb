@@ -1,3 +1,7 @@
+---
+title: Site Configuration
+---
+
 # Site Configuration
 
 Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
@@ -56,9 +60,9 @@ The full default configuration (all keys commented out = use built-in defaults):
 
 ## Related
 
-* [Setting up Cross-Posting](./cross-posting.md#setup) requires site configuration changes.
-* [Drafts](./drafts.md): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
-* [Menu Items](./menu-items.md)
-* [Preconnect](./preconnect.md)
-* [Redirections](./redirections.md)
-* [Themes](./themes.md): The `theme` key selects the active theme.
+* [Setting up Cross-Posting]({% link cross-posting.md %}#setup) requires site configuration changes.
+* [Drafts]({% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
+* [Menu Items]({% link menu-items.md %})
+* [Preconnect]({% link preconnect.md %})
+* [Redirections]({% link redirections.md %})
+* [Themes]({% link themes.md %}): The `theme` key selects the active theme.

@@ -1,3 +1,7 @@
+---
+title: Docker
+---
+
 # Docker
 
 The only requirement in this case is a working Docker setup!

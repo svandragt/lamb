@@ -1,3 +1,7 @@
+---
+title: NGINX configuration
+---
+
 # NGINX configuration
 
 Copy the files in the `site-available` and `snippets` into the respective directories. The `fastcgi`  and `php`

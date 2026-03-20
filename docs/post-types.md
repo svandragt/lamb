@@ -43,5 +43,5 @@ The following sections of the site are special:
 
 ## Related
 
-* [Drafts](./drafts.md): Add `draft: true` to front-matter to save a post as a draft.
-* [Menu Items](./menu-items.md): Page posts with slugs can be pinned as menu items.
+* [Drafts]({% link drafts.md %}): Add `draft: true` to front-matter to save a post as a draft.
+* [Menu Items]({% link menu-items.md %}): Page posts with slugs can be pinned as menu items.

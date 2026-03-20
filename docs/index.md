@@ -1,3 +1,7 @@
+---
+title: Lamb
+---
+
 # Lamb — Literally Another Micro Blog.
 
 Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
@@ -16,27 +20,27 @@ Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
 Webservers:
 
-1. [Caddy](./caddy.md)
-2. [Nginx](./nginx.md)
+1. [Caddy]({% link caddy.md %})
+2. [Nginx]({% link nginx.md %})
 
 Containers:
 
-1. [Docker](./docker.md)
+1. [Docker]({% link docker.md %})
 
 Devtools / local environments / sandbox:
 
-1. [DDev](./ddev.md) local environments wrapper around Docker. Convenient.
-2. [Devbox](./devbox.md) portable, isolated, developer environments. Tidy.
-3. [Local PHP setup](./local-php-setup.md) DIY. Control.
+1. [DDev]({% link ddev.md %}) local environments wrapper around Docker. Convenient.
+2. [Devbox]({% link devbox.md %}) portable, isolated, developer environments. Tidy.
+3. [Local PHP setup]({% link local-php-setup.md %}) DIY. Control.
 
 ## Main Topics
 
-* [Cron Scheduled Tasks](./cron-scheduled-tasks.md)
-* [Cross-posting](./cross-posting.md)
-* [Drafts](./drafts.md)
-* [Menu Items](./menu-items.md)
-* [Post Types](./post-types.md)
-* [Preconnect](./preconnect.md)
-* [Site Configuration](./site-configuration.md)
-* [Themes](./themes.md)
-* [Upgrading](./upgrading.md)
+* [Cron Scheduled Tasks]({% link cron-scheduled-tasks.md %})
+* [Cross-posting]({% link cross-posting.md %})
+* [Drafts]({% link drafts.md %})
+* [Menu Items]({% link menu-items.md %})
+* [Post Types]({% link post-types.md %})
+* [Preconnect]({% link preconnect.md %})
+* [Site Configuration]({% link site-configuration.md %})
+* [Themes]({% link themes.md %})
+* [Upgrading]({% link upgrading.md %})

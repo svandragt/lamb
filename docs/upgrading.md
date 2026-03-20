@@ -1,3 +1,7 @@
+---
+title: Upgrading
+---
+
 # Upgrading
 
 Full instructions for upgrading lamb to a newer version.
