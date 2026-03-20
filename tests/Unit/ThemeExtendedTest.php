@@ -18,6 +18,10 @@ class ThemeExtendedTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+        // Ensure the draft column exists (RedBeanPHP fluid mode only creates columns on first store)
+        $seed = R::dispense('post');
+        $seed->draft = 0;
+        R::store($seed);
         R::exec("DELETE FROM post");
 
         if (!defined('ROOT_URL')) {
@@ -205,11 +209,12 @@ class ThemeExtendedTest extends TestCase
 
     // related_posts
 
-    public function testRelatedPostsReturnsEmptyArrayWhenBodyHasNoTags(): void
+    public function testRelatedPostsReturnsEmptyPostsArrayWhenBodyHasNoTags(): void
     {
         $result = related_posts('<p>No hashtags here.</p>');
         $this->assertIsArray($result);
-        $this->assertCount(0, $result);
+        $this->assertArrayHasKey('posts', $result);
+        $this->assertCount(0, $result['posts']);
     }
 
     public function testRelatedPostsFindsPostsMatchingTagsInBody(): void
@@ -222,12 +227,66 @@ class ThemeExtendedTest extends TestCase
 
         // related_posts extracts tags from the body HTML and finds matching posts
         $result = related_posts('<p>Some post about #lamb</p>');
-        $this->assertCount(1, $result);
+        $this->assertArrayHasKey('posts', $result);
+        $this->assertCount(1, $result['posts']);
     }
 
-    public function testRelatedPostsReturnsArrayType(): void
+    public function testRelatedPostsReturnsArrayWithPostsKey(): void
     {
         $result = related_posts('<p>Hello #world</p>');
         $this->assertIsArray($result);
+        $this->assertArrayHasKey('posts', $result);
+    }
+
+    public function testRelatedPostsExcludesCurrentPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'My post about #lamb end';
+        $bean->version = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $result = related_posts($bean->body, (int) $bean->id);
+        $this->assertArrayHasKey('posts', $result);
+        $this->assertCount(0, $result['posts']);
+    }
+
+    public function testGetPostsByTagsExcludesGivenId(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Post about #exclude end';
+        $bean->version = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $result = get_posts_by_tags(['exclude'], (int) $bean->id);
+        $this->assertCount(0, $result);
+    }
+
+    public function testGetPostsByTagsLimitsResults(): void
+    {
+        for ($i = 0; $i < 11; $i++) {
+            $bean = R::dispense('post');
+            $bean->body = "Post $i about #limitme end";
+            $bean->version = 1;
+            $bean->created = date('Y-m-d H:i:s');
+            R::store($bean);
+        }
+
+        $result = get_posts_by_tags(['limitme']);
+        $this->assertCount(10, $result);
+    }
+
+    public function testGetPostsByTagsExcludesDrafts(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Draft post about #draftme end';
+        $bean->version = 1;
+        $bean->draft = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $result = get_posts_by_tags(['draftme']);
+        $this->assertCount(0, $result);
     }
 }

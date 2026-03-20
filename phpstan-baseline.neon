@@ -165,5 +165,5 @@ parameters:
 		-
 			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$id\.$#'
 			identifier: property.notFound
-			count: 1
+			count: 2
 			path: src/theme.php
