@@ -132,6 +132,11 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $title = $props['name'][0] ?? null;
 
+        $photos = $this->buildPhotos($props['photo'] ?? []);
+        if ($photos !== '') {
+            $content = $content . "\n\n" . $photos;
+        }
+
         $tags = $this->buildTags($props['category'] ?? []);
         if ($tags !== '') {
             $content = $content . ' ' . $tags;
@@ -142,6 +147,21 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         return "---\ntitle: $title\n---\n$content";
+    }
+
+    /**
+     * Convert an array of photo URLs to newline-separated Markdown images.
+     *
+     * @param array $photos
+     * @return string
+     */
+    private function buildPhotos(array $photos): string
+    {
+        if (empty($photos)) {
+            return '';
+        }
+
+        return implode("\n", array_map(fn($url) => '![](' . $url . ')', $photos));
     }
 
     /**

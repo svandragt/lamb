@@ -205,6 +205,39 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#test2', $post->body);
     }
 
+    public function testCreateCallbackPhotoUrlAppendsMarkdownImage(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['A post with a photo'],
+                'photo'   => ['https://example.com/sunset.jpg'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%sunset.jpg%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('![](https://example.com/sunset.jpg)', $post->body);
+    }
+
+    public function testCreateCallbackMultiplePhotosAppendMultipleImages(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['Two photos'],
+                'photo'   => ['https://example.com/a.jpg', 'https://example.com/b.jpg'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%a.jpg%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('![](https://example.com/a.jpg)', $post->body);
+        $this->assertStringContainsString('![](https://example.com/b.jpg)', $post->body);
+    }
+
     public function testCreateCallbackNoCategoriesLeavesBodyUnchanged(): void
     {
         $adapter = new LambMicropubAdapter();
