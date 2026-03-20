@@ -329,6 +329,41 @@ class MicropubAdapterTest extends TestCase
         $this->assertNotNull($post);
     }
 
+    public function testCreateCallbackPublishedSetsCreatedDate(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'   => ['A dated post'],
+                'published' => ['2017-05-31T12:03:36-07:00'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body = ? ', ['A dated post']);
+        $this->assertNotNull($post);
+        $this->assertStringStartsWith('2017-05-31', $post->created);
+    }
+
+    public function testCreateCallbackNestedPropertyStoredInBody(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['Lunch meeting'],
+                'checkin' => [[
+                    'type'       => ['h-card'],
+                    'properties' => ['name' => ['Los Gorditos']],
+                ]],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%Lunch meeting%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('Los Gorditos', $post->body);
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();

@@ -99,6 +99,11 @@ class LambMicropubAdapter extends MicropubAdapter
             $bean->transformed = $this->sanitizeHtml($content);
         }
 
+        $published = $props['published'][0] ?? null;
+        if ($published) {
+            $bean->created = date('Y-m-d H:i:s', strtotime($published));
+        }
+
         R::store($bean);
 
         return permalink($bean);
@@ -150,11 +155,35 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . ' ' . $tags;
         }
 
+        $extra = $this->buildExtraProperties($props);
+        if ($extra !== '') {
+            $content = $content . "\n\n" . $extra;
+        }
+
         if ($title === null) {
             return $content;
         }
 
         return "---\ntitle: $title\n---\n$content";
+    }
+
+    /**
+     * Serialize any extra nested MF2 properties (not content/name/category/photo/published)
+     * as a JSON code block so they are preserved in storage.
+     *
+     * @param array $props
+     * @return string
+     */
+    private function buildExtraProperties(array $props): string
+    {
+        $known = ['content', 'name', 'category', 'photo', 'published'];
+        $extra = array_diff_key($props, array_flip($known));
+
+        if (empty($extra)) {
+            return '';
+        }
+
+        return "```json\n" . json_encode($extra, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n```";
     }
 
     /**
