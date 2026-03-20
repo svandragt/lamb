@@ -86,39 +86,47 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $props = $data['properties'] ?? [];
 
-        $content = $this->extractContent($props);
+        ['content' => $content, 'is_html' => $isHtml] = $this->extractContent($props);
         if ($content === null) {
             return 'invalid_request';
         }
 
-        $body = $this->buildBody($props, $content);
+        $body = $this->buildBody($props, $isHtml ? strip_tags($content) : $content);
 
         $bean = populate_bean($body);
+
+        if ($isHtml) {
+            $bean->transformed = $this->sanitizeHtml($content);
+        }
+
         R::store($bean);
 
         return permalink($bean);
     }
 
     /**
-     * Extract plain-text content from micropub properties.
-     * Returns null if no content is present.
+     * Extract content from micropub properties.
+     * Returns ['content' => string|null, 'is_html' => bool].
      *
      * @param array $props
-     * @return string|null
+     * @return array{content: string|null, is_html: bool}
      */
-    private function extractContent(array $props): ?string
+    private function extractContent(array $props): array
     {
         if (empty($props['content'])) {
-            return null;
+            return ['content' => null, 'is_html' => false];
         }
 
         $raw = $props['content'][0];
 
         if (is_array($raw)) {
-            return $raw['value'] ?? $raw['html'] ?? null;
+            if (isset($raw['html'])) {
+                return ['content' => $raw['html'], 'is_html' => true];
+            }
+            return ['content' => $raw['value'] ?? null, 'is_html' => false];
         }
 
-        return (string) $raw;
+        return ['content' => (string) $raw, 'is_html' => false];
     }
 
     /**
@@ -147,6 +155,23 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         return "---\ntitle: $title\n---\n$content";
+    }
+
+    /**
+     * Strip disallowed tags from HTML content, keeping safe formatting elements.
+     *
+     * @param string $html
+     * @return string
+     */
+    private function sanitizeHtml(string $html): string
+    {
+        return strip_tags($html, [
+            'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
+            'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
+            'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
+            'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
+            'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+        ]);
     }
 
     /**

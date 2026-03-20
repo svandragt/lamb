@@ -205,6 +205,83 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#test2', $post->body);
     }
 
+    public function testCreateCallbackHtmlContentIsRenderedNotEscaped(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p>This has <b>bold</b> text.</p>']],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%bold%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('<b>bold</b>', $post->transformed);
+        $this->assertStringNotContainsString('&lt;b&gt;', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlScriptTagIsStripped(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p>Sanitise script</p><script>alert(1)</script>']],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%Sanitise script%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('<script>', $post->transformed);
+        $this->assertStringContainsString('<p>Sanitise script</p>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlStyleTagIsStripped(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p>Sanitise style</p><style>body{display:none}</style>']],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%Sanitise style%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('<style>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlIframeIsStripped(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p>Sanitise iframe</p><iframe src="https://evil.example.com"></iframe>']],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%Sanitise iframe%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('<iframe', $post->transformed);
+    }
+
+    public function testCreateCallbackPlainTextContentIsStillMarkdownProcessed(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['Plain **text** content'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body = ? ', ['Plain **text** content']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('<strong>text</strong>', $post->transformed);
+    }
+
     public function testCreateCallbackPhotoUrlAppendsMarkdownImage(): void
     {
         $adapter = new LambMicropubAdapter();
