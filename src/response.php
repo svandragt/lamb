@@ -724,6 +724,7 @@ function respond_search(array $args): array
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
     // Results
+    $data['query'] = $query;
     $data['title'] = 'Searched for "' . $query . '"';
     $pagination = $paginated['pagination'];
     return get_results(
