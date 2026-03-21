@@ -44,6 +44,7 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
             $bean->feed_name = $feed_name;
         }
+        $bean->source_url = $feed_item->get_permalink();
     }
 
     parse_bean($bean);
