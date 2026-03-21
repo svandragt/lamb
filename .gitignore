@@ -1,4 +1,3 @@
-/docs-wiki/
 *.db
 /.docker/*.env
 /data/cache/
@@ -20,3 +19,7 @@ node_modules/
 /blob-report/
 /playwright/.cache/
 /playwright/.auth/
+
+# Docs
+/.jekyll-bundle/
+/docs/_site/
