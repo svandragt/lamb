@@ -99,7 +99,7 @@ function update_item(SimplePieItem $item, string $name): void
     }
 }
 
-function prepare_item(SimplePieItem $item, string $name, OODBBean $bean = null): ?OODBBean
+function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null): ?OODBBean
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name, $bean);

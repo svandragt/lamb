@@ -43,6 +43,12 @@ parameters:
 			path: src/lamb.php
 
 		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$to_url\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/lamb.php
+
+		-
 			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$value\.$#'
 			identifier: property.notFound
 			count: 2
@@ -139,9 +145,21 @@ parameters:
 			path: src/response.php
 
 		-
+			message: '#^Access to an undefined property iterable<RedBeanPHP\\OODBBean>&RedBeanPHP\\OODBBean\:\:\$from_slug\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/response.php
+
+		-
 			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$slug\.$#'
 			identifier: property.notFound
-			count: 4
+			count: 6
+			path: src/response.php
+
+		-
+			message: '#^Access to an undefined property iterable<RedBeanPHP\\OODBBean>&RedBeanPHP\\OODBBean\:\:\$to_url\.$#'
+			identifier: property.notFound
+			count: 1
 			path: src/response.php
 
 		-
