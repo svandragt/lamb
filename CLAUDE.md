@@ -53,7 +53,7 @@ lamb/
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
 │   ├── routes.php        # register_route() / call_route() helpers
-│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink
+│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, find_redirect, delete_redirect_for_slug
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify
 │   ├── response.php      # All route handlers (respond_*, redirect_*)
 │   ├── security.php      # require_login(), require_csrf()
@@ -116,6 +116,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
+- `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
 
@@ -123,9 +124,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
 
-Config keys currently documented in code/defaults: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`.
-
-The wiki also documents a planned `[redirections]` section, but that is still work in progress and is not implemented on `main`/`release`.
+Config keys: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`, `[redirections]`.
 
 ### Post Content Format
 
