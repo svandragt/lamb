@@ -10,6 +10,7 @@
 /src/themes/
 !/src/themes/2024
 !/src/themes/default
+!/src/themes/monologue
 .env
 
 # Playwright
