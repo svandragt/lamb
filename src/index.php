@@ -57,6 +57,12 @@ $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);
     $template = 'status';
+} elseif ($action !== false && !Route\is_reserved_route($action)) {
+    $redirect_url = find_redirect($action);
+    if ($redirect_url !== null) {
+        header('Location: ' . $redirect_url, true, 301);
+        exit;
+    }
 }
 $data = Route\call_route($action);
 $action = $data['action'] ?? $action;

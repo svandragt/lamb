@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\Response\get_results;
+use function Lamb\Response\respond_search;
 use function Lamb\Response\upgrade_posts;
 
 class ResponseExtendedTest extends TestCase
@@ -86,6 +87,21 @@ class ResponseExtendedTest extends TestCase
     {
         $result = get_results(25, [], [], 3, 10, 3, 20);
         $this->assertNull($result['pagination']['next_page']);
+    }
+
+    // respond_search
+
+    public function testRespondSearchIncludesQueryInResult(): void
+    {
+        $result = respond_search(['hello']);
+        $this->assertArrayHasKey('query', $result);
+        $this->assertSame('hello', $result['query']);
+    }
+
+    public function testRespondSearchQueryIsHtmlEscaped(): void
+    {
+        $result = respond_search(['<script>']);
+        $this->assertSame('&lt;script&gt;', $result['query']);
     }
 
     // upgrade_posts

@@ -64,6 +64,12 @@ function get_default_ini_text(): string
 ;; Each entry is <label>=<url>. Links appear as <link rel="me"> in the HTML head.
 ;Github = https://github.com/yourusername
 ;Email = mailto:you@example.com
+
+[redirections]
+;; Add 301 redirects for old URL path segments.
+;; Format: <old-slug> = <destination>
+;; Destination can be a root-relative URL, a bare slug, or a full external URL.
+;old-post = /new-post
 INI;
 }
 

@@ -48,7 +48,7 @@ global $template;
         <li class="right">
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
-                <input type="text" name="s" id="s" required>
+                <input type="text" name="s" id="s" value="<?= escape($data['query'] ?? '') ?>" required>
                 <input type="submit" value="🔎">
             </form>
             <?php

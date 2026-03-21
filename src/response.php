@@ -14,6 +14,8 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use RuntimeException;
 
+use function Lamb\delete_redirect_for_slug;
+use function Lamb\find_redirect;
 use function Lamb\parse_bean;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\posts_by_tag;
@@ -137,6 +139,7 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
  */
 function redirect_created(): ?array
 {
+    global $config;
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_CREATE) {
@@ -157,6 +160,16 @@ function redirect_created(): ?array
         $id = R::store($bean);
         if (is_reserved_route($bean->slug)) {
             $bean->slug .= "-" . $id;
+            R::store($bean);
+        }
+        // Remove any existing redirect for this slug — the new post takes priority
+        if (!empty($bean->slug)) {
+            delete_redirect_for_slug($bean->slug);
+            $redirections = $config['redirections'] ?? [];
+            if (isset($redirections[$bean->slug])) {
+                $_SESSION['flash'][] = 'A manual redirect for <code>' . $bean->slug
+                    . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+            }
         }
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
@@ -201,6 +214,8 @@ function redirect_deleted(mixed $args): void
  */
 function redirect_edited(): void
 {
+    global $config;
+
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_EDIT) {
@@ -214,6 +229,8 @@ function redirect_edited(): void
     }
 
     $bean = R::load('post', (int)$id);
+    $old_slug = $bean->slug;
+
     $bean->body = $contents;
 
     parse_bean($bean);
@@ -231,6 +248,26 @@ function redirect_edited(): void
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
     }
+
+    $new_slug = $bean->slug;
+    if (!empty($old_slug) && $old_slug !== $new_slug) {
+        // Remove any redirect pointing to the new slug to avoid redirect loops
+        delete_redirect_for_slug($new_slug);
+        // Store a redirect from the old slug to the new one
+        $auto_redirect = R::dispense('redirect');
+        $auto_redirect->from_slug = $old_slug;
+        $auto_redirect->to_url = '/' . $new_slug;
+        R::store($auto_redirect);
+    }
+
+    if (!empty($new_slug)) {
+        $redirections = $config['redirections'] ?? [];
+        if (isset($redirections[$new_slug])) {
+            $_SESSION['flash'][] = 'A manual redirect for <code>' . $new_slug
+                . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+        }
+    }
+
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);
     redirect_uri($redirect);
@@ -687,6 +724,7 @@ function respond_search(array $args): array
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
     // Results
+    $data['query'] = $query;
     $data['title'] = 'Searched for "' . $query . '"';
     $pagination = $paginated['pagination'];
     return get_results(
