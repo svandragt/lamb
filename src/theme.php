@@ -164,31 +164,43 @@ function page_intro(): string
  * @param string $body Post body Markdown text to extract hashtags from.
  * @return array Associative array with a 'posts' key containing matching OODBBean objects.
  */
-function related_posts($body): array
+function related_posts(string $body, int $exclude_id = 0): array
 {
     $tags = get_tags($body);
 
-    return get_posts_by_tags($tags);
+    return ['posts' => get_posts_by_tags($tags, $exclude_id)];
 }
 
 /**
  * Finds all posts that contain at least one of the given tags, ordered by created date descending.
  *
  * @param array $tags List of tag strings to search for.
+ * @param int $exclude_id Post ID to exclude from results (e.g. the current post).
+ * @param int $limit Maximum number of posts to return.
  * @return array Unique OODBBean post objects matching any of the tags.
  */
-function get_posts_by_tags($tags): array
+function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): array
 {
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $tag_posts = R::find('post', $conditions['sql'] . ' ORDER BY created DESC', $conditions['params']);
+        $sql = '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1)';
+        $params = $conditions['params'];
+        if ($exclude_id > 0) {
+            $sql .= ' AND id != ?';
+            $params[] = $exclude_id;
+        }
+        $sql .= ' ORDER BY created DESC';
+        $tag_posts = R::find('post', $sql, $params);
         foreach ($tag_posts as $tag_post) {
-            $related_posts[] = $tag_post;
+            $related_posts[$tag_post->id] = $tag_post;
+        }
+        if (count($related_posts) >= $limit) {
+            break;
         }
     }
 
-    return array_unique($related_posts);
+    return array_slice(array_values($related_posts), 0, $limit);
 }
 
 /**
