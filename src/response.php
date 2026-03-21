@@ -139,6 +139,7 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
  */
 function redirect_created(): ?array
 {
+    global $config;
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_CREATE) {
