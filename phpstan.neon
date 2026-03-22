@@ -12,3 +12,5 @@ parameters:
     bootstrapFiles:
         - vendor/autoload.php
         - phpstan-bootstrap.php
+    universalObjectCratesClasses:
+        - RedBeanPHP\OODBBean
