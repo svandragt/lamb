@@ -4,6 +4,8 @@ namespace Lamb\Micropub;
 
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
+use Nyholm\Psr7\UploadedFile;
+use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Taproot\Micropub\MicropubAdapter;
@@ -209,6 +211,12 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $props = $data['properties'] ?? [];
 
+        // Merge any uploaded photo files into the photo property as URLs.
+        $uploadedPhotoUrls = $this->saveUploadedPhotos($uploadedFiles);
+        if (!empty($uploadedPhotoUrls)) {
+            $props['photo'] = array_merge($props['photo'] ?? [], $uploadedPhotoUrls);
+        }
+
         ['content' => $content, 'is_html' => $isHtml] = $this->extractContent($props);
         if ($content === null) {
             return 'invalid_request';
@@ -234,6 +242,36 @@ class LambMicropubAdapter extends MicropubAdapter
         R::store($bean);
 
         return permalink($bean);
+    }
+
+    /**
+     * Save uploaded photo files to the assets directory and return their public URLs.
+     *
+     * @param array $uploadedFiles Associative array of field name → UploadedFileInterface (or array thereof).
+     * @return string[]
+     */
+    private function saveUploadedPhotos(array $uploadedFiles): array
+    {
+        $files = $uploadedFiles['photo'] ?? [];
+        if ($files instanceof UploadedFileInterface) {
+            $files = [$files];
+        }
+
+        $urls = [];
+        foreach ($files as $file) {
+            if (!($file instanceof UploadedFileInterface) || $file->getError() !== UPLOAD_ERR_OK) {
+                continue;
+            }
+
+            $uploadDir = \Lamb\Response\get_upload_dir();
+            $ext       = pathinfo($file->getClientFilename() ?? 'upload', PATHINFO_EXTENSION);
+            $filename  = sha1($file->getClientFilename() ?? uniqid('', true)) . ($ext ? ".$ext" : '');
+            $file->moveTo($uploadDir . '/' . $filename);
+
+            $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
+        }
+
+        return $urls;
     }
 
     /**
@@ -391,6 +429,32 @@ function respond_micropub(): void
 
     if (!empty($_POST)) {
         $request = $request->withParsedBody($_POST);
+    }
+
+    if (!empty($_FILES)) {
+        $psr7Files = [];
+        foreach ($_FILES as $field => $info) {
+            if (is_array($info['tmp_name'])) {
+                foreach ($info['tmp_name'] as $i => $tmpName) {
+                    $psr7Files[$field][] = new UploadedFile(
+                        $tmpName,
+                        (int) $info['size'][$i],
+                        (int) $info['error'][$i],
+                        $info['name'][$i],
+                        $info['type'][$i]
+                    );
+                }
+            } else {
+                $psr7Files[$field] = new UploadedFile(
+                    $info['tmp_name'],
+                    (int) $info['size'],
+                    (int) $info['error'],
+                    $info['name'],
+                    $info['type']
+                );
+            }
+        }
+        $request = $request->withUploadedFiles($psr7Files);
     }
 
     $adapter  = new LambMicropubAdapter();

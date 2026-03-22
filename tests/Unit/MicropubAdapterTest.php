@@ -22,6 +22,9 @@ class MicropubAdapterTest extends TestCase
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
         }
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_test');
+        }
     }
 
     // --- handleRequest (RFC 6750 multi-auth rejection) ---
@@ -484,6 +487,37 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body LIKE ? ', ['%Lunch meeting%']);
         $this->assertNotNull($post);
         $this->assertStringContainsString('Los Gorditos', $post->body);
+    }
+
+    public function testCreateCallbackWithUploadedPhotoAppendsMarkdownImage(): void
+    {
+        $adapter = new LambMicropubAdapter();
+
+        // Create a real temp file to simulate an upload
+        $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
+        file_put_contents($tmpFile, 'fake image data');
+
+        $uploadedFile = new \Nyholm\Psr7\UploadedFile(
+            $tmpFile,
+            15,
+            UPLOAD_ERR_OK,
+            'test-photo.jpg',
+            'image/jpeg'
+        );
+
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['A post with an uploaded photo'],
+            ],
+        ];
+
+        $result = $adapter->createCallback($data, ['photo' => $uploadedFile]);
+
+        $this->assertIsString($result);
+        $post = R::findOne('post', ' body LIKE ? ', ['%A post with an uploaded photo%']);
+        $this->assertNotNull($post);
+        $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.jpg\)/', $post->body);
     }
 
     public function testCreateCallbackWithDraftPostStatusSavesAsDraft(): void
