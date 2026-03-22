@@ -486,6 +486,54 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('Los Gorditos', $post->body);
     }
 
+    public function testCreateCallbackWithDraftPostStatusSavesAsDraft(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'     => ['A draft post'],
+                'post-status' => ['draft'],
+            ],
+        ];
+        $adapter->createCallback($data, []);
+        $post = R::findOne('post', ' body = ? ', ['A draft post']);
+        $this->assertNotNull($post);
+        $this->assertSame(1, (int) $post->draft);
+    }
+
+    public function testCreateCallbackWithDraftPostStatusDoesNotSerializeAsJsonBlock(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'     => ['A draft without json block'],
+                'post-status' => ['draft'],
+            ],
+        ];
+        $adapter->createCallback($data, []);
+        $post = R::findOne('post', ' body = ? ', ['A draft without json block']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('post-status', $post->body);
+    }
+
+    public function testCreateCallbackWithPublishedPostStatusSavesAsPublished(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'     => ['A published post'],
+                'post-status' => ['published'],
+            ],
+        ];
+        $adapter->createCallback($data, []);
+        $post = R::findOne('post', ' body = ? ', ['A published post']);
+        $this->assertNotNull($post);
+        $this->assertEmpty($post->draft);
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();

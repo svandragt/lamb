@@ -227,6 +227,10 @@ class LambMicropubAdapter extends MicropubAdapter
             $bean->created = date('Y-m-d H:i:s', strtotime($published));
         }
 
+        if (($props['post-status'][0] ?? null) === 'draft') {
+            $bean->draft = 1;
+        }
+
         R::store($bean);
 
         return permalink($bean);
@@ -299,7 +303,7 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildExtraProperties(array $props): string
     {
-        $known = ['content', 'name', 'category', 'photo', 'published'];
+        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status'];
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {
