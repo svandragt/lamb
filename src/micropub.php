@@ -112,8 +112,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $hasBodyToken = is_array($parsedBody) && isset($parsedBody['access_token']);
 
         if ($hasAuthHeader && $hasBodyToken) {
+            // micropub.rocks test 805 expects error code "bad_request" for this case
+            // rather than RFC 6750's "invalid_request". We use bad_request to satisfy
+            // the test suite while still returning the spec-compliant HTTP 400 status.
             return new Response(400, ['content-type' => 'application/json'], json_encode([
-                'error'             => 'invalid_request',
+                'error'             => 'bad_request',
                 'error_description' => 'The request must not contain more than one method of sending the bearer token (RFC 6750 §2).',
             ]));
         }
