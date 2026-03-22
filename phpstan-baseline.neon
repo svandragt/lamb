@@ -187,6 +187,12 @@ parameters:
 			path: src/theme.php
 
 		-
+			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$draft\.$#'
+			identifier: property.notFound
+			count: 1
+			path: src/micropub.php
+
+		-
 			message: '#^Access to an undefined property RedBeanPHP\\OODBBean\:\:\$transformed\.$#'
 			identifier: property.notFound
 			count: 1

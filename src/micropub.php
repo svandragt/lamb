@@ -192,7 +192,7 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param array $data  Normalised microformats2 data.
      * @param array $uploadedFiles
-     * @return string|'invalid_request'
+     * @return string|array|\Psr\Http\Message\ResponseInterface
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
