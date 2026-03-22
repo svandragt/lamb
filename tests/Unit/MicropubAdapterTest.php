@@ -51,7 +51,7 @@ class MicropubAdapterTest extends TestCase
         $response = $adapter->handleRequest($request);
         $this->assertSame(400, $response->getStatusCode());
         $body = json_decode((string) $response->getBody(), true);
-        $this->assertSame('bad_request', $body['error']);
+        $this->assertSame('invalid_request', $body['error']);
     }
 
     // --- verifyAccessTokenCallback ---
