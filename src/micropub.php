@@ -91,6 +91,37 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * Reject requests that present the bearer token via both the Authorization header
+     * and the POST body, which is forbidden by RFC 6750 §2.
+     *
+     * taproot/micropub-adapter's getAccessToken() silently prefers the header when both
+     * are present instead of rejecting the request. We override handleRequest() here to
+     * enforce the spec before delegating to the parent.
+     * TODO: report upstream to taproot/micropub-adapter that dual-method token requests
+     *       should be rejected with HTTP 400 per RFC 6750 §2.
+     *
+     * @param \Psr\Http\Message\ServerRequestInterface $request
+     * @return \Psr\Http\Message\ResponseInterface
+     */
+    public function handleRequest(\Psr\Http\Message\ServerRequestInterface $request): \Psr\Http\Message\ResponseInterface
+    {
+        $hasAuthHeader = $request->hasHeader('authorization') &&
+            stripos($request->getHeaderLine('authorization'), 'bearer') === 0;
+
+        $parsedBody = $request->getParsedBody();
+        $hasBodyToken = is_array($parsedBody) && isset($parsedBody['access_token']);
+
+        if ($hasAuthHeader && $hasBodyToken) {
+            return new Response(400, ['content-type' => 'application/json'], json_encode([
+                'error'             => 'invalid_request',
+                'error_description' => 'The request must not contain more than one method of sending the bearer token (RFC 6750 §2).',
+            ]));
+        }
+
+        return parent::handleRequest($request);
+    }
+
+    /**
      * Verify the bearer token by introspecting it against the configured token endpoint.
      *
      * @param string $token

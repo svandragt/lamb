@@ -24,6 +24,36 @@ class MicropubAdapterTest extends TestCase
         }
     }
 
+    // --- handleRequest (RFC 6750 multi-auth rejection) ---
+
+    public function testHandleRequestRejects400WhenTokenInBothHeaderAndBody(): void
+    {
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $request = new \Nyholm\Psr7\ServerRequest(
+            'POST',
+            ROOT_URL . '/micropub',
+            [
+                'Authorization' => 'Bearer some-token',
+                'Content-Type'  => 'application/x-www-form-urlencoded',
+            ]
+        );
+        $request = $request->withParsedBody([
+            'h'            => 'entry',
+            'content'      => 'Test content',
+            'access_token' => 'some-token',
+        ]);
+
+        $response = $adapter->handleRequest($request);
+        $this->assertSame(400, $response->getStatusCode());
+        $body = json_decode((string) $response->getBody(), true);
+        $this->assertSame('invalid_request', $body['error']);
+    }
+
     // --- verifyAccessTokenCallback ---
 
     public function testVerifyTokenReturnsFalseWhenIntrospectionFails(): void
