@@ -466,4 +466,24 @@ class MicropubAdapterTest extends TestCase
         $result = $adapter->createCallback($data);
         $this->assertSame('invalid_request', $result);
     }
+
+    public function testCreateCallbackReturnsInsufficientScopeWhenTokenLacksCreateScope(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = [
+            'me'    => ROOT_URL . '/',
+            'scope' => ['read'],
+        ];
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => ['Testing a request with an unauthorized access token.'],
+            ],
+        ];
+        $result = $adapter->createCallback($data, []);
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(401, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
+    }
 }

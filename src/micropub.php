@@ -2,6 +2,7 @@
 
 namespace Lamb\Micropub;
 
+use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -162,6 +163,19 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
+        // W3C Micropub spec §error-response requires HTTP 401 for insufficient_scope.
+        // taproot/micropub-adapter maps it to 403 instead, so we bypass toResponse() by
+        // returning a ResponseInterface directly from this callback.
+        // TODO: report upstream to taproot/micropub-adapter that insufficient_scope should
+        //       map to HTTP 401 per the W3C Micropub spec.
+        $scope = $this->user['scope'] ?? [];
+        if ($this->user !== null && !in_array('create', $scope)) {
+            return new Response(401, ['content-type' => 'application/json'], json_encode([
+                'error' => 'insufficient_scope',
+                'error_description' => 'Your access token does not grant the scope required for this action.',
+            ]));
+        }
+
         $props = $data['properties'] ?? [];
 
         ['content' => $content, 'is_html' => $isHtml] = $this->extractContent($props);
