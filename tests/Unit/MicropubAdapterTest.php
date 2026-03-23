@@ -670,6 +670,46 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#bar', $updated->body);
     }
 
+    public function testUpdateCallbackAddCategoryAppendsHashtag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'A categorised post #test1';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['category' => ['test2']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringContainsString('#test1', $updated->body);
+        $this->assertStringContainsString('#test2', $updated->body);
+    }
+
+    public function testUpdateCallbackAddCategoryDoesNotDuplicate(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'A post #test1';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['category' => ['test1']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(1, substr_count($updated->body, '#test1'));
+    }
+
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
         $bean = R::dispense('post');

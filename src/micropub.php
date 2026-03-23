@@ -272,11 +272,35 @@ class LambMicropubAdapter extends MicropubAdapter
             $this->applyReplace($bean, $property, $values);
         }
 
+        foreach ($actions['add'] ?? [] as $property => $values) {
+            $this->applyAdd($bean, $property, $values);
+        }
+
         parse_bean($bean);
         $bean->updated = date('Y-m-d H:i:s');
         R::store($bean);
 
         return true;
+    }
+
+    /**
+     * Apply an add operation for a single property to a post bean.
+     *
+     * @param OODBBean $bean
+     * @param string   $property
+     * @param array    $values
+     * @return void
+     */
+    private function applyAdd(OODBBean $bean, string $property, array $values): void
+    {
+        if ($property === 'category') {
+            $existing = get_tags($bean->body ?? '');
+            $toAdd    = array_diff($values, $existing);
+            if (!empty($toAdd)) {
+                $newTags = implode(' ', array_map(fn($t) => '#' . $t, $toAdd));
+                $bean->body = rtrim($bean->body ?? '') . ' ' . $newTags;
+            }
+        }
     }
 
     /**
