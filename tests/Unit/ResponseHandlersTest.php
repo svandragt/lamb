@@ -22,6 +22,13 @@ class ResponseHandlersTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+
+        // Ensure post schema columns exist so WHERE filters work regardless of test order.
+        $schema = R::dispense('post');
+        $schema->draft   = null;
+        $schema->deleted = null;
+        R::store($schema);
+
         R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
 
@@ -460,5 +467,55 @@ class ResponseHandlersTest extends TestCase
 
         $result = respond_drafts();
         $this->assertCount(0, $result['posts']);
+    }
+
+    // deleted post visibility
+
+    public function testRespondHomeExcludesDeletedPosts(): void
+    {
+        $visible = R::dispense('post');
+        $visible->body = 'Visible post';
+        $visible->created = date('Y-m-d H:i:s');
+        $visible->updated = date('Y-m-d H:i:s');
+        R::store($visible);
+
+        $deleted = R::dispense('post');
+        $deleted->body = 'Deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_home();
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertContains($visible->id, $ids);
+        $this->assertNotContains($deleted->id, $ids);
+    }
+
+    public function testRespondStatusReturns404ForDeletedPost(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body = 'Soft-deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_status([(string) $deleted->id]);
+        $this->assertSame('404', $result['action'] ?? null);
+    }
+
+    public function testRespondSearchExcludesDeletedPosts(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body = 'Uniquefindableterm deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_search(['Uniquefindableterm']);
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertNotContains($deleted->id, $ids);
     }
 }

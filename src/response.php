@@ -305,7 +305,7 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
-    $where_parts = [' (draft IS NULL OR draft != 1) '];
+    $where_parts = [' (draft IS NULL OR draft != 1) ', ' (deleted IS NULL OR deleted != 1) '];
     $where_params = [];
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
@@ -475,7 +475,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!$bean->id) {
+    if (!$bean->id || $bean->deleted) {
         return respond_404([], true);
     }
 
@@ -538,11 +538,11 @@ function get_feed_data(): array
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND (draft IS NULL OR draft != 1) ORDER BY updated DESC LIMIT 20',
+            $clause['sql'] . ' AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ORDER BY updated DESC LIMIT 20',
             $clause['params']
         );
     } else {
-        $posts = R::findAll('post', ' (draft IS NULL OR draft != 1) ORDER BY updated DESC LIMIT 20 ');
+        $posts = R::findAll('post', ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ORDER BY updated DESC LIMIT 20 ');
     }
 
     $first_post = reset($posts);
@@ -642,7 +642,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || $post->draft == 1) {
+    if ($post === null || $post->draft == 1 || $post->deleted == 1) {
         return respond_404([]);
     }
     $data['posts'] = [$post];
@@ -719,7 +719,7 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND (draft IS NULL OR draft != 1)';
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1)';
 
     // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);

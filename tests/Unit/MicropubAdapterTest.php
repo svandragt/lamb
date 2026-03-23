@@ -792,6 +792,73 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('Keep this content', $updated->body);
     }
 
+    // --- deleteCallback ---
+
+    public function testDeleteCallbackReturnsTrueForExistingPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Post to delete';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertTrue($result);
+    }
+
+    public function testDeleteCallbackSetsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Post to soft-delete';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(1, (int) $updated->deleted);
+    }
+
+    public function testDeleteCallbackReturnsInvalidRequestForUnknownUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->deleteCallback(ROOT_URL . '/status/999999');
+        $this->assertSame('invalid_request', $result);
+    }
+
+    // --- undeleteCallback ---
+
+    public function testUndeleteCallbackClearsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Post to restore';
+        $bean->slug = '';
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->undeleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertEmpty($updated->deleted);
+    }
+
+    public function testUndeleteCallbackReturnsInvalidRequestForUnknownUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->undeleteCallback(ROOT_URL . '/status/999999');
+        $this->assertSame('invalid_request', $result);
+    }
+
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
         $bean = R::dispense('post');

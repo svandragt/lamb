@@ -247,6 +247,44 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * Handle a micropub delete request.
+     *
+     * @param string $url
+     * @return true|string|\Psr\Http\Message\ResponseInterface
+     */
+    public function deleteCallback(string $url)
+    {
+        $bean = $this->findPostByUrl($url);
+        if ($bean === null) {
+            return 'invalid_request';
+        }
+
+        $bean->deleted = 1;
+        R::store($bean);
+
+        return true;
+    }
+
+    /**
+     * Handle a micropub undelete request.
+     *
+     * @param string $url
+     * @return true|string|\Psr\Http\Message\ResponseInterface
+     */
+    public function undeleteCallback(string $url)
+    {
+        $bean = $this->findPostByUrl($url);
+        if ($bean === null) {
+            return 'invalid_request';
+        }
+
+        $bean->deleted = null;
+        R::store($bean);
+
+        return true;
+    }
+
+    /**
      * Handle a micropub update request (replace/add/delete operations).
      *
      * @param string $url
