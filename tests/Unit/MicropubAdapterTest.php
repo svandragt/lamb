@@ -859,6 +859,14 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    public function testConfigurationQueryCallbackReturnsSyndicateTo(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->configurationQueryCallback([]);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('syndicate-to', $result);
+    }
+
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
         $bean = R::dispense('post');

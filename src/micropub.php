@@ -247,6 +247,17 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * Return the configuration query response including an empty syndicate-to list.
+     *
+     * @param array $params
+     * @return array
+     */
+    public function configurationQueryCallback(array $params): array
+    {
+        return ['syndicate-to' => []];
+    }
+
+    /**
      * Handle a micropub delete request.
      *
      * @param string $url
