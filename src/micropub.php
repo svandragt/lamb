@@ -11,7 +11,9 @@ use RedBeanPHP\R;
 use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\get_tags;
+use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 
 class LambMicropubAdapter extends MicropubAdapter
@@ -242,6 +244,80 @@ class LambMicropubAdapter extends MicropubAdapter
         R::store($bean);
 
         return permalink($bean);
+    }
+
+    /**
+     * Handle a micropub update request (replace/add/delete operations).
+     *
+     * @param string $url
+     * @param array  $actions
+     * @return true|string|array|\Psr\Http\Message\ResponseInterface
+     */
+    public function updateCallback(string $url, array $actions)
+    {
+        $bean = $this->findPostByUrl($url);
+        if ($bean === null) {
+            return 'invalid_request';
+        }
+
+        $scope = $this->user['scope'] ?? [];
+        if ($this->user !== null && !in_array('update', $scope)) {
+            return new Response(401, ['content-type' => 'application/json'], json_encode([
+                'error'             => 'insufficient_scope',
+                'error_description' => 'Your access token does not grant the scope required for this action.',
+            ]));
+        }
+
+        foreach ($actions['replace'] ?? [] as $property => $values) {
+            $this->applyReplace($bean, $property, $values);
+        }
+
+        parse_bean($bean);
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        return true;
+    }
+
+    /**
+     * Apply a replace operation for a single property to a post bean.
+     *
+     * @param OODBBean $bean
+     * @param string   $property
+     * @param array    $values
+     * @return void
+     */
+    private function applyReplace(OODBBean $bean, string $property, array $values): void
+    {
+        if ($property === 'content') {
+            $newContent = (string) ($values[0] ?? '');
+            $bean->body = $this->rebuildBody($bean, $newContent);
+        }
+    }
+
+    /**
+     * Rebuild the post body with new content, preserving existing front matter and hashtags.
+     *
+     * @param OODBBean $bean
+     * @param string   $newContent
+     * @return string
+     */
+    private function rebuildBody(OODBBean $bean, string $newContent): string
+    {
+        $currentBody = $bean->body ?? '';
+        $matter      = parse_matter($currentBody);
+        $title       = $matter['title'] ?? null;
+
+        $tags      = get_tags($currentBody);
+        $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
+
+        $content = $newContent . $hashtagStr;
+
+        if ($title === null) {
+            return $content;
+        }
+
+        return "---\ntitle: $title\n---\n$content";
     }
 
     /**

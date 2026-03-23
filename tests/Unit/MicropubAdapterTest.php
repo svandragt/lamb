@@ -598,4 +598,100 @@ class MicropubAdapterTest extends TestCase
         $body = json_decode((string) $result->getBody(), true);
         $this->assertSame('insufficient_scope', $body['error']);
     }
+
+    // --- updateCallback ---
+
+    public function testUpdateCallbackReturnsFalseForUnknownUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(ROOT_URL . '/status/999999', ['replace' => ['content' => ['new']]]);
+        $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUpdateCallbackReplaceContentUpdatesBody(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Updated content']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Updated content', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentPreservesTitle(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = "---\ntitle: My Title\n---\nOriginal content";
+        $bean->title = 'My Title';
+        $bean->slug = 'my-title';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['New body text']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('My Title', $updated->title);
+        $this->assertStringContainsString('New body text', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentPreservesHashtags(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content #foo #bar';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Replaced content']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertStringContainsString('Replaced content', $updated->body);
+        $this->assertStringContainsString('#foo', $updated->body);
+        $this->assertStringContainsString('#bar', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Some content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = [
+            'me'    => ROOT_URL . '/',
+            'scope' => ['create'],
+        ];
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['New content']]]
+        );
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(401, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
+    }
 }
