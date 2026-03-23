@@ -12,6 +12,6 @@ define('HIDDEN_CSRF_NAME', 'csrf');
 define('IMAGE_FILES', 'imageFiles');
 define('MINUTE_IN_SECONDS', 60);
 define('SESSION_LOGIN', 'logged_in');
-define('SUBMIT_CREATE', 'Publish post');
+define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');
 define('SUBMIT_LOGIN', 'Log in');
