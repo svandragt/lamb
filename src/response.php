@@ -390,7 +390,7 @@ function respond_trash(): array
  */
 function count_drafts(): int
 {
-    return R::count('post', ' draft = 1 ');
+    return R::count('post', ' draft = 1 AND (deleted IS NULL OR deleted != 1) ');
 }
 
 /**
