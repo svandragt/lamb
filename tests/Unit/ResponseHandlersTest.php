@@ -13,6 +13,7 @@ use function Lamb\Response\respond_search;
 use function Lamb\Response\respond_settings;
 use function Lamb\Response\respond_status;
 use function Lamb\Response\respond_tag;
+use function Lamb\Response\soft_delete_post;
 
 class ResponseHandlersTest extends TestCase
 {
@@ -503,6 +504,52 @@ class ResponseHandlersTest extends TestCase
 
         $result = respond_status([(string) $deleted->id]);
         $this->assertSame('404', $result['action'] ?? null);
+    }
+
+    // soft_delete_post
+
+    public function testSoftDeletePostSetsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'A post to soft-delete';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertSame(1, (int) $loaded->deleted);
+    }
+
+    public function testSoftDeletePostSetsDeletedAt(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'A post to soft-delete';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertNotEmpty($loaded->deleted_at);
+        $this->assertStringStartsWith(date('Y-m-d'), $loaded->deleted_at);
+    }
+
+    public function testSoftDeletePostKeepsPostInDatabase(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'Keep in DB';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+        $id = $bean->id;
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $id);
+        $this->assertSame($id, $loaded->id);
     }
 
     public function testRespondSearchExcludesDeletedPosts(): void

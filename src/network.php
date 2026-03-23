@@ -27,6 +27,21 @@ function get_feeds(): array
 }
 
 /** @noinspection PhpUnused */
+/**
+ * Hard-delete posts that were soft-deleted more than 30 days ago.
+ *
+ * @return int Number of posts permanently deleted.
+ */
+function purge_deleted_posts(): int
+{
+    $cutoff = date('Y-m-d H:i:s', strtotime('-30 days'));
+    $posts  = R::find('post', ' deleted = 1 AND deleted_at < ? ', [$cutoff]);
+    foreach ($posts as $post) {
+        R::trash($post);
+    }
+    return count($posts);
+}
+
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
@@ -36,6 +51,12 @@ function get_feeds(): array
     if ((time() - $cron_last_updated->value) < MINUTE_IN_SECONDS) {
         die('Too often, try again later.');
     }
+
+    $purged = purge_deleted_posts();
+    if ($purged > 0) {
+        echo("Purged $purged deleted post(s)." . PHP_EOL);
+    }
+
     echo("Updating feeds..." . PHP_EOL);
     foreach ($feeds as $name => $url) {
         flush();

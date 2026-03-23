@@ -198,10 +198,23 @@ function redirect_deleted(mixed $args): void
 
     [$id] = $args;
     $post = R::load('post', (int)$id);
-    if ($post !== null) {
-        R::trash($post);
+    if ($post->id) {
+        soft_delete_post($post);
     }
     redirect_uri('/');
+}
+
+/**
+ * Soft-delete a post by setting its deleted flag and recording the deletion timestamp.
+ *
+ * @param \RedBeanPHP\OODBBean $post
+ * @return void
+ */
+function soft_delete_post(\RedBeanPHP\OODBBean $post): void
+{
+    $post->deleted    = 1;
+    $post->deleted_at = date('Y-m-d H:i:s');
+    R::store($post);
 }
 
 /**
