@@ -23,6 +23,12 @@ global $template;
     <title><?= escape(site_or_page_title('text')) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape($config['site_title']) ?>">
+    <?php foreach ($config['me'] ?? [] as $url) : ?>
+    <link rel="me" href="<?= escape($url) ?>">
+    <?php endforeach; ?>
+    <link rel="authorization_endpoint" href="<?= escape($config['authorization_endpoint']) ?>">
+    <link rel="token_endpoint" href="<?= escape($config['token_endpoint']) ?>">
+    <link rel="micropub" href="<?= ROOT_URL ?>/micropub">
     <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>
     <link rel="alternate" type="application/atom+xml" href="<?= escape($data['feed_url']) ?>"
           title="<?= escape($data['title'] ?? $config['site_title']) ?>">
@@ -48,10 +54,6 @@ global $template;
             <?php
             if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
-                <?php
-            else : ?>
-                <a href="/settings">Settings</a>
-                <a href="/logout">Logout</a>
                 <?php
             endif; ?>
         </li>

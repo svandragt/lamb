@@ -31,7 +31,7 @@ vendor/bin/codecept run Unit
 # Run acceptance tests (requires SITE_URL in .env)
 vendor/bin/codecept run Acceptance
 
-# Generate password hash and write .ddev/.env + .env
+# Generate password hash and write .env
 php make-password.php <your-password>
 
 # Static analysis
@@ -74,7 +74,7 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
-└── make-password.php     # CLI utility: hash password → .ddev/.env
+└── make-password.php     # CLI utility: hash password → .env
 ```
 
 ## Architecture Overview
@@ -334,14 +334,15 @@ User-uploaded files live under `src/assets/`, not under theme directories.
 
 ### `.gitignore` exemption
 
-`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted:
+`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted with two entries — one for the directory and one for its contents:
 
 ```
 # in .gitignore
 !/src/themes/news
+!/src/themes/news/**
 ```
 
-This only un-ignores the directory entry; files inside are still matched by the parent pattern. Use `git add --force src/themes/<name>/` to stage new theme files for the first time.
+Once both entries are added, `git add` works normally for all files inside the theme without needing `--force`. Use `git add --force src/themes/<name>/` only if you add a theme before updating `.gitignore`.
 
 ### Minimal new theme checklist
 
@@ -404,7 +405,7 @@ Tests use **Codeception 5** with PHPUnit underneath.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
-Config in `codeception.yml` reads env from `.ddev/.env` and `.env`.
+Config in `codeception.yml` reads env from `.env`.
 
 ### Red-Green TDD
 
@@ -422,8 +423,7 @@ Authentication password is stored hashed in the `LAMB_LOGIN_PASSWORD` environmen
 
 ```bash
 php make-password.php mysecretpassword
-# writes LAMB_LOGIN_PASSWORD to .ddev/.env
-# writes SITE_URL to .env
+# writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.

@@ -26,6 +26,29 @@ function bootstrap_db(string $data_dir): void
     // transformed is already populated for these posts (parse_bean ran at creation/edit time);
     // we only need to stamp the version column so upgrade_posts() never writes them again.
     R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
+
+    ensure_post_columns();
+}
+
+/**
+ * Ensures the post table has the columns introduced by soft-delete and draft features.
+ * Safe to call on any DB: no-ops if the table or columns don't exist yet.
+ *
+ * @return void
+ */
+function ensure_post_columns(): void
+{
+    $postTableExists = (bool) R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name='post'");
+    if (!$postTableExists) {
+        return;
+    }
+    $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
+    if (!in_array('deleted', $columns, true)) {
+        R::exec('ALTER TABLE post ADD COLUMN deleted INTEGER');
+    }
+    if (!in_array('draft', $columns, true)) {
+        R::exec('ALTER TABLE post ADD COLUMN draft INTEGER');
+    }
 }
 
 /**

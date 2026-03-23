@@ -33,6 +33,28 @@ function action_delete(OODBBean $bean): string
 }
 
 /**
+ * Returns a restore form for the given post bean, or '' if not logged in.
+ *
+ * @param OODBBean $bean The post bean to restore.
+ * @return string HTML restore form, or '' when the user is not authenticated.
+ */
+function action_restore(OODBBean $bean): string
+{
+    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
+        return '';
+    }
+
+    return sprintf(
+        '<form class="form-restore" action="/restore/%s" method="post">'
+        . '<input type="submit" value="Restore post"/>'
+        . '<input type="hidden" name="csrf" value="%s"/>'
+        . '</form>',
+        $bean->id,
+        csrf_token()
+    );
+}
+
+/**
  * Returns an edit button for the given post bean, or '' if not logged in.
  *
  * @param OODBBean $bean The post bean to edit.
@@ -554,4 +576,37 @@ function the_entry_form(): void
         </section>
         <?php
     endif;
+}
+
+/**
+ * Returns the HTML for the admin toolbar shown to logged-in users.
+ * Injected theme-agnostically after <body> via output buffering in index.php.
+ *
+ * @return string
+ */
+function admin_toolbar_html(): string
+{
+    $drafts = \Lamb\Response\count_drafts();
+    $trash  = \Lamb\Response\count_trash();
+
+    $draftsLabel = 'Drafts' . ($drafts > 0 ? " ($drafts)" : '');
+    $trashLabel  = 'Trash'  . ($trash  > 0 ? " ($trash)"  : '');
+
+    return '<div id="admin-toolbar">'
+        . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
+        . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
+        . '<a href="/settings">Settings</a>'
+        . '<a href="/logout">Logout</a>'
+        . '</div>'
+        . '<style>'
+        . '#admin-toolbar{'
+        . 'position:sticky;top:0;z-index:9999;'
+        . 'display:flex;gap:1rem;align-items:center;'
+        . 'padding:.4rem 1rem;'
+        . 'background:#1a1a1a;color:#fff;font-size:.85rem;'
+        . '}'
+        . '#admin-toolbar a{color:#ccc;text-decoration:none;}'
+        . '#admin-toolbar a:hover{color:#fff;}'
+        . '#admin-toolbar a:last-child{margin-left:auto;}'
+        . '</style>';
 }

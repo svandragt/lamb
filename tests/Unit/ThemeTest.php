@@ -3,7 +3,9 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
+use function Lamb\Theme\action_restore;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
@@ -247,5 +249,35 @@ class ThemeTest extends TestCase
         $timestamp = time() + 86400;
         $result = human_time($timestamp);
         $this->assertStringContainsString('Tomorrow', $result);
+    }
+
+    // action_restore
+
+    public function testActionRestoreReturnsEmptyWhenNotLoggedIn(): void
+    {
+        $_SESSION = [];
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $bean = R::dispense('post');
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $this->assertSame('', action_restore($bean));
+    }
+
+    public function testActionRestoreReturnsFormWhenLoggedIn(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $bean = R::dispense('post');
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $html = action_restore($bean);
+        $this->assertStringContainsString('/restore/' . $bean->id, $html);
+        $this->assertStringContainsString('Restore post', $html);
     }
 }

@@ -56,6 +56,17 @@ The full default configuration (all keys commented out = use built-in defaults):
 ;; Format: <label>=<origin>
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
+
+;; IndieAuth endpoints used for Micropub discovery.
+;; Override to use your own IndieAuth server.
+;authorization_endpoint = https://indieauth.com/auth
+;token_endpoint = https://tokens.indieauth.com/token
+
+[me]
+;; Add rel="me" identity links for IndieAuth verification.
+;; Each entry is <label>=<url>. Links appear as <link rel="me"> in the HTML head.
+;Github = https://github.com/yourusername
+;Email = mailto:you@example.com
 ```
 
 ## Related
@@ -63,6 +74,7 @@ The full default configuration (all keys commented out = use built-in defaults):
 * [Setting up Cross-Posting]({% link cross-posting.md %}#setup) requires site configuration changes.
 * [Drafts]({% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
 * [Menu Items]({% link menu-items.md %})
+* [Micropub]({% link micropub.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings enable Micropub publishing.
 * [Preconnect]({% link preconnect.md %})
 * [Redirections]({% link redirections.md %})
 * [Themes]({% link themes.md %}): The `theme` key selects the active theme.

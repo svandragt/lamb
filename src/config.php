@@ -54,6 +54,17 @@ function get_default_ini_text(): string
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
 
+;; IndieAuth endpoints used for Micropub discovery.
+;; Override to use your own IndieAuth server.
+;authorization_endpoint = https://indieauth.com/auth
+;token_endpoint = https://tokens.indieauth.com/token
+
+[me]
+;; Add rel="me" identity links for IndieAuth verification.
+;; Each entry is <label>=<url>. Links appear as <link rel="me"> in the HTML head.
+;Github = https://github.com/yourusername
+;Email = mailto:you@example.com
+
 [redirections]
 ;; Add 301 redirects for old URL path segments.
 ;; Format: <old-slug> = <destination>
@@ -74,9 +85,11 @@ function load(): array
 
     // Hardcoded defaults as fallback for missing keys
     $defaults = [
-        'author_email' => 'joe.sheeple@example.com',
-        'author_name' => 'Joe Sheeple',
-        'site_title' => 'My Microblog',
+        'author_email'           => 'joe.sheeple@example.com',
+        'author_name'            => 'Joe Sheeple',
+        'site_title'             => 'My Microblog',
+        'authorization_endpoint' => 'https://indieauth.com/auth',
+        'token_endpoint'         => 'https://tokens.indieauth.com/token',
     ];
 
     return array_merge($defaults, $config ?: []);
