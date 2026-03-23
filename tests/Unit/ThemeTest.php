@@ -3,8 +3,8 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-
 use RedBeanPHP\R;
+
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\format_past_date;

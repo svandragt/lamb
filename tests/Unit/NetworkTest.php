@@ -4,7 +4,6 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimplePie\Item as SimplePieItem;
-
 use RedBeanPHP\R;
 
 use function Lamb\Network\attributed_content;
