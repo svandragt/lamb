@@ -317,7 +317,7 @@ function the_styles(): void
 function the_scripts(): void
 {
     $scripts = [
-        '' => ['shorthand.js'],
+        '' => ['shorthand.js', 'search-highlight.js'],
         'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js'],
     ];
     $assets = asset_loader($scripts, 'scripts');
