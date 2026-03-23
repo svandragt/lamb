@@ -33,6 +33,28 @@ function action_delete(OODBBean $bean): string
 }
 
 /**
+ * Returns a restore form for the given post bean, or '' if not logged in.
+ *
+ * @param OODBBean $bean The post bean to restore.
+ * @return string HTML restore form, or '' when the user is not authenticated.
+ */
+function action_restore(OODBBean $bean): string
+{
+    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
+        return '';
+    }
+
+    return sprintf(
+        '<form class="form-restore" action="/restore/%s" method="post">'
+        . '<input type="submit" value="Restore post"/>'
+        . '<input type="hidden" name="csrf" value="%s"/>'
+        . '</form>',
+        $bean->id,
+        csrf_token()
+    );
+}
+
+/**
  * Returns an edit button for the given post bean, or '' if not logged in.
  *
  * @param OODBBean $bean The post bean to edit.

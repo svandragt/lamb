@@ -205,6 +205,29 @@ function redirect_deleted(mixed $args): void
 }
 
 /**
+ * Restores a soft-deleted post and redirects back to the trash page.
+ *
+ * @param mixed $args Expects first element to be the post ID.
+ * @return void
+ */
+#[NoReturn]
+function redirect_restored(mixed $args): void
+{
+    if (empty($_POST)) {
+        redirect_uri('/trash');
+    }
+    Security\require_login();
+    Security\require_csrf();
+
+    [$id] = $args;
+    $post = R::load('post', (int)$id);
+    if ($post->id) {
+        restore_post($post);
+    }
+    redirect_uri('/trash');
+}
+
+/**
  * Soft-delete a post by setting its deleted flag and recording the deletion timestamp.
  *
  * @param \RedBeanPHP\OODBBean $post
@@ -231,7 +254,7 @@ function redirect_edited(): void
 
     Security\require_login();
     Security\require_csrf();
-    $validSubmits = [SUBMIT_EDIT, SUBMIT_RESTORE];
+    $validSubmits = [SUBMIT_EDIT];
     if (!in_array($_POST['submit'], $validSubmits, true)) {
         return;
     }
@@ -244,11 +267,6 @@ function redirect_edited(): void
 
     $bean = R::load('post', (int)$id);
     $old_slug = $bean->slug;
-
-    if ($_POST['submit'] === SUBMIT_RESTORE) {
-        $bean->deleted    = null;
-        $bean->deleted_at = null;
-    }
 
     $bean->body = $contents;
 

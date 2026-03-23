@@ -15,4 +15,3 @@ define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Publish post');
 define('SUBMIT_EDIT', 'Update post');
 define('SUBMIT_LOGIN', 'Log in');
-define('SUBMIT_RESTORE', 'Restore post');

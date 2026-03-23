@@ -8,13 +8,8 @@ use function Lamb\Theme\csrf_token;
 $post = $data['post'];
 
 if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
-    if ($post->deleted) {
-        $submitLabel = SUBMIT_RESTORE;
-        $heading     = 'Restore Status';
-    } else {
-        $submitLabel = SUBMIT_EDIT;
-        $heading     = 'Edit Status';
-    }
+    $submitLabel = SUBMIT_EDIT;
+    $heading     = 'Edit Status';
     ?>
     <h2><?= $heading ?></h2>
 
