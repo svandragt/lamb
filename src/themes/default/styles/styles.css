@@ -213,6 +213,13 @@ textarea {
     z-index: 100000; /* Above WP toolbar. */
 }
 
+mark {
+    background: var(--info);
+    color: var(--shadow);
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
 .status, .post {
     /* The h1 is the article header */
 

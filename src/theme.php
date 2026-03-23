@@ -316,13 +316,20 @@ function the_styles(): void
  */
 function the_scripts(): void
 {
+    global $template;
+
     $scripts = [
-        '' => ['shorthand.js', 'search-highlight.js'],
+        '' => ['shorthand.js'],
         'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js'],
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
         printf("<script id='%s' defer src='%s'></script>", $id, $href);
+    }
+
+    if ($template === 'search') {
+        $href = ROOT_URL . '/scripts/search-highlight.js';
+        printf("<script id='%s' defer src='%s'></script>", md5($href), $href);
     }
 }
 
