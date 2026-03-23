@@ -231,7 +231,7 @@ function redirect_edited(): void
 
     Security\require_login();
     Security\require_csrf();
-    $validSubmits = [SUBMIT_EDIT, SUBMIT_RESTORE, SUBMIT_PUBLISH];
+    $validSubmits = [SUBMIT_EDIT, SUBMIT_RESTORE];
     if (!in_array($_POST['submit'], $validSubmits, true)) {
         return;
     }
@@ -248,8 +248,6 @@ function redirect_edited(): void
     if ($_POST['submit'] === SUBMIT_RESTORE) {
         $bean->deleted    = null;
         $bean->deleted_at = null;
-    } elseif ($_POST['submit'] === SUBMIT_PUBLISH) {
-        $bean->draft = null;
     }
 
     $bean->body = $contents;
@@ -357,7 +355,7 @@ function respond_drafts(): array
     Security\require_login();
 
     $data['title'] = 'Drafts';
-    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 ');
+    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 AND (deleted IS NULL OR deleted != 1) ');
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 

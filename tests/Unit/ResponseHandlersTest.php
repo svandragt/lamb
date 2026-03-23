@@ -468,6 +468,22 @@ class ResponseHandlersTest extends TestCase
         $this->assertSame($draft->id, array_values($result['posts'])[0]->id);
     }
 
+    public function testRespondDraftsExcludesSoftDeletedDrafts(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        $deletedDraft = R::dispense('post');
+        $deletedDraft->body    = 'Deleted draft';
+        $deletedDraft->draft   = 1;
+        $deletedDraft->deleted = 1;
+        $deletedDraft->version = 1;
+        $deletedDraft->created = date('Y-m-d H:i:s');
+        R::store($deletedDraft);
+
+        $result = respond_drafts();
+        $this->assertCount(0, $result['posts']);
+    }
+
     public function testRespondDraftsReturnsEmptyWhenNoDrafts(): void
     {
         $_SESSION[SESSION_LOGIN] = true;

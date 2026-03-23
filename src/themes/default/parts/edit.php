@@ -11,9 +11,6 @@ if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
     if ($post->deleted) {
         $submitLabel = SUBMIT_RESTORE;
         $heading     = 'Restore Status';
-    } elseif ($post->draft) {
-        $submitLabel = SUBMIT_PUBLISH;
-        $heading     = 'Publish Draft';
     } else {
         $submitLabel = SUBMIT_EDIT;
         $heading     = 'Edit Status';

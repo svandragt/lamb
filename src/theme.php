@@ -571,8 +571,9 @@ function admin_toolbar_html(): string
     $trashLabel  = 'Trash'  . ($trash  > 0 ? " ($trash)"  : '');
 
     return '<div id="admin-toolbar">'
-        . '<a href="/drafts">' . escape($draftsLabel) . '</a>'
-        . '<a href="/trash">'  . escape($trashLabel)  . '</a>'
+        . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
+        . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
+        . '<a href="/settings">Settings</a>'
         . '<a href="/logout">Logout</a>'
         . '</div>'
         . '<style>'

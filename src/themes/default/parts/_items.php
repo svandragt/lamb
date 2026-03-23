@@ -28,7 +28,7 @@ else :
             </header>
             <?= $bean->transformed ?>
             <footer>
-                <small><?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+                <small><?= action_edit($bean) ?> <?= $bean->deleted ? '' : action_delete($bean) ?></small>
             </footer>
         </article>
         <?php

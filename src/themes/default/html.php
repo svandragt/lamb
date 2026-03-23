@@ -55,10 +55,6 @@ global $template;
             if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
                 <?php
-            else : ?>
-                <a href="/settings">Settings</a>
-                <a href="/logout">Logout</a>
-                <?php
             endif; ?>
         </li>
     </ul>
