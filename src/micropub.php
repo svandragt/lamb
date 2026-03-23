@@ -254,7 +254,10 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function configurationQueryCallback(array $params): array
     {
-        return ['syndicate-to' => []];
+        return [
+            'media-endpoint' => ROOT_URL . '/micropub-media',
+            'syndicate-to'   => [],
+        ];
     }
 
     /**
@@ -660,5 +663,64 @@ function respond_micropub(): void
         }
     }
     echo $response->getBody();
+    exit;
+}
+
+/**
+ * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
+ * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
+ *
+ * @return void
+ */
+function respond_micropub_media(): void
+{
+    $headers = getallheaders() ?: [];
+    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+
+    $token = null;
+    if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
+        $token = trim($m[1]);
+    }
+
+    if (!$token) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Missing bearer token.']);
+        exit;
+    }
+
+    $adapter = new LambMicropubAdapter();
+    $user = $adapter->verifyAccessTokenCallback($token);
+    if (!$user) {
+        http_response_code(401);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Invalid or expired token.']);
+        exit;
+    }
+
+    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Expected a multipart/form-data POST with a file field.']);
+        exit;
+    }
+
+    $file = $_FILES['file'];
+    if ((int) $file['error'] !== UPLOAD_ERR_OK) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'invalid_request', 'error_description' => 'File upload failed.']);
+        exit;
+    }
+
+    $uploadDir = \Lamb\Response\get_upload_dir();
+    $ext       = pathinfo($file['name'] ?? 'upload', PATHINFO_EXTENSION);
+    $filename  = sha1(($file['name'] ?? '') . uniqid('', true)) . ($ext ? ".$ext" : '');
+    move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+
+    $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;
+
+    http_response_code(201);
+    header('Location: ' . $url);
     exit;
 }
