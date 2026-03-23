@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Bootstrap\ensure_post_columns;
 use function Lamb\Response\count_drafts;
 use function Lamb\Response\count_trash;
 use function Lamb\Response\publish_post;
@@ -476,6 +477,24 @@ class ResponseHandlersTest extends TestCase
     }
 
     // deleted post visibility
+
+    public function testRespondHomeReturnsPostsWhenDeletedColumnAbsent(): void
+    {
+        // Simulate a production DB that predates soft-delete: drop the column.
+        R::exec('ALTER TABLE post DROP COLUMN deleted');
+
+        // ensure_post_columns() mirrors what bootstrap_db() does before any request.
+        ensure_post_columns();
+
+        $post = R::dispense('post');
+        $post->body    = 'Old post before soft-delete feature';
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = respond_home();
+        $this->assertCount(1, $result['posts']);
+    }
 
     public function testRespondHomeExcludesDeletedPosts(): void
     {
