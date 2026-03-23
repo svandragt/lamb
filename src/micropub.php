@@ -276,6 +276,12 @@ class LambMicropubAdapter extends MicropubAdapter
             $this->applyAdd($bean, $property, $values);
         }
 
+        foreach ($actions['delete'] ?? [] as $property => $values) {
+            if (is_array($values)) {
+                $this->applyDeleteValues($bean, $property, $values);
+            }
+        }
+
         parse_bean($bean);
         $bean->updated = date('Y-m-d H:i:s');
         R::store($bean);
@@ -299,6 +305,23 @@ class LambMicropubAdapter extends MicropubAdapter
             if (!empty($toAdd)) {
                 $newTags = implode(' ', array_map(fn($t) => '#' . $t, $toAdd));
                 $bean->body = rtrim($bean->body ?? '') . ' ' . $newTags;
+            }
+        }
+    }
+
+    /**
+     * Apply a delete-values operation for a single property to a post bean.
+     *
+     * @param OODBBean $bean
+     * @param string   $property
+     * @param array    $values
+     * @return void
+     */
+    private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
+    {
+        if ($property === 'category') {
+            foreach ($values as $tag) {
+                $bean->body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $bean->body ?? '');
             }
         }
     }
