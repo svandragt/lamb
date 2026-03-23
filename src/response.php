@@ -474,12 +474,13 @@ function respond_settings(): array
 function respond_status(array $args): array
 {
     [$id] = $args;
-    $posts = [R::load('post', (int)$id)];
-
-    $data['posts'] = $posts;
-    if (empty($data['posts'])) {
+    $bean = R::load('post', (int)$id);
+    if (!$bean->id) {
         respond_404([], true);
     }
+
+    $posts = [$bean];
+    $data['posts'] = $posts;
 
     upgrade_posts($data['posts']);
 
