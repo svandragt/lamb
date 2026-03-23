@@ -231,7 +231,8 @@ function redirect_edited(): void
 
     Security\require_login();
     Security\require_csrf();
-    if ($_POST['submit'] !== SUBMIT_EDIT) {
+    $validSubmits = [SUBMIT_EDIT, SUBMIT_RESTORE, SUBMIT_PUBLISH];
+    if (!in_array($_POST['submit'], $validSubmits, true)) {
         return;
     }
 
@@ -243,6 +244,13 @@ function redirect_edited(): void
 
     $bean = R::load('post', (int)$id);
     $old_slug = $bean->slug;
+
+    if ($_POST['submit'] === SUBMIT_RESTORE) {
+        $bean->deleted    = null;
+        $bean->deleted_at = null;
+    } elseif ($_POST['submit'] === SUBMIT_PUBLISH) {
+        $bean->draft = null;
+    }
 
     $bean->body = $contents;
 
@@ -356,6 +364,70 @@ function respond_drafts(): array
     upgrade_posts($data['posts']);
 
     return $data;
+}
+
+/**
+ * Returns paginated soft-deleted posts for the Trash view.
+ *
+ * @return array
+ */
+function respond_trash(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Trash';
+    $paginated = paginate_posts('post', 'deleted_at DESC', ' deleted = 1 ');
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    upgrade_posts($data['posts']);
+
+    return $data;
+}
+
+/**
+ * Returns the count of draft posts.
+ *
+ * @return int
+ */
+function count_drafts(): int
+{
+    return R::count('post', ' draft = 1 ');
+}
+
+/**
+ * Returns the count of soft-deleted (trashed) posts.
+ *
+ * @return int
+ */
+function count_trash(): int
+{
+    return R::count('post', ' deleted = 1 ');
+}
+
+/**
+ * Restore a soft-deleted post by clearing its deleted flags.
+ *
+ * @param \RedBeanPHP\OODBBean $post
+ * @return void
+ */
+function restore_post(\RedBeanPHP\OODBBean $post): void
+{
+    $post->deleted    = null;
+    $post->deleted_at = null;
+    R::store($post);
+}
+
+/**
+ * Publish a draft post by clearing its draft flag.
+ *
+ * @param \RedBeanPHP\OODBBean $post
+ * @return void
+ */
+function publish_post(\RedBeanPHP\OODBBean $post): void
+{
+    $post->draft = null;
+    R::store($post);
 }
 
 /**

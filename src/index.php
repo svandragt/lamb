@@ -34,6 +34,7 @@ Route\register_route(false, __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('delete', __NAMESPACE__ . '\\Response\redirect_deleted', $lookup);
 Route\register_route('drafts', __NAMESPACE__ . '\\Response\respond_drafts');
+Route\register_route('trash', __NAMESPACE__ . '\\Response\respond_trash');
 Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
 Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');
 if ($action === 'home' && $lookup === 'feed') {
@@ -76,4 +77,16 @@ switch ($action) {
 }
 
 # Views
-Theme\part('html', '');
+if (isset($_SESSION[SESSION_LOGIN])) {
+    ob_start();
+    Theme\part('html', '');
+    $page = ob_get_clean();
+    echo preg_replace(
+        '/<body([^>]*)>/',
+        '<body$1>' . Theme\admin_toolbar_html(),
+        $page,
+        1
+    );
+} else {
+    Theme\part('html', '');
+}

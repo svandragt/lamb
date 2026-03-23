@@ -555,3 +555,35 @@ function the_entry_form(): void
         <?php
     endif;
 }
+
+/**
+ * Returns the HTML for the admin toolbar shown to logged-in users.
+ * Injected theme-agnostically after <body> via output buffering in index.php.
+ *
+ * @return string
+ */
+function admin_toolbar_html(): string
+{
+    $drafts = \Lamb\Response\count_drafts();
+    $trash  = \Lamb\Response\count_trash();
+
+    $draftsLabel = 'Drafts' . ($drafts > 0 ? " ($drafts)" : '');
+    $trashLabel  = 'Trash'  . ($trash  > 0 ? " ($trash)"  : '');
+
+    return '<div id="admin-toolbar">'
+        . '<a href="/drafts">' . escape($draftsLabel) . '</a>'
+        . '<a href="/trash">'  . escape($trashLabel)  . '</a>'
+        . '<a href="/logout">Logout</a>'
+        . '</div>'
+        . '<style>'
+        . '#admin-toolbar{'
+        . 'position:sticky;top:0;z-index:9999;'
+        . 'display:flex;gap:1rem;align-items:center;'
+        . 'padding:.4rem 1rem;'
+        . 'background:#1a1a1a;color:#fff;font-size:.85rem;'
+        . '}'
+        . '#admin-toolbar a{color:#ccc;text-decoration:none;}'
+        . '#admin-toolbar a:hover{color:#fff;}'
+        . '#admin-toolbar a:last-child{margin-left:auto;}'
+        . '</style>';
+}

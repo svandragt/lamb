@@ -5,6 +5,9 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Response\count_drafts;
+use function Lamb\Response\count_trash;
+use function Lamb\Response\publish_post;
 use function Lamb\Response\respond_404;
 use function Lamb\Response\respond_drafts;
 use function Lamb\Response\respond_home;
@@ -13,6 +16,8 @@ use function Lamb\Response\respond_search;
 use function Lamb\Response\respond_settings;
 use function Lamb\Response\respond_status;
 use function Lamb\Response\respond_tag;
+use function Lamb\Response\respond_trash;
+use function Lamb\Response\restore_post;
 use function Lamb\Response\soft_delete_post;
 
 class ResponseHandlersTest extends TestCase
@@ -550,6 +555,103 @@ class ResponseHandlersTest extends TestCase
 
         $loaded = R::load('post', $id);
         $this->assertSame($id, $loaded->id);
+    }
+
+    // respond_trash
+
+    public function testRespondTrashReturnsOnlyDeletedPosts(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        $live = R::dispense('post');
+        $live->body    = 'Live post';
+        $live->created = date('Y-m-d H:i:s');
+        $live->updated = date('Y-m-d H:i:s');
+        R::store($live);
+
+        $deleted = R::dispense('post');
+        $deleted->body       = 'Deleted post';
+        $deleted->deleted    = 1;
+        $deleted->deleted_at = date('Y-m-d H:i:s');
+        $deleted->created    = date('Y-m-d H:i:s');
+        $deleted->updated    = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_trash();
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertContains($deleted->id, $ids);
+        $this->assertNotContains($live->id, $ids);
+    }
+
+    // count_drafts / count_trash
+
+    public function testCountDraftsReturnsZeroWhenNoDrafts(): void
+    {
+        $this->assertSame(0, count_drafts());
+    }
+
+    public function testCountDraftsReturnsCorrectNumber(): void
+    {
+        $draft = R::dispense('post');
+        $draft->body    = 'A draft';
+        $draft->draft   = 1;
+        $draft->created = date('Y-m-d H:i:s');
+        $draft->updated = date('Y-m-d H:i:s');
+        R::store($draft);
+
+        $this->assertSame(1, count_drafts());
+    }
+
+    public function testCountTrashReturnsZeroWhenEmpty(): void
+    {
+        $this->assertSame(0, count_trash());
+    }
+
+    public function testCountTrashReturnsCorrectNumber(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body       = 'Trashed post';
+        $deleted->deleted    = 1;
+        $deleted->deleted_at = date('Y-m-d H:i:s');
+        $deleted->created    = date('Y-m-d H:i:s');
+        $deleted->updated    = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $this->assertSame(1, count_trash());
+    }
+
+    // restore_post / publish_post
+
+    public function testRestorePostClearsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body       = 'Deleted post';
+        $bean->deleted    = 1;
+        $bean->deleted_at = date('Y-m-d H:i:s');
+        $bean->created    = date('Y-m-d H:i:s');
+        $bean->updated    = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        restore_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertEmpty($loaded->deleted);
+        $this->assertEmpty($loaded->deleted_at);
+    }
+
+    public function testPublishPostClearsDraftFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'Draft post';
+        $bean->draft   = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        publish_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertEmpty($loaded->draft);
     }
 
     public function testRespondSearchExcludesDeletedPosts(): void
