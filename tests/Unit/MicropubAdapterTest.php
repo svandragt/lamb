@@ -752,6 +752,46 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#gamma', $updated->body);
     }
 
+    public function testUpdateCallbackDeletePropertyRemovesAllCategoryHashtags(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'A post with tags #test1 #test2';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['category']]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('#test1', $updated->body);
+        $this->assertStringNotContainsString('#test2', $updated->body);
+    }
+
+    public function testUpdateCallbackDeletePropertyPreservesContent(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Keep this content #test1 #test2';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['category']]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertStringContainsString('Keep this content', $updated->body);
+    }
+
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
         $bean = R::dispense('post');
