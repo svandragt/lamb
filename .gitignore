@@ -6,10 +6,12 @@
 /src/config.ini
 /todos.md
 
-# Ignore custom themes by default
+# Ignore custom themes by default; explicitly exempt committed themes and their contents
 /src/themes/
 !/src/themes/2024
+!/src/themes/2024/**
 !/src/themes/default
+!/src/themes/default/**
 .env
 
 # Playwright

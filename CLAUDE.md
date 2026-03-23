@@ -334,14 +334,15 @@ User-uploaded files live under `src/assets/`, not under theme directories.
 
 ### `.gitignore` exemption
 
-`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted:
+`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted with two entries — one for the directory and one for its contents:
 
 ```
 # in .gitignore
 !/src/themes/news
+!/src/themes/news/**
 ```
 
-This only un-ignores the directory entry; files inside are still matched by the parent pattern. Use `git add --force src/themes/<name>/` to stage new theme files for the first time.
+Once both entries are added, `git add` works normally for all files inside the theme without needing `--force`. Use `git add --force src/themes/<name>/` only if you add a theme before updating `.gitignore`.
 
 ### Minimal new theme checklist
 
