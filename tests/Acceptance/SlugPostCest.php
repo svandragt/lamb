@@ -16,7 +16,7 @@ class SlugPostCest
         // Create a post with a title (which generates a slug)
         $I->amOnPage('/');
         $I->fillField('contents', "---\ntitle: Test Slug Post\n---\nThis is a test post.");
-        $I->click('Create post');
+        $I->click('Publish post');
 
         // Visit the post via its slug
         $I->amOnPage('/test-slug-post');
