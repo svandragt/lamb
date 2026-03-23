@@ -476,7 +476,7 @@ function respond_status(array $args): array
     [$id] = $args;
     $bean = R::load('post', (int)$id);
     if (!$bean->id) {
-        respond_404([], true);
+        return respond_404([], true);
     }
 
     $posts = [$bean];
