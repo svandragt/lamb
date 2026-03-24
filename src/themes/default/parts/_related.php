@@ -16,7 +16,7 @@ $related_posts = related_posts($body, $current_id);
 
 if (!empty($related_posts['posts'])) :
     ?>
-    <article class="related-posts">
+        <article class="related-posts">
             <h6>Related</h6>
             <ul>
             <?php

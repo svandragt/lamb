@@ -21,7 +21,7 @@ function the_styles(): void
     ];
     $assets = asset_loader($styles, THEME_URL . 'styles');
     foreach ($assets as $id => $href) {
-        printf('<link rel="stylesheet" id="%1$s" href="%2$s?%1$s" />' . PHP_EOL, $id, $href);
+        printf('<link rel="stylesheet" id="%1$s" href="%2$s?ver=%1$s" />' . PHP_EOL, $id, $href);
     }
 }
 
@@ -39,7 +39,7 @@ function the_scripts(): void
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
-        printf("<script id='%s' defer src='%s'></script>", $id, $href);
+        printf('<script id="%1$s" defer src="%2$s?ver=%1$s"></script>', $id, $href);
     }
 }
 
@@ -53,7 +53,7 @@ function the_scripts(): void
  *
  * @param array  $assets    Associative array: key = subdirectory condition, value = array of filenames.
  * @param string $asset_dir Base directory for the assets.
- * @return Generator Yields md5($href) => $href for each asset to load.
+ * @return Generator Yields md5($contents) => $href for each asset to load.
  */
 function asset_loader(array $assets, string $asset_dir): Generator
 {
@@ -69,9 +69,13 @@ function asset_loader(array $assets, string $asset_dir): Generator
         if (!$load) {
             continue;
         }
+
+
         foreach ($files as $file) {
             $href = ROOT_URL . str_replace('//', '/', "/$asset_dir/$dir/$file");
-            yield md5($href) => $href;
+            $filepath = "$asset_dir/$dir/$file";
+            $hash = filemtime($filepath);
+            yield $hash => $href;
         }
     }
 }
