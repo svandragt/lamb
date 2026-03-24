@@ -15,11 +15,10 @@ are supported.
 
 ## Setup
 
-You must have a `src/config.ini`. To setup an example feed add a new `feeds` section and one or more subs
+To set up feeds, add a `[feeds]` section to your site configuration at `/settings`, with one or more entries
 in the format of `name = feed url`:
 
 ```ini
-; Example
 [feeds]
 Test Feed = https://vandragt.com/feed
 ```

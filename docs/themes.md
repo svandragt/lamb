@@ -9,7 +9,7 @@ I'm not a designer.
 * _Default_ is a traditional blog theme
 * _2024_ is a more open modern theme. It's build on top of default.
 
-To switch between themes assign the theme directory as the value to the `theme` key in the `config.ini`:
+To switch between themes, set the `theme` key in the site configuration at `/settings`:
 
 ```ini
 theme = 2024
