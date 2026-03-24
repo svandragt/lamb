@@ -45,8 +45,15 @@
       "src/network.php",
       "src/post.php",
       "src/response.php",
+      "src/response/auth.php",
+      "src/response/feeds.php",
+      "src/response/posts.php",
+      "src/response/upload.php",
       "src/security.php",
       "src/theme.php",
+      "src/theme/assets.php",
+      "src/theme/formatting.php",
+      "src/theme/meta.php",
       "src/micropub.php"
     ]
   },
