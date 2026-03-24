@@ -82,13 +82,4 @@ function bootstrap_session(): void
     session_name('LAMBSESSID');
     session_start();
 
-    // Validate user agents
-    if (isset($_SESSION['HTTP_USER_AGENT'])) {
-        if (isset($_SERVER['HTTP_USER_AGENT']) && $_SESSION['HTTP_USER_AGENT'] !== md5($_SERVER['HTTP_USER_AGENT'])) {
-            /* Possible session hijacking attempt */
-            exit("Security fail");
-        }
-    } else {
-        $_SESSION['HTTP_USER_AGENT'] = md5($_SERVER['HTTP_USER_AGENT'] ?? '');
-    }
 }
