@@ -16,22 +16,25 @@ $related_posts = related_posts($body, $current_id);
 
 if (!empty($related_posts['posts'])) :
     ?>
-    <main>
-        <article>
-            <h3>Related posts</h3>
+    <article class="related-posts">
+            <h6>Related</h6>
             <ul>
             <?php
             foreach ($related_posts['posts'] as $bean) :
                 if (!isset($bean->title)) :
-                    $bean->title = $bean->body;
+                    $bean->title = '';
                 endif;
                 if (empty($bean->is_menu_item)) :
                     ?>
-                    <li><?= date_created($bean) ?>
-                        <span><?= escape(substr(strip_tags($bean->title), 0, 42)) ?>&hellip;</span>
-                        <?php if (!empty($bean->description)) : ?>
-                        <p><?= escape($bean->description) ?></p>
+                    <li>
+                        <?php if (!empty($bean->title)) : ?>
+                            <span><?= escape(substr(strip_tags($bean->title), 0, 42)) ?>&hellip;</span>
                         <?php endif; ?>
+                        <p><?= date_created($bean) ?>
+                        <?php if (!empty($bean->description)) : ?>
+                            <?= escape($bean->description) ?>
+                        <?php endif; ?>
+                        </p>
                     </li>
                     <?php
                 endif;
@@ -39,6 +42,5 @@ if (!empty($related_posts['posts'])) :
             ?>
             </ul>
         </article>
-    </main>
     <?php
 endif;

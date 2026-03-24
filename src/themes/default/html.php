@@ -70,11 +70,13 @@ global $template;
                 <?php
             endwhile;
         endif;
-        part($template); ?>
+        part($template);
+
+        part("_related");
+        ?>
     </main>
 </div>
 <?php
-part("_related");
 part("_pagination");
 ?>
 <footer>

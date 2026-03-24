@@ -178,6 +178,10 @@ h1 {
     font-weight: normal;
 }
 
+h6 {
+    font-size: 1rem;
+}
+
 article {
     border-bottom: 1px solid var(--shadow);
     padding: 0 1vw 1vw 1vw;
@@ -199,6 +203,18 @@ article {
         margin-left: 0;
     }
 
+    &.related-posts {
+
+    p {
+        margin-top: 0;
+    }
+    span {
+       font-weight: bold;
+    }
+
+    }
+
+
 }
 
 main > article:last-of-type,
@@ -218,7 +234,6 @@ small form {
 
 article > small {
     overflow: auto;
-    border-top: 1px dotted var(--bg2);
     display: block;
     margin: 1em 0 0;
     padding: 0 2em;
