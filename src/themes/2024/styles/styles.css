@@ -92,7 +92,7 @@ main {
 }
 
 nav {
-    background: #fee684ff;
+    background: var(--info);
     color: var(--fg);
     margin: 0;
     padding: 0 5%;
@@ -132,8 +132,8 @@ nav a[href$="feed"] {
 }
 
 nav a:hover {
-    background: white;
-    color: black;
+    background: var(--bg-alt);
+    color: var(--text);
 }
 
 nav form {
@@ -201,7 +201,8 @@ article {
 
 }
 
-article:last-of-type {
+main > article:last-of-type,
+li:last-child > article {
     border-bottom: none;
 }
 
@@ -215,18 +216,13 @@ small form {
     display: inline;
 }
 
-article footer {
+article > small {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
     margin: 1em 0 0;
     padding: 0 2em;
     line-height: 2rem;
-    align-self: flex-end;
-
-    a {
-        margin-right: 1em;
-    }
 }
 
 
@@ -262,7 +258,7 @@ textarea {
     margin: 1em 0;
     padding: 0.25em 0.5em;
     background: var(--info);
-    border: 1px solid var(--bg);
+    border: 1px solid var(--bg2);
     border-radius: 4px;
 }
 
@@ -322,7 +318,7 @@ textarea {
         max-width: 10vw;
     }
 
-    article footer {
+    article > small {
         margin: 1em -2em 0;
         width: 100%;
     }

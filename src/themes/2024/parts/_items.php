@@ -8,6 +8,7 @@ use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
+use function Lamb\Theme\escape;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
 use function Lamb\Theme\title_link;
@@ -36,7 +37,7 @@ else :
                     <h2><?= title_link($bean) ?></h2>
                 <?php endif; ?>
                 <div class="meta">
-                    <strong itemprop="author"><?= $config['author_name'] ?></strong> @
+                    <strong itemprop="author"><?= escape($config['author_name'] ?? '') ?></strong> @
                     <?= date_created($bean) ?>
                 </div>
             </header>
