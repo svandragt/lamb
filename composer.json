@@ -69,7 +69,10 @@
   "scripts": {
     "post-install-cmd": "vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
     "post-update-cmd": "vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility",
-    "lint": "vendor/bin/phpcs .",
+    "lint": [
+      "vendor/bin/phpcs .",
+      "bash scripts/check-coverage-doc.sh"
+    ],
     "fix": "vendor/bin/phpcbf .",
     "analyse": "vendor/bin/phpstan analyse --memory-limit=256M",
     "serve": [
