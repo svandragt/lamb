@@ -24,7 +24,7 @@ sudo chmod g+w src/assets -R
 
 To allow logins, add the output of `HIDDEN=1 php make-password.php hackme` (don't use hackme) as an
 environment variable
-to `/etc/php/8.2/fpm/pool.d/www.conf`:
+to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP version):
 
 ```text
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
@@ -34,5 +34,5 @@ env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
 
 ```shell
 sudo systemctl restart nginx
-sudo systemctl restart php8.2-fpm
+sudo systemctl restart php8.4-fpm
 ```

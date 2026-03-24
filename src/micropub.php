@@ -25,7 +25,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * @param array|null $properties Specific properties to return; null means all.
      * @return array|false
      */
-    public function sourceQueryCallback(string $url, array $properties = null)
+    public function sourceQueryCallback(string $url, ?array $properties = null)
     {
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {

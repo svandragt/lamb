@@ -859,6 +859,68 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    // --- beanToMf2Properties (via sourceQueryCallback) ---
+
+    public function testSourceQueryReturnsNamePropertyForTitledPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body  = "---\ntitle: My Title\n---\nSome content";
+        $bean->title = 'My Title';
+        $bean->slug  = 'my-title';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result  = $adapter->sourceQueryCallback(ROOT_URL . '/my-title');
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('name', $result['properties']);
+        $this->assertSame('My Title', $result['properties']['name'][0]);
+    }
+
+    public function testSourceQueryNamePropertyAbsentForUntitledPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body  = 'No front matter here';
+        $bean->slug  = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result  = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertArrayNotHasKey('name', $result['properties']);
+    }
+
+    // --- extractContent (via createCallback) ---
+
+    public function testCreateCallbackArrayContentWithValueKeyUsesValue(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['value' => 'Plain value content']],
+            ],
+        ];
+        $result = $adapter->createCallback($data);
+        $this->assertIsString($result);
+        $post = R::findOne('post', ' body = ? ', ['Plain value content']);
+        $this->assertNotNull($post);
+        // No HTML in transformed — plain markdown path was used.
+        $this->assertStringNotContainsString('&lt;', $post->transformed);
+    }
+
+    // --- findPostByUrl (root/empty path) ---
+
+    public function testSourceQueryReturnsFalseForRootUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result  = $adapter->sourceQueryCallback(ROOT_URL . '/');
+        $this->assertFalse($result);
+    }
+
     public function testConfigurationQueryCallbackReturnsSyndicateTo(): void
     {
         $adapter = new LambMicropubAdapter();
