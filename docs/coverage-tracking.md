@@ -1,22 +1,10 @@
 # Code Coverage Tracking
 
-<!-- src-hash: 573e7f76745b69004ba2a7a631b9863f -->
-
 Coverage is measured by `composer coverage` using pcov (CI) on files matching `src/*.php` (excludes `src/index.php` and all `src/response/*.php`, `src/theme/*.php` subdirectory files).
 
 Current threshold: **70%**
 
-## Keeping this document up to date
-
-The `<!-- src-hash: ... -->` comment above is a fingerprint of all `src/*.php` files (excluding `src/index.php`). Run `scripts/check-coverage-doc.sh` to detect drift:
-
-```bash
-scripts/check-coverage-doc.sh
-```
-
-If the hash has changed (new file added, existing file modified), the script exits non-zero and prints the new hash to embed. Update this doc and the table below, then commit both together.
-
-The check is wired into `composer lint` so CI will catch it automatically.
+**Update this document when:** a new `src/*.php` top-level file is added, or the coverage threshold changes.
 
 ## Covered files (`src/*.php`)
 
