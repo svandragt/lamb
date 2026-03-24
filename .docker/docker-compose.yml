@@ -7,13 +7,14 @@ services:
     ports:
       - "80:80"
     volumes:
-      - ..:/srv/app
+      - ../src:/srv/app/src
       - ./Caddyfile:/etc/caddy/Caddyfile
   composer:
     container_name: lamb-deps
     image: composer:2
     volumes:
-      - ..:/app
+      - ../composer.json:/app/composer.json:ro
+      - ../composer.lock:/app/composer.lock:ro
       - vendor:/app/vendor
     command: install --ignore-platform-reqs --no-interaction
 
@@ -22,11 +23,16 @@ services:
       context: ..
       dockerfile: .docker/Dockerfile
     container_name: lamb-app
+    depends_on:
+      composer:
+        condition: service_completed_successfully
     env_file:
       - ../.ddev/.env
     image: php:fpm
     volumes:
-      - ..:/srv/app
+      - ../src:/srv/app/src
+      - ../data:/srv/app/data
+      - vendor:/srv/app/vendor
 
 volumes:
   vendor:
