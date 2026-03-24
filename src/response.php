@@ -130,33 +130,30 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
 }
 
 /**
- * Redirects the user after successfully creating a post.
+ * Handles post creation from a form submission.
  *
- * This method performs several operations, including checking for user authentication,
- * verifying the presence of a CSRF token, validating the submitted form data,
- * saving the post to the database, and redirecting the user to the home page.
- * If any of these operations fail, the method returns null and no redirection occurs.
+ * Validates the CSRF token, submit value, and content, stores the post, then redirects.
+ * Returns early (void) when validation fails or the submit button does not match.
  *
- * @return array|null An array containing post data if the redirection was successful,
- *                   otherwise null.
+ * @return void
  */
-function redirect_created(): ?array
+function redirect_created(): void
 {
     global $config;
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_CREATE) {
-        return null;
+        return;
     }
     $contents = trim($_POST['contents'] ?? '');
     if (empty($contents)) {
-        return null;
+        return;
     }
 
     $bean = populate_bean($contents);
     if ($bean === null) {
         $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
-        return null;
+        return;
     }
 
     try {
@@ -979,14 +976,73 @@ function get_upload_dir(): string
 }
 
 /**
+ * Paginates an in-memory array of items.
+ *
+ * @param array $values  Flat array of items to paginate.
+ * @param int   $page    Current page (1-based, already clamped by caller).
+ * @param int   $per_page Items per page.
+ * @return array{items: array, pagination: array}
+ */
+function paginate_array(array $values, int $page, int $per_page): array
+{
+    $total_posts = count($values);
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $page   = min($page, $total_pages);
+    $offset = ($page - 1) * $per_page;
+
+    return [
+        'items'      => array_slice($values, $offset, $per_page),
+        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+    ];
+}
+
+/**
+ * Paginates a database bean type with an optional WHERE clause.
+ *
+ * @param string      $bean_type       RedBeanPHP bean type.
+ * @param string      $order_by_clause SQL ORDER BY expression (without keyword).
+ * @param string|null $where_sql       Optional WHERE clause.
+ * @param array       $params          Bound parameters for the WHERE clause.
+ * @param int         $page            Current page (1-based, already clamped by caller).
+ * @param int         $per_page        Items per page.
+ * @return array{items: array, pagination: array}
+ */
+function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page, int $per_page): array
+{
+    $total_posts = !empty($where_sql) ? R::count($bean_type, $where_sql, $params) : R::count($bean_type);
+
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $page   = min($page, $total_pages);
+    $offset = ($page - 1) * $per_page;
+
+    if (!empty($where_sql)) {
+        // When params are provided, use R::find with param binding and append offset/limit
+        $find_params   = $params;
+        $find_params[] = (int)$offset;
+        $find_params[] = (int)$per_page;
+        $items = R::find($bean_type, $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?', $find_params);
+    } else {
+        // No params: safe to use the simpler findAll with a constructed LIMIT
+        $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page);
+    }
+
+    upgrade_posts($items);
+    return [
+        'items'      => $items,
+        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+    ];
+}
+
+/**
  * Paginates a collection of posts, either from an array or a database query.
  *
- * @param mixed $source The source to paginate, either an array of items or a string representing a database bean type.
- * @param string $order_by_clause The SQL order by clause to apply when querying the database. Defaults to 'created DESC'.
- * @param string|null $where_sql Optional SQL WHERE clause for filtering database results (null by default).
- * @param array $params Parameters to bind for the SQL WHERE clause, if provided.
- *
- * @return array An array containing paginated items and pagination details such as current page, total posts, total pages, and offsets.
+ * @param mixed       $source          Array of items, or a bean type string for DB pagination.
+ * @param string      $order_by_clause SQL ORDER BY expression (DB path only).
+ * @param string|null $where_sql       Optional WHERE clause (DB path only).
+ * @param array       $params          Bound parameters for the WHERE clause.
+ * @param int|null    $per_page        Items per page; falls back to config when null.
+ * @param int|null    $page            Current page; falls back to $_GET['page'] when null.
+ * @return array{items: array, pagination: array}
  */
 function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
 {
@@ -999,50 +1055,9 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
     // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
 
-    // If source is an array, do array pagination
     if (is_array($source)) {
-        $values = array_values($source);
-        $total_posts = count($values);
-        $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
-        $page = min($page, $total_pages);
-        $offset = ($page - 1) * $per_page;
-
-        return [
-            'items'      => array_slice($values, $offset, $per_page),
-            'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
-        ];
+        return paginate_array(array_values($source), $page, $per_page);
     }
 
-    // Otherwise expect a bean type string and run DB pagination.
-    $bean_type = (string)$source;
-
-    // Count posts (with or without WHERE/params)
-    if (!empty($where_sql)) {
-        $total_posts = R::count($bean_type, $where_sql, $params);
-    } else {
-        $total_posts = R::count($bean_type);
-    }
-
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
-    $page = min($page, $total_pages);
-    $offset = ($page - 1) * $per_page;
-
-    if (!empty($where_sql)) {
-        // When params are provided, use R::find with param binding and append offset/limit
-        $find_params = $params;
-        $find_params[] = (int)$offset;
-        $find_params[] = (int)$per_page;
-        $sql = $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?';
-        $items = R::find($bean_type, $sql, $find_params);
-    } else {
-        // No params: safe to use the simpler findAll with a constructed LIMIT
-        $limit_sql = 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page;
-        $items = R::findAll($bean_type, $limit_sql);
-    }
-
-    upgrade_posts($items);
-    return [
-        'items'      => $items,
-        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
-    ];
+    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page, $per_page);
 }
