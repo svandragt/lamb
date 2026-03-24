@@ -54,14 +54,14 @@ main {
     max-width: 75ch;
     border: 0 solid var(--shadow);
     border-left-width: 1px;
-    padding: 0 0 1vw 0;
+    padding: 0 0.5rem 1vw;
 
     a {
         color: var(--link);
     }
 
     small a {
-        margin-right: 1em;
+        margin-right: 0.5em;
     }
 
     h2 a.title-link {
