@@ -58,8 +58,8 @@ class ThemeAssetsTest extends TestCase
         the_styles();
         $output = ob_get_clean();
 
-        // href="...styles.css?<md5hash>"
-        $this->assertMatchesRegularExpression('/styles\.css\?[a-f0-9]{32}/', $output);
+        // href="...styles.css?ver=<md5hash>"
+        $this->assertMatchesRegularExpression('/styles\.css\?ver=[a-f0-9]{32}/', $output);
     }
 
     public function testTheStylesOutputsIdAttribute(): void
