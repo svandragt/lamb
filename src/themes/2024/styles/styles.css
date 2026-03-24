@@ -104,8 +104,18 @@ nav {
     }
 }
 
-nav ul, nav li {
-    display: inline;
+nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+nav li {
+    display: flex;
+    align-items: center;
     margin: 0;
     padding: 0;
 }
@@ -137,19 +147,39 @@ nav a:hover {
 }
 
 nav form {
-    display: inline-block;
-    margin: 0 0.5em;
-    line-height: 1.9em;
+    display: flex;
+    align-items: center;
+    margin: 0;
+    gap: 0.25em;
 }
 
-nav ul {
-    display: flow-root;
-    max-width: 140ch;
+nav form input[type="text"] {
+    flex: 1;
+    min-width: 0;
 }
-
 
 nav li.right {
-    float: right;
+    flex: 1;
+    justify-content: flex-end;
+    gap: 0.5em;
+}
+
+/* On narrow screens, push search to its own full-width row */
+@media (max-width: 599px) {
+    nav li.right {
+        flex-basis: 100%;
+        justify-content: stretch;
+        padding-bottom: 0.5em;
+    }
+
+    nav li.right .form-search {
+        flex: 1;
+    }
+
+    nav li.right .form-search input[type="text"] {
+        flex: 1;
+        width: 100%;
+    }
 }
 
 footer {
@@ -325,8 +355,8 @@ textarea {
 
 /* Desktop styles */
 @media (min-width: 600px) {
-    nav input {
-        max-width: 10vw;
+    nav input[type="text"] {
+        max-width: 12em;
     }
 
     article > small {
