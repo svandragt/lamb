@@ -19,7 +19,7 @@ use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\get_tag_search_conditions;
 
-use const Lamb\SQL_NOT_DRAFT;
+use const Lamb\SQL_PUBLISHED;
 
 /**
  * Returns true when the user is authenticated and the bean has an ID.
@@ -221,7 +221,7 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $sql = '(' . $conditions['sql'] . ') AND' . SQL_NOT_DRAFT;
+        $sql = '(' . $conditions['sql'] . ') AND' . SQL_PUBLISHED;
         $params = $conditions['params'];
         if ($exclude_id > 0) {
             $sql .= ' AND id != ?';

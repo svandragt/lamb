@@ -289,4 +289,17 @@ class ThemeExtendedTest extends TestCase
         $result = get_posts_by_tags(['draftme']);
         $this->assertCount(0, $result);
     }
+
+    public function testGetPostsByTagsExcludesTrashedPosts(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Trashed post about #trashme end';
+        $bean->version = 1;
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $result = get_posts_by_tags(['trashme']);
+        $this->assertCount(0, $result);
+    }
 }
