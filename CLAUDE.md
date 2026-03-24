@@ -42,7 +42,18 @@ composer fix
 
 # Install pre-commit hook (one-time, after cloning)
 printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome \
+  pnpm run screenshot [/path] [outdir]
+# Before/after: git stash → screenshot → git stash pop → screenshot
 ```
+
+### Screenshot notes
+- JS deps: `pnpm install` (not npm); Playwright is `@playwright/test`
+- The PHP dev server must be started with `php -S 0.0.0.0:8747 -t src` (no router script argument)
+- Chromium executable: `/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`
+- Script: `scripts/screenshot.mjs [path] [outdir]`
 
 ## Project Structure
 

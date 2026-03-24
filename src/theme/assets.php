@@ -72,9 +72,9 @@ function asset_loader(array $assets, string $asset_dir): Generator
 
 
         foreach ($files as $file) {
-            $href = ROOT_URL . str_replace('//', '/', "/$asset_dir/$dir/$file");
-            $filepath = "$asset_dir/$dir/$file";
-            $hash = filemtime($filepath);
+            $path = $dir ? "$asset_dir/$dir/$file" : "$asset_dir/$file";
+            $href = ROOT_URL . '/' . ltrim($path, '/');
+            $hash = md5($href);
             yield $hash => $href;
         }
     }
