@@ -22,6 +22,9 @@ use function Lamb\Post\posts_by_tag;
 use function Lamb\Route\is_reserved_route;
 use function Lamb\Theme\part;
 
+use const Lamb\SQL_IS_DELETED;
+use const Lamb\SQL_IS_DRAFT;
+use const Lamb\SQL_PUBLISHED;
 use const ROOT_DIR;
 
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
@@ -342,23 +345,16 @@ function respond_home(): array
     $data['title'] = $config['site_title'];
 
     // Use the shared paginator for posts; paginate_posts will read config and $_GET when needed
-    $where_parts = [' (draft IS NULL OR draft != 1) ', ' (deleted IS NULL OR deleted != 1) '];
+    $where_sql = SQL_PUBLISHED;
     $where_params = [];
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
-        $where_parts[] = $clause['sql'];
+        $where_sql .= ' AND ' . $clause['sql'];
         $where_params = $clause['params'];
     }
-    $paginated = paginate_posts(
-        'post',
-        'created DESC',
-        implode(' AND ', $where_parts),
-        $where_params
-    );
+    $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
-
-    upgrade_posts($data['posts']);
 
     return $data;
 }
@@ -373,11 +369,9 @@ function respond_drafts(): array
     Security\require_login();
 
     $data['title'] = 'Drafts';
-    $paginated = paginate_posts('post', 'created DESC', ' draft = 1 AND (deleted IS NULL OR deleted != 1) ');
+    $paginated = paginate_posts('post', 'created DESC', SQL_IS_DRAFT);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
-
-    upgrade_posts($data['posts']);
 
     return $data;
 }
@@ -392,11 +386,9 @@ function respond_trash(): array
     Security\require_login();
 
     $data['title'] = 'Trash';
-    $paginated = paginate_posts('post', 'deleted_at DESC', ' deleted = 1 ');
+    $paginated = paginate_posts('post', 'deleted_at DESC', SQL_IS_DELETED);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
-
-    upgrade_posts($data['posts']);
 
     return $data;
 }
@@ -408,7 +400,7 @@ function respond_trash(): array
  */
 function count_drafts(): int
 {
-    return R::count('post', ' draft = 1 AND (deleted IS NULL OR deleted != 1) ');
+    return R::count('post', SQL_IS_DRAFT);
 }
 
 /**
@@ -418,7 +410,7 @@ function count_drafts(): int
  */
 function count_trash(): int
 {
-    return R::count('post', ' deleted = 1 ');
+    return R::count('post', SQL_IS_DELETED);
 }
 
 /**
@@ -639,11 +631,11 @@ function get_feed_data(): array
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ORDER BY updated DESC LIMIT 20',
+            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20',
             $clause['params']
         );
     } else {
-        $posts = R::findAll('post', ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ORDER BY updated DESC LIMIT 20 ');
+        $posts = R::findAll('post', SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20');
     }
 
     $first_post = reset($posts);
@@ -820,7 +812,7 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1)';
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED;
 
     // Use the shared paginator which supports WHERE + params; omit per_page/page so helper reads config/$_GET
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
@@ -1048,6 +1040,7 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         $items = R::findAll($bean_type, $limit_sql);
     }
 
+    upgrade_posts($items);
     return [
         'items'      => $items,
         'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),

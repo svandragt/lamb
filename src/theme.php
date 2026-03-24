@@ -16,6 +16,19 @@ use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\get_tag_search_conditions;
 
+use const Lamb\SQL_NOT_DRAFT;
+
+/**
+ * Returns true when the user is authenticated and the bean has an ID.
+ *
+ * @param OODBBean $bean
+ * @return bool
+ */
+function can_act_on(OODBBean $bean): bool
+{
+    return isset($bean->id, $_SESSION[SESSION_LOGIN]);
+}
+
 /**
  * Returns a delete form for the given post bean, or '' if not logged in.
  *
@@ -24,7 +37,7 @@ use function Lamb\Post\get_tag_search_conditions;
  */
 function action_delete(OODBBean $bean): string
 {
-    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
+    if (!can_act_on($bean)) {
         return '';
     }
 
@@ -40,7 +53,7 @@ function action_delete(OODBBean $bean): string
  */
 function action_restore(OODBBean $bean): string
 {
-    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
+    if (!can_act_on($bean)) {
         return '';
     }
 
@@ -62,7 +75,7 @@ function action_restore(OODBBean $bean): string
  */
 function action_edit(OODBBean $bean): string
 {
-    if (!isset($bean->id, $_SESSION[SESSION_LOGIN])) {
+    if (!can_act_on($bean)) {
         return '';
     }
 
@@ -206,7 +219,7 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $sql = '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1)';
+        $sql = '(' . $conditions['sql'] . ') AND' . SQL_NOT_DRAFT;
         $params = $conditions['params'];
         if ($exclude_id > 0) {
             $sql .= ' AND id != ?';
