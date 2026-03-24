@@ -316,25 +316,24 @@ function the_styles(): void
  */
 function the_scripts(): void
 {
-    global $template;
-
     $scripts = [
         '' => ['shorthand.js'],
         'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js'],
+        'search' => ['search-highlight.js'],
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
         printf("<script id='%s' defer src='%s'></script>", $id, $href);
     }
-
-    if ($template === 'search') {
-        $href = ROOT_URL . '/scripts/search-highlight.js';
-        printf("<script id='%s' defer src='%s'></script>", md5($href), $href);
-    }
 }
 
 /**
  * Loads and yields asset URLs for the application.
+ *
+ * The array key controls when each group of files is emitted:
+ * - ''         always loaded
+ * - 'logged_in' loaded only when the user is authenticated
+ * - any other string is matched against the current $template
  *
  * @param array $assets An associative array where keys represent directory names
  *                       and values are arrays of filenames to be loaded.
@@ -344,14 +343,21 @@ function the_scripts(): void
  */
 function asset_loader(array $assets, string $asset_dir): Generator
 {
+    global $template;
+
     foreach ($assets as $dir => $files) {
+        $load = match (true) {
+            empty($dir)                                          => true,
+            $dir === SESSION_LOGIN && isset($_SESSION[SESSION_LOGIN]) => true,
+            $dir === $template                                   => true,
+            default                                              => false,
+        };
+        if (!$load) {
+            continue;
+        }
         foreach ($files as $file) {
-            $is_admin_script = $dir === SESSION_LOGIN;
-            if (empty($dir) || ($is_admin_script && isset($_SESSION[SESSION_LOGIN]))) {
-                // Empty dir
-                $href = ROOT_URL . str_replace('//', '/', "/$asset_dir/$dir/$file");
-                yield md5($href) => $href;
-            }
+            $href = ROOT_URL . str_replace('//', '/', "/$asset_dir/$dir/$file");
+            yield md5($href) => $href;
         }
     }
 }
