@@ -180,13 +180,38 @@ class ThemeTest extends TestCase
         $this->assertMatchesRegularExpression('/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/', $result);
     }
 
-    public function testFormatPastDateMonthDayFormatWhenJIs4()
+    public function testFormatPastDateMonthDayIncludesYearWhenJIs4AndYearDiffers()
     {
         $ts = mktime(10, 0, 0, 6, 15, 2020);
         $result = format_past_date(4, 3, $ts);
-        // "June 15 at ..." format (no year)
         $this->assertStringContainsString('June 15', $result);
-        $this->assertStringNotContainsString('2020', $result);
+        $this->assertStringContainsString('2020', $result);
+    }
+
+    public function testFormatPastDateMonthDayOmitsYearWhenJIs4AndYearMatches()
+    {
+        $year = (int) date('Y');
+        $ts = mktime(10, 0, 0, 1, 15, $year);
+        $result = format_past_date(4, 3, $ts);
+        $this->assertStringContainsString('January 15', $result);
+        $this->assertStringNotContainsString((string) $year, $result);
+    }
+
+    public function testFormatPastDateMonthDayIncludesYearWhenJIs5AndYearDiffers()
+    {
+        $ts = mktime(10, 0, 0, 3, 10, 2020);
+        $result = format_past_date(5, 3, $ts);
+        $this->assertStringContainsString('March 10', $result);
+        $this->assertStringContainsString('2020', $result);
+    }
+
+    public function testFormatPastDateMonthDayOmitsYearWhenJIs5AndYearMatches()
+    {
+        $year = (int) date('Y');
+        $ts = mktime(10, 0, 0, 2, 10, $year);
+        $result = format_past_date(5, 3, $ts);
+        $this->assertStringContainsString('February 10', $result);
+        $this->assertStringNotContainsString((string) $year, $result);
     }
 
     public function testFormatPastDateFullDateWithYearWhenJIs6()

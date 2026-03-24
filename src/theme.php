@@ -411,7 +411,8 @@ function format_past_date(int $j, int $difference, int $timestamp): string
         case $j === 3:
             return date("l \a\\t g:i a", $timestamp);
         case $j < 6 && !($j === 5 && $difference === 12):
-            return date("F j \a\\t g:i a", $timestamp);
+            $format = date('Y', $timestamp) !== date('Y') ? "F j, Y \a\\t g:i a" : "F j \a\\t g:i a";
+            return date($format, $timestamp);
         default:
             return date("F j, Y \a\\t g:i a", $timestamp);
     }
