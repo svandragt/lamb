@@ -6,19 +6,23 @@ title: Site Configuration
 
 Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
 
-> Note: the `[redirections]` section described below is still work in progress on the `issue-88-redirection-feature` branch. It is not available on the current `main` or `release` branches.
-
 The full default configuration (all keys commented out = use built-in defaults):
 
 ```
+;; Title of the site, shown in the HTML and feed views
+;site_title = My Microblog
+
 ;; Author email in feed
 ;author_email = joe.sheeple@example.com
 
 ;; Author name in feed
 ;author_name = Joe Sheeple
 
-;; Title of the site, in html and feed views
-;site_title = My Microblog
+;; Active theme directory name (default: default)
+;theme = default
+
+;; Number of posts per page (default: 10)
+;posts_per_page = 10
 
 ;; When content is not found, instead of a 404, the user is redirected to the same
 ;; relative path on another site. Useful for archived or under-construction sites.
@@ -33,8 +37,7 @@ The full default configuration (all keys commented out = use built-in defaults):
 ;;   - A full URL to an external site
 ;Source = https://github.com/svandragt/lamb
 
-;; Planned, not yet available on main/release:
-;[redirections]
+[redirections]
 ;; Add 301 redirects for old URL path segments.
 ;; Format: <old-slug> = <destination>
 ;; Destination can be a root-relative URL, a bare slug, or a full external URL.
