@@ -8,6 +8,11 @@ title: Lamb
 
 Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
 
+## Requirements
+
+- PHP 8.2 – 8.5
+- SQLite3, gettext, simplexml, mbstring extensions
+
 ## Getting started
 
 ```
