@@ -35,6 +35,9 @@ jobs:
       - name: Validate Composer
         run: composer validate
 
+      - name: Security audit
+        run: composer audit
+
       - name: Run PHPCS
         run: |
           composer run lint
