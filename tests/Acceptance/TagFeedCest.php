@@ -36,6 +36,14 @@ class TagFeedCest
 
     public function tryTagPageHasFeedAutodiscoveryLink(AcceptanceTester $I)
     {
+        // Create a post with #lamb so the tag page exists
+        $I->amOnPage('/login');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
+        $I->click('Log in');
+        $I->amOnPage('/');
+        $I->fillField('contents', 'Test post #lamb');
+        $I->click('Create post');
+
         $I->amOnPage('/tag/lamb');
         $I->seeInSource('application/atom+xml');
         $I->seeInSource('/tag/lamb/feed');
