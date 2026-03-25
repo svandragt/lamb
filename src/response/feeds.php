@@ -321,6 +321,10 @@ function respond_tag(array $args): array
     // Get all posts for this tag (in-memory array)
     $all_posts = posts_by_tag($tag);
 
+    if (empty($all_posts)) {
+        return respond_404();
+    }
+
     $paginated = paginate_posts($all_posts);
 
     $data['title'] = 'Tagged with #' . $tag;

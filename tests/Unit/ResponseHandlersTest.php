@@ -337,14 +337,26 @@ class ResponseHandlersTest extends TestCase
 
     // respond_tag
 
+    private function seedPostWithTag(string $tag): void
+    {
+        $post = R::dispense('post');
+        $post->body = "Hello #$tag end";
+        $post->version = 1;
+        $post->draft = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+    }
+
     public function testRespondTagReturnsArray(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertIsArray($result);
     }
 
     public function testRespondTagHasRequiredKeys(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertArrayHasKey('title', $result);
         $this->assertArrayHasKey('posts', $result);
@@ -354,20 +366,22 @@ class ResponseHandlersTest extends TestCase
 
     public function testRespondTagTitleContainsTagName(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertStringContainsString('lamb', $result['title']);
     }
 
     public function testRespondTagFeedUrlContainsTag(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertStringContainsString('lamb', $result['feed_url']);
     }
 
-    public function testRespondTagReturnsNoResultsIntroWhenNoPostsTagged(): void
+    public function testRespondTagReturns404ForNonExistentTag(): void
     {
         $result = respond_tag(['nonexistenttag999']);
-        $this->assertStringContainsString('No results', $result['intro']);
+        $this->assertSame('404', $result['action']);
     }
 
     public function testRespondTagFindsPostWithMatchingTag(): void
