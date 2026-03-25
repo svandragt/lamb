@@ -6,7 +6,7 @@ use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
 
 ?>
-<h2>Settings</h2>
+<h1>Settings</h1>
 <p>
     Edit the application configuration in INI format. Changes are validated before saving.
     Refer to the <a href="https://github.com/svandragt/lamb/wiki" target="_blank">wiki</a> for available keys and examples.

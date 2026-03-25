@@ -3,6 +3,13 @@
 namespace Lamb;
 
 use RedBeanPHP\OODBBean;
+
+// SQL fragments for common post visibility filters.
+const SQL_NOT_DRAFT  = ' (draft IS NULL OR draft != 1) ';
+const SQL_NOT_DELETED = ' (deleted IS NULL OR deleted != 1) ';
+const SQL_PUBLISHED  = ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
+const SQL_IS_DRAFT   = ' draft = 1 AND (deleted IS NULL OR deleted != 1) ';
+const SQL_IS_DELETED = ' deleted = 1 ';
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 

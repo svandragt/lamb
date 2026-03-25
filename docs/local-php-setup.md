@@ -9,7 +9,8 @@ Make sure everything is installed:
 ```bash
 # Install required system packages, for example on Debian Linux derivatives like Ubuntu
 sudo apt update
-sudo apt install php8.2 php8.2-gettext php8.2-mbstring php8.2-sqlite3 php8.2 php8.2-xml composer
+sudo apt install php8.4 php8.4-gettext php8.4-mbstring php8.4-sqlite3 php8.4-xml composer
+# PHP 8.2–8.5 are supported; replace 8.4 with your preferred version
 
 # install project packages
 composer install

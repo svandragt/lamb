@@ -27,14 +27,20 @@ class EmojiSearchCest
 
     public function tryEmojiTag(AcceptanceTester $I)
     {
-        // Search for the emoji tag via the URL path
+        // Create a post with the emoji tag so the tag page exists
+        $I->amOnPage('/login');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
+        $I->click('Log in');
+        $I->amOnPage('/');
+        $I->fillField('contents', 'Emoji tag test #🐑');
+        $I->click('Create post');
+
+        // Visit the emoji tag page via the URL path
         $I->amOnPage('/tag/🐑');
         $I->seeInTitle('Tagged with #🐑');
         $I->see('Tagged with #🐑', 'h1');
-        // It shouldn't 404/redirect to fallback site
-        $I->see('No results found.', 'main');
 
-        // Search for the emoji tag via the URL path (encoded)
+        // Also works with the percent-encoded URL
         $I->amOnPage('/tag/%F0%9F%90%91');
         $I->seeInTitle('Tagged with #🐑');
         $I->see('Tagged with #🐑', 'h1');
