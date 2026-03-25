@@ -3,9 +3,11 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
+use function Lamb\Post\posts_by_tag;
 use function Lamb\Post\slugify;
 
 class PostTest extends TestCase
@@ -170,5 +172,92 @@ class PostTest extends TestCase
         $body = "---\ntitle: My Post Title\nslug: custom-slug\n---\nContent.";
         $result = parse_matter($body);
         $this->assertSame('custom-slug', $result['slug']);
+    }
+
+    // posts_by_tag
+
+    protected function setUpDb(): void
+    {
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+
+        $schema = R::dispense('post');
+        $schema->draft   = null;
+        $schema->deleted = null;
+        R::store($schema);
+        R::exec('DELETE FROM post');
+    }
+
+    public function testPostsByTagReturnsMatchingPost(): void
+    {
+        $this->setUpDb();
+
+        $post = R::dispense('post');
+        $post->body    = 'Hello #php world';
+        $post->version = 1;
+        $post->draft   = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = posts_by_tag('php');
+        $this->assertCount(1, $result);
+    }
+
+    public function testPostsByTagDoesNotReturnDraftPosts(): void
+    {
+        $this->setUpDb();
+
+        $draft = R::dispense('post');
+        $draft->body    = 'Hello #php world';
+        $draft->version = 1;
+        $draft->draft   = 1;
+        $draft->created = date('Y-m-d H:i:s');
+        R::store($draft);
+
+        $result = posts_by_tag('php');
+        $this->assertCount(0, $result);
+    }
+
+    public function testPostsByTagReturnsEmptyArrayWhenNoMatch(): void
+    {
+        $this->setUpDb();
+
+        $result = posts_by_tag('nonexistenttag999');
+        $this->assertIsArray($result);
+        $this->assertCount(0, $result);
+    }
+
+    public function testPostsByTagMatchesTagAtEndOfBody(): void
+    {
+        $this->setUpDb();
+
+        $post = R::dispense('post');
+        $post->body    = 'My post #endtag';
+        $post->version = 1;
+        $post->draft   = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = posts_by_tag('endtag');
+        $this->assertCount(1, $result);
+    }
+
+    public function testPostsByTagReturnsMultipleMatchingPosts(): void
+    {
+        $this->setUpDb();
+
+        for ($i = 0; $i < 3; $i++) {
+            $post = R::dispense('post');
+            $post->body    = "Post $i #multitag";
+            $post->version = 1;
+            $post->draft   = null;
+            $post->created = date('Y-m-d H:i:s', time() - $i);
+            R::store($post);
+        }
+
+        $result = posts_by_tag('multitag');
+        $this->assertCount(3, $result);
     }
 }
