@@ -14,6 +14,32 @@ on:
 
 jobs:
 
+  quality:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Validate Composer
+        run: composer validate
+
+      - name: Security audit
+        run: composer audit
+
+      - name: Run PHPCS
+        run: composer run lint
+
+      - name: Run PHPStan
+        run: composer run analyse
+
   test:
     runs-on: ubuntu-latest
     strategy:
@@ -27,24 +53,10 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php-version }}
-          coverage: pcov
+          coverage: ${{ matrix.php-version == '8.2' && 'pcov' || 'none' }}
 
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
-
-      - name: Validate Composer
-        run: composer validate
-
-      - name: Security audit
-        run: composer audit
-
-      - name: Run PHPCS
-        run: |
-          composer run lint
-
-      - name: Run PHPStan
-        if: matrix.php-version == '8.2'
-        run: composer run analyse
 
       - name: Run Codeception tests
         run: |
@@ -52,6 +64,5 @@ jobs:
           vendor/bin/codecept run --steps
 
       - name: Check code coverage
+        if: matrix.php-version == '8.2'
         run: composer coverage
-
-
