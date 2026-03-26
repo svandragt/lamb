@@ -5,6 +5,7 @@ global $template;
 
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
+use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
@@ -28,7 +29,7 @@ else :
             </header>
             <?= $bean->transformed ?>
             <footer>
-                <small><?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+                <small><?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
             </footer>
         </article>
         <?php

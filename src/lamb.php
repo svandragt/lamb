@@ -3,6 +3,13 @@
 namespace Lamb;
 
 use RedBeanPHP\OODBBean;
+
+// SQL fragments for common post visibility filters.
+const SQL_NOT_DRAFT  = ' (draft IS NULL OR draft != 1) ';
+const SQL_NOT_DELETED = ' (deleted IS NULL OR deleted != 1) ';
+const SQL_PUBLISHED  = ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
+const SQL_IS_DRAFT   = ' draft = 1 AND (deleted IS NULL OR deleted != 1) ';
+const SQL_IS_DELETED = ' deleted = 1 ';
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
@@ -88,15 +95,7 @@ function parse_bean(OODBBean $bean): void
     $front_matter['transformed'] = (parse_tags($markdown));
 
     foreach ($front_matter as $key => $value) {
-        /*
-        Posts should not change their slug one they have one. Only from ID to title is allowed.
-        Changing slugs breaks URLs as long as there are no redirects.
-        Also it breaks the after edit redirect.
-        TODO: remove check after redirects.
-        */
-        if ($key !== 'slug' || empty($bean->slug)) {
-            $bean->$key = $value;
-        }
+        $bean->$key = $value;
     }
 
     // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
@@ -155,4 +154,47 @@ function post_has_slug(string $lookup): string|null
     }
 
     return $post->slug;
+}
+
+/**
+ * Deletes any redirect stored in the DB for the given slug.
+ *
+ * @param string $slug The from_slug to remove.
+ * @return void
+ */
+function delete_redirect_for_slug(string $slug): void
+{
+    $existing = R::findOne('redirect', ' from_slug = ? ', [$slug]);
+    if ($existing !== null) {
+        R::trash($existing);
+    }
+}
+
+/**
+ * Returns the redirect destination for a given slug, or null if none exists.
+ *
+ * Checks manual redirections from config first, then automatic redirects stored in the DB.
+ *
+ * @param string $slug The URL path segment to look up.
+ * @return string|null The destination URL, or null if no redirect is configured.
+ */
+function find_redirect(string $slug): ?string
+{
+    global $config;
+
+    $redirections = $config['redirections'] ?? [];
+    if (isset($redirections[$slug])) {
+        $dest = $redirections[$slug];
+        if (str_starts_with($dest, 'http') || str_starts_with($dest, '/')) {
+            return $dest;
+        }
+        return '/' . $dest;
+    }
+
+    $redirect = R::findOne('redirect', ' from_slug = ? ', [$slug]);
+    if ($redirect !== null) {
+        return $redirect->to_url;
+    }
+
+    return null;
 }

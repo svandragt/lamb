@@ -3,12 +3,16 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
+use function Lamb\Theme\action_restore;
+use function Lamb\Theme\admin_toolbar_html;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\og_escape;
 use function Lamb\Theme\sanitize_filename;
+use function Lamb\Theme\the_entry_form;
 use function Lamb\Theme\the_preconnect;
 
 class ThemeTest extends TestCase
@@ -178,13 +182,38 @@ class ThemeTest extends TestCase
         $this->assertMatchesRegularExpression('/^(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)/', $result);
     }
 
-    public function testFormatPastDateMonthDayFormatWhenJIs4()
+    public function testFormatPastDateMonthDayIncludesYearWhenJIs4AndYearDiffers()
     {
         $ts = mktime(10, 0, 0, 6, 15, 2020);
         $result = format_past_date(4, 3, $ts);
-        // "June 15 at ..." format (no year)
         $this->assertStringContainsString('June 15', $result);
-        $this->assertStringNotContainsString('2020', $result);
+        $this->assertStringContainsString('2020', $result);
+    }
+
+    public function testFormatPastDateMonthDayOmitsYearWhenJIs4AndYearMatches()
+    {
+        $year = (int) date('Y');
+        $ts = mktime(10, 0, 0, 1, 15, $year);
+        $result = format_past_date(4, 3, $ts);
+        $this->assertStringContainsString('January 15', $result);
+        $this->assertStringNotContainsString((string) $year, $result);
+    }
+
+    public function testFormatPastDateMonthDayIncludesYearWhenJIs5AndYearDiffers()
+    {
+        $ts = mktime(10, 0, 0, 3, 10, 2020);
+        $result = format_past_date(5, 3, $ts);
+        $this->assertStringContainsString('March 10', $result);
+        $this->assertStringContainsString('2020', $result);
+    }
+
+    public function testFormatPastDateMonthDayOmitsYearWhenJIs5AndYearMatches()
+    {
+        $year = (int) date('Y');
+        $ts = mktime(10, 0, 0, 2, 10, $year);
+        $result = format_past_date(5, 3, $ts);
+        $this->assertStringContainsString('February 10', $result);
+        $this->assertStringNotContainsString((string) $year, $result);
     }
 
     public function testFormatPastDateFullDateWithYearWhenJIs6()
@@ -247,5 +276,138 @@ class ThemeTest extends TestCase
         $timestamp = time() + 86400;
         $result = human_time($timestamp);
         $this->assertStringContainsString('Tomorrow', $result);
+    }
+
+    // action_restore
+
+    public function testActionRestoreReturnsEmptyWhenNotLoggedIn(): void
+    {
+        $_SESSION = [];
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $bean = R::dispense('post');
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $this->assertSame('', action_restore($bean));
+    }
+
+    public function testActionRestoreReturnsFormWhenLoggedIn(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $bean = R::dispense('post');
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $html = action_restore($bean);
+        $this->assertStringContainsString('/restore/' . $bean->id, $html);
+        $this->assertStringContainsString('Restore post', $html);
+    }
+
+    // admin_toolbar_html
+
+    protected function setUpDb(): void
+    {
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+
+        $schema = R::dispense('post');
+        $schema->draft   = null;
+        $schema->deleted = null;
+        R::store($schema);
+        R::exec('DELETE FROM post');
+    }
+
+    public function testAdminToolbarHtmlContainsLinks(): void
+    {
+        $this->setUpDb();
+        $html = admin_toolbar_html();
+        $this->assertStringContainsString('<a href="/drafts">', $html);
+        $this->assertStringContainsString('<a href="/trash">', $html);
+        $this->assertStringContainsString('<a href="/settings">', $html);
+        $this->assertStringContainsString('<a href="/logout">', $html);
+    }
+
+    public function testAdminToolbarHtmlShowsDraftCountWhenDraftsExist(): void
+    {
+        $this->setUpDb();
+
+        $draft = R::dispense('post');
+        $draft->body  = 'A draft';
+        $draft->draft = 1;
+        $draft->created = date('Y-m-d H:i:s');
+        R::store($draft);
+
+        $html = admin_toolbar_html();
+        $this->assertStringContainsString('Drafts (1)', $html);
+    }
+
+    public function testAdminToolbarHtmlShowsNoDraftCountWhenNoDrafts(): void
+    {
+        $this->setUpDb();
+        $html = admin_toolbar_html();
+        $this->assertStringContainsString('Drafts</a>', $html);
+        $this->assertStringNotContainsString('Drafts (', $html);
+    }
+
+    public function testAdminToolbarHtmlShowsTrashCountWhenTrashedPostsExist(): void
+    {
+        $this->setUpDb();
+
+        $deleted = R::dispense('post');
+        $deleted->body       = 'Deleted post';
+        $deleted->deleted    = 1;
+        $deleted->deleted_at = date('Y-m-d H:i:s');
+        $deleted->created    = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $html = admin_toolbar_html();
+        $this->assertStringContainsString('Trash (1)', $html);
+    }
+
+    public function testAdminToolbarHtmlContainsStyleElement(): void
+    {
+        $this->setUpDb();
+        $html = admin_toolbar_html();
+        $this->assertStringContainsString('<style>', $html);
+        $this->assertStringContainsString('#admin-toolbar', $html);
+    }
+
+    // the_entry_form
+
+    public function testTheEntryFormOutputsNothingWhenNotLoggedIn(): void
+    {
+        $_SESSION = [];
+        ob_start();
+        the_entry_form();
+        $output = ob_get_clean();
+        $this->assertSame('', $output);
+    }
+
+    public function testTheEntryFormOutputsFormWhenLoggedIn(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        ob_start();
+        the_entry_form();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('<form', $output);
+        $this->assertStringContainsString('textarea', $output);
+        $_SESSION = [];
+    }
+
+    public function testTheEntryFormContainsCsrfFieldWhenLoggedIn(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        ob_start();
+        the_entry_form();
+        $output = ob_get_clean();
+        $this->assertStringContainsString('name="csrf"', $output);
+        $_SESSION = [];
     }
 }

@@ -1,6 +1,15 @@
 title: Lamb Documentation
 description: Literally Another Micro Blog — end-user documentation
-theme: jekyll-theme-minimal
+remote_theme: just-the-docs/just-the-docs
+
+plugins:
+  - jekyll-remote-theme
+
+url: https://svandragt.github.io/lamb
+
+aux_links:
+  "Lamb on GitHub": https://github.com/svandragt/lamb
+
 permalink: pretty
 defaults:
   - scope:

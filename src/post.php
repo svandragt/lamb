@@ -20,7 +20,7 @@ use function Lamb\parse_bean;
  * @return OODBBean|null The populated bean instance, or null if input is insufficient.
  * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
-function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
+function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): ?OODBBean
 {
     global $config;
 

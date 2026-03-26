@@ -7,5 +7,7 @@
     "@types/node": "^25.4.0",
     "jsdom": "^29.0.0"
   },
-  "scripts": {}
+  "scripts": {
+    "screenshot": "pnpm exec node scripts/screenshot.mjs"
+  }
 }

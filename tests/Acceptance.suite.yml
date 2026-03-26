@@ -6,7 +6,10 @@
 actor: AcceptanceTester
 modules:
   enabled:
-    - PhpBrowser
+    - PhpBrowser:
+        url: "%SITE_URL%"
+        curl:
+          CURLOPT_PROXY: ""
 extensions:
   enabled:
     - Codeception\Extension\RunProcess:

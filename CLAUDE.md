@@ -31,7 +31,7 @@ vendor/bin/codecept run Unit
 # Run acceptance tests (requires SITE_URL in .env)
 vendor/bin/codecept run Acceptance
 
-# Generate password hash and write .ddev/.env + .env
+# Generate password hash and write .env
 php make-password.php <your-password>
 
 # Static analysis
@@ -42,7 +42,18 @@ composer fix
 
 # Install pre-commit hook (one-time, after cloning)
 printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+
+# Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome \
+  pnpm run screenshot [/path] [outdir]
+# Before/after: git stash → screenshot → git stash pop → screenshot
 ```
+
+### Screenshot notes
+- JS deps: `pnpm install` (not npm); Playwright is `@playwright/test`
+- The PHP dev server must be started with `php -S 0.0.0.0:8747 -t src` (no router script argument)
+- Chromium executable: `/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`
+- Script: `scripts/screenshot.mjs [path] [outdir]`
 
 ## Project Structure
 
@@ -53,7 +64,7 @@ lamb/
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
 │   ├── routes.php        # register_route() / call_route() helpers
-│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink
+│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, find_redirect, delete_redirect_for_slug
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify
 │   ├── response.php      # All route handlers (respond_*, redirect_*)
 │   ├── security.php      # require_login(), require_csrf()
@@ -74,7 +85,7 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
-└── make-password.php     # CLI utility: hash password → .ddev/.env
+└── make-password.php     # CLI utility: hash password → .env
 ```
 
 ## Architecture Overview
@@ -116,6 +127,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
+- `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
 
@@ -123,9 +135,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
 
-Config keys currently documented in code/defaults: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`.
-
-The wiki also documents a planned `[redirections]` section, but that is still work in progress and is not implemented on `main`/`release`.
+Config keys: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`, `[redirections]`.
 
 ### Post Content Format
 
@@ -335,14 +345,15 @@ User-uploaded files live under `src/assets/`, not under theme directories.
 
 ### `.gitignore` exemption
 
-`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted:
+`src/themes/` is ignored by default. Every new theme directory must be explicitly exempted with two entries — one for the directory and one for its contents:
 
 ```
 # in .gitignore
 !/src/themes/news
+!/src/themes/news/**
 ```
 
-This only un-ignores the directory entry; files inside are still matched by the parent pattern. Use `git add --force src/themes/<name>/` to stage new theme files for the first time.
+Once both entries are added, `git add` works normally for all files inside the theme without needing `--force`. Use `git add --force src/themes/<name>/` only if you add a theme before updating `.gitignore`.
 
 ### Minimal new theme checklist
 
@@ -405,7 +416,7 @@ Tests use **Codeception 5** with PHPUnit underneath.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
-Config in `codeception.yml` reads env from `.ddev/.env` and `.env`.
+Config in `codeception.yml` reads env from `.env`.
 
 ### Red-Green TDD
 
@@ -423,8 +434,7 @@ Authentication password is stored hashed in the `LAMB_LOGIN_PASSWORD` environmen
 
 ```bash
 php make-password.php mysecretpassword
-# writes LAMB_LOGIN_PASSWORD to .ddev/.env
-# writes SITE_URL to .env
+# writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.

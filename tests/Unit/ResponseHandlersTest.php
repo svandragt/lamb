@@ -5,6 +5,10 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Bootstrap\ensure_post_columns;
+use function Lamb\Response\count_drafts;
+use function Lamb\Response\count_trash;
+use function Lamb\Response\publish_post;
 use function Lamb\Response\respond_404;
 use function Lamb\Response\respond_drafts;
 use function Lamb\Response\respond_home;
@@ -13,6 +17,9 @@ use function Lamb\Response\respond_search;
 use function Lamb\Response\respond_settings;
 use function Lamb\Response\respond_status;
 use function Lamb\Response\respond_tag;
+use function Lamb\Response\respond_trash;
+use function Lamb\Response\restore_post;
+use function Lamb\Response\soft_delete_post;
 
 class ResponseHandlersTest extends TestCase
 {
@@ -22,6 +29,13 @@ class ResponseHandlersTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+
+        // Ensure post schema columns exist so WHERE filters work regardless of test order.
+        $schema = R::dispense('post');
+        $schema->draft   = null;
+        $schema->deleted = null;
+        R::store($schema);
+
         R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
 
@@ -323,14 +337,26 @@ class ResponseHandlersTest extends TestCase
 
     // respond_tag
 
+    private function seedPostWithTag(string $tag): void
+    {
+        $post = R::dispense('post');
+        $post->body = "Hello #$tag end";
+        $post->version = 1;
+        $post->draft = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+    }
+
     public function testRespondTagReturnsArray(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertIsArray($result);
     }
 
     public function testRespondTagHasRequiredKeys(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertArrayHasKey('title', $result);
         $this->assertArrayHasKey('posts', $result);
@@ -340,20 +366,22 @@ class ResponseHandlersTest extends TestCase
 
     public function testRespondTagTitleContainsTagName(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertStringContainsString('lamb', $result['title']);
     }
 
     public function testRespondTagFeedUrlContainsTag(): void
     {
+        $this->seedPostWithTag('lamb');
         $result = respond_tag(['lamb']);
         $this->assertStringContainsString('lamb', $result['feed_url']);
     }
 
-    public function testRespondTagReturnsNoResultsIntroWhenNoPostsTagged(): void
+    public function testRespondTagReturns404ForNonExistentTag(): void
     {
         $result = respond_tag(['nonexistenttag999']);
-        $this->assertStringContainsString('No results', $result['intro']);
+        $this->assertSame('404', $result['action']);
     }
 
     public function testRespondTagFindsPostWithMatchingTag(): void
@@ -454,11 +482,251 @@ class ResponseHandlersTest extends TestCase
         $this->assertSame($draft->id, array_values($result['posts'])[0]->id);
     }
 
+    public function testRespondDraftsExcludesSoftDeletedDrafts(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        $deletedDraft = R::dispense('post');
+        $deletedDraft->body    = 'Deleted draft';
+        $deletedDraft->draft   = 1;
+        $deletedDraft->deleted = 1;
+        $deletedDraft->version = 1;
+        $deletedDraft->created = date('Y-m-d H:i:s');
+        R::store($deletedDraft);
+
+        $result = respond_drafts();
+        $this->assertCount(0, $result['posts']);
+    }
+
     public function testRespondDraftsReturnsEmptyWhenNoDrafts(): void
     {
         $_SESSION[SESSION_LOGIN] = true;
 
         $result = respond_drafts();
         $this->assertCount(0, $result['posts']);
+    }
+
+    // deleted post visibility
+
+    public function testRespondHomeReturnsPostsWhenDeletedColumnAbsent(): void
+    {
+        // Simulate a production DB that predates soft-delete: drop the column.
+        R::exec('ALTER TABLE post DROP COLUMN deleted');
+
+        // ensure_post_columns() mirrors what bootstrap_db() does before any request.
+        ensure_post_columns();
+
+        $post = R::dispense('post');
+        $post->body    = 'Old post before soft-delete feature';
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = respond_home();
+        $this->assertCount(1, $result['posts']);
+    }
+
+    public function testRespondHomeExcludesDeletedPosts(): void
+    {
+        $visible = R::dispense('post');
+        $visible->body = 'Visible post';
+        $visible->created = date('Y-m-d H:i:s');
+        $visible->updated = date('Y-m-d H:i:s');
+        R::store($visible);
+
+        $deleted = R::dispense('post');
+        $deleted->body = 'Deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_home();
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertContains($visible->id, $ids);
+        $this->assertNotContains($deleted->id, $ids);
+    }
+
+    public function testRespondStatusReturns404ForDeletedPost(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body = 'Soft-deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_status([(string) $deleted->id]);
+        $this->assertSame('404', $result['action'] ?? null);
+    }
+
+    // soft_delete_post
+
+    public function testSoftDeletePostSetsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'A post to soft-delete';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertSame(1, (int) $loaded->deleted);
+    }
+
+    public function testSoftDeletePostSetsDeletedAt(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'A post to soft-delete';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertNotEmpty($loaded->deleted_at);
+        $this->assertStringStartsWith(date('Y-m-d'), $loaded->deleted_at);
+    }
+
+    public function testSoftDeletePostKeepsPostInDatabase(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'Keep in DB';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+        $id = $bean->id;
+
+        soft_delete_post($bean);
+
+        $loaded = R::load('post', $id);
+        $this->assertSame($id, $loaded->id);
+    }
+
+    // respond_trash
+
+    public function testRespondTrashReturnsOnlyDeletedPosts(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        $live = R::dispense('post');
+        $live->body    = 'Live post';
+        $live->created = date('Y-m-d H:i:s');
+        $live->updated = date('Y-m-d H:i:s');
+        R::store($live);
+
+        $deleted = R::dispense('post');
+        $deleted->body       = 'Deleted post';
+        $deleted->deleted    = 1;
+        $deleted->deleted_at = date('Y-m-d H:i:s');
+        $deleted->created    = date('Y-m-d H:i:s');
+        $deleted->updated    = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_trash();
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertContains($deleted->id, $ids);
+        $this->assertNotContains($live->id, $ids);
+    }
+
+    // count_drafts / count_trash
+
+    public function testCountDraftsReturnsZeroWhenNoDrafts(): void
+    {
+        $this->assertSame(0, count_drafts());
+    }
+
+    public function testCountDraftsReturnsCorrectNumber(): void
+    {
+        $draft = R::dispense('post');
+        $draft->body    = 'A draft';
+        $draft->draft   = 1;
+        $draft->created = date('Y-m-d H:i:s');
+        $draft->updated = date('Y-m-d H:i:s');
+        R::store($draft);
+
+        $this->assertSame(1, count_drafts());
+    }
+
+    public function testCountDraftsExcludesSoftDeletedDrafts(): void
+    {
+        $deletedDraft = R::dispense('post');
+        $deletedDraft->body    = 'Deleted draft';
+        $deletedDraft->draft   = 1;
+        $deletedDraft->deleted = 1;
+        $deletedDraft->created = date('Y-m-d H:i:s');
+        $deletedDraft->updated = date('Y-m-d H:i:s');
+        R::store($deletedDraft);
+
+        $this->assertSame(0, count_drafts());
+    }
+
+    public function testCountTrashReturnsZeroWhenEmpty(): void
+    {
+        $this->assertSame(0, count_trash());
+    }
+
+    public function testCountTrashReturnsCorrectNumber(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body       = 'Trashed post';
+        $deleted->deleted    = 1;
+        $deleted->deleted_at = date('Y-m-d H:i:s');
+        $deleted->created    = date('Y-m-d H:i:s');
+        $deleted->updated    = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $this->assertSame(1, count_trash());
+    }
+
+    // restore_post / publish_post
+
+    public function testRestorePostClearsDeletedFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body       = 'Deleted post';
+        $bean->deleted    = 1;
+        $bean->deleted_at = date('Y-m-d H:i:s');
+        $bean->created    = date('Y-m-d H:i:s');
+        $bean->updated    = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        restore_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertEmpty($loaded->deleted);
+        $this->assertEmpty($loaded->deleted_at);
+    }
+
+    public function testPublishPostClearsDraftFlag(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body    = 'Draft post';
+        $bean->draft   = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        publish_post($bean);
+
+        $loaded = R::load('post', $bean->id);
+        $this->assertEmpty($loaded->draft);
+    }
+
+    public function testRespondSearchExcludesDeletedPosts(): void
+    {
+        $deleted = R::dispense('post');
+        $deleted->body = 'Uniquefindableterm deleted post';
+        $deleted->deleted = 1;
+        $deleted->created = date('Y-m-d H:i:s');
+        $deleted->updated = date('Y-m-d H:i:s');
+        R::store($deleted);
+
+        $result = respond_search(['Uniquefindableterm']);
+        $ids = array_map(fn($p) => $p->id, $result['posts']);
+        $this->assertNotContains($deleted->id, $ids);
     }
 }

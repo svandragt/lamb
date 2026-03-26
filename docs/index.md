@@ -8,6 +8,11 @@ title: Lamb
 
 Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
 
+## Requirements
+
+- PHP 8.2 – 8.5
+- SQLite3, gettext, simplexml, mbstring extensions
+
 ## Getting started
 
 ```
@@ -39,10 +44,15 @@ Devtools / local environments / sandbox:
 
 * [Cron Scheduled Tasks]({% link cron-scheduled-tasks.md %})
 * [Cross-posting]({% link cross-posting.md %})
+* [Decision Log]({% link decision-log.md %})
 * [Drafts]({% link drafts.md %})
 * [Menu Items]({% link menu-items.md %})
+* [Micropub]({% link micropub.md %})
 * [Post Types]({% link post-types.md %})
 * [Preconnect]({% link preconnect.md %})
+* [Redirections]({% link redirections.md %})
+* [Search]({% link search.md %})
 * [Site Configuration]({% link site-configuration.md %})
 * [Themes]({% link themes.md %})
+* [Trash]({% link trash.md %})
 * [Upgrading]({% link upgrading.md %})
