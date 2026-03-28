@@ -1,0 +1,5 @@
+# URL where the project is running (web apps, demos, hosted tools)
+live_url = "https://vandragt.com"
+
+# URL for documentation
+docs_url = "https://svandragt.github.io/lamb"
