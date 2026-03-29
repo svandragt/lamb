@@ -28,8 +28,12 @@ class RelatedPostsTagLinksCest
         $this->createPost($I, "First post about #$tag");
         $this->createPost($I, "Second post about #$tag");
 
-        // Grab the URL of the most recent post (top of homepage)
-        $postUrl = $I->grabAttributeFrom('article small a[href^="/status/"]', 'href');
+        // Grab the URL of the first test post using XPath to match by our unique tag,
+        // avoiding flakiness when other posts share the same created timestamp.
+        $postUrl = $I->grabAttributeFrom(
+            '//article[.//a[contains(@href, "/tag/' . $tag . '")]]//small/a[starts-with(@href, "/status/")]',
+            'href'
+        );
         $I->amOnPage($postUrl);
 
         $I->seeElement('.related-posts a[href^="/tag/"]');
