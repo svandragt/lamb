@@ -955,6 +955,17 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('/micropub-media', $result['media-endpoint']);
     }
 
+    public function testConfigurationQueryCallbackReturnsQParameter(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->configurationQueryCallback([]);
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('q', $result);
+        $this->assertContains('config', $result['q']);
+        $this->assertContains('source', $result['q']);
+        $this->assertContains('syndicate-to', $result['q']);
+    }
+
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
         $bean = R::dispense('post');

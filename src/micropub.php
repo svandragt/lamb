@@ -265,6 +265,7 @@ class LambMicropubAdapter extends MicropubAdapter
     public function configurationQueryCallback(array $params): array
     {
         return [
+            'q'              => ['config', 'source', 'syndicate-to'],
             'media-endpoint' => ROOT_URL . '/micropub-media',
             'syndicate-to'   => [],
         ];
