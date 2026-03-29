@@ -31,11 +31,13 @@ else :
 
         ?>
 
-        <article>
+        <article itemscope itemtype="https://schema.org/BlogPosting">
             <header>
                 <?php if ($template !== 'status') : ?>
                     <?php $title = title_link($bean); ?>
-                    <h2<?= empty(trim(strip_tags($title))) ? ' aria-hidden="true"' : '' ?>><?= $title ?></h2>
+                    <?php if (!empty(trim(strip_tags($title)))) : ?>
+                        <h2><?= $title ?></h2>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <div class="meta">
                     <strong itemprop="author"><?= escape($config['author_name'] ?? '') ?></strong> @

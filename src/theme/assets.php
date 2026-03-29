@@ -21,7 +21,7 @@ function the_styles(): void
     ];
     $assets = asset_loader($styles, THEME_URL . 'styles');
     foreach ($assets as $id => $href) {
-        printf('<link rel="stylesheet" id="%1$s" href="%2$s?ver=%1$s" />' . PHP_EOL, $id, $href);
+        printf('<link rel="stylesheet" id="%1$s" href="%2$s?ver=%1$s">' . PHP_EOL, $id, $href);
     }
 }
 
