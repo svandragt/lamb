@@ -24,7 +24,7 @@ if (!empty($pagination)) :
         return $path . ($query ? '?' . $query : '');
     };
     ?>
-    <nav class="pagination" role="navigation" aria-label="Pagination">
+    <nav class="pagination" aria-label="Pagination">
         <?php if (!empty($pagination['prev_page'])) : ?>
             <a class="prev" href="<?= escape($build_url((int)$pagination['prev_page'])) ?>" rel="prev">« Newer</a>
         <?php endif; ?>

@@ -1,12 +1,15 @@
 <?php
 
 global $data;
+global $template;
 
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
+use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
+use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
     ?><p>Sorry no items found.</p>
@@ -20,13 +23,13 @@ else :
         <article>
             <header>
                 <?php if (!empty($bean->title)) : ?>
-                <h2><?= $bean->title ?></h2>
+                <h2><?= $template !== 'status' ? title_link($bean) : $bean->title ?></h2>
                 <?php endif; ?>
                 <small><?= date_created($bean) ?><?= link_source($bean) ?></small>
             </header>
             <?= $bean->transformed ?>
             <footer>
-                <small><?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+                <small><?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
             </footer>
         </article>
         <?php

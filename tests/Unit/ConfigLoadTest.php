@@ -98,4 +98,48 @@ class ConfigLoadTest extends TestCase
         $this->assertArrayHasKey('author_email', $config);
         $this->assertNotEmpty($config['author_email']);
     }
+
+    public function testLoadIncludesAuthorizationEndpointDefault(): void
+    {
+        $config = load();
+        $this->assertArrayHasKey('authorization_endpoint', $config);
+        $this->assertSame('https://indieauth.com/auth', $config['authorization_endpoint']);
+    }
+
+    public function testLoadIncludesTokenEndpointDefault(): void
+    {
+        $config = load();
+        $this->assertArrayHasKey('token_endpoint', $config);
+        $this->assertSame('https://tokens.indieauth.com/token', $config['token_endpoint']);
+    }
+
+    public function testLoadAllowsOverridingAuthorizationEndpoint(): void
+    {
+        save_ini_text("authorization_endpoint = https://my.auth.example.com/auth\n");
+        $config = load();
+        $this->assertSame('https://my.auth.example.com/auth', $config['authorization_endpoint']);
+    }
+
+    public function testLoadAllowsOverridingTokenEndpoint(): void
+    {
+        save_ini_text("token_endpoint = https://my.token.example.com/token\n");
+        $config = load();
+        $this->assertSame('https://my.token.example.com/token', $config['token_endpoint']);
+    }
+
+    public function testLoadMeSectionParsesIntoArray(): void
+    {
+        save_ini_text("[me]\nGithub = https://github.com/aaronpk\nEmail = mailto:me@example.com\n");
+        $config = load();
+        $this->assertArrayHasKey('me', $config);
+        $this->assertSame('https://github.com/aaronpk', $config['me']['Github']);
+        $this->assertSame('mailto:me@example.com', $config['me']['Email']);
+    }
+
+    public function testLoadMeSectionAbsentWhenNotConfigured(): void
+    {
+        save_ini_text("site_title = No Me Section\n");
+        $config = load();
+        $this->assertEmpty($config['me'] ?? []);
+    }
 }

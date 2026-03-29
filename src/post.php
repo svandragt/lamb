@@ -20,7 +20,7 @@ use function Lamb\parse_bean;
  * @return OODBBean|null The populated bean instance, or null if input is insufficient.
  * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
-function populate_bean(string $text, Item $feed_item = null, string $feed_name = null, OODBBean $bean = null): ?OODBBean
+function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): ?OODBBean
 {
     global $config;
 
@@ -44,6 +44,7 @@ function populate_bean(string $text, Item $feed_item = null, string $feed_name =
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
             $bean->feed_name = $feed_name;
         }
+        $bean->source_url = $feed_item->get_permalink();
     }
 
     parse_bean($bean);
@@ -81,7 +82,7 @@ function parse_matter(string $body): array
     if (!is_array($matter)) {
         return [];
     }
-    if (isset($matter['title'])) {
+    if (isset($matter['title']) && !isset($matter['slug'])) {
         $matter['slug'] = slugify($matter['title']);
     }
 

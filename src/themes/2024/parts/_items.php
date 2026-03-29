@@ -6,9 +6,12 @@ global $template;
 
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
+use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
+use function Lamb\Theme\escape;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
+use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
     ?><p>Sorry no items found.</p>
@@ -28,20 +31,24 @@ else :
 
         ?>
 
-        <article>
+        <article itemscope itemtype="https://schema.org/BlogPosting">
             <header>
-                <?php
-                if ($template !== 'status') :?>
-                    <h2><?= $bean->title ?></h2>
+                <?php if ($template !== 'status') : ?>
+                    <?php $title = title_link($bean); ?>
+                    <?php if (!empty(trim(strip_tags($title)))) : ?>
+                        <h2><?= $title ?></h2>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <div class="meta">
-                    <strong itemprop="author"><?= $config['author_name'] ?></strong> @
+                    <strong itemprop="author"><?= escape($config['author_name'] ?? '') ?></strong> @
                     <?= date_created($bean) ?>
                 </div>
             </header>
             <?= $bean->transformed ?>
 
-            <small><?= link_source($bean) ?> <?= action_edit($bean) ?> <?= action_delete($bean) ?></small>
+            <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
+                <small><?= link_source($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+            <?php endif; ?>
         </article>
         <?php
         if (count($data['posts']) > 1) :

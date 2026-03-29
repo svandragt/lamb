@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use SimplePie\Item as SimplePieItem;
+use RedBeanPHP\R;
 
 use function Lamb\Network\attributed_content;
 use function Lamb\Network\get_structured_content;
+use function Lamb\Network\purge_deleted_posts;
 
 class NetworkTest extends TestCase
 {
@@ -104,5 +106,75 @@ class NetworkTest extends TestCase
     {
         $item = $this->makeItem('Title', 'Body', 'https://example.com');
         $this->assertIsString(get_structured_content($item, 'Blog'));
+    }
+
+    // --- purge_deleted_posts ---
+
+    protected function setUpDb(): void
+    {
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        $schema = R::dispense('post');
+        $schema->deleted    = null;
+        $schema->deleted_at = null;
+        R::store($schema);
+        R::exec('DELETE FROM post');
+    }
+
+    public function testPurgeDeletedPostsHardDeletesPostsOlderThan30Days(): void
+    {
+        $this->setUpDb();
+
+        $old = R::dispense('post');
+        $old->body       = 'Old deleted post';
+        $old->deleted    = 1;
+        $old->deleted_at = date('Y-m-d H:i:s', strtotime('-31 days'));
+        $old->created    = date('Y-m-d H:i:s', strtotime('-60 days'));
+        $old->updated    = date('Y-m-d H:i:s', strtotime('-31 days'));
+        R::store($old);
+        $oldId = $old->id;
+
+        purge_deleted_posts();
+
+        $loaded = R::load('post', $oldId);
+        $this->assertSame(0, $loaded->id);
+    }
+
+    public function testPurgeDeletedPostsDoesNotHardDeleteRecentlyDeletedPosts(): void
+    {
+        $this->setUpDb();
+
+        $recent = R::dispense('post');
+        $recent->body       = 'Recently deleted post';
+        $recent->deleted    = 1;
+        $recent->deleted_at = date('Y-m-d H:i:s', strtotime('-5 days'));
+        $recent->created    = date('Y-m-d H:i:s');
+        $recent->updated    = date('Y-m-d H:i:s');
+        R::store($recent);
+        $recentId = $recent->id;
+
+        purge_deleted_posts();
+
+        $loaded = R::load('post', $recentId);
+        $this->assertSame($recentId, $loaded->id);
+    }
+
+    public function testPurgeDeletedPostsDoesNotAffectLivePosts(): void
+    {
+        $this->setUpDb();
+
+        $live = R::dispense('post');
+        $live->body    = 'Live post';
+        $live->created = date('Y-m-d H:i:s');
+        $live->updated = date('Y-m-d H:i:s');
+        R::store($live);
+        $liveId = $live->id;
+
+        purge_deleted_posts();
+
+        $loaded = R::load('post', $liveId);
+        $this->assertSame($liveId, $loaded->id);
     }
 }

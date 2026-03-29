@@ -27,16 +27,36 @@ function get_feeds(): array
 }
 
 /** @noinspection PhpUnused */
+/**
+ * Hard-delete posts that were soft-deleted more than 30 days ago.
+ *
+ * @return int Number of posts permanently deleted.
+ */
+function purge_deleted_posts(): int
+{
+    $cutoff = date('Y-m-d H:i:s', strtotime('-30 days'));
+    $posts  = R::find('post', ' deleted = 1 AND deleted_at < ? ', [$cutoff]);
+    foreach ($posts as $post) {
+        R::trash($post);
+    }
+    return count($posts);
+}
+
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
-    // FIXME: Missing permalink and title
     $feeds = get_feeds();
 
     $cron_last_updated = get_option('last_processed_date', 0);
     if ((time() - $cron_last_updated->value) < MINUTE_IN_SECONDS) {
         die('Too often, try again later.');
     }
+
+    $purged = purge_deleted_posts();
+    if ($purged > 0) {
+        echo("Purged $purged deleted post(s)." . PHP_EOL);
+    }
+
     echo("Updating feeds..." . PHP_EOL);
     foreach ($feeds as $name => $url) {
         flush();
@@ -100,7 +120,7 @@ function update_item(SimplePieItem $item, string $name): void
     }
 }
 
-function prepare_item(SimplePieItem $item, string $name, OODBBean $bean = null): ?OODBBean
+function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null): ?OODBBean
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name, $bean);

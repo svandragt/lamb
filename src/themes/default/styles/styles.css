@@ -132,11 +132,26 @@ main a {
     color: var(--link);
 }
 
+h2 a.title-link {
+    color: var(--link);
+    text-decoration: none;
+}
+
+h2 a.title-link:visited {
+    color: color-mix(in srgb, var(--link), purple 30%);
+}
+
+h2 a.title-link:hover,
+h2 a.title-link:focus {
+    color: color-mix(in srgb, var(--link), blue 25%);
+    text-decoration: underline;
+}
+
 main small {
     overflow: auto;
     border-top: 1px dotted var(--bg2);
     display: block;
-    margin: 2em -2em 0;
+    margin: 2em 0 0;
     padding: 1px 2em;
 }
 
@@ -198,10 +213,23 @@ textarea {
     z-index: 100000; /* Above WP toolbar. */
 }
 
+mark {
+    background: var(--info);
+    color: var(--shadow);
+    border-radius: 2px;
+    padding: 0 2px;
+}
+
 .status, .post {
     /* The h1 is the article header */
 
     article header + h2 {
         display: none
+    }
+}
+
+@media (min-width: 600px) {
+    main small {
+        margin: 2em -2em 0;
     }
 }

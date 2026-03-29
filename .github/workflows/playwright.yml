@@ -5,39 +5,41 @@ on:
   pull_request:
 jobs:
   test:
-    timeout-minutes: 60
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
     - name: Setup PHP
       uses: shivammathur/setup-php@v2
       with:
         php-version: '8.2'
         extensions: sqlite3, gettext, simplexml
     - name: Cache Composer dependencies
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: vendor
         key: composer-${{ hashFiles('composer.lock') }}
     - name: Install Composer dependencies
       run: composer install --no-dev --no-interaction --no-scripts
     - uses: pnpm/action-setup@v4
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v6
       with:
         node-version: lts/*
     - name: Cache pnpm store
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.local/share/pnpm/store
         key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: pnpm-
     - name: Install dependencies
-      run: pnpm install
+      run: pnpm install --frozen-lockfile
     - name: Cache Playwright browsers
       id: playwright-cache
-      uses: actions/cache@v4
+      uses: actions/cache@v5
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: playwright-
     - name: Install Playwright Browsers
       if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: pnpm exec playwright install --with-deps chromium
@@ -46,7 +48,7 @@ jobs:
       run: pnpm exec playwright install-deps chromium
     - name: Run Playwright tests
       run: pnpm exec playwright test
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v6
       if: ${{ !cancelled() }}
       with:
         name: playwright-report
