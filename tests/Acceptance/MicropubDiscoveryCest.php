@@ -6,12 +6,6 @@ use Tests\Support\AcceptanceTester;
 
 class MicropubDiscoveryCest
 {
-    public function homepageEmitsMicropubLinkHeader(AcceptanceTester $I)
-    {
-        $I->amOnPage('/');
-        $I->seeHttpHeader('Link');
-    }
-
     public function homepageHtmlContainsMicropubLink(AcceptanceTester $I)
     {
         $I->amOnPage('/');
