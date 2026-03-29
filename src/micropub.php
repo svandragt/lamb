@@ -122,6 +122,16 @@ class LambMicropubAdapter extends MicropubAdapter
             ]));
         }
 
+        // q=config is a discovery endpoint; return it without requiring a token.
+        if (strtolower($request->getMethod()) === 'get' && ($request->getQueryParams()['q'] ?? '') === 'config') {
+            $this->request = $request;
+            $configResult = $this->configurationQueryCallback($request->getQueryParams());
+            if ($configResult instanceof \Psr\Http\Message\ResponseInterface) {
+                return $configResult;
+            }
+            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult));
+        }
+
         return parent::handleRequest($request);
     }
 
