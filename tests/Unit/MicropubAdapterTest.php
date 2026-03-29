@@ -29,6 +29,23 @@ class MicropubAdapterTest extends TestCase
 
     // --- handleRequest (RFC 6750 multi-auth rejection) ---
 
+    public function testConfigQueryResponds200WithoutAccessToken(): void
+    {
+        $adapter = new StubMicropubAdapter();
+
+        $request = new \Nyholm\Psr7\ServerRequest(
+            'GET',
+            ROOT_URL . '/micropub?q=config'
+        );
+        $request = $request->withQueryParams(['q' => 'config']);
+
+        $response = $adapter->handleRequest($request);
+        $this->assertSame(200, $response->getStatusCode());
+        $body = json_decode((string) $response->getBody(), true);
+        $this->assertArrayHasKey('media-endpoint', $body);
+        $this->assertArrayHasKey('syndicate-to', $body);
+    }
+
     public function testHandleRequestRejects400WhenTokenInBothHeaderAndBody(): void
     {
         $adapter = new StubMicropubAdapter();
