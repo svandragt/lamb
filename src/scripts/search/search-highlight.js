@@ -7,7 +7,7 @@
         return;
     }
 
-    var input = document.getElementById('s');
+    var input = $('#s');
     if (!input || !input.value.trim()) {
         return;
     }
@@ -21,7 +21,7 @@
         return w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }).join('|') + ')', 'gi');
 
-    var container = document.querySelector('main');
+    var container = $('main');
     if (!container) {
         return;
     }
@@ -59,7 +59,7 @@
             return;
         }
 
-        // Skip form elements and headings to avoid breaking UI
+        // Skip form elements to avoid breaking UI
         var tag = node.tagName.toUpperCase();
         if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'TEXTAREA' || tag === 'INPUT') {
             return;
