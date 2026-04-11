@@ -54,7 +54,7 @@ class FeedTemplateTest extends TestCase
             (string) $xml->entry[0]->title,
             'Feed entry title should not be blank for status posts'
         );
-        $expected = date('D j M Y', strtotime($bean->created));
+        $expected = date('D j M Y H:i', strtotime($bean->created));
         $this->assertSame($expected, (string) $xml->entry[0]->title);
     }
 }
