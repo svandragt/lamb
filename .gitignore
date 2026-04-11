@@ -6,12 +6,12 @@
 /src/config.ini
 /todos.md
 
-# Ignore custom themes by default; explicitly exempt committed themes and their contents
-/src/themes/
-!/src/themes/2024
-!/src/themes/2024/**
-!/src/themes/default
-!/src/themes/default/**
+# Ignore user-installed themes; the repo ships 'default' and '2024'.
+# Ignore unknown subdirectories only — never the parent — so that git add
+# on tracked theme files works without -f.
+src/themes/*/
+!src/themes/default/
+!src/themes/2024/
 .env
 
 # Playwright
