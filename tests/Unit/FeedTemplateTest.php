@@ -11,7 +11,7 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedEntryTitleFallsBackToDescriptionWhenEmpty(): void
+    public function testFeedEntryTitleFallsBackToPublishedDateWhenEmpty(): void
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
 
@@ -54,6 +54,7 @@ class FeedTemplateTest extends TestCase
             (string) $xml->entry[0]->title,
             'Feed entry title should not be blank for status posts'
         );
-        $this->assertSame('My status post content here', (string) $xml->entry[0]->title);
+        $expected = date('D j M Y', strtotime($bean->created));
+        $this->assertSame($expected, (string) $xml->entry[0]->title);
     }
 }
