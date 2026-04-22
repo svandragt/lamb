@@ -28,7 +28,7 @@ $Author->addChild('email', escape($config['author_email']));
 foreach ($data['posts'] as $bean) {
     $Entry = $Xml->addChild('entry');
     $Entry->addChild('id', Lamb\permalink($bean));
-    $Entry->addChild('title', escape($bean->title ?? ''));
+    $Entry->addChild('title', escape($bean->title ?: date('D j M Y H:i', strtotime($bean->created))));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
     $Content = $Entry->addChild('content', $bean->transformed);

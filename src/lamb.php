@@ -24,7 +24,7 @@ use function Lamb\Post\parse_matter;
  */
 function get_tags(string $html): array
 {
-    preg_match_all('/(^|[\s>])#([^\s#.,!?;:()\[\]{}<]+)/u', $html, $matches);
+    preg_match_all('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', $html, $matches);
 
     return $matches[2];
 }
@@ -42,7 +42,7 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback('/(^|[\s>])#([^\s#.,!?;:()\[\]{}<]+)/u', function ($matches) {
+    return preg_replace_callback('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', function ($matches) {
         return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
     }, $html);
 }
