@@ -16,7 +16,7 @@ on:
       - 'package.json'
       - 'pnpm-lock.yaml'
 jobs:
-  test:
+  playwright:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
