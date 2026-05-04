@@ -11,7 +11,7 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedEntryTitleFallsBackToPublishedDateWhenEmpty(): void
+    public function testFeedEntryTitleIsEmptyForTitlelessPosts(): void
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
 
@@ -50,11 +50,14 @@ class FeedTemplateTest extends TestCase
         $output = ob_get_clean();
 
         $xml = new \SimpleXMLElement($output);
-        $this->assertNotEmpty(
+        $this->assertSame(
+            '',
             (string) $xml->entry[0]->title,
-            'Feed entry title should not be blank for status posts'
+            'Titleless posts should produce empty <title> for micro.blog convention'
         );
-        $expected = date('D j M Y H:i', strtotime($bean->created));
-        $this->assertSame($expected, (string) $xml->entry[0]->title);
+        $this->assertTrue(
+            isset($xml->entry[0]->title),
+            '<title> element must still be present (Atom requires it)'
+        );
     }
 }

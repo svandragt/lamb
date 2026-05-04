@@ -53,3 +53,9 @@ Key architectural and design decisions made during Lamb's development.
 **Decision:** The Micropub endpoint delegates authentication entirely to IndieAuth rather than implementing its own token system.
 
 **Rationale:** Implementing token issuance and revocation correctly is non-trivial. Delegating to IndieAuth (indieauth.com or a self-hosted server) keeps Lamb's auth surface small and leverages a well-specified open standard.
+
+## Empty `<title>` for titleless feed entries (micro.blog convention)
+
+**Decision:** In the Atom feed, posts without a title emit an empty `<title></title>` element rather than a date-string fallback.
+
+**Rationale:** [book.micro.blog](https://book.micro.blog/) treats entries without a title as microblog-style posts and renders them inline; entries with a title are rendered as titled articles. A date fallback would force every status post into the titled-article layout in micro.blog and similar readers. The `<title>` element is still emitted (empty) because Atom requires it; this produces a benign validator warning we accept as the cost of correct rendering downstream.
