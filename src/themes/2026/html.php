@@ -34,9 +34,8 @@ global $template;
           title="<?= escape($data['title'] ?? $config['site_title']) ?>">
     <?php endif; ?>
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600&family=Public+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+    <link rel="preload" href="<?= ROOT_URL ?>/<?= THEME_URL ?>styles/fonts/public-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="preload" href="<?= ROOT_URL ?>/<?= THEME_URL ?>styles/fonts/geist-mono-500-latin.woff2" as="font" type="font/woff2" crossorigin>
 
     <?php the_preconnect(); ?>
     <?php the_styles(); ?>
@@ -50,7 +49,7 @@ global $template;
             <form action="/search" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
                 <input type="text" name="s" id="s" placeholder="search" value="<?= escape($data['query'] ?? '') ?>" required>
-                <input type="submit" value="↵">
+                <input type="submit" value="↵" aria-label="Search">
             </form>
             <?php if (!isset($_SESSION[SESSION_LOGIN])) : ?>
                 <a href="/login">Login</a>
