@@ -23,4 +23,21 @@ class LambDown extends Parsedown
 
         return parent::blockHeader($Line);
     }
+
+    /**
+     * Inject lazy-loading attributes on every inline image so post bodies
+     * with embedded screenshots do not block first paint on the homepage.
+     */
+    protected function inlineImage($Excerpt)
+    {
+        $image = parent::inlineImage($Excerpt);
+        if (!is_array($image) || !isset($image['element']['attributes'])) {
+            return $image;
+        }
+        $image['element']['attributes'] += [
+            'loading'  => 'lazy',
+            'decoding' => 'async',
+        ];
+        return $image;
+    }
 }
