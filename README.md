@@ -20,8 +20,8 @@ Barrier free super simple blogging, self-hosted.
 
 # Screenshots
 
-An example blog with the default theme:
-![Demo Lamb instance](https://i.imgur.com/rwk2VmV.png "A demo Lamb instance")
+An example blog running the 2026 theme at [vandragt.com](https://vandragt.com):
+![Demo Lamb instance](src/images/demo-vandragt.png "Sander van Dragt's Notes, running Lamb with the 2026 theme")
 
 Dropping images into a post ala GitHub:
 ![Drag and drop image demo](https://vandragt.com/assets/2023/12/6c5e64336afdd939f9c9768ac07b35551de8043b.gif "Creating a post with an image")
