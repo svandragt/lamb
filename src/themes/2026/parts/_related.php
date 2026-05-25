@@ -55,15 +55,13 @@ $primary_tag = $tags[0] ?? null;
             $human = isset($bean->created) ? human_time(strtotime((string) $bean->created)) : '';
             ?>
             <li class="related-item">
-                <a class="related-link" href="<?= escape($permalink) ?>">
-                    <?php if ($human !== '') : ?>
-                        <time class="related-time" datetime="<?= escape((string) $bean->created) ?>"><?= escape($human) ?></time>
-                    <?php endif; ?>
-                    <span class="related-title"><?= escape($title !== '' ? $title : 'Untitled note') ?></span>
-                    <?php if ($excerpt !== '') : ?>
-                        <span class="related-excerpt"><?= escape(mb_strimwidth($excerpt, 0, 140, '…')) ?></span>
-                    <?php endif; ?>
-                </a>
+                <?php if ($human !== '') : ?>
+                    <time class="related-time" datetime="<?= escape((string) $bean->created) ?>"><?= escape($human) ?></time>
+                <?php endif; ?>
+                <p class="related-title"><a href="<?= escape($permalink) ?>"><?= escape($title !== '' ? $title : 'Untitled note') ?></a></p>
+                <?php if ($excerpt !== '') : ?>
+                    <p class="related-excerpt"><?= escape(mb_strimwidth($excerpt, 0, 140, '…')) ?></p>
+                <?php endif; ?>
             </li>
         <?php endforeach; ?>
     </ul>
