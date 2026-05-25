@@ -1,0 +1,661 @@
+/*
+ * Lamb 2026 — Notes
+ * Quiet by design: doesn't demand your attention.
+ * Personality lives in the hanging-timestamp typographic layout, not in chrome.
+ * Two horizontal lines on the whole page: under the nav, above the footer.
+ */
+
+:root {
+    /* Color. Warm-tinted neutrals around a deep amber accent.
+       Restrained strategy: accent appears only on timestamps, links, focus.
+       No accent backgrounds, no bordered panels. */
+    --paper:        oklch(98% 0.006 70);
+    --paper-raised: oklch(95% 0.010 70);
+    --ink:          oklch(22% 0.02 50);
+    --ink-soft:     oklch(50% 0.025 55);
+    --ink-faint:    oklch(70% 0.020 55);
+    --rule:         oklch(88% 0.012 70);
+    --accent:       oklch(56% 0.135 65);
+    --accent-hover: oklch(48% 0.140 60);
+    --accent-tint:  oklch(94% 0.045 70);
+    --selection:    oklch(89% 0.090 75);
+
+    /* Type */
+    --font-mono: "Geist Mono", "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+    --font-body: "Public Sans", "Source Sans 3", system-ui, sans-serif;
+
+    /* Type scale (1.25 ratio, fluid headlines) */
+    --text-xs:   0.75rem;
+    --text-sm:   0.875rem;
+    --text-base: 1.0625rem;
+    --text-md:   1.1875rem;
+    --text-lg:   1.5rem;
+    --text-xl:   clamp(1.6rem, 1.3rem + 1vw, 2rem);
+
+    --leading:       1.65;
+    --leading-tight: 1.2;
+
+    /* Spacing */
+    --s-1: 0.25rem;
+    --s-2: 0.5rem;
+    --s-3: 0.75rem;
+    --s-4: 1rem;
+    --s-5: 1.5rem;
+    --s-6: 2rem;
+    --s-7: 3rem;
+    --s-8: 4.5rem;
+
+    /* Layout */
+    --measure:    65ch;
+    --time-col:   6.5rem;
+    --time-gap:   var(--s-5);
+    --radius:     3px;
+}
+
+/* Reset & base */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; padding: 0; }
+
+body {
+    font: 400 var(--text-base)/var(--leading) var(--font-body);
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+::selection { background: var(--selection); color: var(--ink); }
+
+img { max-width: 100%; height: auto; display: block; }
+
+a {
+    color: var(--accent);
+    text-decoration-thickness: 1px;
+    text-underline-offset: 0.18em;
+    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+a:hover { color: var(--accent-hover); }
+
+a:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 2px;
+}
+
+button, input[type='submit'] { cursor: pointer; }
+
+/* Typography */
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-mono);
+    font-weight: 500;
+    line-height: var(--leading-tight);
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: var(--s-6) 0 var(--s-3);
+}
+
+h1 {
+    font-size: var(--text-xl);
+    font-weight: 600;
+    margin: var(--s-7) 0 var(--s-6);
+    letter-spacing: -0.02em;
+}
+
+h2 { font-size: var(--text-md); }
+h3 { font-size: var(--text-base); }
+h4, h5, h6 {
+    font-size: var(--text-sm);
+    color: var(--ink-soft);
+    letter-spacing: 0.02em;
+}
+
+p { margin: 0.85em 0; }
+
+blockquote {
+    margin: var(--s-5) 0;
+    color: var(--ink-soft);
+    font-style: italic;
+}
+
+blockquote p::before { content: "“"; color: var(--accent); }
+blockquote p::after  { content: "”"; color: var(--accent); }
+
+code {
+    font: 0.9em/1.4 var(--font-mono);
+    color: var(--ink);
+    background: var(--paper-raised);
+    padding: 0.1em 0.35em;
+    border-radius: var(--radius);
+}
+
+pre {
+    background: var(--paper-raised);
+    border-radius: var(--radius);
+    padding: var(--s-4);
+    overflow-x: auto;
+    margin: var(--s-5) 0;
+}
+
+pre code { background: none; padding: 0; font-size: var(--text-sm); }
+
+hr {
+    border: 0;
+    text-align: center;
+    margin: var(--s-7) 0;
+    color: var(--ink-faint);
+    font-family: var(--font-mono);
+}
+
+hr::before {
+    content: "* * *";
+    letter-spacing: 0.6em;
+}
+
+ul, ol { padding-left: var(--s-5); }
+li { margin: var(--s-2) 0; }
+
+/* Site chrome — just two horizontal lines on the entire page */
+
+nav {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    border-bottom: 1px solid var(--rule);
+    background: var(--paper);
+    padding: 0 clamp(var(--s-4), 5vw, var(--s-7));
+}
+
+nav ul {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    gap: 0;
+}
+
+nav li {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0;
+}
+
+nav a, nav .current {
+    display: inline-block;
+    text-decoration: none;
+    color: var(--ink-soft);
+    padding: var(--s-4) var(--s-3);
+    letter-spacing: 0.01em;
+    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+nav a:hover,
+nav a:focus-visible {
+    color: var(--accent);
+    background: none;
+    outline: none;
+}
+
+nav .current {
+    color: var(--ink);
+    position: relative;
+}
+
+nav .current::after {
+    content: "";
+    position: absolute;
+    left: var(--s-3);
+    right: var(--s-3);
+    bottom: calc(var(--s-2) + 1px);
+    height: 2px;
+    background: var(--accent);
+}
+
+/* Subtle separator dots between top-level menu items */
+nav > ul > li:not(:first-child):not(.right)::before {
+    content: "·";
+    color: var(--ink-faint);
+    margin: 0 var(--s-1);
+}
+
+nav form {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    gap: var(--s-2);
+}
+
+nav form input[type="text"] {
+    font: 400 var(--text-sm)/1 var(--font-mono);
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: var(--s-2) var(--s-3);
+    min-width: 0;
+    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+nav form input[type="text"]::placeholder {
+    color: var(--ink-faint);
+}
+
+nav form input[type="text"]:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--paper);
+}
+
+nav form input[type="submit"] {
+    font: var(--text-sm)/1 var(--font-mono);
+    color: var(--ink-soft);
+    background: none;
+    border: 0;
+    padding: var(--s-2);
+    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+nav form input[type="submit"]:hover { color: var(--accent); }
+
+nav li.right {
+    flex: 1;
+    justify-content: flex-end;
+    gap: var(--s-3);
+}
+
+nav a[href$="feed"] {
+    font-family: var(--font-mono);
+}
+
+@media (max-width: 599px) {
+    nav li.right {
+        flex-basis: 100%;
+        justify-content: stretch;
+        padding-bottom: var(--s-2);
+    }
+    nav li.right .form-search { flex: 1; }
+    nav li.right .form-search input[type="text"] { flex: 1; width: 100%; }
+}
+
+/* Reading column */
+
+.container {
+    padding: 0 clamp(var(--s-4), 5vw, var(--s-7));
+}
+
+main {
+    max-width: 44rem;
+    margin: 0 auto;
+    padding: var(--s-7) 0 var(--s-8);
+}
+
+main > h1 {
+    font-size: var(--text-md);
+    font-weight: 500;
+    color: var(--ink-soft);
+    letter-spacing: 0.01em;
+    margin: 0 0 var(--s-6);
+}
+
+main > h1 a {
+    color: inherit;
+    text-decoration: none;
+}
+
+main > ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+main > ul > li { margin: 0; padding: 0; }
+
+/* Post — the typographic signature.
+   Timestamp hangs in the left margin, body wraps around it.
+   Equal balance whether or not a title is present. */
+
+article {
+    display: grid;
+    grid-template-columns: var(--time-col) minmax(0, 1fr);
+    column-gap: var(--time-gap);
+    row-gap: 0;
+    align-items: baseline;
+    padding: 0;
+    margin: 0 0 var(--s-7);
+}
+
+main > ul > li:last-child > article,
+main > article:last-of-type { margin-bottom: 0; }
+
+article > * {
+    grid-column: 2;
+    min-width: 0;
+}
+
+article > header {
+    display: contents;
+}
+
+article > header > h2 {
+    grid-column: 2;
+}
+
+article > header > .meta {
+    grid-column: 1;
+    grid-row: 1;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--accent);
+    text-align: right;
+    line-height: 1.5;
+    letter-spacing: 0.01em;
+}
+
+/* First body element drops its top margin so it baselines with the meta. */
+article > header + * {
+    margin-top: 0;
+}
+
+article header .meta a {
+    color: inherit;
+    text-decoration: none;
+    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+article header .meta a:hover { color: var(--accent-hover); }
+
+article header h2 {
+    font-family: var(--font-mono);
+    font-size: var(--text-md);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    margin: 0 0 var(--s-2);
+    line-height: 1.3;
+}
+
+article header h2 a.title-link {
+    color: var(--ink);
+    text-decoration: none;
+    background-image: linear-gradient(var(--accent), var(--accent));
+    background-size: 0% 1px;
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    transition: background-size 260ms cubic-bezier(0.22, 1, 0.36, 1),
+                color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    padding-bottom: 1px;
+}
+
+article header h2 a.title-link:hover,
+article header h2 a.title-link:focus-visible {
+    color: var(--accent);
+    background-size: 100% 1px;
+}
+
+/* Hashtag chips inside post bodies */
+article a[href^="/tag/"],
+article a[href*="/tag/"] {
+    font-family: var(--font-mono);
+    font-size: 0.85em;
+    color: var(--ink-soft);
+    text-decoration: none;
+    background: var(--paper-raised);
+    padding: 0.1em 0.4em;
+    border-radius: 2px;
+    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+article a[href*="/tag/"]:hover {
+    color: var(--accent);
+    background: var(--accent-tint);
+}
+
+/* Edit/delete/source row for logged-in users */
+article > small {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    margin: var(--s-3) 0 0;
+}
+
+article > small a {
+    color: var(--ink-faint);
+    text-decoration: none;
+    margin-right: var(--s-3);
+}
+
+article > small a:hover { color: var(--accent); }
+
+/* Single-post view: don't repeat the title (h1 is the title), drop the gutter,
+   give the body its full measure. */
+.status article,
+.post article {
+    display: block;
+    margin-bottom: 0;
+}
+
+.status article > header > h2,
+.post article > header > h2 { display: none; }
+
+.status article > header > .meta,
+.post article > header > .meta {
+    text-align: left;
+    margin: 0 0 var(--s-5);
+    font-size: var(--text-sm);
+}
+
+/* Related posts: quiet header, no border, no card */
+
+article.related-posts {
+    margin-top: var(--s-8);
+}
+
+article.related-posts span {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    letter-spacing: 0.04em;
+    margin-bottom: var(--s-3);
+}
+
+article.related-posts p { margin: 0; }
+
+/* Entry form (logged-in only) — quiet, no panel */
+
+section.entry-form {
+    margin: 0 0 var(--s-7);
+}
+
+textarea {
+    font: 400 var(--text-sm)/1.5 var(--font-mono);
+    width: 100%;
+    max-width: 100%;
+    min-height: 7em;
+    display: block;
+    margin: 0 0 var(--s-3);
+    padding: var(--s-3);
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    box-sizing: border-box;
+    resize: vertical;
+    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+textarea:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--paper);
+}
+
+input[type="text"], input[type="password"] {
+    font: 400 var(--text-base)/1.4 var(--font-body);
+    color: var(--ink);
+    background: var(--paper-raised);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    padding: var(--s-2) var(--s-3);
+    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
+                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+input[type="text"]:focus-visible,
+input[type="password"]:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--paper);
+}
+
+input[type="submit"], button {
+    font: 500 var(--text-sm)/1 var(--font-mono);
+    color: var(--paper);
+    background: var(--ink);
+    border: 0;
+    border-radius: var(--radius);
+    padding: var(--s-3) var(--s-4);
+    letter-spacing: 0.01em;
+    transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+input[type="submit"]:hover, button:hover {
+    background: var(--accent-hover);
+}
+
+article > small form,
+footer form { display: inline; }
+
+article > small input[type="submit"],
+article > small button {
+    font-size: var(--text-xs);
+    padding: 0;
+    background: none;
+    color: var(--ink-faint);
+    border: 0;
+    text-decoration: none;
+    margin-right: var(--s-3);
+}
+
+article > small input[type="submit"]:hover,
+article > small button:hover {
+    background: none;
+    color: var(--accent);
+}
+
+/* Pagination */
+
+nav.pagination {
+    max-width: 44rem;
+    margin: var(--s-7) auto 0;
+    padding: var(--s-5) clamp(var(--s-4), 5vw, var(--s-7));
+    background: none;
+    border: 0;
+    text-align: center;
+}
+
+nav.pagination ul { justify-content: center; gap: var(--s-1); }
+nav.pagination > ul > li:not(:first-child):not(.right)::before { content: none; }
+
+.pages .current {
+    color: var(--ink);
+    font-weight: 500;
+}
+
+.pages .current::after { display: none; }
+
+/* Flash */
+
+.flash {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    margin: 0 0 var(--s-5);
+    padding: var(--s-3) 0;
+    color: var(--accent-hover);
+    border: 0;
+    background: none;
+}
+
+/* Footer — second and last horizontal line on the page */
+
+footer {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    text-align: center;
+    padding: var(--s-5) var(--s-4);
+    border-top: 1px solid var(--rule);
+    margin-top: var(--s-8);
+}
+
+footer a {
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+
+footer a:hover { color: var(--accent); }
+
+/* Accessibility */
+
+.screen-reader-text {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    word-wrap: normal !important;
+}
+
+.screen-reader-text:focus {
+    background: var(--paper-raised);
+    clip: auto !important;
+    clip-path: none;
+    color: var(--ink);
+    display: block;
+    font-size: var(--text-base);
+    height: auto;
+    left: var(--s-1);
+    line-height: normal;
+    padding: var(--s-3) var(--s-4);
+    text-decoration: none;
+    top: var(--s-1);
+    width: auto;
+    z-index: 100000;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+    }
+}
+
+/* Narrow viewports — collapse to a single column, timestamp stacked above */
+
+@media (max-width: 599px) {
+    main { padding: var(--s-6) 0 var(--s-7); }
+
+    article {
+        display: block;
+        margin-bottom: var(--s-6);
+    }
+
+    article > * { grid-column: auto; }
+
+    article > header > .meta {
+        text-align: left;
+        margin: 0 0 var(--s-2);
+    }
+}
