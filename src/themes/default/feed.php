@@ -36,6 +36,8 @@ foreach ($data['posts'] as $bean) {
     $Content = $Entry->addChild('content', $bean->transformed);
     $Content->addAttribute('type', 'html');
     $Link = $Entry->addChild('link');
+    $Link->addAttribute('rel', 'alternate');
+    $Link->addAttribute('type', 'text/html');
     $Link->addAttribute('href', Lamb\permalink($bean));
 }
 echo $Xml->asXML();
