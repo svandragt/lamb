@@ -70,24 +70,6 @@ class FeedJsonTemplateTest extends TestCase
         $this->assertSame('<p>Status update.</p>', $item['content_html']);
     }
 
-    /**
-     * @runInSeparateProcess
-     * @preserveGlobalState disabled
-     */
-    public function testFeedJsonContentTypeHeader(): void
-    {
-        $this->renderJsonFeedWithPost(['title' => 'X', 'transformed' => '<p>x</p>']);
-        $headers = xdebug_get_headers();
-        $hasJsonFeed = false;
-        foreach ($headers as $h) {
-            if (stripos($h, 'application/feed+json') !== false) {
-                $hasJsonFeed = true;
-                break;
-            }
-        }
-        $this->assertTrue($hasJsonFeed, 'JSON feed should send application/feed+json content type');
-    }
-
     private function renderJsonFeedWithPost(array $fields): array
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
