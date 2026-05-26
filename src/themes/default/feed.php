@@ -3,9 +3,11 @@
 global $config;
 global $data;
 
-function escape(string $html): string
-{
-    return htmlspecialchars($html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+if (!function_exists('escape')) {
+    function escape(string $html): string
+    {
+        return htmlspecialchars($html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+    }
 }
 
 header('Content-type: application/atom+xml');
