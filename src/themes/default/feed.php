@@ -25,7 +25,7 @@ $Link->addAttribute('href', escape($channel_link));
 
 $Author = $Xml->addChild('author');
 $Author->addChild('name', escape($config['author_name']));
-$Author->addChild('email', escape($config['author_email']));
+$Author->addChild('uri', ROOT_URL);
 
 foreach ($data['posts'] as $bean) {
     $Entry = $Xml->addChild('entry');

@@ -124,6 +124,24 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedAuthorHasNoEmailAndIncludesUri(): void
+    {
+        $xml = $this->renderFeedWithPost([
+            'title'       => 'Post',
+            'description' => 'Excerpt',
+            'transformed' => '<p>Body</p>',
+        ]);
+
+        $author = $xml->author;
+        $this->assertSame('Test Author', (string) $author->name);
+        $this->assertSame(ROOT_URL, (string) $author->uri);
+        $this->assertFalse(isset($author->email), 'Author email should not be exposed in the feed');
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedEntryLinkHasRelAlternateAndTypeHtml(): void
     {
         $xml = $this->renderFeedWithPost([
