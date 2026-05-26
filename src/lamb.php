@@ -90,7 +90,12 @@ function parse_bean(OODBBean $bean): void
     $markdown = $parser->text($md_text);
 
     $front_matter = parse_matter($bean->body);
-    $front_matter['description'] = strtok(strip_tags($markdown), "\n");
+    $description = strtok(strip_tags($markdown), "\n");
+    // Decode twice: feed-ingested bodies already contain HTML entities (e.g. `&#039;`),
+    // which Parsedown then re-encodes (`&amp;#039;`). A single decode only undoes one layer.
+    $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    $front_matter['description'] = $description;
 
     $front_matter['transformed'] = (parse_tags($markdown));
 
