@@ -120,6 +120,24 @@ class FeedTemplateTest extends TestCase
         $this->assertStringContainsString('alt="A cat"', $content);
     }
 
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedEntryLinkHasRelAlternateAndTypeHtml(): void
+    {
+        $xml = $this->renderFeedWithPost([
+            'title'       => 'Linked Post',
+            'description' => 'Excerpt',
+            'transformed' => '<p>Body</p>',
+        ]);
+
+        $link = $xml->entry[0]->link;
+        $this->assertSame('alternate', (string) $link['rel']);
+        $this->assertSame('text/html', (string) $link['type']);
+        $this->assertNotEmpty((string) $link['href']);
+    }
+
     private function renderFeedWithPost(array $fields): \SimpleXMLElement
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
