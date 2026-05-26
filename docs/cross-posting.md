@@ -33,5 +33,6 @@ It is your responsibility to [call the `_cron` endpoint]({% link cron-scheduled-
 ## Related
 
 * [Cron Scheduled Tasks]({% link cron-scheduled-tasks.md %}): How to call the `/_cron` endpoint periodically.
+* [Feeds]({% link feeds.md %}): The Atom and JSON feeds Lamb publishes for your own posts.
 * [Drafts]({% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
 * [Site Configuration]({% link site-configuration.md %}): The `[feeds]` section is configured here.

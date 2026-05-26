@@ -174,6 +174,27 @@ function respond_feed(): void
 }
 
 /**
+ * Responds to a JSON feed request by fetching and rendering the JSON Feed.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_feed_json(): void
+{
+    global $data;
+
+    $feed_data = get_feed_data();
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    $data['feed_url'] = ROOT_URL . '/feed.json';
+    upgrade_posts($data['posts']);
+
+    part("feed_json", '');
+    die();
+}
+
+/**
  * Returns the data needed to render a tag Atom feed.
  *
  * @param string $tag The already-sanitised tag name.
@@ -220,6 +241,32 @@ function respond_tag_feed(array $args): void
     upgrade_posts($data['posts']);
 
     part("feed", '');
+    die();
+}
+
+/**
+ * Responds to a tag JSON feed request by rendering a JSON Feed for posts with a specific tag.
+ *
+ * @param array $args An array where the first element is the tag name.
+ * @return void
+ */
+#[NoReturn]
+function respond_tag_feed_json(array $args): void
+{
+    global $data;
+
+    [$tag] = $args;
+    $tag = urldecode($tag);
+    $tag = htmlspecialchars($tag);
+
+    $feed_data = get_tag_feed_data($tag);
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
+    upgrade_posts($data['posts']);
+
+    part("feed_json", '');
     die();
 }
 

@@ -41,8 +41,11 @@ Route\register_route('drafts', __NAMESPACE__ . '\\Response\respond_drafts');
 Route\register_route('trash', __NAMESPACE__ . '\\Response\respond_trash');
 Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
 Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');
+Route\register_route('feed.json', __NAMESPACE__ . '\\Response\respond_feed_json');
 if ($action === 'home' && $lookup === 'feed') {
     Route\register_route('home', __NAMESPACE__ . '\\Response\respond_feed');
+} elseif ($action === 'home' && $lookup === 'feed.json') {
+    Route\register_route('home', __NAMESPACE__ . '\\Response\respond_feed_json');
 } else {
     Route\register_route('home', __NAMESPACE__ . '\\Response\respond_home');
 }
@@ -53,6 +56,8 @@ Route\register_route('settings', __NAMESPACE__ . '\\Response\respond_settings');
 Route\register_route('status', __NAMESPACE__ . '\\Response\respond_status', $lookup);
 if ($action === 'tag' && $sublookup === 'feed') {
     Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag_feed', $lookup);
+} elseif ($action === 'tag' && $sublookup === 'feed.json') {
+    Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag_feed_json', $lookup);
 } else {
     Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
 }
