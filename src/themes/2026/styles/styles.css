@@ -142,8 +142,11 @@
     --ink-soft:     oklch(50% 0.025 55);
     --ink-faint:    oklch(58% 0.025 55);
     --rule:         oklch(88% 0.012 70);
+    /* --accent is graphical-only (focus ring, current-nav 2px underline, accent-tint pair).
+       Text-bearing amber uses --accent-link, tuned darker to clear WCAG AA on --paper. */
     --accent:       oklch(56% 0.135 65);
-    --accent-hover: oklch(48% 0.140 60);
+    --accent-link:  oklch(46% 0.140 60);
+    --accent-hover: oklch(38% 0.140 58);
     --accent-tint:  oklch(94% 0.045 70);
     --selection:    oklch(89% 0.090 75);
 
@@ -177,6 +180,12 @@
     --time-col:   6.5rem;
     --time-gap:   var(--s-5);
     --radius:     3px;
+    --radius-sm:  2px;
+
+    /* Motion */
+    --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+    --t-fast: 140ms;
+    --t-slow: 260ms;
 }
 
 /* Reset & base */
@@ -198,10 +207,10 @@ body {
 img { max-width: 100%; height: auto; display: block; }
 
 a {
-    color: var(--accent);
+    color: var(--accent-link);
     text-decoration-thickness: 1px;
     text-underline-offset: 0.18em;
-    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: color var(--t-fast) var(--ease-out-quart);
 }
 
 a:hover { color: var(--accent-hover); }
@@ -209,7 +218,7 @@ a:hover { color: var(--accent-hover); }
 a:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
-    border-radius: 2px;
+    border-radius: var(--radius-sm);
 }
 
 button, input[type='submit'] { cursor: pointer; }
@@ -248,8 +257,8 @@ blockquote {
     font-style: italic;
 }
 
-blockquote p::before { content: "“"; color: var(--accent); }
-blockquote p::after  { content: "”"; color: var(--accent); }
+blockquote p::before { content: "“"; color: var(--accent-link); }
+blockquote p::after  { content: "”"; color: var(--accent-link); }
 
 code {
     font: 0.9em/1.4 var(--font-mono);
@@ -318,12 +327,12 @@ nav a, nav .current {
     color: var(--ink-soft);
     padding: var(--s-4) var(--s-3);
     letter-spacing: 0.01em;
-    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: color var(--t-fast) var(--ease-out-quart);
 }
 
 nav a:hover,
 nav a:focus-visible {
-    color: var(--accent);
+    color: var(--accent-link);
     background: none;
     outline: none;
 }
@@ -365,8 +374,8 @@ nav form input[type="text"] {
     border-radius: var(--radius);
     padding: var(--s-2) var(--s-3);
     min-width: 0;
-    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: border-color var(--t-fast) var(--ease-out-quart),
+                background-color var(--t-fast) var(--ease-out-quart);
 }
 
 nav form input[type="text"]::placeholder {
@@ -385,10 +394,10 @@ nav form input[type="submit"] {
     background: none;
     border: 0;
     padding: var(--s-2);
-    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: color var(--t-fast) var(--ease-out-quart);
 }
 
-nav form input[type="submit"]:hover { color: var(--accent); }
+nav form input[type="submit"]:hover { color: var(--accent-link); }
 
 nav li.right {
     flex: 1;
@@ -478,7 +487,7 @@ article > header > .meta {
     grid-row: 1;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    color: var(--accent);
+    color: var(--accent-link);
     text-align: right;
     line-height: 1.5;
     letter-spacing: 0.01em;
@@ -492,7 +501,7 @@ article > header + * {
 article header .meta a {
     color: inherit;
     text-decoration: none;
-    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: color var(--t-fast) var(--ease-out-quart);
 }
 
 article header .meta a:hover { color: var(--accent-hover); }
@@ -513,14 +522,14 @@ article header h2 a.title-link {
     background-size: 0% 1px;
     background-position: 0 100%;
     background-repeat: no-repeat;
-    transition: background-size 260ms cubic-bezier(0.22, 1, 0.36, 1),
-                color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: background-size var(--t-slow) var(--ease-out-quart),
+                color var(--t-fast) var(--ease-out-quart);
     padding-bottom: 1px;
 }
 
 article header h2 a.title-link:hover,
 article header h2 a.title-link:focus-visible {
-    color: var(--accent);
+    color: var(--accent-link);
     background-size: 100% 1px;
 }
 
@@ -533,13 +542,13 @@ article a[href*="/tag/"] {
     text-decoration: none;
     background: var(--paper-raised);
     padding: 0.1em 0.4em;
-    border-radius: 2px;
-    transition: color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    border-radius: var(--radius-sm);
+    transition: color var(--t-fast) var(--ease-out-quart),
+                background-color var(--t-fast) var(--ease-out-quart);
 }
 
 article a[href*="/tag/"]:hover {
-    color: var(--accent);
+    color: var(--accent-link);
     background: var(--accent-tint);
 }
 
@@ -558,7 +567,7 @@ article > small a {
     margin-right: var(--s-3);
 }
 
-article > small a:hover { color: var(--accent); }
+article > small a:hover { color: var(--accent-link); }
 
 /* Single-post view: don't repeat the title (h1 is the title), drop the gutter,
    give the body its full measure. */
@@ -624,7 +633,7 @@ article.related-posts h6 {
     grid-row: 1;
     font-family: var(--font-mono);
     font-size: var(--text-xs);
-    color: var(--accent);
+    color: var(--accent-link);
     text-align: right;
     letter-spacing: 0.01em;
     line-height: 1.5;
@@ -645,13 +654,13 @@ article.related-posts h6 {
     background-position: 0 100%;
     background-repeat: no-repeat;
     padding-bottom: 1px;
-    transition: background-size 220ms cubic-bezier(0.22, 1, 0.36, 1),
-                color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: background-size 220ms var(--ease-out-quart),
+                color var(--t-fast) var(--ease-out-quart);
 }
 
 .related-title a:hover,
 .related-title a:focus-visible {
-    color: var(--accent);
+    color: var(--accent-link);
     background-size: 100% 1px;
     outline: none;
 }
@@ -680,7 +689,7 @@ article.related-posts h6 {
     text-decoration: none;
 }
 
-.related-more a:hover { color: var(--accent); }
+.related-more a:hover { color: var(--accent-link); }
 
 @media (max-width: 599px) {
     .related-item {
@@ -714,8 +723,8 @@ textarea {
     border-radius: var(--radius);
     box-sizing: border-box;
     resize: vertical;
-    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: border-color var(--t-fast) var(--ease-out-quart),
+                background-color var(--t-fast) var(--ease-out-quart);
 }
 
 textarea:focus-visible {
@@ -731,8 +740,8 @@ input[type="text"], input[type="password"] {
     border: 1px solid transparent;
     border-radius: var(--radius);
     padding: var(--s-2) var(--s-3);
-    transition: border-color 140ms cubic-bezier(0.22, 1, 0.36, 1),
-                background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: border-color var(--t-fast) var(--ease-out-quart),
+                background-color var(--t-fast) var(--ease-out-quart);
 }
 
 input[type="text"]:focus-visible,
@@ -750,7 +759,7 @@ input[type="submit"], button {
     border-radius: var(--radius);
     padding: var(--s-3) var(--s-4);
     letter-spacing: 0.01em;
-    transition: background-color 140ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition: background-color var(--t-fast) var(--ease-out-quart);
 }
 
 input[type="submit"]:hover, button:hover {
@@ -774,7 +783,7 @@ article > small button {
 article > small input[type="submit"]:hover,
 article > small button:hover {
     background: none;
-    color: var(--accent);
+    color: var(--accent-link);
 }
 
 /* Pagination */
@@ -827,7 +836,7 @@ footer a {
     text-decoration: none;
 }
 
-footer a:hover { color: var(--accent); }
+footer a:hover { color: var(--accent-link); }
 
 /* Accessibility */
 
@@ -914,7 +923,8 @@ footer a:hover { color: var(--accent); }
         --ink-faint:    oklch(60% 0.020 65);
         --rule:         oklch(32% 0.015 60);
         --accent:       oklch(74% 0.140 70);
-        --accent-hover: oklch(82% 0.130 72);
+        --accent-link:  oklch(82% 0.130 72);
+        --accent-hover: oklch(88% 0.115 75);
         --accent-tint:  oklch(28% 0.040 70);
         --selection:    oklch(38% 0.110 75);
     }
