@@ -19,7 +19,22 @@ created: 2099-01-01 09:00:00
 Wishing you all the best for the year ahead. #news
 ```
 
-The date is interpreted in the server's timezone and uses the `YYYY-MM-DD HH:MM:SS` format. A date in the past publishes immediately (and back-dates the post); a date in the future schedules it.
+A date in the past publishes immediately (and back-dates the post); a date in the future schedules it.
+
+### Accepted date formats
+
+The `created` value is flexible. All of these work:
+
+| Example | Result |
+|---|---|
+| `2099-01-01 09:00:00` | Exact date and time |
+| `2099-01-01` | That date at midnight |
+| `next friday 3pm` | The coming Friday at 15:00 |
+| `+1 week` | One week from now |
+| `tomorrow` | Tomorrow at midnight |
+| `1 Jan 2099 18:30` | Named-month form |
+
+The time you write is the time the post publishes — it is taken at face value and **not** shifted between timezones. Relative phrases like `next friday` or `+1 week` are resolved against the server's clock. If the value can't be understood as a date, the post simply publishes immediately.
 
 ## Viewing scheduled posts
 

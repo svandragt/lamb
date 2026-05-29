@@ -71,7 +71,10 @@ function parse_matter(string $body): array
     $text = explode('---', $body);
     try {
         if (isset($text[1])) {
-            $matter = Yaml::parse($text[1]);
+            // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
+            // author's typed wall-clock time, instead of coercing them to UTC Unix
+            // timestamps (which would shift the time by the server's timezone offset).
+            $matter = Yaml::parse($text[1], Yaml::PARSE_DATETIME);
         }
     } catch (ParseException) {
         // Invalid YAML

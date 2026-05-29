@@ -101,18 +101,23 @@ function parse_bean(OODBBean $bean): void
 
     $front_matter['transformed'] = (parse_tags($markdown));
 
+    // Preserve the existing created date (now for new posts, the stored value for
+    // edits, the feed date for ingested items) so an unparseable front-matter date
+    // falls back to it rather than leaving a non-date string in the column.
+    $previous_created = $bean->created;
+
     foreach ($front_matter as $key => $value) {
         $bean->$key = $value;
     }
 
     // Normalise a front-matter `created` date into the canonical Y-m-d H:i:s string.
-    // YAML parses bare dates into Unix timestamps, which would otherwise break date
-    // sorting/formatting and the scheduling comparison. A future date schedules the post.
+    // Accepts absolute dates (kept as the typed wall-clock) and relative strings such
+    // as "next friday 3pm" (resolved in the server timezone). A future date schedules
+    // the post; an unparseable value falls back to the previous date so the post still
+    // publishes rather than staying hidden forever.
     if (isset($front_matter['created'])) {
-        $normalised = normalize_datetime($front_matter['created']);
-        if ($normalised !== null) {
-            $bean->created = $normalised;
-        }
+        $bean->created = normalize_datetime($front_matter['created'])
+            ?? ($previous_created ?: date('Y-m-d H:i:s'));
     }
 
     // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
