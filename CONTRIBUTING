@@ -18,3 +18,7 @@ Please first open an issue to state the problem you'd like to address, and get a
 I wouldn't want you to spend a lot of effort building a feature that I'm unwilling to maintain or merge.
 
 Have fun!
+
+DEBUGGING WITH XDEBUG
+
+When debugging locally with XDebug, open the site as http://localhost:8747/ (rather than 127.0.0.1 or another host alias) so the XDebug client picks up the session correctly. Applies to all local setups: built-in PHP server, Devbox, DDev.

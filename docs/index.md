@@ -6,7 +6,7 @@ title: Lamb
 
 <img src="https://github.com/svandragt/lamb/blob/main/src/images/og-image-lamb.jpg?raw=true" alt="Lamb made out of circuitry" />
 
-Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
+Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/README.md).
 
 ## Requirements
 
@@ -44,7 +44,6 @@ Devtools / local environments / sandbox:
 
 * [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %})
-* [Decision Log]({{ site.baseurl }}{% link decision-log.md %})
 * [Drafts]({{ site.baseurl }}{% link drafts.md %})
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
