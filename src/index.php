@@ -13,6 +13,7 @@ Bootstrap\bootstrap_db(getenv('LAMB_DATA_DIR') ?: '../data');
 Bootstrap\bootstrap_session();
 
 $config = Config\load();
+Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
 define("THEME", $config['theme'] ?? 'default');

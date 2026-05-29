@@ -34,7 +34,17 @@ The `created` value is flexible. All of these work:
 | `tomorrow` | Tomorrow at midnight |
 | `1 Jan 2099 18:30` | Named-month form |
 
-The time you write is the time the post publishes — it is taken at face value and **not** shifted between timezones. Relative phrases like `next friday` or `+1 week` are resolved against the server's clock. If the value can't be understood as a date, the post simply publishes immediately.
+The time you write is the time the post publishes — it is taken at face value and **not** shifted between timezones. If the value can't be understood as a date, the post simply publishes immediately.
+
+## Timezone
+
+Servers are usually set to UTC, which may not be your timezone. Set yours once in the site configuration at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock:
+
+```ini
+timezone = Europe/London
+```
+
+Use a name from the [list of supported timezones](https://www.php.net/manual/en/timezones.php). It defaults to `UTC`.
 
 ## Viewing scheduled posts
 
@@ -46,6 +56,7 @@ Micropub clients can schedule a post by sending a future `published` date. Sendi
 
 ## Related
 
+* [Site Configuration]({% link site-configuration.md %}): Set your `timezone` so scheduled posts go live at the right local time.
 * [Post Types]({% link post-types.md %}): Front-matter is used to set the `created` date.
 * [Drafts]({% link drafts.md %}): Drafts are hidden until published; scheduled posts are hidden until their date.
 * [Micropub]({% link micropub.md %}): Scheduling posts from a Micropub client.
