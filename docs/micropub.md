@@ -56,3 +56,4 @@ Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's impl
 ## Related
 
 * [Site Configuration]({% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings.
+* [Scheduling]({% link scheduling.md %}): Send a future `published` date or `post-status: scheduled` to schedule a post.

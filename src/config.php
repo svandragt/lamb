@@ -24,6 +24,10 @@ function get_default_ini_text(): string
 ;; Title of the site, in html and feed views
 ;site_title = My Microblog
 
+;; Your timezone, used for post dates and scheduling (the server is often UTC).
+;; Use a name from https://www.php.net/manual/en/timezones.php. Defaults to UTC.
+;timezone = Europe/London
+
 ;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
 ;; relative path on another site.
 ;; Useful where old content is archived to an archive site, or the lamb blog is still under construction but public.
@@ -90,9 +94,32 @@ function load(): array
         'site_title'             => 'My Microblog',
         'authorization_endpoint' => 'https://indieauth.com/auth',
         'token_endpoint'         => 'https://tokens.indieauth.com/token',
+        'timezone'               => 'UTC',
     ];
 
     return array_merge($defaults, $config ?: []);
+}
+
+/**
+ * Applies the author's configured timezone as the default for all date handling.
+ *
+ * The server clock is often UTC while the author lives elsewhere; setting the
+ * timezone here makes scheduling, "now", post dates, and human times all use the
+ * author's wall clock. Falls back to UTC when the configured value is missing or
+ * not a recognised timezone identifier.
+ *
+ * @param array $config The loaded configuration.
+ * @return string The timezone identifier that was applied.
+ */
+function apply_timezone(array $config): string
+{
+    $timezone = $config['timezone'] ?? 'UTC';
+    if (!in_array($timezone, \DateTimeZone::listIdentifiers(), true)) {
+        $timezone = 'UTC';
+    }
+    date_default_timezone_set($timezone);
+
+    return $timezone;
 }
 
 /**

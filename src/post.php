@@ -71,7 +71,10 @@ function parse_matter(string $body): array
     $text = explode('---', $body);
     try {
         if (isset($text[1])) {
-            $matter = Yaml::parse($text[1]);
+            // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
+            // author's typed wall-clock time, instead of coercing them to UTC Unix
+            // timestamps (which would shift the time by the server's timezone offset).
+            $matter = Yaml::parse($text[1], Yaml::PARSE_DATETIME);
         }
     } catch (ParseException) {
         // Invalid YAML
@@ -139,10 +142,12 @@ function body_has_tag(string $tag, string $body): bool
 function posts_by_tag(string $tag): array
 {
     $conditions = get_tag_search_conditions($tag);
+    $not_scheduled = \Lamb\not_scheduled_clause();
     $posts = R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) ORDER BY created DESC',
-        $conditions['params']
+        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) AND'
+            . $not_scheduled['sql'] . 'ORDER BY created DESC',
+        array_merge($conditions['params'], $not_scheduled['params'])
     );
 
     return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));

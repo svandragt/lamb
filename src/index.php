@@ -13,6 +13,7 @@ Bootstrap\bootstrap_db(getenv('LAMB_DATA_DIR') ?: '../data');
 Bootstrap\bootstrap_session();
 
 $config = Config\load();
+Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
 define("THEME", $config['theme'] ?? 'default');
@@ -38,6 +39,7 @@ Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
 Route\register_route('delete', __NAMESPACE__ . '\\Response\redirect_deleted', $lookup);
 Route\register_route('restore', __NAMESPACE__ . '\\Response\redirect_restored', $lookup);
 Route\register_route('drafts', __NAMESPACE__ . '\\Response\respond_drafts');
+Route\register_route('scheduled', __NAMESPACE__ . '\\Response\respond_scheduled');
 Route\register_route('trash', __NAMESPACE__ . '\\Response\respond_trash');
 Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
 Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');

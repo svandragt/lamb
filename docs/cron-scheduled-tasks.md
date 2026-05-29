@@ -6,6 +6,8 @@ title: Cron Scheduled Tasks
 
 Lamb has an scheduled task endpoint that can be called periodically to run tasks in the background, available at `/_cron`.
 
+(Looking to publish a post at a future date instead? See [Scheduling]({% link scheduling.md %}).)
+
 The following tasks run periodically:
 
 1. [Crossposting]({% link cross-posting.md %}) new content from feeds.
@@ -27,3 +29,4 @@ For example the linux cron system can be setup as follows:
 
 * [Cross-posting]({% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
 * [Drafts]({% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
+* [Scheduling]({% link scheduling.md %}): Publishing a post at a future date (a different feature, despite the similar name).
