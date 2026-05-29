@@ -2,12 +2,13 @@
 title: Themes
 ---
 
-Lamb comes with two built in themes: `default` and `2024`.
+Lamb comes with three built-in themes: `default`, `2024`, and `2026`.
 
 I'm not a designer.
 
-* _Default_ is a traditional blog theme
-* _2024_ is a more open modern theme. It's build on top of default.
+* _Default_ is a traditional blog theme.
+* _2024_ is a more open modern theme. It's built on top of default.
+* _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog.
 
 To switch between themes, set the `theme` key in the site configuration at `/settings`:
 
@@ -29,6 +30,11 @@ Default:
 
 2024:
 ![theme-2024](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
+
+---
+
+2026:
+![theme-2026]({{ site.baseurl }}/2026-theme.png)
 
 ## Theme documentation
 
