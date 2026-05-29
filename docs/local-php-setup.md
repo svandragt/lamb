@@ -20,5 +20,3 @@ LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
 ```
 
 Uploaded images are stored under `src/assets/`, so if you are serving Lamb through PHP-FPM or another web server user, make sure that directory is writable at runtime.
-
-**Contributors:** To facilitate debugging using XDebug, it's best to open the site as [http://localhost:8747/](http://localhost:8747/)
