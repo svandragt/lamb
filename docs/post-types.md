@@ -32,6 +32,8 @@ Slugs for pages are derived from the title on creation unless you explicitly pro
 
 A slug is preserved after creation. Changing the title later does not automatically reslug the post. _Good URLs don't change_, so although it's possible to set a slug in the front-matter when creating a page, Lamb will derive it from the title if it isn't set.
 
+You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({% link scheduling.md %}).
+
 # System types
 
 The following sections of the site are special:
@@ -44,4 +46,5 @@ The following sections of the site are special:
 ## Related
 
 * [Drafts]({% link drafts.md %}): Add `draft: true` to front-matter to save a post as a draft.
+* [Scheduling]({% link scheduling.md %}): Add a future `created:` date to publish a post later.
 * [Menu Items]({% link menu-items.md %}): Page posts with slugs can be pinned as menu items.
