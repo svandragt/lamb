@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\posts_by_tag;
@@ -35,29 +36,49 @@ class PostTest extends TestCase
         }
     }
 
-    public function testGetTagSearchConditionsMatchesTagWithTrailingSpace()
+    public function testGetTagSearchConditionsPrefiltersOnHashTag()
     {
         $result = get_tag_search_conditions('php');
-        $this->assertContains('%#php %', $result['params']);
+        $this->assertContains('%#php%', $result['params']);
     }
 
-    public function testGetTagSearchConditionsMatchesTagAtEndOfString()
+    // body_has_tag
+
+    public function testBodyHasTagMatchesTagFollowedBySpace()
     {
-        $result = get_tag_search_conditions('php');
-        $this->assertContains('%#php', $result['params']);
+        $this->assertTrue(body_has_tag('php', 'Hello #php world'));
     }
 
-    public function testGetTagSearchConditionsMatchesNewlineBeforeTag()
+    public function testBodyHasTagMatchesTagAtEndOfBody()
     {
-        $result = get_tag_search_conditions('php');
-        $found = false;
-        foreach ($result['params'] as $param) {
-            if (str_contains($param, "\n#php")) {
-                $found = true;
-                break;
-            }
-        }
-        $this->assertTrue($found, 'Expected a param containing newline before #tag');
+        $this->assertTrue(body_has_tag('php', 'Hello #php'));
+    }
+
+    public function testBodyHasTagMatchesTagFollowedByPunctuation()
+    {
+        $this->assertTrue(body_has_tag('til', "PO Box does #til."));
+        $this->assertTrue(body_has_tag('php', 'Love #php, really'));
+        $this->assertTrue(body_has_tag('php', 'Really? #php!'));
+    }
+
+    public function testBodyHasTagMatchesTagAtStartOfBody()
+    {
+        $this->assertTrue(body_has_tag('php', '#php is great'));
+    }
+
+    public function testBodyHasTagIsCaseInsensitive()
+    {
+        $this->assertTrue(body_has_tag('php', 'Hello #PHP world'));
+    }
+
+    public function testBodyHasTagDoesNotMatchLongerTag()
+    {
+        $this->assertFalse(body_has_tag('til', 'Today #tildes everywhere'));
+    }
+
+    public function testBodyHasTagDoesNotMatchMidWordHash()
+    {
+        $this->assertFalse(body_has_tag('php', 'colour#php inline'));
     }
 
     // slugify
@@ -242,6 +263,36 @@ class PostTest extends TestCase
 
         $result = posts_by_tag('endtag');
         $this->assertCount(1, $result);
+    }
+
+    public function testPostsByTagMatchesTagFollowedByPunctuation(): void
+    {
+        $this->setUpDb();
+
+        $post = R::dispense('post');
+        $post->body    = "I guess that's a PO Box does #til.";
+        $post->version = 1;
+        $post->draft   = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = posts_by_tag('til');
+        $this->assertCount(1, $result);
+    }
+
+    public function testPostsByTagDoesNotMatchLongerTagPrefix(): void
+    {
+        $this->setUpDb();
+
+        $post = R::dispense('post');
+        $post->body    = 'Today I used #tildes everywhere.';
+        $post->version = 1;
+        $post->draft   = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = posts_by_tag('til');
+        $this->assertCount(0, $result);
     }
 
     public function testPostsByTagReturnsMultipleMatchingPosts(): void
