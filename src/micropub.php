@@ -229,9 +229,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $bean->created = date('Y-m-d H:i:s', strtotime($published));
         }
 
-        if (($props['post-status'][0] ?? null) === 'draft') {
+        $postStatus = $props['post-status'][0] ?? null;
+        if ($postStatus === 'draft') {
             $bean->draft = 1;
         }
+        // A "scheduled" post is a published-intent post with a future `published` date;
+        // it is never a draft. Visibility is driven by the future `created` date set
+        // above, so it stays hidden from public listings until that time arrives.
 
         R::store($bean);
 

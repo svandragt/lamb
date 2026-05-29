@@ -272,7 +272,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || $post->draft == 1 || $post->deleted == 1) {
+    if ($post === null || $post->draft == 1 || $post->deleted == 1 || \Lamb\is_scheduled($post)) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

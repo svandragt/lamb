@@ -52,6 +52,7 @@ Devtools / local environments / sandbox:
 * [Post Types]({% link post-types.md %})
 * [Preconnect]({% link preconnect.md %})
 * [Redirections]({% link redirections.md %})
+* [Scheduling]({% link scheduling.md %})
 * [Search]({% link search.md %})
 * [Site Configuration]({% link site-configuration.md %})
 * [Themes]({% link themes.md %})

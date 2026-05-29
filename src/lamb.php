@@ -10,6 +10,8 @@ const SQL_NOT_DELETED = ' (deleted IS NULL OR deleted != 1) ';
 const SQL_PUBLISHED  = ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
 const SQL_IS_DRAFT   = ' draft = 1 AND (deleted IS NULL OR deleted != 1) ';
 const SQL_IS_DELETED = ' deleted = 1 ';
+// SQL fragment selecting posts that are scheduled for the future (and not draft/deleted).
+const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
@@ -103,6 +105,16 @@ function parse_bean(OODBBean $bean): void
         $bean->$key = $value;
     }
 
+    // Normalise a front-matter `created` date into the canonical Y-m-d H:i:s string.
+    // YAML parses bare dates into Unix timestamps, which would otherwise break date
+    // sorting/formatting and the scheduling comparison. A future date schedules the post.
+    if (isset($front_matter['created'])) {
+        $normalised = normalize_datetime($front_matter['created']);
+        if ($normalised !== null) {
+            $bean->created = $normalised;
+        }
+    }
+
     // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
     // This ensures removing "draft: true" from frontmatter publishes the post on next save.
     $bean->draft = !empty($front_matter['draft']) ? 1 : 0;
@@ -145,6 +157,58 @@ function set_option(OODBBean $bean, mixed $value): void
 }
 
 /**
+ * Returns the SQL fragment and bound parameter that exclude posts scheduled for
+ * the future. A post is publicly visible only once its `created` date has arrived.
+ *
+ * The current time is bound as a parameter so the comparison uses the same
+ * timezone basis as the stored `created` values (both produced by PHP's date()).
+ *
+ * @return array{sql: string, params: array}
+ */
+function not_scheduled_clause(): array
+{
+    return [
+        'sql'    => ' (created IS NULL OR created <= ?) ',
+        'params' => [date('Y-m-d H:i:s')],
+    ];
+}
+
+/**
+ * Normalises a date value (YAML timestamp int, DateTime, or parseable string)
+ * into the canonical `Y-m-d H:i:s` string used throughout the app.
+ *
+ * @param mixed $value The raw date value.
+ * @return string|null The normalised string, or null when the value is unparseable.
+ */
+function normalize_datetime(mixed $value): ?string
+{
+    if ($value instanceof \DateTimeInterface) {
+        return $value->format('Y-m-d H:i:s');
+    }
+    if (is_int($value)) {
+        return date('Y-m-d H:i:s', $value);
+    }
+    if (is_string($value) && $value !== '') {
+        $timestamp = strtotime($value);
+        if ($timestamp !== false) {
+            return date('Y-m-d H:i:s', $timestamp);
+        }
+    }
+    return null;
+}
+
+/**
+ * Returns true when the post's `created` date lies in the future (scheduled).
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_scheduled(OODBBean $post): bool
+{
+    return !empty($post->created) && $post->created > date('Y-m-d H:i:s');
+}
+
+/**
  * Checks if a post with the given slug exists in the database.
  *
  * @param string $lookup The slug of the post to look up.
@@ -154,7 +218,7 @@ function set_option(OODBBean $bean, mixed $value): void
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if ($post === null || $post->id === 0 || $post->draft == 1) {
+    if ($post === null || $post->id === 0 || $post->draft == 1 || is_scheduled($post)) {
         return '';
     }
 

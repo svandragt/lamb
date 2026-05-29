@@ -369,14 +369,21 @@ function the_entry_form(): void
  */
 function admin_toolbar_html(): string
 {
-    $drafts = \Lamb\Response\count_drafts();
-    $trash  = \Lamb\Response\count_trash();
+    $drafts    = \Lamb\Response\count_drafts();
+    $scheduled = \Lamb\Response\count_scheduled();
+    $trash     = \Lamb\Response\count_trash();
 
-    $draftsLabel = 'Drafts' . ($drafts > 0 ? " ($drafts)" : '');
-    $trashLabel  = 'Trash'  . ($trash  > 0 ? " ($trash)"  : '');
+    $draftsLabel    = 'Drafts'    . ($drafts > 0 ? " ($drafts)" : '');
+    $scheduledLabel = 'Scheduled' . ($scheduled > 0 ? " ($scheduled)" : '');
+    $trashLabel     = 'Trash'     . ($trash  > 0 ? " ($trash)"  : '');
+
+    $scheduledLink = $scheduled > 0
+        ? '<a href="/scheduled">' . escape($scheduledLabel) . '</a>'
+        : '';
 
     return '<div id="admin-toolbar">'
         . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
+        . $scheduledLink
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
         . '<a href="/logout">Logout</a>'

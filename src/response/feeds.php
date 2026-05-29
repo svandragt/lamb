@@ -14,6 +14,7 @@ use function Lamb\Theme\part;
 
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
+use const Lamb\SQL_IS_SCHEDULED;
 use const Lamb\SQL_PUBLISHED;
 use const ROOT_URL;
 
@@ -38,6 +39,9 @@ function respond_home(): array
         $where_sql .= ' AND ' . $clause['sql'];
         $where_params = $clause['params'];
     }
+    $not_scheduled = \Lamb\not_scheduled_clause();
+    $where_sql .= ' AND ' . $not_scheduled['sql'];
+    $where_params = array_merge($where_params, $not_scheduled['params']);
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
@@ -100,6 +104,33 @@ function count_trash(): int
 }
 
 /**
+ * Responds with the scheduled page showing posts dated in the future (login required).
+ *
+ * @return array The scheduled page data including posts and pagination.
+ */
+function respond_scheduled(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Scheduled';
+    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    return $data;
+}
+
+/**
+ * Returns the count of scheduled (future-dated) posts.
+ *
+ * @return int
+ */
+function count_scheduled(): int
+{
+    return R::count('post', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+}
+
+/**
  * Redirects the user to a search page with the provided query.
  *
  * @param string $query The search query to be included in the redirected URL.
@@ -133,15 +164,21 @@ function get_feed_data(): array
 {
     global $config;
 
+    $not_scheduled = \Lamb\not_scheduled_clause();
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20',
-            $clause['params']
+            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql']
+                . 'ORDER BY updated DESC LIMIT 20',
+            array_merge($clause['params'], $not_scheduled['params'])
         );
     } else {
-        $posts = R::findAll('post', SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20');
+        $posts = R::find(
+            'post',
+            SQL_PUBLISHED . 'AND' . $not_scheduled['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            $not_scheduled['params']
+        );
     }
 
     $first_post = reset($posts);
@@ -296,7 +333,9 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED;
+    $not_scheduled = \Lamb\not_scheduled_clause();
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql'];
+    $params = array_merge($params, $not_scheduled['params']);
 
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
