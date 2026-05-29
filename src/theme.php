@@ -17,6 +17,7 @@ use RuntimeException;
 use function Lamb\get_tags;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 
 use const Lamb\SQL_PUBLISHED;
@@ -230,6 +231,9 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
         $sql .= ' ORDER BY created DESC';
         $tag_posts = R::find('post', $sql, $params);
         foreach ($tag_posts as $tag_post) {
+            if (!body_has_tag($tag, (string) $tag_post->body)) {
+                continue;
+            }
             $related_posts[$tag_post->id] = $tag_post;
         }
         if (count($related_posts) >= $limit) {
