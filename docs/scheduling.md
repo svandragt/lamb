@@ -36,6 +36,8 @@ The `created` value is flexible. All of these work:
 
 The time you write is the time the post publishes — it is taken at face value and **not** shifted between timezones. If the value can't be understood as a date, the post simply publishes immediately.
 
+Relative phrases are resolved **when you save**, then pinned: Lamb rewrites the front-matter to the absolute date it worked out (so `created: next friday` becomes e.g. `created: '2026-06-05 00:00:00'`). This means a later edit won't quietly move the date to the *next* Friday — what you scheduled stays scheduled.
+
 ## Timezone
 
 Servers are usually set to UTC, which may not be your timezone. Set yours once in the site configuration at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock:
