@@ -24,4 +24,4 @@ Keywords are highlighted in the search results using `<mark>` tags (styled by th
 
 ## Related
 
-* [Post Types]({% link post-types.md %}): The content that is searched.
+* [Post Types]({{ site.baseurl }}{% link post-types.md %}): The content that is searched.

@@ -20,5 +20,5 @@ Posts in the trash are not currently purged automatically. To permanently remove
 
 ## Related
 
-* [Post Types]({% link post-types.md %}): The types of posts that can be deleted.
-* [Drafts]({% link drafts.md %}): Drafts are separate from the trash.
+* [Post Types]({{ site.baseurl }}{% link post-types.md %}): The types of posts that can be deleted.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are separate from the trash.

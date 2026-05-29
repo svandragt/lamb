@@ -51,4 +51,4 @@ Any suggestions to improve theming are welcomed.
 
 ## Related
 
-* [Site Configuration]({% link site-configuration.md %}): Set the `theme` key in the config to activate a theme.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set the `theme` key in the config to activate a theme.

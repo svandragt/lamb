@@ -5,7 +5,8 @@ remote_theme: just-the-docs/just-the-docs
 plugins:
   - jekyll-remote-theme
 
-url: https://svandragt.github.io/lamb
+url: https://svandragt.github.io
+baseurl: /lamb
 
 aux_links:
   "Lamb on GitHub": https://github.com/svandragt/lamb

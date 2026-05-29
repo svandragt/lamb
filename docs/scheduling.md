@@ -58,7 +58,7 @@ Micropub clients can schedule a post by sending a future `published` date. Sendi
 
 ## Related
 
-* [Site Configuration]({% link site-configuration.md %}): Set your `timezone` so scheduled posts go live at the right local time.
-* [Post Types]({% link post-types.md %}): Front-matter is used to set the `created` date.
-* [Drafts]({% link drafts.md %}): Drafts are hidden until published; scheduled posts are hidden until their date.
-* [Micropub]({% link micropub.md %}): Scheduling posts from a Micropub client.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set your `timezone` so scheduled posts go live at the right local time.
+* [Post Types]({{ site.baseurl }}{% link post-types.md %}): Front-matter is used to set the `created` date.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are hidden until published; scheduled posts are hidden until their date.
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}): Scheduling posts from a Micropub client.

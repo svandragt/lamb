@@ -78,11 +78,11 @@ The full default configuration (all keys commented out = use built-in defaults):
 
 ## Related
 
-* [Setting up Cross-Posting]({% link cross-posting.md %}#setup) requires site configuration changes.
-* [Drafts]({% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
-* [Menu Items]({% link menu-items.md %})
-* [Micropub]({% link micropub.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings enable Micropub publishing.
-* [Preconnect]({% link preconnect.md %})
-* [Redirections]({% link redirections.md %})
-* [Scheduling]({% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
-* [Themes]({% link themes.md %}): The `theme` key selects the active theme.
+* [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
+* [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings enable Micropub publishing.
+* [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
+* [Redirections]({{ site.baseurl }}{% link redirections.md %})
+* [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
+* [Themes]({{ site.baseurl }}{% link themes.md %}): The `theme` key selects the active theme.
