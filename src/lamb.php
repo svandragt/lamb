@@ -118,6 +118,9 @@ function parse_bean(OODBBean $bean): void
     if (isset($front_matter['created'])) {
         $bean->created = normalize_datetime($front_matter['created'])
             ?? ($previous_created ?: date('Y-m-d H:i:s'));
+        // Pin the resolved date back into the body so relative phrases like
+        // "next friday" don't drift to a new date on the next edit.
+        $bean->body = persist_resolved_created($bean->body, $bean->created);
     }
 
     // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
@@ -176,6 +179,48 @@ function not_scheduled_clause(): array
         'sql'    => ' (created IS NULL OR created <= ?) ',
         'params' => [date('Y-m-d H:i:s')],
     ];
+}
+
+/**
+ * Rewrites the `created` value inside a body's leading YAML front-matter block to
+ * the given resolved (absolute) datetime, leaving all other front-matter intact.
+ *
+ * This pins relative phrases (e.g. "next friday") to a fixed timestamp the first
+ * time a post is saved, so later edits re-resolve a stable absolute date rather
+ * than drifting to a new "next friday" relative to the edit time. Bodies without a
+ * front-matter block, or whose `created` is already the resolved value, are
+ * returned unchanged (no cosmetic churn).
+ *
+ * @param string $body     The raw post body.
+ * @param string $resolved The canonical `Y-m-d H:i:s` value to persist.
+ * @return string The body with its front-matter `created` pinned.
+ */
+function persist_resolved_created(string $body, string $resolved): string
+{
+    // Only touch a front-matter block at the very start of the body.
+    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+        return $body;
+    }
+
+    $new_yaml = preg_replace_callback(
+        '/^([ \t]*created[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        function (array $line) use ($resolved): string {
+            $current = trim($line[2], " \t'\"");
+            if ($current === $resolved) {
+                return $line[0];
+            }
+            return $line[1] . " '" . $resolved . "'";
+        },
+        $m[2],
+        1,
+        $count
+    );
+
+    if ($count === 0) {
+        return $body;
+    }
+
+    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
 }
 
 /**
