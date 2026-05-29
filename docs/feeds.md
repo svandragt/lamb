@@ -23,5 +23,5 @@ Status-style posts without a title produce a feed entry with an empty `<title>` 
 
 ## Related
 
-* [Cross-posting From Feeds]({% link cross-posting.md %}) — consuming external feeds into Lamb
-* [Themes]({% link themes.md %}) — overriding `feed.php` / `feed_json.php` in a custom theme
+* [Cross-posting From Feeds]({{ site.baseurl }}{% link cross-posting.md %}) — consuming external feeds into Lamb
+* [Themes]({{ site.baseurl }}{% link themes.md %}) — overriding `feed.php` / `feed_json.php` in a custom theme

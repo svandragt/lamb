@@ -27,4 +27,4 @@ The above configuration emits the following in the HTML `<head>`:
 
 ## Related
 
-* [Site Configuration]({% link site-configuration.md %}): More information on `config.ini`.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): More information on `config.ini`.

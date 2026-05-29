@@ -3,11 +3,13 @@
   "packages": [
     "php@8.2",
     "php82Extensions.xdebug@latest",
-    "nodejs@24"
+    "nodejs@24",
+    "ruby@3.3",
+    "openssl@latest",
+    "pkg-config@latest"
   ],
   "env": {
-    "DEVBOX_COREPACK_ENABLED":  "true"
-
+    "DEVBOX_COREPACK_ENABLED": "true"
   },
   "shell": {
     "init_hook": [

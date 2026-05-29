@@ -59,5 +59,5 @@ Once the post exists, the config entry has no effect and can be safely deleted f
 
 ## Related
 
-*   [Site Configuration]({% link site-configuration.md %})
-*   [Post Types]({% link post-types.md %})
+*   [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %})
+*   [Post Types]({{ site.baseurl }}{% link post-types.md %})

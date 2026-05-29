@@ -26,3 +26,7 @@ node_modules/
 # Docs
 /.jekyll-bundle/
 /docs/_site/
+/docs/.bundle/
+/docs/.jekyll-cache/
+/docs/vendor/
+/docs/Gemfile.lock
