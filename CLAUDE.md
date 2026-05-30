@@ -390,7 +390,8 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
-- Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie
+- Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
+- Sessions are only started for (previously) logged-in users: `Bootstrap\should_start_session()` checks for the `lamb_logged_in` or `LAMBSESSID` cookie, so anonymous visitors get no `Set-Cookie` and no no-cache headers and their pages stay cacheable. Routes that need a session for an otherwise-anonymous request (the login page, CSRF POSTs, flash-before-redirect) call `Bootstrap\start_session()` explicitly. `Bootstrap\cache_headers()` emits `max-age=300` for anonymous responses and private/no-store for logged-in ones (session cache limiter is disabled so it never fights these)
 - Admin-only JS files are conditionally loaded via `asset_loader()`
 
 ### Feed Ingestion (Cron)

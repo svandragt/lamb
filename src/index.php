@@ -21,7 +21,9 @@ define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 
 # Bootstrap
-header('Cache-Control: max-age=300');
+foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_header) {
+    header($cache_header);
+}
 header('Link: <' . ROOT_URL . '/micropub>; rel="micropub"', false);
 header('Link: <' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"', false);
 header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false);
