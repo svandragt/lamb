@@ -20,7 +20,7 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 **Status:** Accepted
 **Context:** Lamb is a single-author writer's blog. Previous behaviour published feed-ingested posts immediately, which prioritised syndication use over authorship. This was the wrong default for a tool aimed at individual writers.
 **Decision:** Feed items are now saved as drafts by default. Authors must review and publish them explicitly. Users who want syndication behaviour (publish immediately) can opt out by setting `feeds_draft = false` in the `[feeds]` config section.
-**Consequences:** Existing installs with no `feeds_draft` config will silently change behaviour on upgrade — new feed items will land as drafts. Documented in config comments and wiki.
+**Consequences:** Existing installs with no `feeds_draft` config will silently change behaviour on upgrade — new feed items will land as drafts. Documented in config comments and the docs.
 
 ---
 
