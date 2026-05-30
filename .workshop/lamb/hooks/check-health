@@ -1,0 +1,21 @@
+#!/bin/bash
+# Runs as 'workshop' after setup hooks and on `workshop refresh` (cwd /project).
+# Verifies lamb's toolchain is present; reports Ready/Error to Workshop.
+set -uo pipefail
+
+missing=()
+command -v php >/dev/null      || missing+=("php")
+command -v composer >/dev/null || missing+=("composer")
+command -v node >/dev/null     || missing+=("node")
+command -v ruby >/dev/null     || missing+=("ruby")
+
+# PHP extensions lamb's composer.json requires.
+for ext in sqlite3 simplexml gettext mbstring; do
+  php -m 2>/dev/null | grep -qix "$ext" || missing+=("php-ext:$ext")
+done
+
+if [ "${#missing[@]}" -eq 0 ]; then
+  workshopctl set-health okay
+else
+  workshopctl set-health error --reason "missing: ${missing[*]}"
+fi

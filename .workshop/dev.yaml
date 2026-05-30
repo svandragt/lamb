@@ -1,4 +1,20 @@
 name: dev
 base: ubuntu@24.04
 sdks:
-    - name: claude-code
+    - name: node          # Node.js 24 (store SDK) — mirrors devbox nodejs@24
+    - name: claude-code    # agent tooling
+    - name: project-lamb   # in-project SDK: PHP toolchain + project bootstrap
+
+actions:
+  # Print the URL to reach the dev server from the host.
+  url: |
+    echo "http://$(hostname -I | awk '{print $1}'):8747"
+  # Start the lamb dev server (binds 0.0.0.0 so the host can reach it).
+  # Sets a dev /login password (default "hackme"). Override:
+  #   workshop run dev serve -- mypassword
+  serve: |
+    cd /project
+    pw="${1:-hackme}"
+    export LAMB_LOGIN_PASSWORD="$(php -r 'echo base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));' "$pw")"
+    echo "lamb /login password: $pw"
+    composer serve
