@@ -12,6 +12,7 @@
   "require": {
     "php": ">=8.2",
     "ext-gettext": "*",
+    "ext-pdo_mysql": "*",
     "ext-simplexml": "*",
     "ext-sqlite3": "*",
     "erusev/parsedown": "^1.7",

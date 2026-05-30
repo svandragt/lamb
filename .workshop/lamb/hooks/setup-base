@@ -1,0 +1,26 @@
+#!/bin/bash
+# Runs once as root against the base image (cwd /).
+# Installs lamb's OS-level toolchain, mirroring devbox.json packages.
+# Ubuntu 24.04 ships PHP 8.3 via apt (lamb requires >=8.2).
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+apt-get update
+apt-get install -y --no-install-recommends \
+  php8.3-cli \
+  php8.3-sqlite3 \
+  php8.3-mysql \
+  php8.3-xml \
+  php8.3-mbstring \
+  php8.3-curl \
+  php8.3-zip \
+  php8.3-gd \
+  php8.3-xdebug \
+  composer \
+  ruby-full \
+  openssl \
+  pkg-config \
+  git \
+  unzip \
+  ca-certificates
+rm -rf /var/lib/apt/lists/*

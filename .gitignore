@@ -30,3 +30,6 @@ node_modules/
 /docs/.jekyll-cache/
 /docs/vendor/
 /docs/Gemfile.lock
+
+# pnpm store created when running inside the Workshop env
+/.pnpm-store/

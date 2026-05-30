@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(vendor/bin/codecept run *)",
+      "Bash(composer lint)",
+      "Bash(git fetch *)",
+      "Bash(lxc info *)"
+    ]
+  }
+}
