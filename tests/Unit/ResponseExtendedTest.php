@@ -98,10 +98,14 @@ class ResponseExtendedTest extends TestCase
         $this->assertSame('hello', $result['query']);
     }
 
-    public function testRespondSearchQueryIsHtmlEscaped(): void
+    public function testRespondSearchQueryIsStoredRawAndEscapedAtOutput(): void
     {
+        // The query is kept raw in the result; escaping happens once at render
+        // time (search box uses escape(), the title via page_title()). Storing it
+        // pre-escaped here would double-encode metacharacters in the displayed term.
         $result = respond_search(['<script>']);
-        $this->assertSame('&lt;script&gt;', $result['query']);
+        $this->assertSame('<script>', $result['query']);
+        $this->assertStringContainsString('<script>', $result['title']);
     }
 
     // upgrade_posts

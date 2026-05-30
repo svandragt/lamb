@@ -456,9 +456,12 @@ class LambMicropubAdapter extends MicropubAdapter
                 continue;
             }
 
+            $ext = \Lamb\Response\safe_upload_extension($file->getClientFilename() ?? '');
+            if ($ext === null) {
+                continue;
+            }
             $uploadDir = \Lamb\Response\get_upload_dir();
-            $ext       = pathinfo($file->getClientFilename() ?? 'upload', PATHINFO_EXTENSION);
-            $filename  = sha1($file->getClientFilename() ?? uniqid('', true)) . ($ext ? ".$ext" : '');
+            $filename  = sha1($file->getClientFilename() ?? uniqid('', true)) . ".$ext";
             $file->moveTo($uploadDir . '/' . $filename);
 
             $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
@@ -710,9 +713,16 @@ function respond_micropub_media(): void
         exit;
     }
 
+    $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
+    if ($ext === null) {
+        http_response_code(400);
+        header('Content-Type: application/json');
+        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Unsupported file type.']);
+        exit;
+    }
+
     $uploadDir = \Lamb\Response\get_upload_dir();
-    $ext       = pathinfo($file['name'] ?? 'upload', PATHINFO_EXTENSION);
-    $filename  = sha1(($file['name'] ?? '') . uniqid('', true)) . ($ext ? ".$ext" : '');
+    $filename  = sha1(($file['name'] ?? '') . uniqid('', true)) . ".$ext";
     move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
 
     $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;

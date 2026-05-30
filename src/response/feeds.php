@@ -323,7 +323,9 @@ function respond_search(array $args): array
         }
         redirect_search($query);
     }
-    $query = htmlspecialchars($query);
+    // Keep $query raw: SQL uses bound parameters, and every output path
+    // (page title, search box) escapes at render time. Escaping here too would
+    // double-encode HTML metacharacters in the displayed search term.
 
     // Support multiple words filtering
     $words = explode(' ', $query);
@@ -402,7 +404,8 @@ function respond_tag(array $args): array
 {
     [$tag] = $args;
     $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
+    // Keep $tag raw: matching, URL-encoding and the page title each handle it
+    // correctly, and the title is escaped at render time (so no double-encoding).
 
     // Get all posts for this tag (in-memory array)
     $all_posts = posts_by_tag($tag);

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\get_upload_dir;
+use function Lamb\Response\safe_upload_extension;
 
 class UploadTest extends TestCase
 {
@@ -97,5 +98,43 @@ class UploadTest extends TestCase
         $result = get_upload_dir();
         $expectedSuffix = 'assets/' . date('Y/m');
         $this->assertStringContainsString($expectedSuffix, $result);
+    }
+
+    // safe_upload_extension — only image extensions may be written to the web root
+
+    public function testSafeUploadExtensionAllowsPng(): void
+    {
+        $this->assertSame('png', safe_upload_extension('photo.png'));
+    }
+
+    public function testSafeUploadExtensionLowercasesExtension(): void
+    {
+        $this->assertSame('jpg', safe_upload_extension('PHOTO.JPG'));
+    }
+
+    public function testSafeUploadExtensionRejectsPhp(): void
+    {
+        $this->assertNull(safe_upload_extension('evil.php'));
+    }
+
+    public function testSafeUploadExtensionRejectsPhtml(): void
+    {
+        $this->assertNull(safe_upload_extension('evil.phtml'));
+    }
+
+    public function testSafeUploadExtensionRejectsSvgToAvoidScriptedImages(): void
+    {
+        $this->assertNull(safe_upload_extension('logo.svg'));
+    }
+
+    public function testSafeUploadExtensionRejectsFilenameWithoutExtension(): void
+    {
+        $this->assertNull(safe_upload_extension('noextension'));
+    }
+
+    public function testSafeUploadExtensionUsesFinalExtensionForDoubleExtension(): void
+    {
+        // "evil.php.png" should be treated as a png (the stored name is hashed anyway)
+        $this->assertSame('png', safe_upload_extension('evil.php.png'));
     }
 }
