@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\local_redirect_target;
 use function Lamb\Response\redirect_login;
 
 class ResponseAuthTest extends TestCase
@@ -58,5 +59,38 @@ class ResponseAuthTest extends TestCase
         $result = redirect_login();
         $this->assertIsArray($result);
         $this->assertCount(0, $result);
+    }
+
+    // local_redirect_target — the post-login redirect must stay on this site
+
+    public function testLocalRedirectTargetAllowsLocalPath(): void
+    {
+        $this->assertSame('/settings', local_redirect_target('/settings'));
+    }
+
+    public function testLocalRedirectTargetPreservesQueryString(): void
+    {
+        $this->assertSame('/search/foo?page=2', local_redirect_target('/search/foo?page=2'));
+    }
+
+    public function testLocalRedirectTargetRejectsAbsoluteUrl(): void
+    {
+        $this->assertSame('/', local_redirect_target('https://evil.example/phish'));
+    }
+
+    public function testLocalRedirectTargetRejectsProtocolRelativeUrl(): void
+    {
+        $this->assertSame('/', local_redirect_target('//evil.example/phish'));
+    }
+
+    public function testLocalRedirectTargetRejectsBackslashTrick(): void
+    {
+        $this->assertSame('/', local_redirect_target('/\\evil.example'));
+    }
+
+    public function testLocalRedirectTargetDefaultsToRootForEmpty(): void
+    {
+        $this->assertSame('/', local_redirect_target(''));
+        $this->assertSame('/', local_redirect_target(null));
     }
 }

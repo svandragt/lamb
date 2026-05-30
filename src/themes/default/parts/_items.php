@@ -8,6 +8,7 @@ use function Lamb\Theme\action_edit;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
+use function Lamb\Theme\escape;
 use function Lamb\Theme\link_source;
 use function Lamb\Theme\title_link;
 
@@ -23,7 +24,7 @@ else :
         <article>
             <header>
                 <?php if (!empty($bean->title)) : ?>
-                <h2><?= $template !== 'status' ? title_link($bean) : $bean->title ?></h2>
+                <h2><?= $template !== 'status' ? title_link($bean) : escape($bean->title) ?></h2>
                 <?php endif; ?>
                 <small><?= date_created($bean) ?><?= link_source($bean) ?></small>
             </header>

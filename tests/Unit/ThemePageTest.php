@@ -80,6 +80,26 @@ class ThemePageTest extends TestCase
         $this->assertSame('My Page', site_or_page_title('text'));
     }
 
+    // HTML escaping of titles (untrusted feed titles can reach $data['title'])
+
+    public function testPageTitleEscapesHtmlInDataTitle(): void
+    {
+        global $data;
+        $data['title'] = '<script>alert(1)</script>';
+        $result = page_title();
+        $this->assertStringNotContainsString('<script>', $result);
+        $this->assertStringContainsString('&lt;script&gt;', $result);
+    }
+
+    public function testSiteTitleEscapesHtml(): void
+    {
+        global $config;
+        $config['site_title'] = '<img src=x onerror=alert(1)>';
+        $result = site_title();
+        $this->assertStringNotContainsString('<img', $result);
+        $this->assertStringContainsString('&lt;img', $result);
+    }
+
     // page_intro
 
     public function testPageIntroReturnsEmptyStringWhenIntroNotSet(): void

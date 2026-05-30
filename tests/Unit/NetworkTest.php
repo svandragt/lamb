@@ -108,6 +108,37 @@ class NetworkTest extends TestCase
         $this->assertIsString(get_structured_content($item, 'Blog'));
     }
 
+    // A hostile feed title must not be able to inject extra YAML front-matter
+    // keys (e.g. slug, created) by embedding newlines.
+
+    public function testGetStructuredContentTitleWithNewlineDoesNotInjectFrontMatterKeys(): void
+    {
+        $item = $this->makeItem("Innocent\nslug: /evil", 'Content', 'https://example.com');
+        $result = get_structured_content($item, 'Blog');
+        // The injected "slug:" must not appear on its own front-matter line.
+        $this->assertStringNotContainsString("\nslug:", $result);
+        // And the title must collapse to a single line.
+        $this->assertStringContainsString('title: Innocent slug: /evil', $result);
+    }
+
+    public function testGetStructuredContentTitleCannotCloseFrontMatterEarly(): void
+    {
+        // A "---" inside the title would otherwise split the front-matter block.
+        $item = $this->makeItem('Before --- After', 'Content', 'https://example.com');
+        $result = get_structured_content($item, 'Blog');
+        $this->assertStringNotContainsString('Before --- After', $result);
+    }
+
+    public function testGetStructuredContentTitleIsLengthCapped(): void
+    {
+        $item = $this->makeItem(str_repeat('a', 500), 'Content', 'https://example.com');
+        $result = get_structured_content($item, 'Blog');
+        // Extract the title line and assert it is not unbounded.
+        preg_match('/title: (.*)/', $result, $m);
+        $this->assertNotEmpty($m);
+        $this->assertLessThanOrEqual(200, strlen(trim($m[1])));
+    }
+
     // --- purge_deleted_posts ---
 
     protected function setUpDb(): void

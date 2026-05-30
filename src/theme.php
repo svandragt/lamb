@@ -89,11 +89,12 @@ function action_edit(OODBBean $bean): string
 /**
  * Returns the current session CSRF token, creating one if it does not exist yet.
  *
- * @return string SHA-256 hex CSRF token stored in the session.
+ * @return string 64-character hex CSRF token (32 random bytes) stored in the session.
+ * @throws \Random\RandomException If no cryptographically secure source is available.
  */
 function csrf_token(): string
 {
-    $_SESSION[HIDDEN_CSRF_NAME] = $_SESSION[HIDDEN_CSRF_NAME] ?? hash('sha256', uniqid(mt_rand(), true));
+    $_SESSION[HIDDEN_CSRF_NAME] = $_SESSION[HIDDEN_CSRF_NAME] ?? bin2hex(random_bytes(32));
 
     return $_SESSION[HIDDEN_CSRF_NAME];
 }
@@ -138,7 +139,7 @@ function site_title($type = 'html'): string
     if ($type !== 'html') {
         return $config['site_title'];
     }
-    return sprintf('<h1>%s</h1>', $config['site_title']);
+    return sprintf('<h1>%s</h1>', escape($config['site_title']));
 }
 
 /**
@@ -177,7 +178,7 @@ function page_title(string $type = 'html'): string
         return $title;
     }
 
-    return sprintf('<h1>%s</h1>', $title);
+    return sprintf('<h1>%s</h1>', escape($title));
 }
 
 /**

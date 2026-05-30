@@ -49,8 +49,31 @@ function redirect_login(): ?array
 
     $uuid = bin2hex(random_bytes(16)); // Generate a UUID
     setcookie('lamb_logged_in', $uuid, get_cookie_options(time() + 3600));
-    $where = filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL);
+    $where = local_redirect_target(filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL));
     redirect_uri($where);
+}
+
+/**
+ * Constrains a post-login redirect target to a local path, defeating open-redirect
+ * phishing via the `redirect_to` parameter.
+ *
+ * Only same-site absolute paths are accepted: the value must start with a single
+ * "/" and must not begin with "//" or "/\" (which browsers treat as protocol-relative
+ * URLs pointing off-site). Anything else falls back to the site root.
+ *
+ * @param string|null $value The requested redirect target.
+ * @return string A safe local path, or '/' when the value is missing or off-site.
+ */
+function local_redirect_target(?string $value): string
+{
+    if ($value === null || $value === '' || $value[0] !== '/') {
+        return '/';
+    }
+    if (str_starts_with($value, '//') || str_starts_with($value, '/\\')) {
+        return '/';
+    }
+
+    return $value;
 }
 
 /**
