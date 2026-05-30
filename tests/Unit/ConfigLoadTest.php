@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Config\config_modified_timestamp;
 use function Lamb\Config\get_ini_text;
 use function Lamb\Config\load;
 use function Lamb\Config\save_ini_text;
@@ -65,6 +66,36 @@ class ConfigLoadTest extends TestCase
         $text = get_ini_text();
         $this->assertStringContainsString('Second', $text);
         $this->assertStringNotContainsString('First', $text);
+    }
+
+    // config_modified_timestamp
+
+    public function testConfigModifiedTimestampIsZeroWhenNoConfigStored(): void
+    {
+        // setUp() removes the site_config_ini option, so nothing has been saved.
+        $this->assertSame(0, config_modified_timestamp());
+    }
+
+    public function testSaveIniTextStampsModifiedTimestamp(): void
+    {
+        $before = time();
+        save_ini_text("site_title = Test\n");
+
+        $ts = config_modified_timestamp();
+        $this->assertGreaterThanOrEqual($before, $ts);
+        $this->assertLessThanOrEqual(time() + 1, $ts);
+    }
+
+    public function testConfigModifiedTimestampAdvancesOnReSave(): void
+    {
+        save_ini_text("site_title = One\n");
+        // Backdate the stored timestamp to simulate an old edit.
+        R::exec("UPDATE option SET updated = ? WHERE name = 'site_config_ini'", ['2000-01-01 00:00:00']);
+        $old = config_modified_timestamp();
+        $this->assertSame(strtotime('2000-01-01 00:00:00'), $old);
+
+        save_ini_text("site_title = Two\n");
+        $this->assertGreaterThan($old, config_modified_timestamp());
     }
 
     // load

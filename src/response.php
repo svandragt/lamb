@@ -43,10 +43,8 @@ function get_cookie_options(int $expires): array
 function latest_content_timestamp(): int
 {
     $latest = R::findOne('post', \Lamb\SQL_PUBLISHED . ' ORDER BY updated DESC LIMIT 1');
-    if ($latest === null || empty($latest->updated)) {
-        return 0;
-    }
-    return strtotime($latest->updated) ?: 0;
+    $post_ts = ($latest !== null && !empty($latest->updated)) ? (strtotime($latest->updated) ?: 0) : 0;
+    return max($post_ts, \Lamb\Config\config_modified_timestamp());
 }
 
 /**

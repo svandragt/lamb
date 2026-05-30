@@ -159,7 +159,27 @@ function get_ini_text(): string
 function save_ini_text(string $ini_text): void
 {
     $option = get_option('site_config_ini', '');
+    // Stamp the edit time so conditional-GET validators invalidate cached pages
+    // immediately on a settings change (see Response\latest_content_timestamp).
+    $option->updated = date('Y-m-d H:i:s');
     set_option($option, $ini_text);
+}
+
+/**
+ * Returns the Unix timestamp of the last config edit, or 0 if config was never saved.
+ *
+ * Used to fold config changes into the cache validator so editing settings
+ * (title, menu, theme, …) invalidates anonymous cached pages right away.
+ *
+ * @return int
+ */
+function config_modified_timestamp(): int
+{
+    $option = get_option('site_config_ini', '');
+    if ($option->id === 0 || empty($option->updated)) {
+        return 0;
+    }
+    return strtotime($option->updated) ?: 0;
 }
 
 /**

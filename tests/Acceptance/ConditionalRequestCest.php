@@ -71,4 +71,26 @@ class ConditionalRequestCest
         $I->amOnPage('/login');
         $I->dontSeeResponseHeader('ETag');
     }
+
+    public function editingSettingsInvalidatesAnonymousCache(AcceptanceTester $I): void
+    {
+        $this->seedPost($I);
+        $I->amOnPage('/');
+        $I->seeResponseHeaderExists('ETag');
+        $oldEtag = $I->grabResponseHeader('ETag');
+
+        // Change a setting as the admin, then log out.
+        $I->amOnPage('/login');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
+        $I->click('Log in');
+        $I->amOnPage('/settings');
+        $I->fillField('ini_text', "site_title = Changed Title\n");
+        $I->click('Save settings');
+        $I->amOnPage('/logout');
+
+        // The validator the client held before the edit must no longer match.
+        $I->haveHttpHeader('If-None-Match', $oldEtag);
+        $I->amOnPage('/');
+        $I->seeResponseCodeIs(200);
+    }
 }
