@@ -161,7 +161,11 @@ function save_ini_text(string $ini_text): void
     $option = get_option('site_config_ini', '');
     // Stamp the edit time so conditional-GET validators invalidate cached pages
     // immediately on a settings change (see Response\latest_content_timestamp).
-    $option->updated = date('Y-m-d H:i:s');
+    // Advance the timestamp monotonically: two saves landing in the same
+    // wall-clock second must still move it forward, otherwise the composite
+    // ETag is unchanged and anonymous clients are served a stale 304 (#279).
+    $previous = !empty($option->updated) ? (strtotime($option->updated) ?: 0) : 0;
+    $option->updated = date('Y-m-d H:i:s', max(time(), $previous + 1));
     set_option($option, $ini_text);
 }
 
