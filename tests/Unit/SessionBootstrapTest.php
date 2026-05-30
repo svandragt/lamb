@@ -52,4 +52,10 @@ class SessionBootstrapTest extends TestCase
         $this->assertStringContainsString('private', $joined);
         $this->assertStringContainsString('no-store', $joined);
     }
+
+    public function testResponsesVaryByCookieSoSharedCachesSeparateAnonymousFromLoggedIn(): void
+    {
+        $this->assertStringContainsString('Vary: Cookie', implode("\n", cache_headers(false)));
+        $this->assertStringContainsString('Vary: Cookie', implode("\n", cache_headers(true)));
+    }
 }

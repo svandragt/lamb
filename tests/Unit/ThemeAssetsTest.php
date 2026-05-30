@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Theme\asset_version;
 use function Lamb\Theme\redirect_to;
 use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
@@ -167,6 +168,44 @@ class ThemeAssetsTest extends TestCase
         $project_src = dirname(__DIR__, 2) . '/src/';
         $file = $project_src . ltrim($url_path, '/');
         $this->assertFileExists($file, "Script file not found at $file — URL '$url_path' does not resolve to a real file");
+    }
+
+    // -------------------------------------------------------------------------
+    // asset_version (cache-buster)
+    // -------------------------------------------------------------------------
+
+    public function testAssetVersionHashesFileContentsNotUrl(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb_asset_');
+        file_put_contents($tmp, 'body { color: red; }');
+        try {
+            $href = 'http://localhost/themes/default/styles/styles.css';
+            $this->assertSame(md5_file($tmp), asset_version($tmp, $href));
+            $this->assertSame(md5('body { color: red; }'), asset_version($tmp, $href));
+        } finally {
+            unlink($tmp);
+        }
+    }
+
+    public function testAssetVersionChangesWhenContentChanges(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb_asset_');
+        try {
+            $href = 'http://localhost/scripts/shorthand.js';
+            file_put_contents($tmp, 'v1');
+            $v1 = asset_version($tmp, $href);
+            file_put_contents($tmp, 'v2');
+            $v2 = asset_version($tmp, $href);
+            $this->assertNotSame($v1, $v2, 'cache-buster must change when file content changes');
+        } finally {
+            unlink($tmp);
+        }
+    }
+
+    public function testAssetVersionFallsBackToUrlHashWhenFileMissing(): void
+    {
+        $href = 'http://localhost/themes/default/styles/missing.css';
+        $this->assertSame(md5($href), asset_version('/no/such/file.css', $href));
     }
 
     // -------------------------------------------------------------------------

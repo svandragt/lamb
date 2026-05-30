@@ -139,6 +139,10 @@ function bootstrap_session(): void
  * Logged-in responses are private and uncacheable; anonymous responses are
  * cacheable so a CDN/reverse-proxy/browser can serve them without hitting PHP.
  *
+ * Vary: Cookie tells shared caches to key on the request cookies, so a cached
+ * anonymous page is never served to a logged-in user (who always carries the
+ * session/login cookie) and vice versa.
+ *
  * @param bool $logged_in Whether the current visitor is logged in.
  * @return string[] Header strings ready to pass to header().
  */
@@ -148,7 +152,11 @@ function cache_headers(bool $logged_in): array
         return [
             'Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0',
             'Pragma: no-cache',
+            'Vary: Cookie',
         ];
     }
-    return ['Cache-Control: max-age=300'];
+    return [
+        'Cache-Control: max-age=300',
+        'Vary: Cookie',
+    ];
 }
