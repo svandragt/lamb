@@ -8,15 +8,18 @@ Barrier free super simple blogging, self-hosted.
 - Friction
   free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
   entry, with drag and drop image support.
-- Generates a discoverable Atom feed (/feed) from recently published blogs.
 - Hashtags support, by just typing them `#ahyeah`.
-- 404 fallback redirection to your old site, optionally.
-- Friendly user theming, if you don't like my two shades of 2000s retro themes. ;)
+- Drafts, scheduled posts, and friction free trash with restore.
+- Discoverable Atom feeds (`/feed`, plus a feed per tag).
 - Pull external content into the blog by subscribing to feeds; ingested posts land as drafts by default.
+- Publish from other apps through a Micropub endpoint.
+- Full text search and configurable menu items.
+- 404 fallback redirection to your old site, plus automatic 301s when a post's slug changes.
+- Friendly user theming, if you don't like my retro themes. ;)
 
 # Getting started
 
-[Visit the wiki](https://github.com/svandragt/lamb/wiki) to get started.
+[Read the documentation](https://svandragt.github.io/lamb) to get started.
 
 # Screenshots
 
@@ -35,4 +38,4 @@ Friction free post deletion:
 - Opinionated defaults over settings.
 - Assume success, communicate failure.
 
-[![Built with Devbox](https://jetpack.io/img/devbox/shield_moon.svg)](https://jetpack.io/devbox/docs/contributor-quickstart/)
+[![Built with Devbox](https://www.jetify.com/img/devbox/shield_moon.svg)](https://www.jetify.com/docs/devbox/)

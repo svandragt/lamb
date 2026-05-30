@@ -9,7 +9,7 @@ use function Lamb\Theme\escape;
 <h1>Settings</h1>
 <p>
     Edit the application configuration in INI format. Changes are validated before saving.
-    Refer to the <a href="https://github.com/svandragt/lamb/wiki" target="_blank">wiki</a> for available keys and examples.
+    Refer to the <a href="https://svandragt.github.io/lamb/site-configuration" target="_blank">documentation</a> for available keys and examples.
 </p>
 
 <form method="post" action="/settings" id="settingsform">

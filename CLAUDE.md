@@ -6,9 +6,9 @@ Lamb is a self-hosted, single-author microblog. It uses PHP 8.2+, SQLite (via Re
 
 The end-user documentation lives in `docs/` (tracked in the repository, served via GitHub Pages). It is the end-user manual. When working on user-facing features:
 
-- Check whether a wiki page exists for the feature and update it if needed.
-- When adding new user-facing behaviour, consider whether a new wiki page is warranted.
-- Ensure wiki pages that are topically related link to each other via a "Related" section.
+- Check whether a docs page exists for the feature and update it if needed.
+- When adding new user-facing behaviour, consider whether a new docs page is warranted.
+- Ensure docs pages that are topically related link to each other via a "Related" section.
 
 ## Key Commands
 

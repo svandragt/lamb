@@ -5,7 +5,7 @@ LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 RUN apt-get update -y && \
 	apt-get install libyaml-dev -y && \
 	pecl install yaml && echo "extension=yaml.so" > /usr/local/etc/php/conf.d/ext-yaml.ini && docker-php-ext-enable yaml && \
-	docker-php-ext-install gettext
+	docker-php-ext-install gettext pdo_mysql
 
 WORKDIR /srv/app/
 
