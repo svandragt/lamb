@@ -25,41 +25,49 @@ class ConditionalRequestTest extends TestCase
 
     public function testContentEtagIsQuotedAndDeterministic(): void
     {
-        $etag = content_etag(1234567890);
+        $etag = content_etag(1234567890, 100);
         $this->assertSame('"', $etag[0]);
         $this->assertSame('"', $etag[strlen($etag) - 1]);
-        $this->assertSame($etag, content_etag(1234567890));
+        $this->assertSame($etag, content_etag(1234567890, 100));
     }
 
-    public function testContentEtagDiffersWhenTimestampChanges(): void
+    public function testContentEtagDiffersWhenContentTimestampChanges(): void
     {
-        $this->assertNotSame(content_etag(1000), content_etag(1001));
+        $this->assertNotSame(content_etag(1000, 1), content_etag(1001, 1));
+    }
+
+    public function testContentEtagDiffersWhenConfigChangesWithinSameSecond(): void
+    {
+        // Same last-modified (content) timestamp, different config edit time: the
+        // validator must still change so a settings edit invalidates caches even
+        // when it lands in the same second as the latest post (issue #279).
+        $this->assertNotSame(content_etag(1000, 500), content_etag(1000, 1000));
     }
 
     public function testNoConditionalHeadersIsNotAMatch(): void
     {
         $ts = 1234567890;
-        $this->assertFalse(client_has_current_version([], content_etag($ts), $ts));
+        $this->assertFalse(client_has_current_version([], content_etag($ts, 0), $ts));
     }
 
     public function testMatchingIfNoneMatchIsCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts);
+        $etag = content_etag($ts, 0);
         $this->assertTrue(client_has_current_version(['HTTP_IF_NONE_MATCH' => $etag], $etag, $ts));
     }
 
     public function testNonMatchingIfNoneMatchIsNotCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts);
+        $etag = content_etag($ts, 0);
         $this->assertFalse(client_has_current_version(['HTTP_IF_NONE_MATCH' => '"stale"'], $etag, $ts));
     }
 
     public function testIfModifiedSinceAtOrAfterLastModifiedIsCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts);
+        $etag = content_etag($ts, 0);
         $server = ['HTTP_IF_MODIFIED_SINCE' => http_date($ts)];
         $this->assertTrue(client_has_current_version($server, $etag, $ts));
 
@@ -70,7 +78,7 @@ class ConditionalRequestTest extends TestCase
     public function testIfModifiedSinceBeforeLastModifiedIsNotCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts);
+        $etag = content_etag($ts, 0);
         $server = ['HTTP_IF_MODIFIED_SINCE' => http_date($ts - 60)];
         $this->assertFalse(client_has_current_version($server, $etag, $ts));
     }

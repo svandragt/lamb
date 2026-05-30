@@ -54,15 +54,21 @@ function latest_content_timestamp(): int
  * No-ops when there is no content timestamp. Callers must only use this for
  * cacheable (anonymous, non-error) GET/HEAD responses, before any output.
  *
- * @param int $lastModifiedTs Unix timestamp of the latest relevant change.
+ * Last-Modified is the second-resolution max() of the two timestamps (the only
+ * resolution HTTP-date supports), while the ETag keeps them distinct so a config
+ * edit in the same second as the latest post still invalidates caches (#279).
+ *
+ * @param int $contentTs Unix timestamp of the most recent content change.
+ * @param int $configTs  Unix timestamp of the last config edit.
  * @return void
  */
-function send_304_if_current(int $lastModifiedTs): void
+function send_304_if_current(int $contentTs, int $configTs): void
 {
+    $lastModifiedTs = max($contentTs, $configTs);
     if ($lastModifiedTs <= 0) {
         return;
     }
-    $etag = \Lamb\Bootstrap\content_etag($lastModifiedTs);
+    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs);
     header('ETag: ' . $etag);
     header('Last-Modified: ' . \Lamb\Bootstrap\http_date($lastModifiedTs));
     if (\Lamb\Bootstrap\client_has_current_version($_SERVER, $etag, $lastModifiedTs)) {

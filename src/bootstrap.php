@@ -173,14 +173,21 @@ function http_date(int $ts): string
 }
 
 /**
- * Builds a strong ETag from a content timestamp.
+ * Builds a strong ETag from the content and config change timestamps.
  *
- * @param int $ts Unix timestamp of the most recent relevant change.
+ * The two components are kept distinct rather than collapsed to their max(): a
+ * settings edit and a post update can land in the same whole second, and a
+ * single-timestamp ETag would not change in that case, so the edit would not
+ * invalidate cached pages. Folding both in means either source moving (even
+ * within the same second) yields a different ETag (issue #279).
+ *
+ * @param int $contentTs Unix timestamp of the most recent content change (the response's last-modified).
+ * @param int $configTs  Unix timestamp of the last config edit.
  * @return string A quoted ETag value.
  */
-function content_etag(int $ts): string
+function content_etag(int $contentTs, int $configTs): string
 {
-    return '"' . dechex($ts) . '"';
+    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '"';
 }
 
 /**

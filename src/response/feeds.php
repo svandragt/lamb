@@ -208,8 +208,9 @@ function feed_cache(string $updated): void
     header('Cache-Control: max-age=1800');
     // Fold in config edits so changes to feed-affecting settings (title, menu
     // exclusions, …) invalidate cached feeds immediately.
-    $ts = max(strtotime($updated) ?: 0, Config\config_modified_timestamp());
-    send_304_if_current($ts);
+    $config_ts = Config\config_modified_timestamp();
+    $ts = max(strtotime($updated) ?: 0, $config_ts);
+    send_304_if_current($ts, $config_ts);
 }
 
 /**

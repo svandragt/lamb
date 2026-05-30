@@ -107,7 +107,10 @@ if (isset($_SESSION[SESSION_LOGIN])) {
     // which must not answer with 304.
     $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
     if (in_array($method, ['GET', 'HEAD'], true) && !in_array($action, ['login', '404'], true)) {
-        Response\send_304_if_current(Response\latest_content_timestamp());
+        Response\send_304_if_current(
+            Response\latest_content_timestamp(),
+            \Lamb\Config\config_modified_timestamp()
+        );
     }
     Theme\part('html', '');
 }
