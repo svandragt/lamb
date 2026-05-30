@@ -160,3 +160,53 @@ function cache_headers(bool $logged_in): array
         'Vary: Cookie',
     ];
 }
+
+/**
+ * Formats a Unix timestamp as an RFC 7231 HTTP-date (always GMT).
+ *
+ * @param int $ts Unix timestamp.
+ * @return string e.g. "Thu, 01 Jan 1970 00:00:00 GMT".
+ */
+function http_date(int $ts): string
+{
+    return gmdate('D, d M Y H:i:s', $ts) . ' GMT';
+}
+
+/**
+ * Builds a strong ETag from a content timestamp.
+ *
+ * @param int $ts Unix timestamp of the most recent relevant change.
+ * @return string A quoted ETag value.
+ */
+function content_etag(int $ts): string
+{
+    return '"' . dechex($ts) . '"';
+}
+
+/**
+ * Decides whether the client already holds the current version of a response,
+ * so a 304 Not Modified can be returned instead of a full body.
+ *
+ * Honours both If-None-Match (against the ETag) and If-Modified-Since (against
+ * the last-modified timestamp).
+ *
+ * @param array  $server          Typically $_SERVER.
+ * @param string $etag            The current response ETag.
+ * @param int    $lastModifiedTs  The current last-modified Unix timestamp.
+ * @return bool
+ */
+function client_has_current_version(array $server, string $etag, int $lastModifiedTs): bool
+{
+    $if_none_match = trim($server['HTTP_IF_NONE_MATCH'] ?? '');
+    if ($if_none_match !== '' && $if_none_match === $etag) {
+        return true;
+    }
+    $if_modified_since = $server['HTTP_IF_MODIFIED_SINCE'] ?? '';
+    if ($if_modified_since !== '') {
+        $since = strtotime($if_modified_since);
+        if ($since !== false && $lastModifiedTs <= $since) {
+            return true;
+        }
+    }
+    return false;
+}

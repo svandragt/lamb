@@ -391,8 +391,9 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
 - Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
-- Sessions are only started for (previously) logged-in users: `Bootstrap\should_start_session()` checks for the `lamb_logged_in` or `LAMBSESSID` cookie, so anonymous visitors get no `Set-Cookie` and no no-cache headers and their pages stay cacheable. Routes that need a session for an otherwise-anonymous request (the login page, CSRF POSTs, flash-before-redirect) call `Bootstrap\start_session()` explicitly. `Bootstrap\cache_headers()` emits `max-age=300` for anonymous responses and private/no-store for logged-in ones (session cache limiter is disabled so it never fights these)
-- Admin-only JS files are conditionally loaded via `asset_loader()`
+- Sessions are only started for (previously) logged-in users: `Bootstrap\should_start_session()` checks for the `lamb_logged_in` or `LAMBSESSID` cookie, so anonymous visitors get no `Set-Cookie` and no no-cache headers and their pages stay cacheable. Routes that need a session for an otherwise-anonymous request (the login page, CSRF POSTs, flash-before-redirect) call `Bootstrap\start_session()` explicitly. `Bootstrap\cache_headers()` emits `max-age=300` + `Vary: Cookie` for anonymous responses and private/no-store for logged-in ones (session cache limiter is disabled so it never fights these)
+- Conditional GET: anonymous content pages and feeds carry `ETag`/`Last-Modified` validators derived from the most recently updated post (`Response\latest_content_timestamp()`), and `Response\send_304_if_current()` short-circuits with `304 Not Modified`. The login page and 404 responses are excluded. Feeds use a longer `max-age` (`Response\feed_cache()`)
+- Admin-only JS files are conditionally loaded via `asset_loader()`. Asset URLs are cache-busted with a content hash (`Theme\asset_version()` → `md5_file`), so editing a CSS/JS file invalidates the `?ver=` query
 
 ### Feed Ingestion (Cron)
 

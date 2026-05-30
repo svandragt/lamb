@@ -102,5 +102,12 @@ if (isset($_SESSION[SESSION_LOGIN])) {
         1
     );
 } else {
+    // Conditional GET for cacheable content pages. Excludes the always-fresh
+    // login page and the (intentionally cacheable but non-200) 404 response,
+    // which must not answer with 304.
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (in_array($method, ['GET', 'HEAD'], true) && !in_array($action, ['login', '404'], true)) {
+        Response\send_304_if_current(Response\latest_content_timestamp());
+    }
     Theme\part('html', '');
 }
