@@ -32,6 +32,52 @@ function get_cookie_options(int $expires): array
 }
 
 /**
+ * Returns the Unix timestamp of the most recently updated published post.
+ *
+ * Used as a coarse, monotonic content validator for conditional GETs: any post
+ * edit/publish moves it forward, so anonymous pages revalidate; the max-age
+ * window covers edge cases (config edits, scheduled posts going live).
+ *
+ * @return int Unix timestamp, or 0 when there is no published content yet.
+ */
+function latest_content_timestamp(): int
+{
+    $latest = R::findOne('post', \Lamb\SQL_PUBLISHED . ' ORDER BY updated DESC LIMIT 1');
+    $post_ts = ($latest !== null && !empty($latest->updated)) ? (strtotime($latest->updated) ?: 0) : 0;
+    return max($post_ts, \Lamb\Config\config_modified_timestamp());
+}
+
+/**
+ * Emits ETag/Last-Modified validators for a cacheable response and short-circuits
+ * with 304 Not Modified when the client already holds the current version.
+ *
+ * No-ops when there is no content timestamp. Callers must only use this for
+ * cacheable (anonymous, non-error) GET/HEAD responses, before any output.
+ *
+ * Last-Modified is the second-resolution max() of the two timestamps (the only
+ * resolution HTTP-date supports), while the ETag keeps them distinct so a config
+ * edit in the same second as the latest post still invalidates caches (#279).
+ *
+ * @param int $contentTs Unix timestamp of the most recent content change.
+ * @param int $configTs  Unix timestamp of the last config edit.
+ * @return void
+ */
+function send_304_if_current(int $contentTs, int $configTs): void
+{
+    $lastModifiedTs = max($contentTs, $configTs);
+    if ($lastModifiedTs <= 0) {
+        return;
+    }
+    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs);
+    header('ETag: ' . $etag);
+    header('Last-Modified: ' . \Lamb\Bootstrap\http_date($lastModifiedTs));
+    if (\Lamb\Bootstrap\client_has_current_version($_SERVER, $etag, $lastModifiedTs)) {
+        http_response_code(304);
+        exit;
+    }
+}
+
+/**
  * Builds a SQL NOT IN clause for excluding posts by slug.
  *
  * @param array $slugs Slugs to exclude.

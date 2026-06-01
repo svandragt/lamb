@@ -191,6 +191,29 @@ function get_feed_data(): array
 }
 
 /**
+ * Sets caching headers for an anonymous feed response.
+ *
+ * Feeds are polled by readers rather than browsed, so they get a longer max-age
+ * than regular pages, plus a conditional-GET 304 short-circuit keyed on the
+ * feed's freshest item. No-op for logged-in users (their responses are private).
+ *
+ * @param string $updated The feed's latest-updated datetime string.
+ * @return void
+ */
+function feed_cache(string $updated): void
+{
+    if (isset($_SESSION[SESSION_LOGIN])) {
+        return;
+    }
+    header('Cache-Control: max-age=1800');
+    // Fold in config edits so changes to feed-affecting settings (title, menu
+    // exclusions, …) invalidate cached feeds immediately.
+    $config_ts = Config\config_modified_timestamp();
+    $ts = max(strtotime($updated) ?: 0, $config_ts);
+    send_304_if_current($ts, $config_ts);
+}
+
+/**
  * Responds to a feed request by fetching and rendering the Atom feed.
  *
  * @return void
@@ -204,6 +227,7 @@ function respond_feed(): void
     foreach ($feed_data as $key => $value) {
         $data[$key] = $value;
     }
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed", '');
@@ -225,6 +249,7 @@ function respond_feed_json(): void
         $data[$key] = $value;
     }
     $data['feed_url'] = ROOT_URL . '/feed.json';
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed_json", '');
@@ -275,6 +300,7 @@ function respond_tag_feed(array $args): void
     foreach ($feed_data as $key => $value) {
         $data[$key] = $value;
     }
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed", '');
@@ -301,6 +327,7 @@ function respond_tag_feed_json(array $args): void
         $data[$key] = $value;
     }
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed_json", '');

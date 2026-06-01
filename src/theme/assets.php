@@ -44,6 +44,26 @@ function the_scripts(): void
 }
 
 /**
+ * Computes a content-addressed cache-busting version for an asset.
+ *
+ * Hashing the file contents (not the URL) means the version only changes when the
+ * file actually changes, so a deploy invalidates stale browser/CDN copies while
+ * returning visitors keep their cache across deploys that leave the file untouched.
+ * Falls back to hashing the URL when the file cannot be read (e.g. a remote asset).
+ *
+ * @param string $local_path Absolute filesystem path to the asset.
+ * @param string $href       The public URL of the asset (used as a fallback).
+ * @return string 32-character hex hash.
+ */
+function asset_version(string $local_path, string $href): string
+{
+    if (is_file($local_path)) {
+        return md5_file($local_path) ?: md5($href);
+    }
+    return md5($href);
+}
+
+/**
  * Loads and yields asset URLs for the application.
  *
  * The array key controls when each group of files is emitted:
@@ -53,7 +73,7 @@ function the_scripts(): void
  *
  * @param array  $assets    Associative array: key = subdirectory condition, value = array of filenames.
  * @param string $asset_dir Base directory for the assets.
- * @return Generator Yields md5($contents) => $href for each asset to load.
+ * @return Generator Yields asset_version($contents) => $href for each asset to load.
  */
 function asset_loader(array $assets, string $asset_dir): Generator
 {
@@ -74,7 +94,8 @@ function asset_loader(array $assets, string $asset_dir): Generator
         foreach ($files as $file) {
             $path = $dir ? "$asset_dir/$dir/$file" : "$asset_dir/$file";
             $href = ROOT_URL . '/' . ltrim($path, '/');
-            $hash = md5($href);
+            $local_path = (defined('ROOT_DIR') ? ROOT_DIR : '') . '/' . ltrim($path, '/');
+            $hash = asset_version($local_path, $href);
             yield $hash => $href;
         }
     }

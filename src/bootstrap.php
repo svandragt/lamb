@@ -52,16 +52,17 @@ function ensure_post_columns(): void
 }
 
 /**
- * Initializes and secures a session.
+ * Configures session security settings without starting the session.
  *
- * This method configures the session to enhance security by enabling strict mode,
- * making cookies inaccessible via JavaScript, and ensuring secure transmission over HTTPS.
- * It also sets a SameSite attribute to cookies to mitigate CSRF attacks.
- * Additionally, it validates the user agent to prevent session hijacking attempts.
+ * This hardens the session by enabling strict mode, making cookies inaccessible
+ * via JavaScript, ensuring secure transmission over HTTPS, and setting a SameSite
+ * attribute to mitigate CSRF. It also disables PHP's session cache limiter so that
+ * starting a session does not emit no-cache headers — the application manages cache
+ * headers itself (see cache_headers()).
  *
  * @return void
  */
-function bootstrap_session(): void
+function configure_session(): void
 {
     // Make cookies inaccessible via JavaScript (XSS).
     ini_set("session.cookie_httponly", 1);
@@ -80,5 +81,139 @@ function bootstrap_session(): void
     }
     session_set_cookie_params($cookie_params);
     session_name('LAMBSESSID');
+
+    // We manage Cache-Control ourselves (cache_headers()). Without this, session_start()
+    // would emit no-store/no-cache on every page that has a session, defeating caching.
+    session_cache_limiter('');
+}
+
+/**
+ * Decides whether a request should resume/start a PHP session.
+ *
+ * A session is only warranted when the request carries evidence of a (previously)
+ * logged-in user: the lamb_logged_in marker cookie set at login, or an existing
+ * LAMBSESSID session cookie. Anonymous visitors get no session — and therefore no
+ * Set-Cookie and no no-cache headers — so their pages remain cacheable (issue #116).
+ *
+ * @param array $cookies Typically $_COOKIE.
+ * @return bool
+ */
+function should_start_session(array $cookies): bool
+{
+    return isset($cookies['lamb_logged_in']) || isset($cookies['LAMBSESSID']);
+}
+
+/**
+ * Starts the session if one is not already active. Idempotent.
+ *
+ * Routes that need a session for an otherwise-anonymous request (the login page,
+ * CSRF-protected POSTs, setting a flash before redirecting) call this explicitly.
+ * configure_session() must have run first.
+ *
+ * @return void
+ */
+function start_session(): void
+{
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        return;
+    }
     session_start();
+}
+
+/**
+ * Initializes and secures a session, starting it only for (previously) logged-in users.
+ *
+ * @return void
+ */
+function bootstrap_session(): void
+{
+    configure_session();
+    if (should_start_session($_COOKIE)) {
+        start_session();
+    }
+}
+
+/**
+ * Returns the Cache-Control headers to emit for the current request.
+ *
+ * Logged-in responses are private and uncacheable; anonymous responses are
+ * cacheable so a CDN/reverse-proxy/browser can serve them without hitting PHP.
+ *
+ * Vary: Cookie tells shared caches to key on the request cookies, so a cached
+ * anonymous page is never served to a logged-in user (who always carries the
+ * session/login cookie) and vice versa.
+ *
+ * @param bool $logged_in Whether the current visitor is logged in.
+ * @return string[] Header strings ready to pass to header().
+ */
+function cache_headers(bool $logged_in): array
+{
+    if ($logged_in) {
+        return [
+            'Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0',
+            'Pragma: no-cache',
+            'Vary: Cookie',
+        ];
+    }
+    return [
+        'Cache-Control: max-age=300',
+        'Vary: Cookie',
+    ];
+}
+
+/**
+ * Formats a Unix timestamp as an RFC 7231 HTTP-date (always GMT).
+ *
+ * @param int $ts Unix timestamp.
+ * @return string e.g. "Thu, 01 Jan 1970 00:00:00 GMT".
+ */
+function http_date(int $ts): string
+{
+    return gmdate('D, d M Y H:i:s', $ts) . ' GMT';
+}
+
+/**
+ * Builds a strong ETag from the content and config change timestamps.
+ *
+ * The two components are kept distinct rather than collapsed to their max(): a
+ * settings edit and a post update can land in the same whole second, and a
+ * single-timestamp ETag would not change in that case, so the edit would not
+ * invalidate cached pages. Folding both in means either source moving (even
+ * within the same second) yields a different ETag (issue #279).
+ *
+ * @param int $contentTs Unix timestamp of the most recent content change (the response's last-modified).
+ * @param int $configTs  Unix timestamp of the last config edit.
+ * @return string A quoted ETag value.
+ */
+function content_etag(int $contentTs, int $configTs): string
+{
+    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '"';
+}
+
+/**
+ * Decides whether the client already holds the current version of a response,
+ * so a 304 Not Modified can be returned instead of a full body.
+ *
+ * Honours both If-None-Match (against the ETag) and If-Modified-Since (against
+ * the last-modified timestamp).
+ *
+ * @param array  $server          Typically $_SERVER.
+ * @param string $etag            The current response ETag.
+ * @param int    $lastModifiedTs  The current last-modified Unix timestamp.
+ * @return bool
+ */
+function client_has_current_version(array $server, string $etag, int $lastModifiedTs): bool
+{
+    $if_none_match = trim($server['HTTP_IF_NONE_MATCH'] ?? '');
+    if ($if_none_match !== '' && $if_none_match === $etag) {
+        return true;
+    }
+    $if_modified_since = $server['HTTP_IF_MODIFIED_SINCE'] ?? '';
+    if ($if_modified_since !== '') {
+        $since = strtotime($if_modified_since);
+        if ($since !== false && $lastModifiedTs <= $since) {
+            return true;
+        }
+    }
+    return false;
 }

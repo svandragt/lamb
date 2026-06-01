@@ -30,6 +30,24 @@ to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP ver
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
 ```
 
+## Caching uploaded assets
+
+Files dropped into posts are stored under `src/assets/` with content-addressed
+names (a hash of the file), so their URL changes whenever the content changes.
+That makes them safe to cache aggressively and indefinitely. Add a `location`
+block so NGINX serves them with a long, immutable cache:
+
+```nginx
+location /assets/ {
+    expires 1y;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+Theme CSS and application JavaScript are already cache-busted by a content hash
+in their query string (`?ver=…`), so the same long-cache treatment is safe for
+`/themes/` and `/scripts/` if you wish to add them.
+
 ## Restart services
 
 ```shell

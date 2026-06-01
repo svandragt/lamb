@@ -22,6 +22,10 @@ use Random\RandomException;
  */
 function redirect_login(): ?array
 {
+    // The login page needs a session for the CSRF token and any flash messages,
+    // even for an otherwise-anonymous visitor who carries no session cookie yet.
+    \Lamb\Bootstrap\start_session();
+
     // Prevent caching for this page
     header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
     header("Cache-Control: post-check=0, pre-check=0", false);
@@ -84,11 +88,25 @@ function local_redirect_target(?string $value): string
 #[NoReturn]
 function redirect_logout(): void
 {
-    unset($_SESSION[SESSION_LOGIN]);
+    $_SESSION = [];
 
+    // Clear the login marker cookie.
     setcookie('lamb_logged_in', '', get_cookie_options(time() - 3600));
 
-    session_regenerate_id(true);
+    // Expire the session cookie too, so subsequent requests are fully anonymous
+    // (no session started, responses cacheable again — issue #116).
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', [
+        'expires'  => time() - 3600,
+        'path'     => $params['path'],
+        'secure'   => $params['secure'],
+        'httponly' => $params['httponly'],
+        'samesite' => $params['samesite'],
+    ]);
+
+    if (session_status() === PHP_SESSION_ACTIVE) {
+        session_destroy();
+    }
     redirect_uri('/');
 }
 

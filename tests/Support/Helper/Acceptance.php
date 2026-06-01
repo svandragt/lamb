@@ -28,4 +28,38 @@ class Acceptance extends Module
             @unlink($db);
         }
     }
+
+    /**
+     * Returns all values of a response header, joined by newlines.
+     *
+     * The installed PhpBrowser/InnerBrowser has no seeHttpHeader/grabHttpHeader,
+     * so we reach into the BrowserKit client's last response directly.
+     */
+    public function grabResponseHeader(string $name): string
+    {
+        /** @var \Codeception\Module\PhpBrowser $browser */
+        $browser = $this->getModule('PhpBrowser');
+        $values = $browser->client->getInternalResponse()->getHeader($name, false);
+        return implode("\n", (array) $values);
+    }
+
+    public function seeResponseHeaderContains(string $name, string $needle): void
+    {
+        $this->assertStringContainsString($needle, $this->grabResponseHeader($name));
+    }
+
+    public function dontSeeResponseHeaderContains(string $name, string $needle): void
+    {
+        $this->assertStringNotContainsString($needle, $this->grabResponseHeader($name));
+    }
+
+    public function seeResponseHeaderExists(string $name): void
+    {
+        $this->assertNotSame('', $this->grabResponseHeader($name), "Expected response header $name to be present");
+    }
+
+    public function dontSeeResponseHeader(string $name): void
+    {
+        $this->assertSame('', $this->grabResponseHeader($name), "Expected response header $name to be absent");
+    }
 }
