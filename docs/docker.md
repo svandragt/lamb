@@ -38,6 +38,23 @@ $ docker compose up --build -d
 
 The `-d` flag is used to start the containers in the background (detached mode).
 
-## Known issues
+## Running tests
 
-- Codeception cannot be run from within the docker container
+Codeception runs inside the `lamb-app` container. The whole project is mounted
+at `/srv/app`, so the test suites and configuration are available there.
+
+The test runner reads `.env` for its parameters, so make sure you have generated
+one with the `make-password.php` step from [Setup](#setup) before running the
+tests.
+
+```shell
+# Unit tests (fast, no server required)
+$ docker exec -it lamb-app vendor/bin/codecept run Unit
+
+# Full suite, including acceptance tests against the running stack
+$ docker exec -it lamb-app vendor/bin/codecept run
+```
+
+Acceptance tests use `SITE_URL`, which `make-password.php` automatically sets to
+`http://lamb-web` (the Caddy container) when run inside the container, so they
+exercise the live Docker stack.
