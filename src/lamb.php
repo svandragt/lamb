@@ -280,6 +280,30 @@ function is_scheduled(OODBBean $post): bool
 }
 
 /**
+ * Returns true when a post may be shown for a direct permalink request
+ * (/status/<id> or a slug URL).
+ *
+ * Deleted posts are never visible. Drafts and posts scheduled for the future
+ * are visible only to the logged-in author, so they can preview their own
+ * work by permalink; anonymous visitors get a 404. This is the single-post
+ * counterpart to visible_clause() (the SQL allow-list for listings), with the
+ * added logged-in preview exception.
+ *
+ * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
+ * @return bool
+ */
+function is_visible(OODBBean $post): bool
+{
+    if (empty($post->id) || $post->deleted == 1) {
+        return false;
+    }
+    if (isset($_SESSION[SESSION_LOGIN])) {
+        return true;
+    }
+    return $post->draft != 1 && !is_scheduled($post);
+}
+
+/**
  * Checks if a post with the given slug exists in the database.
  *
  * @param string $lookup The slug of the post to look up.
