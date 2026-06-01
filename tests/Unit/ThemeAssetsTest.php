@@ -120,6 +120,35 @@ class ThemeAssetsTest extends TestCase
         $this->assertStringContainsString('confirm-delete.js', $output);
         $this->assertStringContainsString('link-edit-buttons.js', $output);
         $this->assertStringContainsString('upload-image.js', $output);
+        $this->assertStringContainsString('paste-link.js', $output);
+    }
+
+    public function testTheScriptsDoesNotIncludePasteLinkJsWhenNotLoggedIn(): void
+    {
+        unset($_SESSION[SESSION_LOGIN]);
+
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        $this->assertStringNotContainsString('paste-link.js', $output);
+    }
+
+    public function testTheScriptsPasteLinkJsUrlPointsToExistingFile(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        preg_match('/src="([^"]*paste-link\.js[^"]*)"/', $output, $m);
+        $this->assertNotEmpty($m, 'paste-link.js src attribute not found in output');
+
+        $url_path = parse_url($m[1], PHP_URL_PATH);
+        $project_src = dirname(__DIR__, 2) . '/src/';
+        $file = $project_src . ltrim($url_path, '/');
+        $this->assertFileExists($file, "Script file not found at $file — URL '$url_path' does not resolve to a real file");
     }
 
     public function testTheScriptsIncludesSearchHighlightJsWhenTemplateIsSearch(): void

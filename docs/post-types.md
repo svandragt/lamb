@@ -10,6 +10,8 @@ The default, add some words into the textarea and press the publish button. Any 
 
 Any tags are automatically linked to tag archives.
 
+Select some text and paste a link over it to turn the selection into a markdown link, e.g. selecting `Lamb` and pasting `https://example.com` produces `[Lamb](https://example.com)`.
+
 Permalinks for statuses are in the form of `/status/<integer>`.
 
 ```markdown
