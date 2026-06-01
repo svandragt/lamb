@@ -71,7 +71,10 @@ function parse_matter(string $body): array
     $text = explode('---', $body);
     try {
         if (isset($text[1])) {
-            $matter = Yaml::parse($text[1]);
+            // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
+            // author's typed wall-clock time, instead of coercing them to UTC Unix
+            // timestamps (which would shift the time by the server's timezone offset).
+            $matter = Yaml::parse($text[1], Yaml::PARSE_DATETIME);
         }
     } catch (ParseException) {
         // Invalid YAML
@@ -95,7 +98,12 @@ function slugify(string $text): string
 }
 
 /**
- * Returns SQL conditions and parameters for matching posts that contain the given tag.
+ * Returns a broad SQL prefilter for posts whose body contains the given tag.
+ *
+ * The SQL is deliberately permissive (it also matches longer tags that share
+ * this prefix, e.g. `#tildes` for `til`); callers must refine the result set
+ * with body_has_tag() so the match honours the same delimiter rules as the
+ * inline tag renderer (Lamb\parse_tags).
  *
  * @param string $tag The tag to match.
  * @return array{sql: string, params: array}
@@ -103,9 +111,25 @@ function slugify(string $text): string
 function get_tag_search_conditions(string $tag): array
 {
     return [
-        'sql'    => 'body LIKE ? OR body LIKE ? OR body LIKE ?',
-        'params' => ["%#$tag %", "%\n#$tag %", "%#$tag"],
+        'sql'    => 'body LIKE ?',
+        'params' => ["%#$tag%"],
     ];
+}
+
+/**
+ * Returns true if $body contains $tag as a hashtag, using the same boundary
+ * rules as the inline tag renderer (Lamb\parse_tags): the tag must follow the
+ * start of the string, whitespace, or `>`, and be followed by whitespace, the
+ * end of the string, or one of the tag-terminating punctuation characters.
+ *
+ * @param string $tag  The tag to look for (without the leading `#`).
+ * @param string $body The raw post body.
+ * @return bool
+ */
+function body_has_tag(string $tag, string $body): bool
+{
+    $pattern = '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[\s#&.,!?;:()\[\]{}<]|$)/iu';
+    return (bool) preg_match($pattern, $body);
 }
 
 /**
@@ -118,9 +142,13 @@ function get_tag_search_conditions(string $tag): array
 function posts_by_tag(string $tag): array
 {
     $conditions = get_tag_search_conditions($tag);
-    return R::find(
+    $not_scheduled = \Lamb\not_scheduled_clause();
+    $posts = R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) ORDER BY created DESC',
-        $conditions['params']
+        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) AND'
+            . $not_scheduled['sql'] . 'ORDER BY created DESC',
+        array_merge($conditions['params'], $not_scheduled['params'])
     );
+
+    return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));
 }

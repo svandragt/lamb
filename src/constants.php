@@ -10,6 +10,10 @@
 
 define('HIDDEN_CSRF_NAME', 'csrf');
 define('IMAGE_FILES', 'imageFiles');
+// Image extensions accepted for upload. SVG is excluded: it can carry scripts.
+define('IMAGE_UPLOAD_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
+// Seconds before a single feed fetch is abandoned during /_cron ingestion.
+define('FEED_FETCH_TIMEOUT', 15);
 define('MINUTE_IN_SECONDS', 60);
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');

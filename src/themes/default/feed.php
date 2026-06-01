@@ -3,9 +3,11 @@
 global $config;
 global $data;
 
-function escape(string $html): string
-{
-    return htmlspecialchars($html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+if (!function_exists('escape')) {
+    function escape(string $html): string
+    {
+        return htmlspecialchars($html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+    }
 }
 
 header('Content-type: application/atom+xml');
@@ -23,17 +25,19 @@ $Link->addAttribute('href', escape($channel_link));
 
 $Author = $Xml->addChild('author');
 $Author->addChild('name', escape($config['author_name']));
-$Author->addChild('email', escape($config['author_email']));
+$Author->addChild('uri', ROOT_URL);
 
 foreach ($data['posts'] as $bean) {
     $Entry = $Xml->addChild('entry');
     $Entry->addChild('id', Lamb\permalink($bean));
-    $Entry->addChild('title', escape($bean->title ?? ''));
+    $Entry->addChild('title', escape($bean->title ?: ''));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
     $Content = $Entry->addChild('content', $bean->transformed);
     $Content->addAttribute('type', 'html');
     $Link = $Entry->addChild('link');
+    $Link->addAttribute('rel', 'alternate');
+    $Link->addAttribute('type', 'text/html');
     $Link->addAttribute('href', Lamb\permalink($bean));
 }
 echo $Xml->asXML();

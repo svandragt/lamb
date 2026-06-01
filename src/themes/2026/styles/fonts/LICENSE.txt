@@ -1,0 +1,20 @@
+Bundled webfonts in this directory are distributed under the SIL Open Font
+License, Version 1.1 (https://openfontlicense.org/).
+
+Geist Mono
+    Copyright 2023 The Geist Mono Project Authors
+    https://github.com/vercel/geist-font
+    Files: geist-mono-*.woff2
+
+Public Sans
+    Copyright 2015 The Public Sans Authors
+    https://github.com/uswds/public-sans
+    Files: public-sans-*.woff2
+
+The full SIL OFL 1.1 text is available at:
+    https://openfontlicense.org/open-font-license-official-text/
+
+Latin and latin-extended subsets were obtained from the Google Fonts CSS
+API (fonts.googleapis.com/css2) and saved as woff2 with no further
+modification. To refresh, fetch the Google Fonts CSS for the same
+families and weights and replace the files in place.

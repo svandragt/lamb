@@ -557,6 +557,43 @@ class MicropubAdapterTest extends TestCase
         $this->assertEmpty($post->draft);
     }
 
+    public function testCreateCallbackWithScheduledPostStatusIsNotMarkedDraft(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $future = date('Y-m-d\TH:i:sP', strtotime('+1 day'));
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'     => ['A scheduled micropub post'],
+                'post-status' => ['scheduled'],
+                'published'   => [$future],
+            ],
+        ];
+        $adapter->createCallback($data, []);
+        $post = R::findOne('post', ' body = ? ', ['A scheduled micropub post']);
+        $this->assertNotNull($post);
+        $this->assertEmpty($post->draft, 'Scheduled posts must not be marked as drafts');
+        $this->assertGreaterThan(date('Y-m-d H:i:s'), $post->created, 'Scheduled post keeps its future publish date');
+    }
+
+    public function testCreateCallbackWithFuturePublishedDateHidesFromHome(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $future = date('Y-m-d\TH:i:sP', strtotime('+1 day'));
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'   => ['A future dated micropub post'],
+                'published' => [$future],
+            ],
+        ];
+        $adapter->createCallback($data, []);
+
+        $result = \Lamb\Response\respond_home();
+        $bodies = array_map(static fn($p) => $p->body, $result['posts']);
+        $this->assertNotContains('A future dated micropub post', $bodies, 'Future-dated micropub posts must not appear on the homepage');
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();

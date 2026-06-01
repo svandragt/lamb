@@ -1,6 +1,5 @@
 source "https://rubygems.org"
 
-gem "jekyll", "~> 4.3"
-gem "jekyll-remote-theme"
-gem "just-the-docs"
+# Use the github-pages gem so local builds match GitHub Pages' Jekyll version.
+gem "github-pages", group: :jekyll_plugins
 gem "webrick", "~> 1.8"

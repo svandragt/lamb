@@ -28,10 +28,11 @@ this can be done is by adding a cron job on the server or via an external servic
 It's not possible to check more often than once every minute, and each feed individually will be cached for 30 minutes
 to avoid spamming the endpoint.
 
-It is your responsibility to [call the `_cron` endpoint]({% link cron-scheduled-tasks.md %}), unlike other CMSes you might be used to.
+It is your responsibility to [call the `_cron` endpoint]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}), unlike other CMSes you might be used to.
 
 ## Related
 
-* [Cron Scheduled Tasks]({% link cron-scheduled-tasks.md %}): How to call the `/_cron` endpoint periodically.
-* [Drafts]({% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
-* [Site Configuration]({% link site-configuration.md %}): The `[feeds]` section is configured here.
+* [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How to call the `/_cron` endpoint periodically.
+* [Feeds]({{ site.baseurl }}{% link feeds.md %}): The Atom and JSON feeds Lamb publishes for your own posts.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[feeds]` section is configured here.

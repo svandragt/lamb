@@ -44,8 +44,13 @@ function respond_upload(array $_args): void
             die();
         }
         // File upload successful
+        $ext = safe_upload_extension($f['name']);
+        if ($ext === null) {
+            header('HTTP/1.1 400 Bad Request');
+            echo json_encode('Unsupported file type.', JSON_THROW_ON_ERROR);
+            die();
+        }
         $temp_fp = $f['tmp_name'];
-        $ext = pathinfo($f['name'])['extension'];
         $new_fn = sha1($f['name']) . ".$ext";
         $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
         if (!move_uploaded_file($temp_fp, $new_fp)) {
@@ -58,6 +63,27 @@ function respond_upload(array $_args): void
 
     echo json_encode($out, JSON_THROW_ON_ERROR);
     die();
+}
+
+/**
+ * Returns a safe, lower-cased file extension for an uploaded file, or null if the
+ * extension is not an allowed image type.
+ *
+ * Uploads land under the web root (src/assets/), so the extension is the line of
+ * defence against writing executable files (e.g. .php). Only the allowlisted image
+ * extensions are accepted; anything else (including extensionless names) is rejected.
+ *
+ * @param string $filename The client-supplied filename.
+ * @return string|null The allowed lower-case extension, or null when not permitted.
+ */
+function safe_upload_extension(string $filename): ?string
+{
+    $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    if ($ext === '' || !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true)) {
+        return null;
+    }
+
+    return $ext;
 }
 
 /**

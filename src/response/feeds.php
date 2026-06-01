@@ -14,6 +14,7 @@ use function Lamb\Theme\part;
 
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
+use const Lamb\SQL_IS_SCHEDULED;
 use const Lamb\SQL_PUBLISHED;
 use const ROOT_URL;
 
@@ -38,6 +39,9 @@ function respond_home(): array
         $where_sql .= ' AND ' . $clause['sql'];
         $where_params = $clause['params'];
     }
+    $not_scheduled = \Lamb\not_scheduled_clause();
+    $where_sql .= ' AND ' . $not_scheduled['sql'];
+    $where_params = array_merge($where_params, $not_scheduled['params']);
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
@@ -100,6 +104,33 @@ function count_trash(): int
 }
 
 /**
+ * Responds with the scheduled page showing posts dated in the future (login required).
+ *
+ * @return array The scheduled page data including posts and pagination.
+ */
+function respond_scheduled(): array
+{
+    Security\require_login();
+
+    $data['title'] = 'Scheduled';
+    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    $data['posts'] = $paginated['items'];
+    $data['pagination'] = $paginated['pagination'];
+
+    return $data;
+}
+
+/**
+ * Returns the count of scheduled (future-dated) posts.
+ *
+ * @return int
+ */
+function count_scheduled(): int
+{
+    return R::count('post', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+}
+
+/**
  * Redirects the user to a search page with the provided query.
  *
  * @param string $query The search query to be included in the redirected URL.
@@ -133,15 +164,21 @@ function get_feed_data(): array
 {
     global $config;
 
+    $not_scheduled = \Lamb\not_scheduled_clause();
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20',
-            $clause['params']
+            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql']
+                . 'ORDER BY updated DESC LIMIT 20',
+            array_merge($clause['params'], $not_scheduled['params'])
         );
     } else {
-        $posts = R::findAll('post', SQL_PUBLISHED . 'ORDER BY updated DESC LIMIT 20');
+        $posts = R::find(
+            'post',
+            SQL_PUBLISHED . 'AND' . $not_scheduled['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            $not_scheduled['params']
+        );
     }
 
     $first_post = reset($posts);
@@ -170,6 +207,27 @@ function respond_feed(): void
     upgrade_posts($data['posts']);
 
     part("feed", '');
+    die();
+}
+
+/**
+ * Responds to a JSON feed request by fetching and rendering the JSON Feed.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_feed_json(): void
+{
+    global $data;
+
+    $feed_data = get_feed_data();
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    $data['feed_url'] = ROOT_URL . '/feed.json';
+    upgrade_posts($data['posts']);
+
+    part("feed_json", '');
     die();
 }
 
@@ -224,6 +282,32 @@ function respond_tag_feed(array $args): void
 }
 
 /**
+ * Responds to a tag JSON feed request by rendering a JSON Feed for posts with a specific tag.
+ *
+ * @param array $args An array where the first element is the tag name.
+ * @return void
+ */
+#[NoReturn]
+function respond_tag_feed_json(array $args): void
+{
+    global $data;
+
+    [$tag] = $args;
+    $tag = urldecode($tag);
+    $tag = htmlspecialchars($tag);
+
+    $feed_data = get_tag_feed_data($tag);
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
+    upgrade_posts($data['posts']);
+
+    part("feed_json", '');
+    die();
+}
+
+/**
  * Responds to a search query with paginated results.
  *
  * @param array $args The first element should be the search query.
@@ -239,7 +323,9 @@ function respond_search(array $args): array
         }
         redirect_search($query);
     }
-    $query = htmlspecialchars($query);
+    // Keep $query raw: SQL uses bound parameters, and every output path
+    // (page title, search box) escapes at render time. Escaping here too would
+    // double-encode HTML metacharacters in the displayed search term.
 
     // Support multiple words filtering
     $words = explode(' ', $query);
@@ -249,7 +335,9 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED;
+    $not_scheduled = \Lamb\not_scheduled_clause();
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql'];
+    $params = array_merge($params, $not_scheduled['params']);
 
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 
@@ -316,7 +404,8 @@ function respond_tag(array $args): array
 {
     [$tag] = $args;
     $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
+    // Keep $tag raw: matching, URL-encoding and the page title each handle it
+    // correctly, and the title is escaped at render time (so no double-encoding).
 
     // Get all posts for this tag (in-memory array)
     $all_posts = posts_by_tag($tag);

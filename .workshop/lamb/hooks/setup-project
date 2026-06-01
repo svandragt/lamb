@@ -1,0 +1,21 @@
+#!/bin/bash
+# Runs as the 'workshop' user at every launch/refresh (cwd /project).
+# Mirrors devbox.json init_hook: composer install + pnpm install.
+set -euo pipefail
+
+# Enable pnpm via corepack (mirrors devbox DEVBOX_COREPACK_ENABLED).
+if command -v corepack >/dev/null 2>&1; then
+  corepack enable >/dev/null 2>&1 || true
+  corepack prepare pnpm@latest --activate >/dev/null 2>&1 || true
+fi
+
+if [ -f composer.json ]; then
+  composer install --no-interaction --prefer-dist
+fi
+
+if [ -f package.json ] && command -v pnpm >/dev/null 2>&1; then
+  # CI=true: run non-interactively (the mounted node_modules may have been
+  # created by a different package manager on the host; pnpm needs a TTY to
+  # confirm removing it otherwise).
+  CI=true pnpm install
+fi

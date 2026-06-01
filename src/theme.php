@@ -17,6 +17,7 @@ use RuntimeException;
 use function Lamb\get_tags;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 
 use const Lamb\SQL_PUBLISHED;
@@ -88,11 +89,12 @@ function action_edit(OODBBean $bean): string
 /**
  * Returns the current session CSRF token, creating one if it does not exist yet.
  *
- * @return string SHA-256 hex CSRF token stored in the session.
+ * @return string 64-character hex CSRF token (32 random bytes) stored in the session.
+ * @throws \Random\RandomException If no cryptographically secure source is available.
  */
 function csrf_token(): string
 {
-    $_SESSION[HIDDEN_CSRF_NAME] = $_SESSION[HIDDEN_CSRF_NAME] ?? hash('sha256', uniqid(mt_rand(), true));
+    $_SESSION[HIDDEN_CSRF_NAME] = $_SESSION[HIDDEN_CSRF_NAME] ?? bin2hex(random_bytes(32));
 
     return $_SESSION[HIDDEN_CSRF_NAME];
 }
@@ -137,7 +139,7 @@ function site_title($type = 'html'): string
     if ($type !== 'html') {
         return $config['site_title'];
     }
-    return sprintf('<h1>%s</h1>', $config['site_title']);
+    return sprintf('<h1>%s</h1>', escape($config['site_title']));
 }
 
 /**
@@ -176,7 +178,7 @@ function page_title(string $type = 'html'): string
         return $title;
     }
 
-    return sprintf('<h1>%s</h1>', $title);
+    return sprintf('<h1>%s</h1>', escape($title));
 }
 
 /**
@@ -230,6 +232,9 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
         $sql .= ' ORDER BY created DESC';
         $tag_posts = R::find('post', $sql, $params);
         foreach ($tag_posts as $tag_post) {
+            if (!body_has_tag($tag, (string) $tag_post->body)) {
+                continue;
+            }
             $related_posts[$tag_post->id] = $tag_post;
         }
         if (count($related_posts) >= $limit) {
@@ -365,14 +370,21 @@ function the_entry_form(): void
  */
 function admin_toolbar_html(): string
 {
-    $drafts = \Lamb\Response\count_drafts();
-    $trash  = \Lamb\Response\count_trash();
+    $drafts    = \Lamb\Response\count_drafts();
+    $scheduled = \Lamb\Response\count_scheduled();
+    $trash     = \Lamb\Response\count_trash();
 
-    $draftsLabel = 'Drafts' . ($drafts > 0 ? " ($drafts)" : '');
-    $trashLabel  = 'Trash'  . ($trash  > 0 ? " ($trash)"  : '');
+    $draftsLabel    = 'Drafts'    . ($drafts > 0 ? " ($drafts)" : '');
+    $scheduledLabel = 'Scheduled' . ($scheduled > 0 ? " ($scheduled)" : '');
+    $trashLabel     = 'Trash'     . ($trash  > 0 ? " ($trash)"  : '');
+
+    $scheduledLink = $scheduled > 0
+        ? '<a href="/scheduled">' . escape($scheduledLabel) . '</a>'
+        : '';
 
     return '<div id="admin-toolbar">'
         . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
+        . $scheduledLink
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
         . '<a href="/logout">Logout</a>'

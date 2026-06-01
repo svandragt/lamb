@@ -2,9 +2,21 @@ name: Playwright Tests
 on:
   push:
     branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
   pull_request:
+    paths:
+      - 'src/**'
+      - 'e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
 jobs:
-  test:
+  playwright:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:

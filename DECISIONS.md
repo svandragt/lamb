@@ -6,12 +6,21 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-05-29 — `docs/` is end-user documentation only
+
+**Status:** Accepted
+**Context:** `docs/` is published to GitHub Pages as Lamb's end-user manual. A `contributing.md` page (titled "Milestones") had crept in describing a `gh issue list` + ChatGPT workflow for generating milestone goals — a maintainer task, not something a blog operator needs.
+**Decision:** Keep `docs/` scoped to end-user documentation (installation, configuration, features). Contributor- and maintainer-facing material lives in root-level files (`README.md`, `CONTRIBUTING`, `BRANCHES`, `CLAUDE.md`, `DECISIONS.md`, `DESIGN.md`, `PRODUCT.md`). Removed `docs/contributing.md`.
+**Consequences:** Clearer audience for the docs site; contributor docs are discoverable in the repo root where they're conventionally expected. New pages added to `docs/` should be evaluated against the end-user scope.
+
+---
+
 ## 2026-03-17 — Feed items ingested as drafts by default
 
 **Status:** Accepted
 **Context:** Lamb is a single-author writer's blog. Previous behaviour published feed-ingested posts immediately, which prioritised syndication use over authorship. This was the wrong default for a tool aimed at individual writers.
 **Decision:** Feed items are now saved as drafts by default. Authors must review and publish them explicitly. Users who want syndication behaviour (publish immediately) can opt out by setting `feeds_draft = false` in the `[feeds]` config section.
-**Consequences:** Existing installs with no `feeds_draft` config will silently change behaviour on upgrade — new feed items will land as drafts. Documented in config comments and wiki.
+**Consequences:** Existing installs with no `feeds_draft` config will silently change behaviour on upgrade — new feed items will land as drafts. Documented in config comments and the docs.
 
 ---
 

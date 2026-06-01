@@ -146,6 +146,29 @@ class ThemeAssetsTest extends TestCase
         $this->assertStringNotContainsString('search-highlight.js', $output);
     }
 
+    public function testTheScriptsSearchHighlightJsUrlPointsToExistingFile(): void
+    {
+        // The asset_loader uses the array key as both a condition and a subdirectory path.
+        // search-highlight.js must live at src/scripts/search/search-highlight.js so that
+        // the emitted URL scripts/search/search-highlight.js resolves to a real file.
+        global $template;
+        $template = 'search';
+
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        preg_match('/src="([^"]*search-highlight\.js[^"]*)"/', $output, $m);
+        $this->assertNotEmpty($m, 'search-highlight.js src attribute not found in output');
+
+        // Strip ROOT_URL prefix and query string to get the relative URL path,
+        // then map it to the real filesystem under src/ using the project root.
+        $url_path = parse_url($m[1], PHP_URL_PATH);
+        $project_src = dirname(__DIR__, 2) . '/src/';
+        $file = $project_src . ltrim($url_path, '/');
+        $this->assertFileExists($file, "Script file not found at $file — URL '$url_path' does not resolve to a real file");
+    }
+
     // -------------------------------------------------------------------------
     // redirect_to
     // -------------------------------------------------------------------------

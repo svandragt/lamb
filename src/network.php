@@ -70,6 +70,8 @@ function purge_deleted_posts(): int
         /** @noinspection PhpDeprecationInspection */
         $feed->set_cache_location('../data/cache/simplepie');
         $feed->set_feed_url($url);
+        // Cap each fetch so a slow or hostile feed URL cannot stall the cron run.
+        $feed->set_timeout(FEED_FETCH_TIMEOUT);
         $feed->init();
         echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
 
@@ -162,7 +164,7 @@ function create_item(SimplePieItem $item, string $name)
 function get_structured_content(SimplePieItem $item, string $name): string
 {
     $contents = attributed_content($item, $name);
-    $title = addslashes($item->get_title());
+    $title = sanitize_feed_title($item->get_title());
     if (!empty($title)) {
         $contents = <<<MATTER
 ---
@@ -173,6 +175,30 @@ title: {$title}
 MATTER;
     }
     return $contents;
+}
+
+/**
+ * Sanitises a remote feed title before it is embedded in a post's YAML front matter.
+ *
+ * Front matter is delimited by `---` and parsed as YAML, so an untrusted title
+ * containing newlines could inject extra keys (e.g. `slug`, `created`) and a `---`
+ * sequence could close the block early. Whitespace is collapsed to single spaces,
+ * any run of three or more hyphens is shortened, the result is length-capped, and
+ * slashes/quotes are escaped (preserving the existing front-matter format).
+ *
+ * @param string $title The raw feed item title.
+ * @return string A single-line, length-capped, escaped title safe for front matter.
+ */
+function sanitize_feed_title(string $title): string
+{
+    $title = (string) preg_replace('/\s+/', ' ', $title);
+    $title = (string) preg_replace('/-{3,}/', '--', $title);
+    $title = trim($title);
+    if (mb_strlen($title) > 200) {
+        $title = rtrim(mb_substr($title, 0, 200));
+    }
+
+    return addslashes($title);
 }
 
 /**

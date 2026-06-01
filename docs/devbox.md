@@ -12,5 +12,3 @@ composer install
 LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
 
 ```
-
-**Contributors**: To facilitate debugging using XDebug, it's best to open the site as http://localhost:8747/

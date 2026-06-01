@@ -10,6 +10,7 @@ modules:
         url: "%SITE_URL%"
         curl:
           CURLOPT_PROXY: ""
+    - \Tests\Support\Helper\Acceptance
 extensions:
   enabled:
     - Codeception\Extension\RunProcess:

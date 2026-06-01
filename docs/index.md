@@ -6,12 +6,12 @@ title: Lamb
 
 <img src="https://github.com/svandragt/lamb/blob/main/src/images/og-image-lamb.jpg?raw=true" alt="Lamb made out of circuitry" />
 
-Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/readme.md).
+Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/README.md).
 
 ## Requirements
 
 - PHP 8.2 – 8.5
-- SQLite3, gettext, simplexml, mbstring extensions
+- SQLite3, gettext, simplexml, mbstring, pdo_mysql extensions (pdo_mysql is required by the database library even though Lamb uses SQLite)
 
 ## Getting started
 
@@ -27,32 +27,33 @@ Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
 Webservers:
 
-1. [Caddy]({% link caddy.md %})
-2. [Nginx]({% link nginx.md %})
+1. [Caddy]({{ site.baseurl }}{% link caddy.md %})
+2. [Nginx]({{ site.baseurl }}{% link nginx.md %})
 
 Containers:
 
-1. [Docker]({% link docker.md %})
+1. [Docker]({{ site.baseurl }}{% link docker.md %})
 
 Devtools / local environments / sandbox:
 
-1. [DDev]({% link ddev.md %}) local environments wrapper around Docker. Convenient.
-2. [Devbox]({% link devbox.md %}) portable, isolated, developer environments. Tidy.
-3. [Local PHP setup]({% link local-php-setup.md %}) DIY. Control.
+1. [DDev]({{ site.baseurl }}{% link ddev.md %}) local environments wrapper around Docker. Convenient.
+2. [Devbox]({{ site.baseurl }}{% link devbox.md %}) portable, isolated, developer environments. Tidy.
+3. [Local PHP setup]({{ site.baseurl }}{% link local-php-setup.md %}) DIY. Control.
 
 ## Main Topics
 
-* [Cron Scheduled Tasks]({% link cron-scheduled-tasks.md %})
-* [Cross-posting]({% link cross-posting.md %})
-* [Decision Log]({% link decision-log.md %})
-* [Drafts]({% link drafts.md %})
-* [Menu Items]({% link menu-items.md %})
-* [Micropub]({% link micropub.md %})
-* [Post Types]({% link post-types.md %})
-* [Preconnect]({% link preconnect.md %})
-* [Redirections]({% link redirections.md %})
-* [Search]({% link search.md %})
-* [Site Configuration]({% link site-configuration.md %})
-* [Themes]({% link themes.md %})
-* [Trash]({% link trash.md %})
-* [Upgrading]({% link upgrading.md %})
+* [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
+* [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %})
+* [Drafts]({{ site.baseurl }}{% link drafts.md %})
+* [Feeds]({{ site.baseurl }}{% link feeds.md %})
+* [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
+* [Micropub]({{ site.baseurl }}{% link micropub.md %})
+* [Post Types]({{ site.baseurl }}{% link post-types.md %})
+* [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
+* [Redirections]({{ site.baseurl }}{% link redirections.md %})
+* [Scheduling]({{ site.baseurl }}{% link scheduling.md %})
+* [Search]({{ site.baseurl }}{% link search.md %})
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %})
+* [Themes]({{ site.baseurl }}{% link themes.md %})
+* [Trash]({{ site.baseurl }}{% link trash.md %})
+* [Upgrading]({{ site.baseurl }}{% link upgrading.md %})

@@ -104,4 +104,14 @@ class LambTest extends TestCase
         $result = parse_tags('word#tag end');
         $this->assertStringNotContainsString('<a href', $result);
     }
+
+    public function testParseTagsDoesNotCreatePartialEntityReferenceInHref(): void
+    {
+        // Parsedown HTML-escapes & to &amp;, so "#foo&bar" in source becomes
+        // "#foo&amp;bar" in HTML. The old regex matched through "&amp" (stopping
+        // at ";") producing a broken href="/tag/foo&amp" — an incomplete entity.
+        $result = parse_tags('<p>#foo&amp;bar</p>');
+        $this->assertStringNotContainsString('href="/tag/foo&amp"', $result);
+        $this->assertStringContainsString('href="/tag/foo"', $result);
+    }
 }

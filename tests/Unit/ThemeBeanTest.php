@@ -65,6 +65,23 @@ class ThemeBeanTest extends TestCase
         $this->assertArrayHasKey(HIDDEN_CSRF_NAME, $_SESSION);
     }
 
+    public function testCsrfTokenIsHighEntropyHexString(): void
+    {
+        // Generated from a cryptographically secure source: 32 bytes -> 64 hex chars.
+        unset($_SESSION[HIDDEN_CSRF_NAME]);
+        $token = csrf_token();
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', $token);
+    }
+
+    public function testCsrfTokenDiffersAcrossSessions(): void
+    {
+        unset($_SESSION[HIDDEN_CSRF_NAME]);
+        $first = csrf_token();
+        unset($_SESSION[HIDDEN_CSRF_NAME]);
+        $second = csrf_token();
+        $this->assertNotSame($first, $second);
+    }
+
     // action_delete
 
     public function testActionDeleteReturnsEmptyWhenNotLoggedIn(): void
