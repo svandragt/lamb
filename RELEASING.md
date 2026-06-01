@@ -5,6 +5,10 @@ branch (see `BRANCHES`); `main` is the active development branch. Versions are
 plain SemVer tags (`0.9.0`); pre-releases use a suffix (`0.9.0-rc1`). There is
 no version string in the code — **the Git tag is the source of truth**.
 
+> **Run everything below from Lamb's devbox shell** (`devbox shell` in the repo)
+> or via `devbox run -- …`. The pre-push hook runs the test suite, which needs
+> PHP — a bare shell (or the *global* devbox) won't have it.
+
 ## 1. Pre-flight (on `main`)
 
 - [ ] All intended PRs are merged into `main`; nothing release-worthy is still open.
@@ -44,7 +48,7 @@ git log --format='- %s' <last-tag>..main
       the PR title). Group under **Added / Changed / Fixed**.
 - [ ] Call out anything requiring action on upgrade in an **Upgrade notes**
       section (e.g. "install the `pdo_mysql` PHP extension", config changes).
-- [ ] Save the notes to a temp file (e.g. `/tmp/notes.md`) for step 6.
+- [ ] Save the notes to a temp file (e.g. `/tmp/notes.md`) for step 5.
 
 ## 4. Merge `main` into `release`
 
@@ -54,19 +58,14 @@ git merge --no-ff main -m "Release <version>"
 git push origin release
 ```
 
-- [ ] Resolve any conflicts (rare — `release` should only trail `main`).
+- [ ] Resolve any conflicts (uncommon — `main` is the source of truth, though
+      `release` may also carry the occasional release-only commit).
 - [ ] Re-run `vendor/bin/codecept run` on `release` to confirm green.
 
-## 5. Tag
+## 5. Tag and create the GitHub release
 
-```sh
-git tag -a <version> -m "Lamb <version>"   # e.g. 0.9.0
-git push origin <version>
-```
-
-- [ ] Tag is created on the `release` branch tip.
-
-## 6. Create the GitHub release
+`gh release create` creates the tag itself at `--target release` (the pushed
+branch tip) and publishes the release in one step — no separate `git tag` needed.
 
 ```sh
 gh release create <version> \
@@ -77,11 +76,13 @@ gh release create <version> \
 # add --latest to mark a final release as the latest
 ```
 
+- [ ] Push `release` (step 4) first, so `--target release` tags the intended commit.
 - [ ] Final releases: pass `--latest`. Pre-releases: pass `--prerelease` and
       do **not** mark latest.
-- [ ] Verify on GitHub: `gh release view <version>`.
+- [ ] Verify: `gh release view <version>`, and `git fetch --tags` to pull the
+      tag `gh` created.
 
-## 7. Post-release
+## 6. Post-release
 
 - [ ] Announce / update any demo site if applicable.
 - [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a
