@@ -15,7 +15,6 @@ use function Lamb\Theme\part;
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
 use const Lamb\SQL_IS_SCHEDULED;
-use const Lamb\SQL_PUBLISHED;
 use const ROOT_URL;
 
 /**
@@ -32,16 +31,14 @@ function respond_home(): array
 
     $data['title'] = $config['site_title'];
 
-    $where_sql = SQL_PUBLISHED;
-    $where_params = [];
+    $visible = \Lamb\visible_clause();
+    $where_sql = $visible['sql'];
+    $where_params = $visible['params'];
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $where_sql .= ' AND ' . $clause['sql'];
-        $where_params = $clause['params'];
+        $where_params = array_merge($where_params, $clause['params']);
     }
-    $not_scheduled = \Lamb\not_scheduled_clause();
-    $where_sql .= ' AND ' . $not_scheduled['sql'];
-    $where_params = array_merge($where_params, $not_scheduled['params']);
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
@@ -164,20 +161,19 @@ function get_feed_data(): array
 {
     global $config;
 
-    $not_scheduled = \Lamb\not_scheduled_clause();
+    $visible = \Lamb\visible_clause();
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql']
-                . 'ORDER BY updated DESC LIMIT 20',
-            array_merge($clause['params'], $not_scheduled['params'])
+            $clause['sql'] . ' AND' . $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            array_merge($clause['params'], $visible['params'])
         );
     } else {
         $posts = R::find(
             'post',
-            SQL_PUBLISHED . 'AND' . $not_scheduled['sql'] . 'ORDER BY updated DESC LIMIT 20',
-            $not_scheduled['params']
+            $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            $visible['params']
         );
     }
 
@@ -362,9 +358,9 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $not_scheduled = \Lamb\not_scheduled_clause();
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql'];
-    $params = array_merge($params, $not_scheduled['params']);
+    $visible = \Lamb\visible_clause();
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $visible['sql'];
+    $params = array_merge($params, $visible['params']);
 
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 

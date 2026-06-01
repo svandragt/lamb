@@ -182,6 +182,27 @@ function not_scheduled_clause(): array
 }
 
 /**
+ * Returns the SQL fragment and bound parameters selecting only posts that are
+ * publicly visible to anonymous visitors: not draft, not deleted, and not
+ * scheduled for the future.
+ *
+ * This is the single allow-list definition of "visible". Every public listing
+ * query should use it instead of re-assembling SQL_PUBLISHED with
+ * not_scheduled_clause(), so a new query cannot accidentally omit one of the
+ * conditions (which is how scheduled posts leaked into related posts).
+ *
+ * @return array{sql: string, params: array}
+ */
+function visible_clause(): array
+{
+    $not_scheduled = not_scheduled_clause();
+    return [
+        'sql'    => SQL_PUBLISHED . 'AND' . $not_scheduled['sql'],
+        'params' => $not_scheduled['params'],
+    ];
+}
+
+/**
  * Rewrites the `created` value inside a body's leading YAML front-matter block to
  * the given resolved (absolute) datetime, leaving all other front-matter intact.
  *

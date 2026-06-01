@@ -19,8 +19,7 @@ use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
-
-use const Lamb\SQL_PUBLISHED;
+use function Lamb\visible_clause;
 
 /**
  * Returns true when the user is authenticated and the bean has an ID.
@@ -223,8 +222,9 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $sql = '(' . $conditions['sql'] . ') AND' . SQL_PUBLISHED;
-        $params = $conditions['params'];
+        $visible = visible_clause();
+        $sql = '(' . $conditions['sql'] . ') AND' . $visible['sql'];
+        $params = array_merge($conditions['params'], $visible['params']);
         if ($exclude_id > 0) {
             $sql .= ' AND id != ?';
             $params[] = $exclude_id;

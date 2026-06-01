@@ -142,12 +142,11 @@ function body_has_tag(string $tag, string $body): bool
 function posts_by_tag(string $tag): array
 {
     $conditions = get_tag_search_conditions($tag);
-    $not_scheduled = \Lamb\not_scheduled_clause();
+    $visible = \Lamb\visible_clause();
     $posts = R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND (draft IS NULL OR draft != 1) AND'
-            . $not_scheduled['sql'] . 'ORDER BY created DESC',
-        array_merge($conditions['params'], $not_scheduled['params'])
+        '(' . $conditions['sql'] . ') AND' . $visible['sql'] . 'ORDER BY created DESC',
+        array_merge($conditions['params'], $visible['params'])
     );
 
     return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));
