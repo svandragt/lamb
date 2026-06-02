@@ -28,7 +28,7 @@ Remove the value from the front matter and re-save to turn the post back into a 
 - **Atom feed**: emits `<thr:in-reply-to ref="…" href="…" />` (the `http://purl.org/syndication/thread/1.0` thread extension).
 - **JSON feed**: emits `_microblog.in_reply_to_url` (the micro.blog reply convention).
 
-If you also have [webmention sending]({{ site.baseurl }}{% link webmentions.md %}) configured, replying to a page that links back is the most common kind of webmention — the link in your reply is picked up and the parent is notified on the next `/_cron` run.
+Replying to a page is the most common kind of [webmention]({{ site.baseurl }}{% link webmentions.md %}), and Lamb sends them automatically — there is nothing to configure. The link in your reply is picked up and the parent is notified on the next `/_cron` run.
 
 ## Related
 
