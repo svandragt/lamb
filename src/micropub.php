@@ -474,8 +474,25 @@ class LambMicropubAdapter extends MicropubAdapter
                 continue;
             }
             $uploadDir = \Lamb\Response\get_upload_dir();
-            $filename  = sha1($file->getClientFilename() ?? uniqid('', true)) . ".$ext";
-            $file->moveTo($uploadDir . '/' . $filename);
+            $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
+
+            // Re-encode JPEG/PNG to WebP via a temp copy of the stream; fall back to
+            // storing the original bytes when conversion isn't possible.
+            $filename = null;
+            if (\Lamb\Response\should_convert_to_webp($ext)) {
+                $tmp = tempnam(sys_get_temp_dir(), 'lamb_up_');
+                if ($tmp !== false) {
+                    file_put_contents($tmp, (string) $file->getStream());
+                    if (\Lamb\Response\convert_to_webp($tmp, $uploadDir . '/' . $seed . '.webp')) {
+                        $filename = $seed . '.webp';
+                    }
+                    unlink($tmp);
+                }
+            }
+            if ($filename === null) {
+                $filename = $seed . ".$ext";
+                $file->moveTo($uploadDir . '/' . $filename);
+            }
 
             $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
         }
@@ -744,8 +761,17 @@ function respond_micropub_media(): void
     }
 
     $uploadDir = \Lamb\Response\get_upload_dir();
-    $filename  = sha1(($file['name'] ?? '') . uniqid('', true)) . ".$ext";
-    move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+    $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
+
+    // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
+    $converted = \Lamb\Response\should_convert_to_webp($ext)
+        && \Lamb\Response\convert_to_webp($file['tmp_name'], $uploadDir . '/' . $seed . '.webp');
+    if ($converted) {
+        $filename = $seed . '.webp';
+    } else {
+        $filename = $seed . ".$ext";
+        move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+    }
 
     $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;
 

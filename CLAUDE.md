@@ -345,7 +345,7 @@ When the user is logged in, it also loads:
 
 User-uploaded files live under `src/assets/`, not under theme directories.
 
-`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`); GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 
