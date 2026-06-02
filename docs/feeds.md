@@ -29,12 +29,13 @@ micro.blog render the icon as the feed's avatar in their timeline.
 These are sourced by convention from the web root (next to `index.php`) — no
 configuration is needed:
 
-| File | Atom element | Shape |
-|------|--------------|-------|
-| `favicon.png` | `<icon>` | small square avatar |
-| `logo.png` | `<logo>` | wider banner (roughly 2:1) |
+| File | Atom element | Aspect ratio ([RFC 4287](https://www.rfc-editor.org/rfc/rfc4287)) |
+|------|--------------|------------------------------------------------------------------|
+| `favicon.png` | `<icon>` | 1:1 — small square avatar ([§4.2.5](https://www.rfc-editor.org/rfc/rfc4287#section-4.2.5)) |
+| `logo.png` | `<logo>` | 2:1 — twice as wide as tall ([§4.2.8](https://www.rfc-editor.org/rfc/rfc4287#section-4.2.8)) |
 
-Drop either file into the `src/` directory (the web root). Each element is only
+The RFC recommends these aspect ratios but does not mandate pixel sizes. Drop
+either file into the `src/` directory (the web root). Each element is only
 included when its file exists, so the feed never points at a missing image.
 
 ## Related
