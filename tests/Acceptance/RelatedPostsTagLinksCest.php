@@ -20,11 +20,26 @@ class RelatedPostsTagLinksCest
         $I->click('Create post');
     }
 
+    /**
+     * Pin the active theme so this test exercises the reference theme it asserts.
+     *
+     * The default theme for new installs is `2026`, whose related-posts section
+     * deliberately omits the per-item tag links this test checks. `base` is the
+     * full-feature reference theme that renders them, so pin to it explicitly.
+     */
+    private function useBaseTheme(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/settings');
+        $I->fillField('ini_text', "theme = base\n");
+        $I->click('Save settings');
+    }
+
     public function relatedPostsContainLinkedTags(AcceptanceTester $I): void
     {
         $tag = 'relatedtagtest' . uniqid();
 
         $this->login($I);
+        $this->useBaseTheme($I);
         $this->createPost($I, "First post about #$tag");
         $this->createPost($I, "Second post about #$tag");
 

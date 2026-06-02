@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
 
@@ -87,5 +88,14 @@ class ConfigTest extends TestCase
 
         $this->assertFalse(is_menu_item('https://example.com'));
         $config = $original;
+    }
+
+    public function testDefaultIniSelectsTheTwentyTwentySixThemeForNewInstalls(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertIsArray($parsed);
+        $this->assertArrayHasKey('theme', $parsed, 'theme must be a top-level key in the seeded INI');
+        $this->assertSame('2026', $parsed['theme']);
     }
 }
