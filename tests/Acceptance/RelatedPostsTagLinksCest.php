@@ -5,16 +5,17 @@ namespace Tests\Acceptance;
 use Tests\Support\AcceptanceTester;
 
 /**
- * Verifies the related-posts section surfaces a tag link in each bundled theme.
+ * Verifies the related-posts section surfaces a tag link.
  *
- * The themes reach that outcome differently:
- *   - base  — related items render the post's transformed body, so the inline
- *             #hashtag becomes a /tag/ link. Two posts is enough.
- *   - 2024  — only overrides _items.php; the related part falls back to base,
- *             so it behaves the same. Two posts is enough.
- *   - 2026  — related items show only a title/excerpt (no body), so a /tag/
- *             link appears solely via the "More in #tag" overflow link, which
- *             requires more than five related posts.
+ * The base theme is the reference. The 2024 theme is intentionally not covered
+ * here: it does not override _related.php, so it falls back to base and behaves
+ * identically. The 2026 theme overrides _related.php with different markup, so
+ * it gets its own case:
+ *   - base — related items render the post's transformed body, so the inline
+ *            #hashtag becomes a /tag/ link. Two posts is enough.
+ *   - 2026 — related items show only a title/excerpt (no body), so a /tag/ link
+ *            appears solely via the "More in #tag" overflow link, which requires
+ *            more than five related posts.
  */
 class RelatedPostsTagLinksCest
 {
@@ -68,11 +69,6 @@ class RelatedPostsTagLinksCest
     public function baseThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
     {
         $this->assertRelatedTagLink($I, 'base', 2);
-    }
-
-    public function classic2024ThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
-    {
-        $this->assertRelatedTagLink($I, '2024', 2);
     }
 
     public function notes2026ThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
