@@ -10,27 +10,27 @@ class TagFeedCest
     {
         $I->amOnPage('/tag/lamb/feed');
         $I->seeResponseCodeIs(200);
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
     }
 
     public function tryTagFeedContainsTagTitle(AcceptanceTester $I)
     {
         $I->amOnPage('/tag/lamb/feed');
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
         $I->seeInSource('lamb');
     }
 
     public function tryTagFeedContainsValidAtomStructure(AcceptanceTester $I)
     {
         $I->amOnPage('/tag/lamb/feed');
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
         $I->seeInSource('<generator>Lamb</generator>');
     }
 
     public function tryTagFeedUrlPointsToTagFeed(AcceptanceTester $I)
     {
         $I->amOnPage('/tag/lamb/feed');
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
         $I->seeInSource('/tag/lamb/feed');
     }
 
@@ -53,7 +53,7 @@ class TagFeedCest
     {
         $I->amOnPage('/home/feed');
         $I->seeResponseCodeIs(200);
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
         $I->seeInSource('<generator>Lamb</generator>');
     }
 
@@ -61,7 +61,7 @@ class TagFeedCest
     {
         $I->amOnPage('/tag/%F0%9F%90%91/feed');
         $I->seeResponseCodeIs(200);
-        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom">');
+        $I->seeInSource('<feed xmlns="http://www.w3.org/2005/Atom"');
         // SimpleXMLElement encodes emoji as XML character entities
         $I->seeInSource('&#x1F411;');
     }
