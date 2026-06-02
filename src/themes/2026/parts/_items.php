@@ -11,6 +11,7 @@ use function Lamb\Theme\date_created;
 use function Lamb\Theme\escape;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\link_source;
+use function Lamb\Theme\the_reply_context;
 use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
@@ -44,6 +45,7 @@ else :
                     <?= date_created($bean) ?>
                 </div>
             </header>
+            <?= the_reply_context($bean) ?>
             <?= $bean->transformed ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>

@@ -32,6 +32,10 @@ foreach ($data['posts'] as $bean) {
     if (!empty($bean->title)) {
         $item['title'] = $bean->title;
     }
+    if (!empty($bean->in_reply_to)) {
+        // micro.blog reply convention.
+        $item['_microblog'] = ['in_reply_to_url' => $bean->in_reply_to];
+    }
     $feed['items'][] = $item;
 }
 

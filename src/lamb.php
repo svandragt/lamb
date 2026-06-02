@@ -101,6 +101,17 @@ function parse_bean(OODBBean $bean): void
 
     $front_matter['transformed'] = (parse_tags($markdown));
 
+    // Normalise the reply target. Accept either `in-reply-to` (IndieWeb/Micropub
+    // spelling) or `in_reply_to`, and remove both from the blind copy below so the
+    // hyphenated key is never written as an invalid column. Empty when absent, so
+    // removing it from front matter on edit clears the stored value.
+    $in_reply_to = $front_matter['in-reply-to'] ?? $front_matter['in_reply_to'] ?? null;
+    unset($front_matter['in-reply-to'], $front_matter['in_reply_to']);
+    if (is_array($in_reply_to)) {
+        $in_reply_to = $in_reply_to[0] ?? null;
+    }
+    $bean->in_reply_to = is_string($in_reply_to) ? trim($in_reply_to) : '';
+
     // Preserve the existing created date (now for new posts, the stored value for
     // edits, the feed date for ingested items) so an unparseable front-matter date
     // falls back to it rather than leaving a non-date string in the column.

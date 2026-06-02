@@ -428,17 +428,26 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = $bean->body ?? '';
         $matter      = parse_matter($currentBody);
         $title       = $matter['title'] ?? null;
+        $replyTo     = $matter['in-reply-to'] ?? $matter['in_reply_to'] ?? null;
 
         $tags      = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
-        if ($title === null) {
+        $front = [];
+        if ($title !== null) {
+            $front[] = "title: $title";
+        }
+        if (is_string($replyTo) && $replyTo !== '') {
+            $front[] = "in-reply-to: $replyTo";
+        }
+
+        if ($front === []) {
             return $content;
         }
 
-        return "---\ntitle: $title\n---\n$content";
+        return "---\n" . implode("\n", $front) . "\n---\n$content";
     }
 
     /**
@@ -509,6 +518,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function buildBody(array $props, string $content): string
     {
         $title = $props['name'][0] ?? null;
+        $replyTo = $props['in-reply-to'][0] ?? null;
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -525,11 +535,19 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        if ($title === null) {
+        $matter = [];
+        if ($title !== null) {
+            $matter[] = "title: $title";
+        }
+        if (is_string($replyTo) && $replyTo !== '') {
+            $matter[] = "in-reply-to: $replyTo";
+        }
+
+        if ($matter === []) {
             return $content;
         }
 
-        return "---\ntitle: $title\n---\n$content";
+        return "---\n" . implode("\n", $matter) . "\n---\n$content";
     }
 
     /**
