@@ -46,7 +46,7 @@ class FeedTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/default/feed.php';
+        require __DIR__ . '/../../src/themes/base/feed.php';
         $output = ob_get_clean();
 
         $xml = new \SimpleXMLElement($output);
@@ -191,7 +191,7 @@ class FeedTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/default/feed.php';
+        require __DIR__ . '/../../src/themes/base/feed.php';
         $output = ob_get_clean();
 
         return new \SimpleXMLElement($output);

@@ -18,8 +18,8 @@ The full default configuration (all keys commented out = use built-in defaults):
 ;; Author name in feed
 ;author_name = Joe Sheeple
 
-;; Active theme directory name (default: default)
-;theme = default
+;; Active theme directory name. New installs default to 2026; `base` is the fallback library.
+theme = 2026
 
 ;; Number of posts per page (default: 10)
 ;posts_per_page = 10

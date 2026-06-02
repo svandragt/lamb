@@ -15,7 +15,7 @@ use function Lamb\set_option;
 function get_default_ini_text(): string
 {
     return <<<INI
-;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), 2024, default.
+;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), 2024, base.
 ;; Custom themes live in src/themes/<name>/ and only need to override the parts they change.
 theme = 2026
 
@@ -82,6 +82,49 @@ INI;
 }
 
 /**
+ * Resolves a configured theme name to the directory that should be rendered.
+ *
+ * Falls back to the bundled `base` theme (the part-fallback library) when no
+ * theme is configured, and aliases the legacy name `default` to `base` so
+ * installs that explicitly set `theme = default` keep working after the rename.
+ *
+ * @param string|null $configured The theme name from config, or null when unset.
+ * @param string $fallback The theme to use when none is configured.
+ * @return string The theme directory name to render.
+ */
+function resolve_theme(?string $configured, string $fallback = 'base'): string
+{
+    if (empty($configured)) {
+        return $fallback;
+    }
+    if ($configured === 'default') {
+        return 'base';
+    }
+    return $configured;
+}
+
+/**
+ * Ensures the INI text records an explicit top-level `theme` key.
+ *
+ * Older installs never stored a theme and relied on a PHP fallback. Stamping an
+ * explicit value lets that fallback be removed later. Idempotent: returns the
+ * text unchanged when a top-level `theme` key is already present.
+ *
+ * @param string $ini_text The raw INI configuration text.
+ * @param string $default_theme The theme to record when none is set.
+ * @return string The INI text, with a `theme` line prepended when it was absent.
+ */
+function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
+{
+    $parsed = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
+    if (is_array($parsed) && array_key_exists('theme', $parsed)) {
+        return $ini_text;
+    }
+
+    return "theme = {$default_theme}\n\n" . $ini_text;
+}
+
+/**
  * Loads the configuration settings.
  *
  * @return array The configuration settings.
@@ -135,7 +178,14 @@ function get_ini_text(): string
 {
     $option = get_option('site_config_ini', '');
     if ($option->id > 0) {
-        return $option->value;
+        // Migrate themeless installs to an explicit theme so the PHP fallback
+        // can eventually be removed. Only rewrites (and bumps the cache
+        // validator) on the first request after upgrade.
+        $ini_text = ensure_explicit_theme($option->value);
+        if ($ini_text !== $option->value) {
+            save_ini_text($ini_text);
+        }
+        return $ini_text;
     }
 
     // Bootstrap
@@ -148,6 +198,7 @@ function get_ini_text(): string
         $ini_text = get_default_ini_text();
     }
 
+    $ini_text = ensure_explicit_theme($ini_text);
     save_ini_text($ini_text);
 
     return $ini_text;

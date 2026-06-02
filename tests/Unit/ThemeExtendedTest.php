@@ -104,7 +104,7 @@ class ThemeExtendedTest extends TestCase
     public function testAssetLoaderYieldsPublicAsset(): void
     {
         $assets = ['' => ['styles.css']];
-        $results = iterator_to_array(asset_loader($assets, 'themes/default/styles'));
+        $results = iterator_to_array(asset_loader($assets, 'themes/base/styles'));
 
         $this->assertCount(1, $results);
         $href = array_values($results)[0];
@@ -114,7 +114,7 @@ class ThemeExtendedTest extends TestCase
     public function testAssetLoaderKeyIsMd5OfHref(): void
     {
         $assets = ['' => ['styles.css']];
-        $results = iterator_to_array(asset_loader($assets, 'themes/default/styles'));
+        $results = iterator_to_array(asset_loader($assets, 'themes/base/styles'));
 
         foreach ($results as $key => $href) {
             $this->assertSame(md5($href), $key);

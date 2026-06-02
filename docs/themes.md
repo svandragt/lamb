@@ -2,13 +2,13 @@
 title: Themes
 ---
 
-Lamb comes with three built-in themes: `default`, `2024`, and `2026`.
+Lamb comes with three built-in themes: `base`, `2024`, and `2026`.
 
 I'm not a designer.
 
 * _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog. **New installs use this theme by default.**
-* _Default_ is a traditional blog theme. It also acts as the fallback theme: any file an active theme does not provide is loaded from here.
-* _2024_ is a more open modern theme. It's built on top of default.
+* _Base_ is a traditional blog theme. It also acts as the fallback theme: any file an active theme does not provide is loaded from here.
+* _2024_ is a more open modern theme. It's built on top of base.
 
 Existing sites keep whatever theme they already use; only fresh installs start on `2026`.
 
@@ -41,12 +41,12 @@ Default:
 ## Theme documentation
 
 * All functions available in theme.php can be reused in the theme.
-* A theme does not need to provide every file. Lamb falls back to `src/themes/default/` when a file is missing in the active theme.
+* A theme does not need to provide every file. Lamb falls back to `src/themes/base/` when a file is missing in the active theme.
 * The only file path that is always expected in the active theme is `styles/styles.css`, because `the_styles()` always loads that stylesheet from the selected theme.
 * `html.php` is only needed when you want to change the outer page layout.
 * `feed.php` is only needed when you want to change the Atom feed output.
-* Use the `part($basename)` function to load any other theme includes. This enables a fallback to the default theme's
-  files if the file does not exist in the theme. This makes the default theme is a requirement for the 2024 theme.
+* Use the `part($basename)` function to load any other theme includes. This enables a fallback to the base theme's
+  files if the file does not exist in the theme. This makes the base theme a requirement for the 2024 theme.
 * CSS stylesheets must be saved in a subfolder of the theme called `styles/` and are loaded using `the_styles()`.
 * `the_styles()` takes no arguments and loads `styles/styles.css` from the active theme.
 * `the_scripts()` takes no arguments and loads application scripts from `src/scripts/`, not from the active theme directory.

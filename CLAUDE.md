@@ -74,8 +74,9 @@ lamb/
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
 │   ├── assets/           # Runtime upload storage (created under YYYY/MM)
 │   ├── themes/
-│   │   ├── default/      # Default theme (HTML, parts, feed, CSS)
-│   │   └── 2024/         # Alternative theme (overrides parts as needed)
+│   │   ├── base/         # Base theme + fallback library (HTML, parts, feed, CSS)
+│   │   ├── 2024/         # Alternative theme (overrides parts as needed)
+│   │   └── 2026/         # "Notes" theme — default for new installs
 │   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
 ├── tests/
 │   ├── Unit/             # PHPUnit tests (ConfigTest.php)
@@ -157,9 +158,9 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### Theming
 
-`Theme\part($name, $dir)` includes `THEME_DIR/$dir/$name.php`, falling back to `src/themes/default/`. Custom themes only need to override specific parts.
+`Theme\part($name, $dir)` includes `THEME_DIR/$dir/$name.php`, falling back to `src/themes/base/`. Custom themes only need to override specific parts.
 
-**Theme parts (default):**
+**Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
 - `feed.php` — Atom feed output
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`
@@ -173,10 +174,10 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### How themes are selected
 
-`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and falls back to `'default'`:
+`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Config\resolve_theme()`, which falls back to `'base'` when unset and aliases the legacy name `'default'` to `'base'`:
 
 ```php
-define("THEME",     $config['theme'] ?? 'default');
+define("THEME",     Config\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');   // absolute FS path
 define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relative)
 ```
@@ -185,7 +186,7 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
 
-New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs whose stored config has no `theme` key keep falling back to `default` (the `?? 'default'` in `index.php`).
+New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs without an explicit theme are migrated to `theme = base` on first read (`Config\ensure_explicit_theme()` in `get_ini_text()`), so the `'base'` fallback and the `default`→`base` alias can be removed once all installs carry an explicit theme.
 
 ### Part resolution (`Theme\part`)
 
@@ -194,7 +195,7 @@ Theme\part($name, $dir = 'parts')
 ```
 
 1. Looks for `THEME_DIR . $dir . '/' . $name . '.php'`
-2. Falls back to `src/themes/default/$dir/$name.php`
+2. Falls back to `src/themes/base/$dir/$name.php`
 3. Throws `RuntimeException` if neither exists
 
 `$name` and `$dir` are sanitised (only `[a-zA-Z0-9-_]` allowed — dots and slashes are stripped).
@@ -348,7 +349,7 @@ User-uploaded files live under `src/assets/`, not under theme directories.
 
 ### `.gitignore` exemption
 
-Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`default`, `2024`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
+Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`base`, `2024`, `2026`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
 
 To ship a new theme as part of the repo, add one line to `.gitignore`:
 
@@ -361,7 +362,7 @@ After that, `git add` works normally for all files inside the theme.
 
 ### Minimal new theme checklist
 
-A theme only needs to override the files that differ from `default`. The absolute minimum is a stylesheet:
+A theme only needs to override the files that differ from `base`. The absolute minimum is a stylesheet:
 
 ```
 src/themes/<name>/
@@ -369,7 +370,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the default feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `default` automatically.
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the base feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically.
 
 ### Typical file set (for a full redesign)
 

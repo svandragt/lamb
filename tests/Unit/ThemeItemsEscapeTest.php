@@ -48,7 +48,7 @@ class ThemeItemsEscapeTest extends TestCase
         $template = 'status';
 
         ob_start();
-        include dirname(__DIR__, 2) . '/src/themes/default/parts/_items.php';
+        include dirname(__DIR__, 2) . '/src/themes/base/parts/_items.php';
         return (string) ob_get_clean();
     }
 

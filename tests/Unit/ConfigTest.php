@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\ensure_explicit_theme;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
+use function Lamb\Config\resolve_theme;
 
 // Since we need to test a function that depends on global $config, we'll mock it or set it.
 class ConfigTest extends TestCase
@@ -97,5 +99,51 @@ class ConfigTest extends TestCase
         $this->assertIsArray($parsed);
         $this->assertArrayHasKey('theme', $parsed, 'theme must be a top-level key in the seeded INI');
         $this->assertSame('2026', $parsed['theme']);
+    }
+
+    public function testEnsureExplicitThemeAddsBaseWhenThemeMissing(): void
+    {
+        $ini = "site_title = Example\n\n[menu_items]\nAbout = about\n";
+
+        $migrated = ensure_explicit_theme($ini);
+        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
+
+        $this->assertSame('base', $parsed['theme']);
+        // Existing content is preserved.
+        $this->assertSame('Example', $parsed['site_title']);
+        $this->assertSame('about', $parsed['menu_items']['About']);
+    }
+
+    public function testEnsureExplicitThemeLeavesExistingThemeUntouched(): void
+    {
+        $ini = "theme = 2024\nsite_title = Example\n";
+
+        $this->assertSame($ini, ensure_explicit_theme($ini));
+    }
+
+    public function testEnsureExplicitThemeIsIdempotent(): void
+    {
+        $ini = "site_title = Example\n";
+
+        $once = ensure_explicit_theme($ini);
+        $twice = ensure_explicit_theme($once);
+
+        $this->assertSame($once, $twice);
+    }
+
+    public function testResolveThemeFallsBackToBaseWhenUnset(): void
+    {
+        $this->assertSame('base', resolve_theme(null));
+    }
+
+    public function testResolveThemeMapsLegacyDefaultToBase(): void
+    {
+        $this->assertSame('base', resolve_theme('default'));
+    }
+
+    public function testResolveThemePassesThroughOtherThemes(): void
+    {
+        $this->assertSame('2026', resolve_theme('2026'));
+        $this->assertSame('my-custom', resolve_theme('my-custom'));
     }
 }
