@@ -25,7 +25,7 @@ Senders that don't follow the rules are rejected: a missing or non-`http(s)` `so
 
 ## Seeing your mentions
 
-Received webmentions appear at the bottom of the relevant post page. For now they are shown to the **logged-in author only** — public display and moderation are planned follow-ups. Each entry links to the source page, with the author and a short snippet where they can be detected.
+Received webmentions appear at the bottom of the relevant post page, visible to the **logged-in author only**. Lamb treats them as a private notification for you rather than public comments, so they are not displayed to visitors. Each entry links to the source page, with the author and a short snippet where they can be detected.
 
 ## Sending
 
