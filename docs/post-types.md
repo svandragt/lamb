@@ -12,7 +12,7 @@ Any tags are automatically linked to tag archives.
 
 Select some text and paste a link over it to turn the selection into a markdown link, e.g. selecting `Lamb` and pasting `https://example.com` produces `[Lamb](https://example.com)`.
 
-Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor.
+Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor. JPEG and PNG uploads are automatically converted to WebP to keep files small; GIF, WebP, and AVIF are stored as-is.
 
 Permalinks for statuses are in the form of `/status/<integer>`.
 

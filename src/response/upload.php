@@ -51,6 +51,19 @@ function respond_upload(array $_args): void
             die();
         }
         $temp_fp = $f['tmp_name'];
+
+        // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
+        // bytes if conversion fails (assume success, communicate failure).
+        if (should_convert_to_webp($ext)) {
+            $webp_fn = sha1($f['name']) . '.webp';
+            $webp_fp = sprintf("%s/%s", get_upload_dir(), $webp_fn);
+            if (convert_to_webp($temp_fp, $webp_fp)) {
+                $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
+                $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$webp_fn");
+                continue;
+            }
+        }
+
         $new_fn = sha1($f['name']) . ".$ext";
         $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
         if (!move_uploaded_file($temp_fp, $new_fp)) {
@@ -84,6 +97,57 @@ function safe_upload_extension(string $filename): ?string
     }
 
     return $ext;
+}
+
+/**
+ * Whether an uploaded image of the given extension should be re-encoded to WebP.
+ *
+ * Only JPEG and PNG are converted: they are common, lossy/lossless raster formats
+ * that GD round-trips cleanly and that shrink noticeably as WebP. Already-efficient
+ * formats (webp, avif) are left untouched, and gif is passed through because it may
+ * be animated — GD would flatten it to a single frame.
+ *
+ * @param string|null $ext A lower-case extension as returned by safe_upload_extension().
+ * @return bool
+ */
+function should_convert_to_webp(?string $ext): bool
+{
+    return in_array($ext, ['jpg', 'jpeg', 'png'], true);
+}
+
+/**
+ * Re-encodes an image file as WebP, writing the result to $dest_path.
+ *
+ * Reads $src_path with GD, preserves alpha transparency, and writes a WebP. Returns
+ * false (writing nothing) when the source cannot be decoded, so callers can fall back
+ * to storing the original bytes.
+ *
+ * @param string $src_path  Path to the source image (e.g. an uploaded temp file).
+ * @param string $dest_path Path the WebP should be written to.
+ * @param int $quality      WebP quality (0-100).
+ * @return bool True when a WebP was written, false on failure.
+ */
+function convert_to_webp(string $src_path, string $dest_path, int $quality = 82): bool
+{
+    $data = @file_get_contents($src_path);
+    if ($data === false) {
+        return false;
+    }
+
+    $image = @imagecreatefromstring($data);
+    if ($image === false) {
+        return false;
+    }
+
+    // Preserve transparency from PNG sources.
+    imagepalettetotruecolor($image);
+    imagealphablending($image, false);
+    imagesavealpha($image, true);
+
+    $ok = imagewebp($image, $dest_path, $quality);
+    imagedestroy($image);
+
+    return $ok;
 }
 
 /**
