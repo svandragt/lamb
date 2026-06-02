@@ -25,6 +25,7 @@ foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_head
     header($cache_header);
 }
 header('Link: <' . ROOT_URL . '/micropub>; rel="micropub"', false);
+header('Link: <' . ROOT_URL . '/webmention>; rel="webmention"', false);
 header('Link: <' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"', false);
 header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false);
 
@@ -65,6 +66,7 @@ if ($action === 'tag' && $sublookup === 'feed') {
 } else {
     Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
 }
+Route\register_route('webmention', __NAMESPACE__ . '\\Webmention\respond_webmention');
 Route\register_route('micropub', __NAMESPACE__ . '\\Micropub\respond_micropub');
 Route\register_route('micropub-media', __NAMESPACE__ . '\\Micropub\respond_micropub_media');
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
