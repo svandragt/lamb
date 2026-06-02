@@ -46,6 +46,7 @@ Devtools / local environments / sandbox:
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %})
 * [Drafts]({{ site.baseurl }}{% link drafts.md %})
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
+* [Media]({{ site.baseurl }}{% link media.md %})
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %})
 * [Post Types]({{ site.baseurl }}{% link post-types.md %})
