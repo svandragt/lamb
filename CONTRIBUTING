@@ -19,6 +19,14 @@ I wouldn't want you to spend a lot of effort building a feature that I'm unwilli
 
 Have fun!
 
+MERGE PROTECTION (MAINTAINERS)
+
+Pull requests into main and release must not be merged until the `ci` status
+check passes. This is enforced by a GitHub ruleset, which lives in repository
+settings rather than the repo tree. The intended configuration is checked in
+at .github/rulesets/require-ci.json — see .github/rulesets/README.md for how
+to import and verify it.
+
 DEVELOPMENT ENVIRONMENTS
 
 Set up your environment using the README. Alternatives are documented for end users in docs/ (Devbox, DDev, Docker, local PHP). For a sandboxed, reproducible environment using Canonical Workshop, see .workshop/README.md.
