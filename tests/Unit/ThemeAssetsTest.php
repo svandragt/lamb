@@ -17,7 +17,7 @@ class ThemeAssetsTest extends TestCase
             define('ROOT_URL', 'http://localhost');
         }
         if (!defined('THEME_URL')) {
-            define('THEME_URL', 'themes/default/');
+            define('THEME_URL', 'themes/base/');
         }
 
         global $template;
@@ -208,7 +208,7 @@ class ThemeAssetsTest extends TestCase
         $tmp = tempnam(sys_get_temp_dir(), 'lamb_asset_');
         file_put_contents($tmp, 'body { color: red; }');
         try {
-            $href = 'http://localhost/themes/default/styles/styles.css';
+            $href = 'http://localhost/themes/base/styles/styles.css';
             $this->assertSame(md5_file($tmp), asset_version($tmp, $href));
             $this->assertSame(md5('body { color: red; }'), asset_version($tmp, $href));
         } finally {
@@ -233,7 +233,7 @@ class ThemeAssetsTest extends TestCase
 
     public function testAssetVersionFallsBackToUrlHashWhenFileMissing(): void
     {
-        $href = 'http://localhost/themes/default/styles/missing.css';
+        $href = 'http://localhost/themes/base/styles/missing.css';
         $this->assertSame(md5($href), asset_version('/no/such/file.css', $href));
     }
 

@@ -8,7 +8,7 @@ class ThemeScheduledPartTest extends TestCase
 {
     private function partsDir(): string
     {
-        return dirname(__DIR__, 2) . '/src/themes/default/parts';
+        return dirname(__DIR__, 2) . '/src/themes/base/parts';
     }
 
     public function testScheduledTemplatePartExists(): void

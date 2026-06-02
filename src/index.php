@@ -16,7 +16,7 @@ $config = Config\load();
 Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
-define("THEME", $config['theme'] ?? 'default');
+define("THEME", Config\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 

@@ -279,12 +279,12 @@ function link_source(OODBBean $bean): string
 }
 
 /**
- * Includes a theme part file, falling back to the default theme when the active theme does not override it.
+ * Includes a theme part file, falling back to the base theme when the active theme does not override it.
  *
  * @param string $name Part name without extension (e.g. 'home', '_items').
  * @param string $dir  Subdirectory within the theme folder. Defaults to 'parts'. Pass '' for top-level files.
  * @return void
- * @throws RuntimeException When the part file cannot be found in either the active or default theme.
+ * @throws RuntimeException When the part file cannot be found in either the active or base theme.
  */
 function part(string $name, string $dir = 'parts'): void
 {
@@ -294,8 +294,8 @@ function part(string $name, string $dir = 'parts'): void
     }
     $filename = THEME_DIR . "$dir$name.php";
     if (!is_readable($filename)) {
-        // Fallback to default
-        $filename = __DIR__ . "/themes/default/$dir$name.php";
+        // Fallback to the base theme (the complete reference part library)
+        $filename = __DIR__ . "/themes/base/$dir$name.php";
     }
     if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);
