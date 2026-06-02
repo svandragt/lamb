@@ -9,8 +9,10 @@ intended configuration is reviewable and reproducible.
 
 Blocks merging any pull request into `main` (the default branch) or
 `release` until the **`ci`** status check is green. `ci` is the single
-aggregate gate job in `.github/workflows/ci.yml`; it only succeeds when both
-`quality` and every `test` matrix entry succeed.
+aggregate gate job in `.github/workflows/ci.yml`; it only succeeds when
+`quality`, every `test` matrix entry, and the `playwright` browser suite
+succeed. (`playwright` is skipped — and treated as a pass — on PRs that
+don't touch e2e-relevant paths like `src/**`; see the `changes` job.)
 
 Why this matters: without a required status check, a PR can be merged the
 instant it opens — before CI has finished, or even when it has failed.
@@ -54,6 +56,9 @@ should be disabled with "Required statuses must pass before merging", and
 - Allow a specific automation/admin to bypass: add entries to
   `bypass_actors`.
 
-> Note: the `playwright` workflow is intentionally **not** required — it is
-> path-filtered (`src/**` etc.), so it does not run on every PR and cannot
-> serve as a universal gate. It remains an advisory check.
+> Note: the browser (`playwright`) suite is folded into the `ci` gate rather
+> than being its own required check. The CI workflow always runs (so the
+> required `ci` context is always reported), but the playwright job only
+> executes when e2e-relevant files change — a required check from a
+> `paths:`-filtered workflow would otherwise hang as "pending" forever on
+> PRs that don't trigger it.
