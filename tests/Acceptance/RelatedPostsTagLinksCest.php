@@ -4,6 +4,18 @@ namespace Tests\Acceptance;
 
 use Tests\Support\AcceptanceTester;
 
+/**
+ * Verifies the related-posts section surfaces a tag link in each bundled theme.
+ *
+ * The themes reach that outcome differently:
+ *   - base  — related items render the post's transformed body, so the inline
+ *             #hashtag becomes a /tag/ link. Two posts is enough.
+ *   - 2024  — only overrides _items.php; the related part falls back to base,
+ *             so it behaves the same. Two posts is enough.
+ *   - 2026  — related items show only a title/excerpt (no body), so a /tag/
+ *             link appears solely via the "More in #tag" overflow link, which
+ *             requires more than five related posts.
+ */
 class RelatedPostsTagLinksCest
 {
     private function login(AcceptanceTester $I): void
@@ -11,6 +23,13 @@ class RelatedPostsTagLinksCest
         $I->amOnPage('/login');
         $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
         $I->click('Log in');
+    }
+
+    private function setTheme(AcceptanceTester $I, string $theme): void
+    {
+        $I->amOnPage('/settings');
+        $I->fillField('ini_text', "theme = $theme\n");
+        $I->click('Save settings');
     }
 
     private function createPost(AcceptanceTester $I, string $contents): void
@@ -21,36 +40,45 @@ class RelatedPostsTagLinksCest
     }
 
     /**
-     * Pin the active theme so this test exercises the reference theme it asserts.
-     *
-     * The default theme for new installs is `2026`, whose related-posts section
-     * deliberately omits the per-item tag links this test checks. `base` is the
-     * full-feature reference theme that renders them, so pin to it explicitly.
+     * Seeds $count posts sharing a unique tag under $theme, opens one of them,
+     * and asserts the related-posts section links to that tag.
      */
-    private function useBaseTheme(AcceptanceTester $I): void
-    {
-        $I->amOnPage('/settings');
-        $I->fillField('ini_text', "theme = base\n");
-        $I->click('Save settings');
-    }
-
-    public function relatedPostsContainLinkedTags(AcceptanceTester $I): void
+    private function assertRelatedTagLink(AcceptanceTester $I, string $theme, int $count): void
     {
         $tag = 'relatedtagtest' . uniqid();
 
         $this->login($I);
-        $this->useBaseTheme($I);
-        $this->createPost($I, "First post about #$tag");
-        $this->createPost($I, "Second post about #$tag");
+        $this->setTheme($I, $theme);
+        for ($i = 1; $i <= $count; $i++) {
+            $this->createPost($I, "Post $i about #$tag");
+        }
 
-        // Grab the URL of the first test post using XPath to match by our unique tag,
-        // avoiding flakiness when other posts share the same created timestamp.
+        // Grab a test post's permalink by matching the unique tag, avoiding
+        // flakiness when posts share a created timestamp. The permalink lives in
+        // <small> (base) or .meta (2024/2026), so match it anywhere in the article.
         $postUrl = $I->grabAttributeFrom(
-            '//article[.//a[contains(@href, "/tag/' . $tag . '")]]//small/a[starts-with(@href, "/status/")]',
+            '//article[.//a[contains(@href, "/tag/' . $tag . '")]]//a[starts-with(@href, "/status/")]',
             'href'
         );
         $I->amOnPage($postUrl);
 
         $I->seeElement('.related-posts a[href^="/tag/"]');
+    }
+
+    public function baseThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
+    {
+        $this->assertRelatedTagLink($I, 'base', 2);
+    }
+
+    public function classic2024ThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
+    {
+        $this->assertRelatedTagLink($I, '2024', 2);
+    }
+
+    public function notes2026ThemeRelatedPostsContainLinkedTags(AcceptanceTester $I): void
+    {
+        // The 2026 related list only surfaces a tag link once it overflows
+        // (>5 related posts), via the "More in #tag" link.
+        $this->assertRelatedTagLink($I, '2026', 7);
     }
 }
