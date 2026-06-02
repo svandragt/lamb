@@ -67,8 +67,23 @@ jobs:
         if: matrix.php-version == '8.2'
         run: composer coverage
 
+  # Single aggregate gate. Mark THIS job ("ci") as the required status check
+  # in branch protection / the ruleset — not the individual matrix jobs.
+  # `if: always()` ensures the job runs (and reports a definite success/failure)
+  # even when a dependency fails. Without it the job would be *skipped* when
+  # `quality`/`test` fail, and GitHub treats a skipped required check as
+  # passing — which would let a red PR merge.
   ci:
     runs-on: ubuntu-latest
     needs: [quality, test]
+    if: always()
     steps:
-      - run: echo "All checks passed"
+      - name: Verify required jobs succeeded
+        run: |
+          echo "quality: ${{ needs.quality.result }}"
+          echo "test:    ${{ needs.test.result }}"
+          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::One or more required jobs did not succeed"
+            exit 1
+          fi
+          echo "All checks passed"
