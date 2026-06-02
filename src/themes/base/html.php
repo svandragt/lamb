@@ -31,6 +31,7 @@ global $template;
     <link rel="authorization_endpoint" href="<?= escape($config['authorization_endpoint']) ?>">
     <link rel="token_endpoint" href="<?= escape($config['token_endpoint']) ?>">
     <link rel="micropub" href="<?= ROOT_URL ?>/micropub">
+    <link rel="webmention" href="<?= ROOT_URL ?>/webmention">
     <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>
     <link rel="alternate" type="application/atom+xml" href="<?= escape($data['feed_url']) ?>"
           title="<?= escape($data['title'] ?? $config['site_title']) ?>">
@@ -77,6 +78,8 @@ global $template;
         part($template);
 
         part("_related");
+
+        part("_webmentions");
         ?>
     </main>
 </div>

@@ -54,7 +54,8 @@
       "src/theme/assets.php",
       "src/theme/formatting.php",
       "src/theme/meta.php",
-      "src/micropub.php"
+      "src/micropub.php",
+      "src/webmention.php"
     ]
   },
   "autoload-dev": {
