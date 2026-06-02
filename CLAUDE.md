@@ -185,6 +185,8 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
 
+New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs whose stored config has no `theme` key keep falling back to `default` (the `?? 'default'` in `index.php`).
+
 ### Part resolution (`Theme\part`)
 
 ```php

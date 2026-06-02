@@ -6,9 +6,11 @@ Lamb comes with three built-in themes: `default`, `2024`, and `2026`.
 
 I'm not a designer.
 
-* _Default_ is a traditional blog theme.
+* _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog. **New installs use this theme by default.**
+* _Default_ is a traditional blog theme. It also acts as the fallback theme: any file an active theme does not provide is loaded from here.
 * _2024_ is a more open modern theme. It's built on top of default.
-* _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog.
+
+Existing sites keep whatever theme they already use; only fresh installs start on `2026`.
 
 To switch between themes, set the `theme` key in the site configuration at `/settings`:
 
