@@ -10,6 +10,7 @@ use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\link_source;
+use function Lamb\Theme\the_reply_context;
 use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
@@ -28,6 +29,7 @@ else :
                 <?php endif; ?>
                 <small><?= date_created($bean) ?><?= link_source($bean) ?></small>
             </header>
+            <?= the_reply_context($bean) ?>
             <?= $bean->transformed ?>
             <footer>
                 <small><?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>

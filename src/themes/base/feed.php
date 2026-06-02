@@ -13,7 +13,9 @@ if (!function_exists('escape')) {
 header('Content-type: application/atom+xml');
 $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed';
 
-$Xml = new SimpleXMLElement('<feed xmlns="http://www.w3.org/2005/Atom"></feed>');
+$Xml = new SimpleXMLElement(
+    '<feed xmlns="http://www.w3.org/2005/Atom" xmlns:thr="http://purl.org/syndication/thread/1.0"></feed>'
+);
 $Xml->addChild('title', escape($data['title'] ?? $config['site_title']));
 $Xml->addChild('id', escape($channel_link));
 $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['updated'])));
@@ -47,6 +49,13 @@ foreach ($data['posts'] as $bean) {
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
     $Content = $Entry->addChild('content', $bean->transformed);
     $Content->addAttribute('type', 'html');
+    if (!empty($bean->in_reply_to)) {
+        // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping
+        // would double-encode any query-string ampersands.
+        $Thread = $Entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');
+        $Thread->addAttribute('ref', $bean->in_reply_to);
+        $Thread->addAttribute('href', $bean->in_reply_to);
+    }
     $Link = $Entry->addChild('link');
     $Link->addAttribute('rel', 'alternate');
     $Link->addAttribute('type', 'text/html');
