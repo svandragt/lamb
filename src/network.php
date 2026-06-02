@@ -96,6 +96,16 @@ function purge_deleted_posts(): int
         set_option($last_updated, (int)date('U'));
     }
 
+    $sent = \Lamb\Webmention\process_outbound();
+    if ($sent['sent'] || $sent['failed'] || $sent['skipped']) {
+        printf(
+            "Webmentions sent: %d, failed: %d, skipped: %d" . PHP_EOL,
+            $sent['sent'],
+            $sent['failed'],
+            $sent['skipped']
+        );
+    }
+
     set_option($cron_last_updated, (int)date('U'));
     exit('Done');
 }
