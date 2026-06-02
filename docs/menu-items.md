@@ -19,4 +19,4 @@ Links can also point to external resources.
 
 ## Related
 
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): More information on `config.ini`.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): More information on the settings page.
