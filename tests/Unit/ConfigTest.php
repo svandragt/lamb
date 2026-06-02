@@ -83,6 +83,23 @@ class ConfigTest extends TestCase
         $config = $original;
     }
 
+    public function testIsMenuItemMatchesSlugWithOrWithoutLeadingSlash(): void
+    {
+        // The docs (docs/menu-items.md) document "/about-me" as a menu value
+        // that hides the matching page from the timeline. The leading slash is
+        // optional: both forms must resolve to the bare post slug "about-me".
+        global $config;
+        $original = $config;
+
+        $config['menu_items'] = ['About me' => '/about-me'];
+        $this->assertTrue(is_menu_item('about-me'), 'Leading-slash menu value should match the bare slug');
+
+        $config['menu_items'] = ['About me' => 'about-me'];
+        $this->assertTrue(is_menu_item('about-me'), 'Slugless menu value should match the bare slug');
+
+        $config = $original;
+    }
+
     public function testIsMenuItemReturnsFalseForExternalUrl(): void
     {
         global $config;
