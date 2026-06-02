@@ -61,6 +61,7 @@ function redirect_created(): void
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
+    \Lamb\Webmention\enqueue_for_post($bean);
     redirect_uri('/');
 }
 
@@ -212,6 +213,8 @@ function redirect_edited(): void
                 . '</code> still exists in Settings → [redirections]. You may want to remove it.';
         }
     }
+
+    \Lamb\Webmention\enqueue_for_post($bean);
 
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);

@@ -6,7 +6,7 @@ title: Webmentions
 
 [Webmention](https://www.w3.org/TR/webmention/) is an open standard that lets one site notify another when it links to it. When someone replies to, likes, or links one of your posts from their own Webmention-enabled site, they can send your blog a notification so you know about the mention.
 
-Lamb can **receive** webmentions out of the box.
+Lamb can **receive** webmentions, and **send** them when you publish a post that links to other sites.
 
 ## How it works
 
@@ -27,7 +27,17 @@ Senders that don't follow the rules are rejected: a missing or non-`http(s)` `so
 
 Received webmentions appear at the bottom of the relevant post page. For now they are shown to the **logged-in author only** — public display and moderation are planned follow-ups. Each entry links to the source page, with the author and a short snippet where they can be detected.
 
+## Sending
+
+When you publish or edit a post, Lamb scans its rendered HTML for links to **other** sites and queues a webmention for each. The queue is worked through on the next [`/_cron`]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}) run rather than during the publish request, so saving a post stays fast. For each queued target Lamb:
+
+1. Fetches the target page and discovers its webmention endpoint (HTTP `Link` header → `<link rel="webmention">` → `<a rel="webmention">`).
+2. POSTs your post URL (`source`) and the linked URL (`target`) to that endpoint.
+
+Each source/target pair is sent once — re-editing a post does not re-notify targets it already reached, so receivers are not spammed. Drafts, future-scheduled posts, and posts ingested from other feeds do not send webmentions.
+
 ## Related
 
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts from any Micropub client; uses the same IndieWeb discovery pattern.
+* [Cron / scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How `/_cron` drives feed ingestion and outbound webmentions.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Pull posts in from other feeds.
