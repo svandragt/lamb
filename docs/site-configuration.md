@@ -6,7 +6,8 @@ title: Site Configuration
 
 Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
 
-The full default configuration (all keys commented out = use built-in defaults):
+The default configuration. Real defaults ship as active lines so you can edit
+one value rather than write it from scratch; personal details stay commented:
 
 ```
 ;; Title of the site, shown in the HTML and feed views
@@ -21,12 +22,20 @@ The full default configuration (all keys commented out = use built-in defaults):
 ;; Active theme directory name. New installs default to 2026; `base` is the fallback library.
 theme = 2026
 
-;; Number of posts per page (default: 10)
-;posts_per_page = 10
+;; Number of posts shown per page in lists and feeds.
+posts_per_page = 10
 
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
-;; Use a name from https://www.php.net/manual/en/timezones.php (default: UTC)
-;timezone = Europe/London
+;; Use a name from https://www.php.net/manual/en/timezones.php.
+timezone = UTC
+
+;; Feed-ingested posts are saved as drafts by default for editorial review.
+;; Set to false to publish feed items directly.
+feeds_draft = true
+
+;; IndieAuth endpoints used for Micropub discovery. Override to use your own server.
+authorization_endpoint = https://indieauth.com/auth
+token_endpoint = https://tokens.indieauth.com/token
 
 ;; When content is not found, instead of a 404, the user is redirected to the same
 ;; relative path on another site. Useful for archived or under-construction sites.
@@ -54,20 +63,11 @@ theme = 2026
 ;; Test feed compatibility at https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
 
-;; Feed-ingested posts are saved as drafts by default for editorial review.
-;; Set to false to publish feed items directly.
-;feeds_draft = false
-
 [preconnect]
 ;; List external origins to preconnect to, improving load time for external resources.
 ;; Format: <label>=<origin>
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
-
-;; IndieAuth endpoints used for Micropub discovery.
-;; Override to use your own IndieAuth server.
-;authorization_endpoint = https://indieauth.com/auth
-;token_endpoint = https://tokens.indieauth.com/token
 
 [me]
 ;; Add rel="me" identity links for IndieAuth verification.

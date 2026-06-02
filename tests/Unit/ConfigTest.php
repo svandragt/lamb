@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\compose_config;
 use function Lamb\Config\ensure_explicit_theme;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
@@ -145,5 +146,69 @@ class ConfigTest extends TestCase
     {
         $this->assertSame('2026', resolve_theme('2026'));
         $this->assertSame('my-custom', resolve_theme('my-custom'));
+    }
+
+    public function testDefaultIniExposesRealDefaultsAtTopLevel(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertSame('UTC', $parsed['timezone']);
+        $this->assertSame('10', $parsed['posts_per_page']);
+        $this->assertSame('https://indieauth.com/auth', $parsed['authorization_endpoint']);
+        $this->assertSame('https://tokens.indieauth.com/token', $parsed['token_endpoint']);
+        $this->assertArrayHasKey('feeds_draft', $parsed);
+    }
+
+    public function testDefaultIniKeepsRealDefaultsOutOfSections(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        // Regression: these were previously commented inside [feeds]/[preconnect],
+        // so uncommenting them in place parsed as nested keys the code never read.
+        $this->assertArrayNotHasKey('feeds_draft', $parsed['feeds'] ?? []);
+        $this->assertArrayNotHasKey('authorization_endpoint', $parsed['preconnect'] ?? []);
+        $this->assertArrayNotHasKey('token_endpoint', $parsed['preconnect'] ?? []);
+    }
+
+    public function testComposeConfigFillsRealDefaultsForMissingKeys(): void
+    {
+        $config = compose_config("site_title = Mine\n", get_default_ini_text());
+
+        $this->assertSame('UTC', $config['timezone']);
+        $this->assertSame('10', $config['posts_per_page']);
+        $this->assertSame('https://indieauth.com/auth', $config['authorization_endpoint']);
+    }
+
+    public function testComposeConfigLetsStoredValuesOverrideDefaults(): void
+    {
+        $config = compose_config("timezone = Europe/London\n", get_default_ini_text());
+
+        $this->assertSame('Europe/London', $config['timezone']);
+    }
+
+    public function testComposeConfigSuppliesIdentityPlaceholderFallback(): void
+    {
+        // author_name is kept commented in the seeded INI, so it must come from
+        // the in-code fallback for consumers (feed.php) that have no inline default.
+        $config = compose_config("site_title = Mine\n", get_default_ini_text());
+
+        $this->assertSame('Joe Sheeple', $config['author_name']);
+    }
+
+    public function testComposeConfigNeverInheritsThemeFromDefaults(): void
+    {
+        // A stored config without a theme must not be silently re-themed by the
+        // seeded default (theme is resolved/migrated per-install instead).
+        $config = compose_config("site_title = Mine\n", "theme = 2026\nposts_per_page = 10\n");
+
+        $this->assertArrayNotHasKey('theme', $config);
+        $this->assertSame('10', $config['posts_per_page']);
+    }
+
+    public function testComposeConfigHonorsTopLevelFeedsDraftFalse(): void
+    {
+        $config = compose_config("feeds_draft = false\n", get_default_ini_text());
+
+        $this->assertFalse(filter_var($config['feeds_draft'], FILTER_VALIDATE_BOOLEAN));
     }
 }

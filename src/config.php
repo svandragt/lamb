@@ -29,8 +29,19 @@ theme = 2026
 ;site_title = My Microblog
 
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
-;; Use a name from https://www.php.net/manual/en/timezones.php. Defaults to UTC.
-;timezone = Europe/London
+;; Use a name from https://www.php.net/manual/en/timezones.php.
+timezone = UTC
+
+;; Number of posts shown per page in lists and feeds.
+posts_per_page = 10
+
+;; Feed-ingested posts are saved as drafts by default for editorial review before
+;; publishing. Set to false to publish feed items directly without review.
+feeds_draft = true
+
+;; IndieAuth endpoints used for Micropub discovery. Override to use your own server.
+authorization_endpoint = https://indieauth.com/auth
+token_endpoint = https://tokens.indieauth.com/token
 
 ;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
 ;; relative path on another site.
@@ -52,20 +63,11 @@ theme = 2026
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
 
-;; Feed-ingested posts are saved as drafts by default for editorial review before publishing.
-;; Set to false to publish feed items directly without review.
-;feeds_draft = false
-
 [preconnect]
 ;; List external origins to preconnect to, improving load time for external resources.
 ;; Each item is in the format of <label>=<origin>.
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
-
-;; IndieAuth endpoints used for Micropub discovery.
-;; Override to use your own IndieAuth server.
-;authorization_endpoint = https://indieauth.com/auth
-;token_endpoint = https://tokens.indieauth.com/token
 
 [me]
 ;; Add rel="me" identity links for IndieAuth verification.
@@ -131,20 +133,41 @@ function ensure_explicit_theme(string $ini_text, string $default_theme = 'base')
  */
 function load(): array
 {
-    $ini_text = get_ini_text();
-    $config = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
+    return compose_config(get_ini_text(), get_default_ini_text());
+}
 
-    // Hardcoded defaults as fallback for missing keys
-    $defaults = [
-        'author_email'           => 'joe.sheeple@example.com',
-        'author_name'            => 'Joe Sheeple',
-        'site_title'             => 'My Microblog',
-        'authorization_endpoint' => 'https://indieauth.com/auth',
-        'token_endpoint'         => 'https://tokens.indieauth.com/token',
-        'timezone'               => 'UTC',
+/**
+ * Merges stored config over the seeded defaults to produce the effective config.
+ *
+ * The seeded INI (`get_default_ini_text()`) is the single source of truth for the
+ * real defaults (timezone, posts_per_page, feeds_draft, IndieAuth endpoints), so
+ * they no longer live in a parallel hardcoded array. Precedence (lowest to
+ * highest): identity placeholders → seeded defaults → stored config.
+ *
+ * @param string $stored_ini  The raw stored INI text.
+ * @param string $default_ini The seeded default INI text.
+ * @return array The effective configuration.
+ */
+function compose_config(string $stored_ini, string $default_ini): array
+{
+    $config = @parse_ini_string($stored_ini, true, INI_SCANNER_RAW) ?: [];
+    $defaults = @parse_ini_string($default_ini, true, INI_SCANNER_RAW) ?: [];
+
+    // Theme is intentionally not defaulted here. An install without an explicit
+    // theme is resolved/migrated per-install (see resolve_theme / get_ini_text),
+    // so inheriting the seeded theme would silently re-theme existing sites.
+    unset($defaults['theme']);
+
+    // Personal-identity values are kept commented in the seeded INI, so supply
+    // them as a last-resort fallback for consumers without an inline default
+    // (e.g. feed.php reads author_name directly).
+    $fallback = [
+        'author_email' => 'joe.sheeple@example.com',
+        'author_name'  => 'Joe Sheeple',
+        'site_title'   => 'My Microblog',
     ];
 
-    return array_merge($defaults, $config ?: []);
+    return array_merge($fallback, $defaults, $config);
 }
 
 /**
