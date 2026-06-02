@@ -21,6 +21,22 @@ Both formats are autodiscoverable via `<link rel="alternate">` tags in the HTML 
 
 Status-style posts without a title produce a feed entry with an empty `<title>` (Atom) or no `title` field at all (JSON Feed). This follows the [micro.blog convention](https://book.micro.blog/) so timeline-style readers can render them as short notes rather than empty-titled articles.
 
+## Feed icon and logo
+
+The Atom feed can advertise an avatar and a banner image. Feed readers such as
+micro.blog render the icon as the feed's avatar in their timeline.
+
+These are sourced by convention from the web root (next to `index.php`) — no
+configuration is needed:
+
+| File | Atom element | Shape |
+|------|--------------|-------|
+| `favicon.png` | `<icon>` | small square avatar |
+| `logo.png` | `<logo>` | wider banner (roughly 2:1) |
+
+Drop either file into the `src/` directory (the web root). Each element is only
+included when its file exists, so the feed never points at a missing image.
+
 ## Related
 
 * [Cross-posting From Feeds]({{ site.baseurl }}{% link cross-posting.md %}) — consuming external feeds into Lamb

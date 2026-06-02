@@ -156,7 +156,56 @@ class FeedTemplateTest extends TestCase
         $this->assertNotEmpty((string) $link['href']);
     }
 
-    private function renderFeedWithPost(array $fields): \SimpleXMLElement
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedOmitsIconAndLogoWhenConventionFilesAbsent(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            []
+        );
+
+        $this->assertFalse(isset($xml->icon), 'Feed should not emit <icon> when favicon.png is absent');
+        $this->assertFalse(isset($xml->logo), 'Feed should not emit <logo> when logo.png is absent');
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedIncludesIconFromFaviconConvention(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            ['favicon.png']
+        );
+
+        $this->assertSame(ROOT_URL . '/favicon.png', (string) $xml->icon);
+        $this->assertFalse(isset($xml->logo), 'No logo.png means no <logo>');
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedIncludesLogoFromLogoConvention(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            ['favicon.png', 'logo.png']
+        );
+
+        $this->assertSame(ROOT_URL . '/favicon.png', (string) $xml->icon);
+        $this->assertSame(ROOT_URL . '/logo.png', (string) $xml->logo);
+    }
+
+    /**
+     * @param array $fields        Post bean fields.
+     * @param array $conventionFiles Names of web-root convention files to create (e.g. favicon.png).
+     */
+    private function renderFeedWithPost(array $fields, array $conventionFiles = []): \SimpleXMLElement
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
 
@@ -167,6 +216,23 @@ class FeedTemplateTest extends TestCase
 
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
+        }
+
+        // ROOT_DIR is a constant defined once per process (Codeception does not
+        // isolate test methods), so the web-root path is fixed and convention-file
+        // presence is controlled per render by writing/removing the files on disk.
+        $webRoot = sys_get_temp_dir() . '/lamb_feed_test_' . getmypid();
+        if (!is_dir($webRoot)) {
+            mkdir($webRoot, 0777, true);
+        }
+        foreach (['favicon.png', 'logo.png'] as $file) {
+            @unlink($webRoot . '/' . $file);
+        }
+        foreach ($conventionFiles as $file) {
+            file_put_contents($webRoot . '/' . $file, 'x');
+        }
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', $webRoot);
         }
 
         $bean = R::dispense('post');

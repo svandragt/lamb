@@ -19,6 +19,18 @@ $Xml->addChild('id', escape($channel_link));
 $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['updated'])));
 $Xml->addChild('generator', 'Lamb');
 
+// Atom <icon> (square avatar) and <logo> (wider banner) are sourced by
+// convention from the web root: drop favicon.png / logo.png next to index.php.
+// Only emitted when the file actually exists, so we never advertise a broken
+// image URL to feed readers (e.g. micro.blog renders <icon> as the avatar).
+if (defined('ROOT_DIR')) {
+    foreach (['favicon.png' => 'icon', 'logo.png' => 'logo'] as $file => $element) {
+        if (file_exists(ROOT_DIR . '/' . $file)) {
+            $Xml->addChild($element, escape(ROOT_URL . '/' . $file));
+        }
+    }
+}
+
 $Link = $Xml->addChild('atom:link');
 $Link->addAttribute('rel', 'self');
 $Link->addAttribute('href', escape($channel_link));
