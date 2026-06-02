@@ -40,7 +40,29 @@ Images sent via Micropub — both inline `photo` files on a post and files sent 
 
 ## Server requirements
 
-Uploads require the directory `src/assets/` to be writable by the web server or PHP-FPM user. WebP conversion requires PHP's GD extension built with WebP support (the common default); without it, files are stored in their original format.
+Uploads require the directory `src/assets/` to be writable by the web server or PHP-FPM user.
+
+WebP conversion relies on PHP's [GD extension](https://www.php.net/manual/en/book.image.php) being built **with WebP support**. This is the common default, but it isn't guaranteed on every host. WebP support is the only thing the conversion needs — if it's missing, nothing breaks: Lamb stores each upload in its original format instead, so JPEG and PNG files are saved as-is rather than being converted. You simply don't get the smaller WebP files.
+
+### Checking for WebP support
+
+Run this on the server (the same PHP binary your site uses):
+
+```bash
+php -r 'echo function_exists("imagewebp") ? "WebP: yes\n" : "WebP: no\n";'
+```
+
+For more detail, inspect GD's reported capabilities:
+
+```bash
+php -r 'print_r(gd_info());'
+```
+
+Look for `[WebP Support] => 1` in the output. `1` means uploads will be converted; `0` (or a missing line) means they'll be stored in their original format.
+
+If you can't run the CLI — for example on shared hosting where only the web server's PHP is configured — drop a one-line script such as `phpinfo();` into a temporary file in `src/`, load it in your browser, and search the page for "WebP" under the **gd** section. Delete the file afterwards.
+
+If WebP support is missing and you want it, install or enable the WebP-capable GD build for your platform (for example `apt install php-gd` on Debian/Ubuntu, which bundles WebP support in current releases) and restart PHP-FPM or your web server.
 
 ## Related
 
