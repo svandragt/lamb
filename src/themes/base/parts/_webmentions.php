@@ -7,8 +7,8 @@ use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 use function Lamb\Webmention\webmentions_for_post;
 
-// Received webmentions are shown to the logged-in author only for now; public
-// display / moderation is a follow-up (see #244).
+// Received webmentions are a private notification for the author, not public
+// comments: they are shown to the logged-in author only, by design.
 if ($template !== 'status' || !isset($_SESSION[SESSION_LOGIN])) {
     return;
 }
