@@ -30,23 +30,27 @@ to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP ver
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
 ```
 
-## Caching uploaded assets
+## Caching static assets
 
-Files dropped into posts are stored under `src/assets/` with content-addressed
-names (a hash of the file), so their URL changes whenever the content changes.
-That makes them safe to cache aggressively and indefinitely. Add a `location`
-block so NGINX serves them with a long, immutable cache:
+Uploaded files under `src/assets/` use content-addressed names (a hash of the
+file), and theme CSS / application JavaScript under `/themes/` and `/scripts/`
+are cache-busted by a content hash in their query string (`?ver=…`). In every
+case the URL changes whenever the content changes, so all three are safe to
+cache aggressively and indefinitely.
+
+The shipped `lamb.conf` snippet already serves them with a long, immutable
+cache via this `location` block:
 
 ```nginx
-location /assets/ {
+location ~ ^/(themes|scripts|assets)/ {
     expires 1y;
     add_header Cache-Control "public, immutable";
 }
 ```
 
-Theme CSS and application JavaScript are already cache-busted by a content hash
-in their query string (`?ver=…`), so the same long-cache treatment is safe for
-`/themes/` and `/scripts/` if you wish to add them.
+Without it, NGINX serves static files with no `Cache-Control`, which Lighthouse
+flags as *"Use efficient cache lifetimes"* and which forces repeat visitors to
+re-download fonts, CSS and images on every visit.
 
 ## Restart services
 
