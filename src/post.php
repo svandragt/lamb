@@ -24,6 +24,7 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
 {
     global $config;
 
+    $text = normalize_frontmatter_fence($text);
     $matter = parse_matter($text);
 
     if ($bean === null) {
@@ -57,6 +58,28 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     }
 
     return $bean;
+}
+
+/**
+ * Restores a front-matter fence that iOS "Smart Punctuation" has rewritten.
+ *
+ * Typing `---` on iOS produces em/en dashes (commonly `—-`), which stops the
+ * fence from being recognised as a front-matter delimiter. When the body opens
+ * with a dash-only fence line and has a matching closing fence line, both are
+ * normalised back to a literal `---`. Dashes anywhere else (post body, em-dash
+ * punctuation, signatures) are left untouched, and the surrounding whitespace
+ * and line endings are preserved.
+ *
+ * @param string $body The raw post body.
+ * @return string The body with a normalised opening/closing front-matter fence.
+ */
+function normalize_frontmatter_fence(string $body): string
+{
+    // Dash-like fence characters: hyphen-minus, en dash (U+2013), em dash (U+2014).
+    $pattern = '/\A([-\x{2013}\x{2014}]{2,})([ \t]*\R)(.*?)(\R)([-\x{2013}\x{2014}]{2,})([ \t]*)(\R|\z)/su';
+    return preg_replace_callback($pattern, static function (array $m): string {
+        return '---' . $m[2] . $m[3] . $m[4] . '---' . $m[6] . $m[7];
+    }, $body, 1) ?? $body;
 }
 
 /**

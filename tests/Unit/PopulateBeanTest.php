@@ -188,6 +188,37 @@ class PopulateBeanTest extends TestCase
         $this->assertSame(1, $bean->version);
     }
 
+    public function testPopulateBeanNormalisesIosSmartDashFenceForSlug(): void
+    {
+        // iOS "Smart Punctuation" rewrites the typed `---` fence as `—-`.
+        $text = "\u{2014}-\ntitle: My Post Title\n\u{2014}-\nContent here.";
+        $bean = populate_bean($text);
+        $this->assertSame('my-post-title', $bean->slug);
+    }
+
+    public function testPopulateBeanRewritesMangledFenceInStoredBody(): void
+    {
+        $text = "\u{2014}-\ntitle: Hello World\n\u{2014}-\nContent.";
+        $bean = populate_bean($text);
+        $this->assertStringStartsWith("---\n", $bean->body);
+        $this->assertStringNotContainsString("\u{2014}", $bean->body);
+    }
+
+    public function testPopulateBeanNormalisesDoubleEmDashFence(): void
+    {
+        $text = "\u{2014}\u{2014}\ntitle: Double Dash\n\u{2014}\u{2014}\nBody.";
+        $bean = populate_bean($text);
+        $this->assertSame('double-dash', $bean->slug);
+    }
+
+    public function testPopulateBeanLeavesEmDashesInContentUntouched(): void
+    {
+        $text = "A plain status \u{2014} with an em dash in it.";
+        $bean = populate_bean($text);
+        $this->assertSame($text, $bean->body);
+        $this->assertSame('', $bean->slug);
+    }
+
     public function testPopulateBeanSetsSourceUrlFromFeedItem(): void
     {
         $item = $this->createMock(SimplePieItem::class);
