@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+# Upgrade Lamb in place: reset to the upstream of the checked-out branch,
+# reinstall production dependencies, and verify the site still responds.
+# Safe to run from cron, e.g.: 15 3 * * * /path/to/lamb/bin/upgrade
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+prev=$(git rev-parse HEAD)
+branch=$(git rev-parse --abbrev-ref HEAD)
+
+git fetch origin
+git reset --hard '@{u}'
+composer install --no-dev --no-interaction --prefer-dist --no-scripts
+
+echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
+
+# Health check: only when SITE_URL is configured (written by make-password.php).
+site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "'\"") || true
+if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
+    if ! curl -fsS -o /dev/null --max-time 15 "$site_url"; then
+        echo "Health check failed for ${site_url}" >&2
+        echo "Roll back with: git reset --hard ${prev} && composer install --no-dev --no-interaction --prefer-dist --no-scripts" >&2
+        exit 1
+    fi
+fi

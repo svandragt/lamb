@@ -1,0 +1,32 @@
+# Production image published to ghcr.io/svandragt/lamb on each release.
+# Self-contained: app + vendor baked in, FrankenPHP (Caddy + PHP) serves it.
+# Build from the repository root: docker build -f .docker/Dockerfile.release .
+
+FROM composer:2 AS vendor
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-autoloader --ignore-platform-reqs
+COPY src/ src/
+RUN composer dump-autoload --no-dev --optimize --ignore-platform-reqs
+
+FROM dunglas/frankenphp:php8.2
+LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
+LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
+
+RUN install-php-extensions gettext pdo_mysql
+
+RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
+
+COPY .docker/Caddyfile.release /etc/frankenphp/Caddyfile
+
+WORKDIR /app
+COPY composer.json make-password.php ./
+COPY src/ src/
+COPY --from=vendor /app/vendor/ vendor/
+
+# SQLite database and uploads live outside the image.
+RUN mkdir -p data src/assets
+VOLUME ["/app/data", "/app/src/assets"]
+
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS -o /dev/null http://localhost/ || exit 1
