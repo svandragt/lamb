@@ -323,7 +323,7 @@ Additional helper from `Lamb\Config`:
 
 `the_styles()` takes no arguments and always loads `styles/styles.css` from the active theme. There is no multi-file or concatenation mechanism — put everything in one CSS file per theme.
 
-The URL served is `THEME_URL . 'styles/styles.css'` with a cache-buster query string (`?<md5-of-url>`).
+`Theme\styles_markup()` decides how it is served. When the minified stylesheet is ≤ 20 KB it is **inlined** as a `<style>` tag (minified via `Theme\minify_css()`, with relative `url()` font references rewritten to absolute via `Theme\rewrite_css_urls()`) so first paint isn't blocked on a separate CSS request — the main mobile-PageSpeed win for a single-file theme. Larger or unreadable stylesheets fall back to an external `<link rel="stylesheet">` whose URL is `THEME_URL . 'styles/styles.css'` with a content-hash cache-buster (`?ver=<md5>`). The two preloaded fonts in `html.php` keep their absolute URLs, which match the rewritten `url()` targets, so inlining does not double-fetch them.
 
 ### JavaScript asset loading
 
@@ -345,7 +345,7 @@ When the user is logged in, it also loads:
 
 User-uploaded files live under `src/assets/`, not under theme directories.
 
-`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`); GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`) and downscaled so their longest edge is at most 1600px (`Response\scaled_dimensions()`) — large screenshots are not served at full resolution to phones; GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 

@@ -5,7 +5,10 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Theme\asset_version;
+use function Lamb\Theme\minify_css;
 use function Lamb\Theme\redirect_to;
+use function Lamb\Theme\rewrite_css_urls;
+use function Lamb\Theme\styles_markup;
 use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
 
@@ -70,6 +73,104 @@ class ThemeAssetsTest extends TestCase
         $output = ob_get_clean();
 
         $this->assertStringContainsString(' id="', $output);
+    }
+
+    // -------------------------------------------------------------------------
+    // minify_css
+    // -------------------------------------------------------------------------
+
+    public function testMinifyCssRemovesComments(): void
+    {
+        $css = "/* a comment */\nbody { color: red; }";
+        $this->assertStringNotContainsString('comment', minify_css($css));
+    }
+
+    public function testMinifyCssCollapsesWhitespaceAndStructuralSpacing(): void
+    {
+        $css = "body {\n    color:   red;\n    margin: 0;\n}";
+        $this->assertSame('body{color:red;margin:0}', minify_css($css));
+    }
+
+    public function testMinifyCssDropsFinalSemicolonInBlock(): void
+    {
+        $this->assertSame('a{color:red}', minify_css('a { color: red; }'));
+    }
+
+    // -------------------------------------------------------------------------
+    // rewrite_css_urls
+    // -------------------------------------------------------------------------
+
+    public function testRewriteCssUrlsMakesRelativeUrlsAbsolute(): void
+    {
+        $css = "@font-face { src: url('fonts/a.woff2') format('woff2'); }";
+        $out = rewrite_css_urls($css, 'http://localhost/themes/x/styles/');
+        $this->assertStringContainsString("url('http://localhost/themes/x/styles/fonts/a.woff2')", $out);
+    }
+
+    public function testRewriteCssUrlsLeavesAbsoluteUrlsUntouched(): void
+    {
+        $css = "a { background: url(https://cdn.example/bg.png); }";
+        $out = rewrite_css_urls($css, 'http://localhost/themes/x/styles/');
+        $this->assertStringContainsString('url(https://cdn.example/bg.png)', $out);
+        $this->assertStringNotContainsString('localhost', $out);
+    }
+
+    public function testRewriteCssUrlsLeavesRootRelativeAndDataUrlsUntouched(): void
+    {
+        $css = "a{background:url(/img/x.png)} b{background:url(data:image/png;base64,AAAA)}";
+        $out = rewrite_css_urls($css, 'http://localhost/themes/x/styles/');
+        $this->assertStringContainsString('url(/img/x.png)', $out);
+        $this->assertStringContainsString('url(data:image/png;base64,AAAA)', $out);
+    }
+
+    // -------------------------------------------------------------------------
+    // styles_markup — inline small CSS, fall back to <link> otherwise
+    // -------------------------------------------------------------------------
+
+    public function testStylesMarkupInlinesSmallCssAsStyleTag(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb_css_');
+        file_put_contents($tmp, "body { color: red; }");
+        try {
+            $out = styles_markup($tmp, 'http://localhost/themes/x/styles/styles.css', 'http://localhost/themes/x/styles/');
+            $this->assertStringContainsString('<style', $out);
+            $this->assertStringContainsString('body{color:red}', $out);
+            $this->assertStringNotContainsString('<link', $out);
+        } finally {
+            unlink($tmp);
+        }
+    }
+
+    public function testStylesMarkupRewritesRelativeFontUrlsWhenInlining(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb_css_');
+        file_put_contents($tmp, "@font-face{src:url('fonts/a.woff2') format('woff2')}");
+        try {
+            $out = styles_markup($tmp, 'http://localhost/themes/x/styles/styles.css', 'http://localhost/themes/x/styles/');
+            $this->assertStringContainsString("url('http://localhost/themes/x/styles/fonts/a.woff2')", $out);
+        } finally {
+            unlink($tmp);
+        }
+    }
+
+    public function testStylesMarkupFallsBackToLinkWhenOverSizeLimit(): void
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb_css_');
+        file_put_contents($tmp, str_repeat('a{color:red}', 100));
+        try {
+            // Tiny limit forces the external-stylesheet fallback.
+            $out = styles_markup($tmp, 'http://localhost/themes/x/styles/styles.css', 'http://localhost/themes/x/styles/', 50);
+            $this->assertStringContainsString('<link rel="stylesheet"', $out);
+            $this->assertMatchesRegularExpression('/styles\.css\?ver=[a-f0-9]{32}/', $out);
+        } finally {
+            unlink($tmp);
+        }
+    }
+
+    public function testStylesMarkupFallsBackToLinkWhenFileMissing(): void
+    {
+        $out = styles_markup('/no/such/file.css', 'http://localhost/themes/x/styles/styles.css', 'http://localhost/themes/x/styles/');
+        $this->assertStringContainsString('<link rel="stylesheet"', $out);
     }
 
     // -------------------------------------------------------------------------

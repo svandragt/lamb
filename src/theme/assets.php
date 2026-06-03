@@ -10,19 +10,94 @@ use const ROOT_URL;
 use const SESSION_LOGIN;
 
 /**
- * Emits a <link rel="stylesheet"> tag for the active theme's styles/styles.css with a cache-busting hash.
+ * Emits the active theme's stylesheet, inlined when small enough (see styles_markup()).
  *
  * @return void
  */
 function the_styles(): void
 {
-    $styles = [
-        '' => ['styles.css'],
-    ];
-    $assets = asset_loader($styles, THEME_URL . 'styles');
-    foreach ($assets as $id => $href) {
-        printf('<link rel="stylesheet" id="%1$s" href="%2$s?ver=%1$s">' . PHP_EOL, $id, $href);
+    $css_url  = ROOT_URL . '/' . THEME_URL . 'styles/styles.css';
+    $css_path = (defined('ROOT_DIR') ? ROOT_DIR : '') . '/' . THEME_URL . 'styles/styles.css';
+    $base_url = ROOT_URL . '/' . THEME_URL . 'styles/';
+
+    echo styles_markup($css_path, $css_url, $base_url);
+}
+
+/**
+ * Builds the markup that loads the active theme's stylesheet.
+ *
+ * Small stylesheets are inlined as a <style> tag to remove the render-blocking
+ * round-trip on first paint (the single biggest mobile PageSpeed win for a
+ * one-file theme). Relative url() references are rewritten to absolute so they
+ * still resolve once the CSS lives in the HTML rather than at styles/styles.css.
+ * Anything larger than $max_bytes, or an unreadable file, falls back to an
+ * external <link> with a content-hash cache-buster.
+ *
+ * @param string $css_path  Absolute filesystem path to the stylesheet.
+ * @param string $css_url   Public URL of the stylesheet (fallback <link> href).
+ * @param string $base_url  Absolute URL of the directory the stylesheet lives in.
+ * @param int    $max_bytes Inline only when the minified CSS is at most this size.
+ * @return string The <style> or <link> markup, including a trailing newline.
+ */
+function styles_markup(string $css_path, string $css_url, string $base_url, int $max_bytes = 20480): string
+{
+    if (is_file($css_path) && is_readable($css_path)) {
+        $css = file_get_contents($css_path);
+        if ($css !== false) {
+            $inline = minify_css(rewrite_css_urls($css, $base_url));
+            if (strlen($inline) <= $max_bytes) {
+                return sprintf('<style id="%s">%s</style>', md5($inline), $inline) . PHP_EOL;
+            }
+        }
     }
+
+    $ver = asset_version($css_path, $css_url);
+    return sprintf('<link rel="stylesheet" id="%1$s" href="%2$s?ver=%1$s">', $ver, $css_url) . PHP_EOL;
+}
+
+/**
+ * Rewrites relative url() references in CSS to absolute URLs against $base_url.
+ *
+ * Needed when CSS is inlined into the HTML document: a relative url('fonts/x.woff2')
+ * would otherwise resolve against the page URL instead of the stylesheet's directory.
+ * Absolute (http(s):, //, /), data: and fragment (#) URLs are left untouched.
+ *
+ * @param string $css      The stylesheet contents.
+ * @param string $base_url Absolute URL of the stylesheet's directory (trailing slash).
+ * @return string The CSS with relative url() references made absolute.
+ */
+function rewrite_css_urls(string $css, string $base_url): string
+{
+    return preg_replace_callback(
+        '/url\(\s*([\'"]?)([^\'")]+)\1\s*\)/i',
+        static function (array $m) use ($base_url): string {
+            $url = trim($m[2]);
+            if (preg_match('~^(?:https?:)?//|^/|^data:|^#~i', $url)) {
+                return $m[0];
+            }
+            return "url('" . $base_url . $url . "')";
+        },
+        $css
+    );
+}
+
+/**
+ * Minifies CSS for inlining: strips comments and collapses insignificant whitespace.
+ *
+ * Conservative by design — it only touches whitespace and comments, so it is safe
+ * for the controlled, hand-written theme stylesheets Lamb ships.
+ *
+ * @param string $css The stylesheet contents.
+ * @return string Minified CSS.
+ */
+function minify_css(string $css): string
+{
+    $css = preg_replace('#/\*.*?\*/#s', '', $css);
+    $css = preg_replace('/\s+/', ' ', $css);
+    $css = preg_replace('/\s*([{}:;,>])\s*/', '$1', $css);
+    $css = str_replace(';}', '}', $css);
+
+    return trim($css);
 }
 
 /**
