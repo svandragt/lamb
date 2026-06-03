@@ -4,34 +4,55 @@ title: Upgrading
 
 # Upgrading
 
-Full instructions for upgrading lamb to a newer version.
+How you upgrade depends on how you installed Lamb. There is [more information about branches](https://github.com/svandragt/lamb/blob/main/BRANCHES) to be on — `release` is the stable branch.
 
-This is what I do every night:
+## Git install
+
+Run the bundled upgrade script:
 
 ```
-git pull
-git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name @{u})
-composer install
+bin/upgrade
 ```
 
-This is all you need to upgrade. There is [more information about branches](https://github.com/svandragt/lamb/blob/main/BRANCHES) to be on.
+It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds. If the health check fails, it prints the exact command to roll back to the previous version.
 
-## Explanation
+Note: the reset discards any local changes to tracked files. Your database (`data/`), uploads (`src/assets/`), and `.env` are not tracked, so they are unaffected.
 
-The commands are a series of Git and Composer commands typically used in a development environment. Here's a breakdown of what each command does:
+To upgrade automatically every night, add it to cron:
 
-1. **`git pull`**:
-   - This command fetches changes from the remote repository and merges them into the current branch. It is a combination of `git fetch` (which retrieves the latest changes from the remote) and `git merge` (which integrates those changes into your current branch).
+```
+15 3 * * * /path/to/lamb/bin/upgrade
+```
 
-2. **`git reset --hard $(git rev-parse --abbrev-ref --symbolic-full-name @{u})`**:
-   - This command resets the current branch to the state of its upstream branch (the branch it is tracking on the remote).
-   - `git rev-parse --abbrev-ref --symbolic-full-name @{u}` retrieves the name of the upstream branch for the current branch. The `@{u}` syntax refers to the upstream branch.
-   - The `git reset --hard` command then resets the current branch to match the upstream branch exactly, discarding any local changes (both staged and unstaged). This means any uncommitted changes in your working directory will be lost.
+Cron will email you the output if the health check fails (when your system is set up to deliver mail).
 
-3. **`composer install`**:
-   - This command is used in PHP projects that use Composer as a dependency manager. It installs the dependencies listed in the `composer.json` file.
-   - If the `composer.lock` file exists, it will install the exact versions of the dependencies specified in that file. If it doesn't exist, it will create one based on the versions of the dependencies that are installed.
+## Tarball install
 
-### Summary
+Download the latest `lamb-<version>.tar.gz` from the [releases page](https://github.com/svandragt/lamb/releases) and extract it over your existing installation:
 
-In summary, these commands are used to update a local Git repository to match the remote repository (discarding any local changes) and then install the necessary PHP dependencies for the project. This sequence is often used to ensure that the local development environment is in sync with the latest code and dependencies from the remote repository.
+```
+tar -xzf lamb-<version>.tar.gz --strip-components=1 -C /path/to/lamb
+```
+
+Your database (`data/`), uploads (`src/assets/`), and `.env` are preserved — the tarball does not contain them.
+
+## Docker install
+
+Pull the new image and recreate the container:
+
+```
+docker pull ghcr.io/svandragt/lamb:latest
+docker stop lamb && docker rm lamb
+docker run -d --name lamb -p 80:80 \
+  -e LAMB_LOGIN_PASSWORD='<your-hash>' \
+  -v lamb-data:/app/data -v lamb-assets:/app/src/assets \
+  ghcr.io/svandragt/lamb:latest
+```
+
+The database and uploads live in the named volumes and survive the recreate.
+
+## Related
+
+- [Installation options]({{ site.baseurl }}{% link index.md %})
+- [Docker]({{ site.baseurl }}{% link docker.md %})
+- [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
