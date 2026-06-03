@@ -84,6 +84,10 @@ gh release create <version> \
 
 ## 6. Post-release
 
+- [ ] Publishing the release triggers the `Release artifacts` workflow. Verify it
+      attached `lamb-<version>.tar.gz` to the release (`gh release view <version>`)
+      and pushed `ghcr.io/svandragt/lamb:<version>` (plus `:latest` for finals).
+      Re-run via `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
 - [ ] Announce / update any demo site if applicable.
 - [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a
       clean checkout of `release` installs and runs.

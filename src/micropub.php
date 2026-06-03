@@ -239,6 +239,8 @@ class LambMicropubAdapter extends MicropubAdapter
 
         R::store($bean);
 
+        \Lamb\Webmention\enqueue_for_post($bean);
+
         return permalink($bean);
     }
 
@@ -342,6 +344,8 @@ class LambMicropubAdapter extends MicropubAdapter
         $bean->updated = date('Y-m-d H:i:s');
         R::store($bean);
 
+        \Lamb\Webmention\enqueue_for_post($bean);
+
         return true;
     }
 
@@ -424,17 +428,26 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = $bean->body ?? '';
         $matter      = parse_matter($currentBody);
         $title       = $matter['title'] ?? null;
+        $replyTo     = $matter['in-reply-to'] ?? $matter['in_reply_to'] ?? null;
 
         $tags      = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
-        if ($title === null) {
+        $front = [];
+        if ($title !== null) {
+            $front[] = "title: $title";
+        }
+        if (is_string($replyTo) && $replyTo !== '') {
+            $front[] = "in-reply-to: $replyTo";
+        }
+
+        if ($front === []) {
             return $content;
         }
 
-        return "---\ntitle: $title\n---\n$content";
+        return "---\n" . implode("\n", $front) . "\n---\n$content";
     }
 
     /**
@@ -461,8 +474,25 @@ class LambMicropubAdapter extends MicropubAdapter
                 continue;
             }
             $uploadDir = \Lamb\Response\get_upload_dir();
-            $filename  = sha1($file->getClientFilename() ?? uniqid('', true)) . ".$ext";
-            $file->moveTo($uploadDir . '/' . $filename);
+            $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
+
+            // Re-encode JPEG/PNG to WebP via a temp copy of the stream; fall back to
+            // storing the original bytes when conversion isn't possible.
+            $filename = null;
+            if (\Lamb\Response\should_convert_to_webp($ext)) {
+                $tmp = tempnam(sys_get_temp_dir(), 'lamb_up_');
+                if ($tmp !== false) {
+                    file_put_contents($tmp, (string) $file->getStream());
+                    if (\Lamb\Response\convert_to_webp($tmp, $uploadDir . '/' . $seed . '.webp')) {
+                        $filename = $seed . '.webp';
+                    }
+                    unlink($tmp);
+                }
+            }
+            if ($filename === null) {
+                $filename = $seed . ".$ext";
+                $file->moveTo($uploadDir . '/' . $filename);
+            }
 
             $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
         }
@@ -505,6 +535,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function buildBody(array $props, string $content): string
     {
         $title = $props['name'][0] ?? null;
+        $replyTo = $props['in-reply-to'][0] ?? null;
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -521,11 +552,19 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        if ($title === null) {
+        $matter = [];
+        if ($title !== null) {
+            $matter[] = "title: $title";
+        }
+        if (is_string($replyTo) && $replyTo !== '') {
+            $matter[] = "in-reply-to: $replyTo";
+        }
+
+        if ($matter === []) {
             return $content;
         }
 
-        return "---\ntitle: $title\n---\n$content";
+        return "---\n" . implode("\n", $matter) . "\n---\n$content";
     }
 
     /**
@@ -722,8 +761,17 @@ function respond_micropub_media(): void
     }
 
     $uploadDir = \Lamb\Response\get_upload_dir();
-    $filename  = sha1(($file['name'] ?? '') . uniqid('', true)) . ".$ext";
-    move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+    $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
+
+    // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
+    $converted = \Lamb\Response\should_convert_to_webp($ext)
+        && \Lamb\Response\convert_to_webp($file['tmp_name'], $uploadDir . '/' . $seed . '.webp');
+    if ($converted) {
+        $filename = $seed . '.webp';
+    } else {
+        $filename = $seed . ".$ext";
+        move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+    }
 
     $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;
 

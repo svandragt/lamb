@@ -18,9 +18,13 @@ class ThemeExtendedTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        // Ensure the draft column exists (RedBeanPHP fluid mode only creates columns on first store)
+        // Ensure visibility columns exist (RedBeanPHP fluid mode only creates columns on first store).
+        // Without deleted/created present, the visibility SQL errors and fluid mode silently returns
+        // an empty result set, masking the behaviour under test.
         $seed = R::dispense('post');
         $seed->draft = 0;
+        $seed->deleted = 0;
+        $seed->created = date('Y-m-d H:i:s');
         R::store($seed);
         R::exec("DELETE FROM post");
 
@@ -100,7 +104,7 @@ class ThemeExtendedTest extends TestCase
     public function testAssetLoaderYieldsPublicAsset(): void
     {
         $assets = ['' => ['styles.css']];
-        $results = iterator_to_array(asset_loader($assets, 'themes/default/styles'));
+        $results = iterator_to_array(asset_loader($assets, 'themes/base/styles'));
 
         $this->assertCount(1, $results);
         $href = array_values($results)[0];
@@ -110,7 +114,7 @@ class ThemeExtendedTest extends TestCase
     public function testAssetLoaderKeyIsMd5OfHref(): void
     {
         $assets = ['' => ['styles.css']];
-        $results = iterator_to_array(asset_loader($assets, 'themes/default/styles'));
+        $results = iterator_to_array(asset_loader($assets, 'themes/base/styles'));
 
         foreach ($results as $key => $href) {
             $this->assertSame(md5($href), $key);
@@ -300,6 +304,19 @@ class ThemeExtendedTest extends TestCase
         R::store($bean);
 
         $result = get_posts_by_tags(['trashme']);
+        $this->assertCount(0, $result);
+    }
+
+    public function testGetPostsByTagsExcludesScheduledPosts(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Scheduled post about #scheduleme end';
+        $bean->version = 1;
+        $bean->draft = 0;
+        $bean->created = date('Y-m-d H:i:s', time() + 86400);
+        R::store($bean);
+
+        $result = get_posts_by_tags(['scheduleme']);
         $this->assertCount(0, $result);
     }
 }

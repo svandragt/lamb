@@ -30,8 +30,10 @@ services:
       - ../.ddev/.env
     image: php:fpm
     volumes:
-      - ../src:/srv/app/src
-      - ../data:/srv/app/data
+      # Mount the whole project so Codeception config and tests are available
+      # inside the container. The vendor volume is overlaid on top so the
+      # container uses the dependencies installed by the composer service.
+      - ..:/srv/app
       - vendor:/srv/app/vendor
 
 volumes:

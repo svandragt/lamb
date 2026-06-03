@@ -19,8 +19,7 @@ use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
-
-use const Lamb\SQL_PUBLISHED;
+use function Lamb\visible_clause;
 
 /**
  * Returns true when the user is authenticated and the bean has an ID.
@@ -223,8 +222,9 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $sql = '(' . $conditions['sql'] . ') AND' . SQL_PUBLISHED;
-        $params = $conditions['params'];
+        $visible = visible_clause();
+        $sql = '(' . $conditions['sql'] . ') AND' . $visible['sql'];
+        $params = array_merge($conditions['params'], $visible['params']);
         if ($exclude_id > 0) {
             $sql .= ' AND id != ?';
             $params[] = $exclude_id;
@@ -279,12 +279,12 @@ function link_source(OODBBean $bean): string
 }
 
 /**
- * Includes a theme part file, falling back to the default theme when the active theme does not override it.
+ * Includes a theme part file, falling back to the base theme when the active theme does not override it.
  *
  * @param string $name Part name without extension (e.g. 'home', '_items').
  * @param string $dir  Subdirectory within the theme folder. Defaults to 'parts'. Pass '' for top-level files.
  * @return void
- * @throws RuntimeException When the part file cannot be found in either the active or default theme.
+ * @throws RuntimeException When the part file cannot be found in either the active or base theme.
  */
 function part(string $name, string $dir = 'parts'): void
 {
@@ -294,8 +294,8 @@ function part(string $name, string $dir = 'parts'): void
     }
     $filename = THEME_DIR . "$dir$name.php";
     if (!is_readable($filename)) {
-        // Fallback to default
-        $filename = __DIR__ . "/themes/default/$dir$name.php";
+        // Fallback to the base theme (the complete reference part library)
+        $filename = __DIR__ . "/themes/base/$dir$name.php";
     }
     if (!is_readable($filename)) {
         throw new RuntimeException('unreadable part: ' . $filename);

@@ -101,7 +101,7 @@ Small, deliberate touches that reward attention but don't ask for it:
 - `styles/styles.css`: full visual definition.
 - `parts/_items.php`: minimal override to move the author into `screen-reader-text`.
 
-Everything else falls back to `themes/default/`.
+Everything else falls back to `themes/base/`.
 
 ## Activate
 

@@ -14,6 +14,27 @@ on:
 
 jobs:
 
+  # Detect whether files relevant to the browser (Playwright) suite changed.
+  # The workflow itself always runs (no `paths:` filter on the triggers above)
+  # so the required `ci` check is always reported; the expensive playwright
+  # job below is what we gate on these paths, keeping doc-only PRs fast.
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      e2e: ${{ steps.filter.outputs.e2e }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            e2e:
+              - 'src/**'
+              - 'e2e/**'
+              - 'playwright.config.ts'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+
   quality:
     runs-on: ubuntu-latest
 
@@ -67,8 +88,86 @@ jobs:
         if: matrix.php-version == '8.2'
         run: composer coverage
 
+  # Browser end-to-end suite. Only runs when e2e-relevant files change
+  # (see the `changes` job); otherwise it is skipped and the gate below
+  # treats that as a pass.
+  playwright:
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: sqlite3, gettext, simplexml
+      - name: Cache Composer dependencies
+        uses: actions/cache@v5
+        with:
+          path: vendor
+          key: composer-${{ hashFiles('composer.lock') }}
+      - name: Install Composer dependencies
+        run: composer install --no-dev --no-interaction --no-scripts
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: playwright-
+      - name: Install Playwright Browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm exec playwright install-deps chromium
+      - name: Run Playwright tests
+        run: pnpm exec playwright test
+      - uses: actions/upload-artifact@v6
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
+
+  # Single aggregate gate. Mark THIS job ("ci") as the required status check
+  # in branch protection / the ruleset — not the individual matrix jobs.
+  # `if: always()` ensures the job runs (and reports a definite success/failure)
+  # even when a dependency fails. Without it the job would be *skipped* when
+  # a dependency fails, and GitHub treats a skipped required check as
+  # passing — which would let a red PR merge.
   ci:
     runs-on: ubuntu-latest
-    needs: [quality, test]
+    needs: [quality, test, playwright]
+    if: always()
     steps:
-      - run: echo "All checks passed"
+      - name: Verify required jobs succeeded
+        run: |
+          echo "quality:    ${{ needs.quality.result }}"
+          echo "test:       ${{ needs.test.result }}"
+          echo "playwright: ${{ needs.playwright.result }}"
+          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ]; then
+            echo "::error::quality or test did not succeed"
+            exit 1
+          fi
+          # playwright is skipped on PRs that don't touch e2e-relevant paths;
+          # only a real failure (or cancellation) should block the merge.
+          if [ "${{ needs.playwright.result }}" != "success" ] && [ "${{ needs.playwright.result }}" != "skipped" ]; then
+            echo "::error::playwright did not succeed"
+            exit 1
+          fi
+          echo "All checks passed"

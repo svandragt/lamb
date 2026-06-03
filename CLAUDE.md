@@ -74,8 +74,9 @@ lamb/
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
 │   ├── assets/           # Runtime upload storage (created under YYYY/MM)
 │   ├── themes/
-│   │   ├── default/      # Default theme (HTML, parts, feed, CSS)
-│   │   └── 2024/         # Alternative theme (overrides parts as needed)
+│   │   ├── base/         # Base theme + fallback library (HTML, parts, feed, CSS)
+│   │   ├── 2024/         # Alternative theme (overrides parts as needed)
+│   │   └── 2026/         # "Notes" theme — default for new installs
 │   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
 ├── tests/
 │   ├── Unit/             # PHPUnit tests (ConfigTest.php)
@@ -157,9 +158,9 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### Theming
 
-`Theme\part($name, $dir)` includes `THEME_DIR/$dir/$name.php`, falling back to `src/themes/default/`. Custom themes only need to override specific parts.
+`Theme\part($name, $dir)` includes `THEME_DIR/$dir/$name.php`, falling back to `src/themes/base/`. Custom themes only need to override specific parts.
 
-**Theme parts (default):**
+**Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
 - `feed.php` — Atom feed output
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`
@@ -173,10 +174,10 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### How themes are selected
 
-`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and falls back to `'default'`:
+`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Config\resolve_theme()`, which falls back to `'base'` when unset and aliases the legacy name `'default'` to `'base'`:
 
 ```php
-define("THEME",     $config['theme'] ?? 'default');
+define("THEME",     Config\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');   // absolute FS path
 define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relative)
 ```
@@ -185,6 +186,8 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
 
+New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs without an explicit theme are migrated to `theme = base` on first read (`Config\ensure_explicit_theme()` in `get_ini_text()`), so the `'base'` fallback and the `default`→`base` alias can be removed once all installs carry an explicit theme.
+
 ### Part resolution (`Theme\part`)
 
 ```php
@@ -192,7 +195,7 @@ Theme\part($name, $dir = 'parts')
 ```
 
 1. Looks for `THEME_DIR . $dir . '/' . $name . '.php'`
-2. Falls back to `src/themes/default/$dir/$name.php`
+2. Falls back to `src/themes/base/$dir/$name.php`
 3. Throws `RuntimeException` if neither exists
 
 `$name` and `$dir` are sanitised (only `[a-zA-Z0-9-_]` allowed — dots and slashes are stripped).
@@ -336,16 +339,17 @@ When the user is logged in, it also loads:
 - `src/scripts/logged_in/confirm-delete.js`
 - `src/scripts/logged_in/link-edit-buttons.js`
 - `src/scripts/logged_in/upload-image.js`
+- `src/scripts/logged_in/paste-link.js`
 
 ### Upload asset storage
 
 User-uploaded files live under `src/assets/`, not under theme directories.
 
-`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`); GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 
-Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`default`, `2024`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
+Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`base`, `2024`, `2026`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
 
 To ship a new theme as part of the repo, add one line to `.gitignore`:
 
@@ -358,7 +362,7 @@ After that, `git add` works normally for all files inside the theme.
 
 ### Minimal new theme checklist
 
-A theme only needs to override the files that differ from `default`. The absolute minimum is a stylesheet:
+A theme only needs to override the files that differ from `base`. The absolute minimum is a stylesheet:
 
 ```
 src/themes/<name>/
@@ -366,7 +370,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the default feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `default` automatically.
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the base feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically.
 
 ### Typical file set (for a full redesign)
 
@@ -390,8 +394,10 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
-- Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie
-- Admin-only JS files are conditionally loaded via `asset_loader()`
+- Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
+- Sessions are only started for (previously) logged-in users: `Bootstrap\should_start_session()` checks for the `lamb_logged_in` or `LAMBSESSID` cookie, so anonymous visitors get no `Set-Cookie` and no no-cache headers and their pages stay cacheable. Routes that need a session for an otherwise-anonymous request (the login page, CSRF POSTs, flash-before-redirect) call `Bootstrap\start_session()` explicitly. `Bootstrap\cache_headers()` emits `max-age=300` + `Vary: Cookie` for anonymous responses and private/no-store for logged-in ones (session cache limiter is disabled so it never fights these)
+- Conditional GET: anonymous content pages and feeds carry `ETag`/`Last-Modified` validators derived from the most recently updated post **and the last config edit** (`Response\latest_content_timestamp()` takes the `max()` of the latest post `updated` and `Config\config_modified_timestamp()`), and `Response\send_304_if_current()` short-circuits with `304 Not Modified`. `Last-Modified` is the second-resolution `max()` of the two timestamps, but the `ETag` (`Bootstrap\content_etag()`) keeps them as **distinct components** (`"<content>-<config>"`) so a settings edit that lands in the same whole second as the latest post still changes the validator and invalidates caches. The login page and 404 responses are excluded. Feeds use a longer `max-age` (`Response\feed_cache()`). `Config\save_ini_text()` stamps `updated` on the config row so settings changes invalidate cached pages immediately
+- Admin-only JS files are conditionally loaded via `asset_loader()`. Asset URLs are cache-busted with a content hash (`Theme\asset_version()` → `md5_file`), so editing a CSS/JS file invalidates the `?ver=` query
 
 ### Feed Ingestion (Cron)
 

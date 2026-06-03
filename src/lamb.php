@@ -101,6 +101,17 @@ function parse_bean(OODBBean $bean): void
 
     $front_matter['transformed'] = (parse_tags($markdown));
 
+    // Normalise the reply target. Accept either `in-reply-to` (IndieWeb/Micropub
+    // spelling) or `in_reply_to`, and remove both from the blind copy below so the
+    // hyphenated key is never written as an invalid column. Empty when absent, so
+    // removing it from front matter on edit clears the stored value.
+    $in_reply_to = $front_matter['in-reply-to'] ?? $front_matter['in_reply_to'] ?? null;
+    unset($front_matter['in-reply-to'], $front_matter['in_reply_to']);
+    if (is_array($in_reply_to)) {
+        $in_reply_to = $in_reply_to[0] ?? null;
+    }
+    $bean->in_reply_to = is_string($in_reply_to) ? trim($in_reply_to) : '';
+
     // Preserve the existing created date (now for new posts, the stored value for
     // edits, the feed date for ingested items) so an unparseable front-matter date
     // falls back to it rather than leaving a non-date string in the column.
@@ -182,6 +193,27 @@ function not_scheduled_clause(): array
 }
 
 /**
+ * Returns the SQL fragment and bound parameters selecting only posts that are
+ * publicly visible to anonymous visitors: not draft, not deleted, and not
+ * scheduled for the future.
+ *
+ * This is the single allow-list definition of "visible". Every public listing
+ * query should use it instead of re-assembling SQL_PUBLISHED with
+ * not_scheduled_clause(), so a new query cannot accidentally omit one of the
+ * conditions (which is how scheduled posts leaked into related posts).
+ *
+ * @return array{sql: string, params: array}
+ */
+function visible_clause(): array
+{
+    $not_scheduled = not_scheduled_clause();
+    return [
+        'sql'    => SQL_PUBLISHED . 'AND' . $not_scheduled['sql'],
+        'params' => $not_scheduled['params'],
+    ];
+}
+
+/**
  * Rewrites the `created` value inside a body's leading YAML front-matter block to
  * the given resolved (absolute) datetime, leaving all other front-matter intact.
  *
@@ -256,6 +288,30 @@ function normalize_datetime(mixed $value): ?string
 function is_scheduled(OODBBean $post): bool
 {
     return !empty($post->created) && $post->created > date('Y-m-d H:i:s');
+}
+
+/**
+ * Returns true when a post may be shown for a direct permalink request
+ * (/status/<id> or a slug URL).
+ *
+ * Deleted posts are never visible. Drafts and posts scheduled for the future
+ * are visible only to the logged-in author, so they can preview their own
+ * work by permalink; anonymous visitors get a 404. This is the single-post
+ * counterpart to visible_clause() (the SQL allow-list for listings), with the
+ * added logged-in preview exception.
+ *
+ * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
+ * @return bool
+ */
+function is_visible(OODBBean $post): bool
+{
+    if (empty($post->id) || $post->deleted == 1) {
+        return false;
+    }
+    if (isset($_SESSION[SESSION_LOGIN])) {
+        return true;
+    }
+    return $post->draft != 1 && !is_scheduled($post);
 }
 
 /**

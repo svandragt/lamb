@@ -61,6 +61,7 @@ function redirect_created(): void
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
+    \Lamb\Webmention\enqueue_for_post($bean);
     redirect_uri('/');
 }
 
@@ -213,6 +214,8 @@ function redirect_edited(): void
         }
     }
 
+    \Lamb\Webmention\enqueue_for_post($bean);
+
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);
     redirect_uri($redirect);
@@ -228,7 +231,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!$bean->id || $bean->deleted) {
+    if (!\Lamb\is_visible($bean)) {
         return respond_404([], true);
     }
 
@@ -272,7 +275,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || $post->draft == 1 || $post->deleted == 1 || \Lamb\is_scheduled($post)) {
+    if ($post === null || !\Lamb\is_visible($post)) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

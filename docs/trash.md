@@ -16,9 +16,10 @@ From the `/trash` page, use the restore button on any post to move it back to pu
 
 ## Permanent deletion
 
-Posts in the trash are not currently purged automatically. To permanently remove a post you would need to delete it directly from the database.
+Posts in the trash are permanently deleted once they have been there for 30 days. This happens automatically during the [cron run]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}), so the trash purges itself as long as the cron endpoint is being called.
 
 ## Related
 
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): The types of posts that can be deleted.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are separate from the trash.
+* [Cron / Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): Runs the 30-day trash purge.

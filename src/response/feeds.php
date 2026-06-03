@@ -15,7 +15,6 @@ use function Lamb\Theme\part;
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
 use const Lamb\SQL_IS_SCHEDULED;
-use const Lamb\SQL_PUBLISHED;
 use const ROOT_URL;
 
 /**
@@ -32,16 +31,14 @@ function respond_home(): array
 
     $data['title'] = $config['site_title'];
 
-    $where_sql = SQL_PUBLISHED;
-    $where_params = [];
+    $visible = \Lamb\visible_clause();
+    $where_sql = $visible['sql'];
+    $where_params = $visible['params'];
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $where_sql .= ' AND ' . $clause['sql'];
-        $where_params = $clause['params'];
+        $where_params = array_merge($where_params, $clause['params']);
     }
-    $not_scheduled = \Lamb\not_scheduled_clause();
-    $where_sql .= ' AND ' . $not_scheduled['sql'];
-    $where_params = array_merge($where_params, $not_scheduled['params']);
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
@@ -164,20 +161,19 @@ function get_feed_data(): array
 {
     global $config;
 
-    $not_scheduled = \Lamb\not_scheduled_clause();
+    $visible = \Lamb\visible_clause();
     $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
     if ($clause !== null) {
         $posts = R::find(
             'post',
-            $clause['sql'] . ' AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql']
-                . 'ORDER BY updated DESC LIMIT 20',
-            array_merge($clause['params'], $not_scheduled['params'])
+            $clause['sql'] . ' AND' . $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            array_merge($clause['params'], $visible['params'])
         );
     } else {
         $posts = R::find(
             'post',
-            SQL_PUBLISHED . 'AND' . $not_scheduled['sql'] . 'ORDER BY updated DESC LIMIT 20',
-            $not_scheduled['params']
+            $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
+            $visible['params']
         );
     }
 
@@ -188,6 +184,29 @@ function get_feed_data(): array
         'feed_url' => ROOT_URL . '/feed',
         'posts'    => $posts,
     ];
+}
+
+/**
+ * Sets caching headers for an anonymous feed response.
+ *
+ * Feeds are polled by readers rather than browsed, so they get a longer max-age
+ * than regular pages, plus a conditional-GET 304 short-circuit keyed on the
+ * feed's freshest item. No-op for logged-in users (their responses are private).
+ *
+ * @param string $updated The feed's latest-updated datetime string.
+ * @return void
+ */
+function feed_cache(string $updated): void
+{
+    if (isset($_SESSION[SESSION_LOGIN])) {
+        return;
+    }
+    header('Cache-Control: max-age=1800');
+    // Fold in config edits so changes to feed-affecting settings (title, menu
+    // exclusions, …) invalidate cached feeds immediately.
+    $config_ts = Config\config_modified_timestamp();
+    $ts = max(strtotime($updated) ?: 0, $config_ts);
+    send_304_if_current($ts, $config_ts);
 }
 
 /**
@@ -204,6 +223,7 @@ function respond_feed(): void
     foreach ($feed_data as $key => $value) {
         $data[$key] = $value;
     }
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed", '');
@@ -225,6 +245,7 @@ function respond_feed_json(): void
         $data[$key] = $value;
     }
     $data['feed_url'] = ROOT_URL . '/feed.json';
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed_json", '');
@@ -275,6 +296,7 @@ function respond_tag_feed(array $args): void
     foreach ($feed_data as $key => $value) {
         $data[$key] = $value;
     }
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed", '');
@@ -301,6 +323,7 @@ function respond_tag_feed_json(array $args): void
         $data[$key] = $value;
     }
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
+    feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
     part("feed_json", '');
@@ -335,9 +358,9 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $not_scheduled = \Lamb\not_scheduled_clause();
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . SQL_PUBLISHED . 'AND' . $not_scheduled['sql'];
-    $params = array_merge($params, $not_scheduled['params']);
+    $visible = \Lamb\visible_clause();
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $visible['sql'];
+    $params = array_merge($params, $visible['params']);
 
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 

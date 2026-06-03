@@ -14,7 +14,10 @@ modules:
 extensions:
   enabled:
     - Codeception\Extension\RunProcess:
-        0: env LAMB_DATA_DIR=../tests/Support/Data php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
+        # Pass LAMB_LOGIN_PASSWORD through to the test web server: the app reads it
+        # via getenv(), but .env is only loaded into Codeception's %param% space, not
+        # exported to this child process. Without it, every login-gated test fails.
+        0: env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD=%LAMB_LOGIN_PASSWORD% php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
         sleep: 1
 step_decorators:
   - Codeception\Step\ConditionalAssertion

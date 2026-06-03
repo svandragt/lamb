@@ -16,13 +16,16 @@ $config = Config\load();
 Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
-define("THEME", $config['theme'] ?? 'default');
+define("THEME", Config\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 
 # Bootstrap
-header('Cache-Control: max-age=300');
+foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_header) {
+    header($cache_header);
+}
 header('Link: <' . ROOT_URL . '/micropub>; rel="micropub"', false);
+header('Link: <' . ROOT_URL . '/webmention>; rel="webmention"', false);
 header('Link: <' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"', false);
 header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false);
 
@@ -63,6 +66,7 @@ if ($action === 'tag' && $sublookup === 'feed') {
 } else {
     Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
 }
+Route\register_route('webmention', __NAMESPACE__ . '\\Webmention\respond_webmention');
 Route\register_route('micropub', __NAMESPACE__ . '\\Micropub\respond_micropub');
 Route\register_route('micropub-media', __NAMESPACE__ . '\\Micropub\respond_micropub_media');
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
@@ -100,5 +104,15 @@ if (isset($_SESSION[SESSION_LOGIN])) {
         1
     );
 } else {
+    // Conditional GET for cacheable content pages. Excludes the always-fresh
+    // login page and the (intentionally cacheable but non-200) 404 response,
+    // which must not answer with 304.
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (in_array($method, ['GET', 'HEAD'], true) && !in_array($action, ['login', '404'], true)) {
+        Response\send_304_if_current(
+            Response\latest_content_timestamp(),
+            \Lamb\Config\config_modified_timestamp()
+        );
+    }
     Theme\part('html', '');
 }

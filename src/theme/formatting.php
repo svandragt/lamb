@@ -15,6 +15,30 @@ function escape(string $html): string
     return htmlspecialchars($html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE);
 }
 
+
+/**
+ * Render the reply-context line for a post that is a reply to another URL.
+ *
+ * Returns an empty string when the post has no `in_reply_to` target. The link
+ * carries the `u-in-reply-to` microformats2 class so Webmention receivers
+ * categorise the mention as a reply.
+ *
+ * @param \RedBeanPHP\OODBBean $bean
+ * @return string
+ */
+function the_reply_context(\RedBeanPHP\OODBBean $bean): string
+{
+    $url = trim((string) ($bean->in_reply_to ?? ''));
+    if ($url === '') {
+        return '';
+    }
+
+    $label = parse_url($url, PHP_URL_HOST) ?: $url;
+
+    return '<p class="reply-context">In reply to <a class="u-in-reply-to" rel="in-reply-to" href="'
+        . escape($url) . '">' . escape($label) . '</a></p>';
+}
+
 /**
  * Escapes a string for use in OpenGraph meta attribute values.
  * Decodes any existing HTML entities first to avoid double-encoding.

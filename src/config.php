@@ -15,6 +15,10 @@ use function Lamb\set_option;
 function get_default_ini_text(): string
 {
     return <<<INI
+;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), 2024, base.
+;; Custom themes live in src/themes/<name>/ and only need to override the parts they change.
+theme = 2026
+
 ;; Author email in feed
 ;author_email = joe.sheeple@example.com
 
@@ -25,8 +29,19 @@ function get_default_ini_text(): string
 ;site_title = My Microblog
 
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
-;; Use a name from https://www.php.net/manual/en/timezones.php. Defaults to UTC.
-;timezone = Europe/London
+;; Use a name from https://www.php.net/manual/en/timezones.php.
+timezone = UTC
+
+;; Number of posts shown per page in lists and feeds.
+posts_per_page = 10
+
+;; Feed-ingested posts are saved as drafts by default for editorial review before
+;; publishing. Set to false to publish feed items directly without review.
+feeds_draft = true
+
+;; IndieAuth endpoints used for Micropub discovery. Override to use your own server.
+authorization_endpoint = https://indieauth.com/auth
+token_endpoint = https://tokens.indieauth.com/token
 
 ;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
 ;; relative path on another site.
@@ -48,20 +63,11 @@ function get_default_ini_text(): string
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
 
-;; Feed-ingested posts are saved as drafts by default for editorial review before publishing.
-;; Set to false to publish feed items directly without review.
-;feeds_draft = false
-
 [preconnect]
 ;; List external origins to preconnect to, improving load time for external resources.
 ;; Each item is in the format of <label>=<origin>.
 ;google-fonts = https://fonts.googleapis.com
 ;google-fonts-static = https://fonts.gstatic.com
-
-;; IndieAuth endpoints used for Micropub discovery.
-;; Override to use your own IndieAuth server.
-;authorization_endpoint = https://indieauth.com/auth
-;token_endpoint = https://tokens.indieauth.com/token
 
 [me]
 ;; Add rel="me" identity links for IndieAuth verification.
@@ -78,26 +84,90 @@ INI;
 }
 
 /**
+ * Resolves a configured theme name to the directory that should be rendered.
+ *
+ * Falls back to the bundled `base` theme (the part-fallback library) when no
+ * theme is configured, and aliases the legacy name `default` to `base` so
+ * installs that explicitly set `theme = default` keep working after the rename.
+ *
+ * @param string|null $configured The theme name from config, or null when unset.
+ * @param string $fallback The theme to use when none is configured.
+ * @return string The theme directory name to render.
+ */
+function resolve_theme(?string $configured, string $fallback = 'base'): string
+{
+    if (empty($configured)) {
+        return $fallback;
+    }
+    if ($configured === 'default') {
+        return 'base';
+    }
+    return $configured;
+}
+
+/**
+ * Ensures the INI text records an explicit top-level `theme` key.
+ *
+ * Older installs never stored a theme and relied on a PHP fallback. Stamping an
+ * explicit value lets that fallback be removed later. Idempotent: returns the
+ * text unchanged when a top-level `theme` key is already present.
+ *
+ * @param string $ini_text The raw INI configuration text.
+ * @param string $default_theme The theme to record when none is set.
+ * @return string The INI text, with a `theme` line prepended when it was absent.
+ */
+function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
+{
+    $parsed = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
+    if (is_array($parsed) && array_key_exists('theme', $parsed)) {
+        return $ini_text;
+    }
+
+    return "theme = {$default_theme}\n\n" . $ini_text;
+}
+
+/**
  * Loads the configuration settings.
  *
  * @return array The configuration settings.
  */
 function load(): array
 {
-    $ini_text = get_ini_text();
-    $config = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
+    return compose_config(get_ini_text(), get_default_ini_text());
+}
 
-    // Hardcoded defaults as fallback for missing keys
-    $defaults = [
-        'author_email'           => 'joe.sheeple@example.com',
-        'author_name'            => 'Joe Sheeple',
-        'site_title'             => 'My Microblog',
-        'authorization_endpoint' => 'https://indieauth.com/auth',
-        'token_endpoint'         => 'https://tokens.indieauth.com/token',
-        'timezone'               => 'UTC',
+/**
+ * Merges stored config over the seeded defaults to produce the effective config.
+ *
+ * The seeded INI (`get_default_ini_text()`) is the single source of truth for the
+ * real defaults (timezone, posts_per_page, feeds_draft, IndieAuth endpoints), so
+ * they no longer live in a parallel hardcoded array. Precedence (lowest to
+ * highest): identity placeholders → seeded defaults → stored config.
+ *
+ * @param string $stored_ini  The raw stored INI text.
+ * @param string $default_ini The seeded default INI text.
+ * @return array The effective configuration.
+ */
+function compose_config(string $stored_ini, string $default_ini): array
+{
+    $config = @parse_ini_string($stored_ini, true, INI_SCANNER_RAW) ?: [];
+    $defaults = @parse_ini_string($default_ini, true, INI_SCANNER_RAW) ?: [];
+
+    // Theme is intentionally not defaulted here. An install without an explicit
+    // theme is resolved/migrated per-install (see resolve_theme / get_ini_text),
+    // so inheriting the seeded theme would silently re-theme existing sites.
+    unset($defaults['theme']);
+
+    // Personal-identity values are kept commented in the seeded INI, so supply
+    // them as a last-resort fallback for consumers without an inline default
+    // (e.g. feed.php reads author_name directly).
+    $fallback = [
+        'author_email' => 'joe.sheeple@example.com',
+        'author_name'  => 'Joe Sheeple',
+        'site_title'   => 'My Microblog',
     ];
 
-    return array_merge($defaults, $config ?: []);
+    return array_merge($fallback, $defaults, $config);
 }
 
 /**
@@ -131,7 +201,14 @@ function get_ini_text(): string
 {
     $option = get_option('site_config_ini', '');
     if ($option->id > 0) {
-        return $option->value;
+        // Migrate themeless installs to an explicit theme so the PHP fallback
+        // can eventually be removed. Only rewrites (and bumps the cache
+        // validator) on the first request after upgrade.
+        $ini_text = ensure_explicit_theme($option->value);
+        if ($ini_text !== $option->value) {
+            save_ini_text($ini_text);
+        }
+        return $ini_text;
     }
 
     // Bootstrap
@@ -144,6 +221,7 @@ function get_ini_text(): string
         $ini_text = get_default_ini_text();
     }
 
+    $ini_text = ensure_explicit_theme($ini_text);
     save_ini_text($ini_text);
 
     return $ini_text;
@@ -159,7 +237,31 @@ function get_ini_text(): string
 function save_ini_text(string $ini_text): void
 {
     $option = get_option('site_config_ini', '');
+    // Stamp the edit time so conditional-GET validators invalidate cached pages
+    // immediately on a settings change (see Response\latest_content_timestamp).
+    // Advance the timestamp monotonically: two saves landing in the same
+    // wall-clock second must still move it forward, otherwise the composite
+    // ETag is unchanged and anonymous clients are served a stale 304 (#279).
+    $previous = !empty($option->updated) ? (strtotime($option->updated) ?: 0) : 0;
+    $option->updated = date('Y-m-d H:i:s', max(time(), $previous + 1));
     set_option($option, $ini_text);
+}
+
+/**
+ * Returns the Unix timestamp of the last config edit, or 0 if config was never saved.
+ *
+ * Used to fold config changes into the cache validator so editing settings
+ * (title, menu, theme, …) invalidates anonymous cached pages right away.
+ *
+ * @return int
+ */
+function config_modified_timestamp(): int
+{
+    $option = get_option('site_config_ini', '');
+    if ($option->id === 0 || empty($option->updated)) {
+        return 0;
+    }
+    return strtotime($option->updated) ?: 0;
 }
 
 /**

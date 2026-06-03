@@ -27,6 +27,29 @@ to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP ver
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...GM5S2Q0VWY3Rk9sdXoyVVFkYTg3bDA1M
 ```
 
+## Caching uploaded assets
+
+Files dropped into posts are stored under `src/assets/` with content-addressed
+names (a hash of the file), so their URL changes whenever the content changes.
+That makes them safe to cache aggressively and indefinitely. Add a matcher to
+the Caddyfile so these are served with a long, immutable cache:
+
+```caddyfile
+lamb.test:80 {
+	root * src/
+
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	file_server
+	php_fastcgi unix//run/php/php8.2-fpm.sock
+}
+```
+
+Theme CSS and application JavaScript are already cache-busted by a content hash
+in their query string (`?ver=…`), so the same treatment is safe for `/themes/*`
+and `/scripts/*` if you wish to add them.
+
 # Restart services
 
 ```shell

@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Config\config_modified_timestamp;
 use function Lamb\Config\get_ini_text;
 use function Lamb\Config\load;
 use function Lamb\Config\save_ini_text;
@@ -39,18 +40,34 @@ class ConfigLoadTest extends TestCase
 
     public function testGetIniTextReturnsSavedTextOnSubsequentCall(): void
     {
-        $custom = "[menu_items]\nAbout = about\n";
+        // Includes an explicit theme so the themeless-migration is a no-op and
+        // this stays a pure round-trip assertion (migration is covered below).
+        $custom = "theme = 2024\n[menu_items]\nAbout = about\n";
         save_ini_text($custom);
 
         $text = get_ini_text();
         $this->assertSame($custom, $text);
     }
 
+    public function testGetIniTextMigratesThemelessStoredConfigToExplicitTheme(): void
+    {
+        save_ini_text("site_title = Legacy Blog\n");
+
+        $text = get_ini_text();
+        $parsed = parse_ini_string($text, true, INI_SCANNER_RAW);
+
+        // Themeless stored config gains an explicit theme on read...
+        $this->assertSame('base', $parsed['theme']);
+        // ...and the migration is persisted, so a second read is stable.
+        $this->assertSame($text, get_ini_text());
+    }
+
     // save_ini_text
 
     public function testSaveIniTextPersistsText(): void
     {
-        $ini = "site_title = Test Blog\n";
+        // Explicit theme keeps get_ini_text()'s migration a no-op for this round-trip.
+        $ini = "theme = 2024\nsite_title = Test Blog\n";
         save_ini_text($ini);
 
         $text = get_ini_text();
@@ -65,6 +82,51 @@ class ConfigLoadTest extends TestCase
         $text = get_ini_text();
         $this->assertStringContainsString('Second', $text);
         $this->assertStringNotContainsString('First', $text);
+    }
+
+    // config_modified_timestamp
+
+    public function testConfigModifiedTimestampIsZeroWhenNoConfigStored(): void
+    {
+        // setUp() removes the site_config_ini option, so nothing has been saved.
+        $this->assertSame(0, config_modified_timestamp());
+    }
+
+    public function testSaveIniTextStampsModifiedTimestamp(): void
+    {
+        $before = time();
+        save_ini_text("site_title = Test\n");
+
+        $ts = config_modified_timestamp();
+        $this->assertGreaterThanOrEqual($before, $ts);
+        $this->assertLessThanOrEqual(time() + 1, $ts);
+    }
+
+    public function testConfigModifiedTimestampAdvancesOnReSave(): void
+    {
+        save_ini_text("site_title = One\n");
+        // Backdate the stored timestamp to simulate an old edit.
+        R::exec("UPDATE option SET updated = ? WHERE name = 'site_config_ini'", ['2000-01-01 00:00:00']);
+        $old = config_modified_timestamp();
+        $this->assertSame(strtotime('2000-01-01 00:00:00'), $old);
+
+        save_ini_text("site_title = Two\n");
+        $this->assertGreaterThan($old, config_modified_timestamp());
+    }
+
+    public function testReSaveWithinSameSecondStillAdvancesTimestamp(): void
+    {
+        // A second save landing in the same wall-clock second as the previous
+        // edit must still move the timestamp forward; otherwise the conditional
+        // GET ETag is unchanged and anonymous clients get a stale 304 (#279).
+        save_ini_text("site_title = One\n");
+        // Force the stored edit time to the current second to simulate a
+        // re-save colliding with the previous edit's second.
+        R::exec("UPDATE option SET updated = ? WHERE name = 'site_config_ini'", [date('Y-m-d H:i:s')]);
+        $first = config_modified_timestamp();
+
+        save_ini_text("site_title = Two\n");
+        $this->assertGreaterThan($first, config_modified_timestamp());
     }
 
     // load
