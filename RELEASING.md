@@ -50,21 +50,30 @@ git log --format='- %s' <last-tag>..main
       section (e.g. "install the `pdo_mysql` PHP extension", config changes).
 - [ ] Save the notes to a temp file (e.g. `/tmp/notes.md`) for step 5.
 
-## 4. Merge `main` into `release`
+## 4. Promote `main` to `release` via PR
+
+Direct pushes to `release` are rejected by the branch ruleset (`GH013` —
+changes must go through a pull request), so promotion happens as a PR merged
+with a **merge commit** (not squash/rebase, to keep histories connected):
 
 ```sh
-git checkout release && git pull
-git merge --no-ff main -m "Release <version>"
-git push origin release
+gh pr create --base release --head main \
+  --title "Release <version>" \
+  --body "Promote main to release for <version>."
+gh pr merge --merge --subject "Release <version>"
 ```
 
+- [ ] If the PR reports `BEHIND`, `release` has commits not on `main` (e.g.
+      old release merges). Sync first: branch from `main`, `git merge
+      origin/release` (a merge commit, no content changes expected), PR that
+      into `main`, then re-check the release PR.
 - [ ] Resolve any conflicts (uncommon — `main` is the source of truth, though
       `release` may also carry the occasional release-only commit).
 - [ ] Re-run `vendor/bin/codecept run` on `release` to confirm green.
 
 ## 5. Tag and create the GitHub release
 
-`gh release create` creates the tag itself at `--target release` (the pushed
+`gh release create` creates the tag itself at `--target release` (the merged
 branch tip) and publishes the release in one step — no separate `git tag` needed.
 
 ```sh
@@ -76,7 +85,12 @@ gh release create <version> \
 # add --latest to mark a final release as the latest
 ```
 
-- [ ] Push `release` (step 4) first, so `--target release` tags the intended commit.
+- [ ] Merge the release PR (step 4) first, so `--target release` tags the
+      intended commit. If the tag landed on the wrong commit, move it — the
+      release object and its notes follow the tag:
+      `git tag -f -m "<version>" <version> origin/release && git push -f origin <version>`.
+      The `release: published` event will **not** re-fire for a moved tag; use
+      the `workflow_dispatch` re-run from step 6 instead.
 - [ ] Final releases: pass `--latest`. Pre-releases: pass `--prerelease` and
       do **not** mark latest.
 - [ ] Verify: `gh release view <version>`, and `git fetch --tags` to pull the
