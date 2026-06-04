@@ -186,18 +186,15 @@ function upgrade_posts(array $posts): void
         if ($bean === null) {
             continue;
         }
-        switch ($bean->version) {
-            case 1:
-                # Get all beans on the current version 1.
-                break;
-            default:
-                parse_bean($bean);
-                try {
-                    $bean->version = 1;
-                    R::store($bean);
-                } catch (SQL $e) {
-                    $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
-                }
+        if ((int)$bean->version === POST_VERSION) {
+            continue;
+        }
+        parse_bean($bean);
+        try {
+            $bean->version = POST_VERSION;
+            R::store($bean);
+        } catch (SQL $e) {
+            $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
         }
     }
 }

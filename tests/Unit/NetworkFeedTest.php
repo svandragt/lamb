@@ -125,13 +125,13 @@ class NetworkFeedTest extends TestCase
         $this->assertStringContainsString('My Title', $result->body);
     }
 
-    public function testPrepareItemSetsVersionToOne(): void
+    public function testPrepareItemSetsVersionToCurrent(): void
     {
         $item = $this->makeItem();
         $bean = R::dispense('post');
 
         $result = prepare_item($item, 'TestBlog', $bean);
-        $this->assertSame(1, (int)$result->version);
+        $this->assertSame(POST_VERSION, (int)$result->version);
     }
 
     public function testPrepareItemWithNewBeanCreatesNewPost(): void
