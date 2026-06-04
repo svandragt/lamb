@@ -55,7 +55,8 @@
       "src/theme/formatting.php",
       "src/theme/meta.php",
       "src/micropub.php",
-      "src/webmention.php"
+      "src/webmention.php",
+      "src/websub.php"
     ]
   },
   "autoload-dev": {

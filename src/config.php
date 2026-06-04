@@ -48,6 +48,10 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Useful where old content is archived to an archive site, or the lamb blog is still under construction but public.
 ;404_fallback = https://my.oldsite.com
 
+;; WebSub hub used to push new posts to feed subscribers in real time.
+;; The hub is advertised in the Atom and JSON feeds, and pinged when you publish.
+;websub_hub = https://pubsubhubbub.superfeedr.com/
+
 [menu_items]
 ;; Add <label>=<url> entries here where URL is either:
 ;;   - Slugs of an existing post, which is then hidden in the feed and the timeline (

@@ -58,6 +58,7 @@ function redirect_created(): void
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
     \Lamb\Webmention\enqueue_for_post($bean);
+    \Lamb\Websub\ping_for_post($bean);
     redirect_uri('/');
 }
 
@@ -211,6 +212,7 @@ function redirect_edited(): void
     }
 
     \Lamb\Webmention\enqueue_for_post($bean);
+    \Lamb\Websub\ping_for_post($bean);
 
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);

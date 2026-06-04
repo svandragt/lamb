@@ -70,7 +70,39 @@ class FeedJsonTemplateTest extends TestCase
         $this->assertSame('<p>Status update.</p>', $item['content_html']);
     }
 
-    private function renderJsonFeedWithPost(array $fields): array
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonAdvertisesWebSubHubWhenConfigured(): void
+    {
+        $json = $this->renderJsonFeedWithPost(
+            ['title' => 'Hello', 'transformed' => '<p>Body</p>'],
+            ['websub_hub' => 'https://hub.example.com/']
+        );
+
+        $this->assertSame(
+            [['type' => 'WebSub', 'url' => 'https://hub.example.com/']],
+            $json['hubs'],
+            'JSON feed should advertise the configured WebSub hub'
+        );
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonOmitsHubsWhenNotConfigured(): void
+    {
+        $json = $this->renderJsonFeedWithPost([
+            'title'       => 'Hello',
+            'transformed' => '<p>Body</p>',
+        ]);
+
+        $this->assertArrayNotHasKey('hubs', $json, 'No hubs field should be emitted without websub_hub config');
+    }
+
+    private function renderJsonFeedWithPost(array $fields, array $extraConfig = []): array
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
 
@@ -92,11 +124,11 @@ class FeedJsonTemplateTest extends TestCase
         R::store($bean);
 
         global $config, $data;
-        $config = [
+        $config = array_merge([
             'site_title'   => 'Test Blog',
             'author_name'  => 'Test Author',
             'author_email' => 'test@test.com',
-        ];
+        ], $extraConfig);
         $data = [
             'posts'    => [$bean],
             'title'    => 'Test Blog',

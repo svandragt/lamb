@@ -37,6 +37,14 @@ $Link = $Xml->addChild('atom:link');
 $Link->addAttribute('rel', 'self');
 $Link->addAttribute('href', escape($channel_link));
 
+// WebSub: advertise the configured hub so subscribers can get real-time pushes.
+$websub_hub = trim((string) ($config['websub_hub'] ?? ''));
+if ($websub_hub !== '') {
+    $Hub = $Xml->addChild('link');
+    $Hub->addAttribute('rel', 'hub');
+    $Hub->addAttribute('href', escape($websub_hub));
+}
+
 $Author = $Xml->addChild('author');
 $Author->addChild('name', escape($config['author_name']));
 $Author->addChild('uri', ROOT_URL);
