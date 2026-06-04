@@ -227,7 +227,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!\Lamb\is_visible($bean)) {
+    if (!\Lamb\is_visible($bean) && !\Lamb\preview_token_valid($bean, $_GET['preview'] ?? null)) {
         return respond_404([], true);
     }
 
@@ -271,7 +271,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || !\Lamb\is_visible($post)) {
+    if ($post === null || (!\Lamb\is_visible($post) && !\Lamb\preview_token_valid($post, $_GET['preview'] ?? null))) {
         return respond_404([]);
     }
     $data['posts'] = [$post];
