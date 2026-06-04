@@ -315,6 +315,34 @@ function is_visible(OODBBean $post): bool
 }
 
 /**
+ * Returns true when the supplied preview token grants access to an
+ * unpublished post's permalink.
+ *
+ * Micropub createCallback appends ?preview=<token> to the Location header for
+ * draft/scheduled posts so the creating client can show the post it just made
+ * without a Lamb session (see issue #285). Tokens are random per-post secrets
+ * with an expiry; deleted posts never match.
+ *
+ * @param OODBBean    $post  The post to inspect.
+ * @param string|null $token The supplied preview token (e.g. $_GET['preview']).
+ * @return bool
+ */
+function preview_token_valid(OODBBean $post, ?string $token): bool
+{
+    if (empty($post->id) || $post->deleted == 1) {
+        return false;
+    }
+    if (empty($post->preview_token) || $token === null || $token === '') {
+        return false;
+    }
+    if (empty($post->preview_token_expires) || strtotime($post->preview_token_expires) < time()) {
+        return false;
+    }
+
+    return hash_equals((string) $post->preview_token, $token);
+}
+
+/**
  * Checks if a post with the given slug exists in the database.
  *
  * @param string $lookup The slug of the post to look up.
@@ -324,7 +352,11 @@ function is_visible(OODBBean $post): bool
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if ($post === null || $post->id === 0 || $post->draft == 1 || is_scheduled($post)) {
+    if ($post === null || $post->id === 0) {
+        return '';
+    }
+    $unpublished = $post->draft == 1 || is_scheduled($post);
+    if ($unpublished && !preview_token_valid($post, $_GET['preview'] ?? null)) {
         return '';
     }
 
