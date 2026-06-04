@@ -9,7 +9,7 @@ Barrier free super simple blogging, self-hosted.
   free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
   entry with server-side syntax highlighting; drag and drop or paste images, automatically converted to WebP and downscaled.
 - Hashtags by just typing them `#ahyeah`, plus full text search and configurable menu items.
-- Drafts, scheduled posts, and friction free trash with restore.
+- Drafts, scheduled posts, and one-click trash with restore.
 - Discoverable Atom and JSON feeds (`/feed` and `/feed.json`, plus feeds per tag), with WebSub for instant updates.
 - IndieWeb friendly: send and receive webmentions, write reply posts (`in-reply-to`), and publish from other apps through a Micropub endpoint.
 - Pull external content into the blog by subscribing to feeds; ingested posts land as drafts by default.
