@@ -31,14 +31,8 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     if ($bean === null) {
         $bean = R::dispense('post');
     }
-    // A published post's slug is locked (see parse_bean); capture the stored
-    // state before it is overwritten so the feed-name prefix below cannot
-    // change a slug the lock just preserved.
-    $slug_mutable = empty($bean->id) || !empty($bean->draft);
     $bean->body = $text;
-    if ($slug_mutable) {
-        $bean->slug = $matter['slug'] ?? '';
-    }
+    $bean->slug = $matter['slug'] ?? '';
     $bean->created = date("Y-m-d H:i:s");
     $bean->updated = date("Y-m-d H:i:s");
     if ($feed_item) {
@@ -59,7 +53,7 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     // (pinned by finalize_slug() on first save) is authoritative and must not
     // be prefixed again on cron updates.
     $derived = isset($matter['title']) && $bean->slug === slugify((string) $matter['title']);
-    if ($feed_item && $feed_name && $bean->slug && $derived && $slug_mutable) {
+    if ($feed_item && $feed_name && $bean->slug && $derived) {
         $bean->slug = slugify("$feed_name-" . $bean->slug);
     }
     $bean->version = POST_VERSION;
