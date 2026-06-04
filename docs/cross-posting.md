@@ -30,6 +30,12 @@ to avoid spamming the endpoint.
 
 It is your responsibility to [call the `_cron` endpoint]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}), unlike other CMSes you might be used to.
 
+## What gets imported when you add a feed
+
+The first cron run after adding a feed imports every item currently present in the feed itself — typically the publisher's most recent 10–20 entries, depending on how many they include. It does not reach back through the publisher's full archive.
+
+After that first run, only items published or updated since the previous run are imported.
+
 ## Related
 
 * [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How to call the `/_cron` endpoint periodically.
