@@ -202,10 +202,70 @@ class FeedTemplateTest extends TestCase
     }
 
     /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedAdvertisesWebSubHubWhenConfigured(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            [],
+            ['websub_hubs' => 'https://hub.example.com/']
+        );
+
+        $hub = null;
+        foreach ($xml->link as $link) {
+            if ((string) $link['rel'] === 'hub') {
+                $hub = (string) $link['href'];
+            }
+        }
+        $this->assertSame('https://hub.example.com/', $hub, 'Feed should advertise the configured WebSub hub');
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedAdvertisesEveryCommaSeparatedHub(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            [],
+            ['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/']
+        );
+
+        $hubs = [];
+        foreach ($xml->link as $link) {
+            if ((string) $link['rel'] === 'hub') {
+                $hubs[] = (string) $link['href'];
+            }
+        }
+        $this->assertSame(
+            ['https://hub-a.example.com/', 'https://hub-b.example.com/'],
+            $hubs,
+            'Every comma-separated hub should get its own link element'
+        );
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedOmitsHubLinkWhenNotConfigured(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post', 'transformed' => '<p>Body</p>']);
+
+        foreach ($xml->link as $link) {
+            $this->assertNotSame('hub', (string) $link['rel'], 'No hub link should be emitted without websub_hubs config');
+        }
+    }
+
+    /**
      * @param array $fields        Post bean fields.
      * @param array $conventionFiles Names of web-root convention files to create (e.g. favicon.png).
+     * @param array $extraConfig   Extra config keys merged into $config.
      */
-    private function renderFeedWithPost(array $fields, array $conventionFiles = []): \SimpleXMLElement
+    private function renderFeedWithPost(array $fields, array $conventionFiles = [], array $extraConfig = []): \SimpleXMLElement
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
 
@@ -244,11 +304,11 @@ class FeedTemplateTest extends TestCase
         R::store($bean);
 
         global $config, $data;
-        $config = [
+        $config = array_merge([
             'site_title'   => 'Test Blog',
             'author_name'  => 'Test Author',
             'author_email' => 'test@test.com',
-        ];
+        ], $extraConfig);
         $data = [
             'posts'    => [$bean],
             'title'    => 'Test Blog',

@@ -41,6 +41,11 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; relative path on another site. Useful for archived or under-construction sites.
 ;404_fallback = https://my.oldsite.com
 
+;; WebSub hubs used to push new posts to feed subscribers in real time.
+;; Hubs are advertised in the Atom and JSON feeds, and pinged when you publish.
+;; Separate multiple hubs with commas.
+;websub_hubs = https://hub.example.com/
+
 [menu_items]
 ;; Add <label>=<url> entries. URL can be:
 ;;   - A post slug, which hides the post from the feed and timeline
@@ -80,6 +85,7 @@ token_endpoint = https://tokens.indieauth.com/token
 
 * [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
+* [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings enable Micropub publishing.
 * [Preconnect]({{ site.baseurl }}{% link preconnect.md %})

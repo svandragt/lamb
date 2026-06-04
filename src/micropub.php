@@ -247,6 +247,7 @@ class LambMicropubAdapter extends MicropubAdapter
         R::store($bean);
 
         \Lamb\Webmention\enqueue_for_post($bean);
+        \Lamb\Websub\ping_for_post($bean);
 
         $location = permalink($bean);
         if ($needs_preview) {
@@ -357,6 +358,7 @@ class LambMicropubAdapter extends MicropubAdapter
         R::store($bean);
 
         \Lamb\Webmention\enqueue_for_post($bean);
+        \Lamb\Websub\ping_for_post($bean);
 
         return true;
     }

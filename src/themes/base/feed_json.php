@@ -20,6 +20,15 @@ $feed = [
     'items'         => [],
 ];
 
+// WebSub: advertise the configured hubs so subscribers can get real-time pushes.
+$websub_hubs = \Lamb\Websub\hub_urls($config);
+if ($websub_hubs !== []) {
+    $feed['hubs'] = array_map(
+        fn($hub) => ['type' => 'WebSub', 'url' => $hub],
+        $websub_hubs
+    );
+}
+
 foreach ($data['posts'] as $bean) {
     $url = Lamb\permalink($bean);
     $item = [
