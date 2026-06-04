@@ -7,13 +7,12 @@ Barrier free super simple blogging, self-hosted.
 - SQLite based portable single author blog.
 - Friction
   free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
-  entry, with drag and drop image support.
-- Hashtags support, by just typing them `#ahyeah`.
-- Drafts, scheduled posts, and friction free trash with restore.
-- Discoverable Atom feeds (`/feed`, plus a feed per tag).
+  entry with server-side syntax highlighting; drag and drop or paste images, automatically converted to WebP and downscaled.
+- Hashtags by just typing them `#ahyeah`, plus full text search and configurable menu items.
+- Drafts, scheduled posts, and one-click trash with restore.
+- Discoverable Atom and JSON feeds (`/feed` and `/feed.json`, plus feeds per tag), with WebSub for instant updates.
+- IndieWeb friendly: send and receive webmentions, write reply posts (`in-reply-to`), and publish from other apps through a Micropub endpoint.
 - Pull external content into the blog by subscribing to feeds; ingested posts land as drafts by default.
-- Publish from other apps through a Micropub endpoint.
-- Full text search and configurable menu items.
 - 404 fallback redirection to your old site, plus automatic 301s when a post's slug changes.
 - Friendly user theming, if you don't like my retro themes. ;)
 
