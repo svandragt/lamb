@@ -271,23 +271,34 @@ function response(int $status, string $body): array
  */
 function extract_outbound_links(string $html): array
 {
-    $own_host = strtolower((string) parse_url(ROOT_URL, PHP_URL_HOST));
     $targets = [];
 
     if (preg_match_all('/<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']/i', $html, $matches)) {
         foreach ($matches[1] as $href) {
             $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5);
-            if (!is_valid_http_url($href)) {
-                continue;
-            }
-            $host = strtolower((string) parse_url($href, PHP_URL_HOST));
-            if ($host !== '' && $host !== $own_host && !in_array($href, $targets, true)) {
+            if (is_external_http_url($href) && !in_array($href, $targets, true)) {
                 $targets[] = $href;
             }
         }
     }
 
     return $targets;
+}
+
+/**
+ * Whether a URL is an absolute http(s) URL pointing at a host other than ours.
+ *
+ * @param string $url
+ * @return bool
+ */
+function is_external_http_url(string $url): bool
+{
+    if (!is_valid_http_url($url)) {
+        return false;
+    }
+    $own_host = strtolower((string) parse_url(ROOT_URL, PHP_URL_HOST));
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    return $host !== '' && $host !== $own_host;
 }
 
 /**
@@ -396,7 +407,12 @@ function enqueue_for_post(OODBBean $bean): void
         return;
     }
 
-    enqueue_outbound((int) $bean->id, permalink($bean), (string) ($bean->transformed ?? ''));
+    enqueue_outbound(
+        (int) $bean->id,
+        permalink($bean),
+        (string) ($bean->transformed ?? ''),
+        (string) ($bean->in_reply_to ?? '')
+    );
 }
 
 /**
@@ -406,15 +422,27 @@ function enqueue_for_post(OODBBean $bean): void
  * source+target is left untouched (so receivers are not spammed), while a
  * previously failed row is reset to pending for another attempt.
  *
+ * The reply target (from a post's `in-reply-to` front matter) is treated as an
+ * outbound link even when it does not appear in the body, so replies notify the
+ * parent. It is subject to the same external-host filter as body links.
+ *
  * @param int    $post_id
- * @param string $source  This post's permalink.
- * @param string $html    The post's rendered HTML.
+ * @param string $source   This post's permalink.
+ * @param string $html     The post's rendered HTML.
+ * @param string $reply_to Optional `in-reply-to` target URL.
  * @return int Number of newly created queue rows.
  */
-function enqueue_outbound(int $post_id, string $source, string $html): int
+function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
 {
+    $targets = extract_outbound_links($html);
+
+    $reply_to = trim($reply_to);
+    if ($reply_to !== '' && is_external_http_url($reply_to) && !in_array($reply_to, $targets, true)) {
+        $targets[] = $reply_to;
+    }
+
     $created = 0;
-    foreach (extract_outbound_links($html) as $target) {
+    foreach ($targets as $target) {
         $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
         if ($row) {
             if ($row->status === 'failed') {

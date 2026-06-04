@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\Webmention\discover_endpoint;
+use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_outbound;
 use function Lamb\Webmention\extract_outbound_links;
 use function Lamb\Webmention\process_outbound;
@@ -143,6 +144,54 @@ class WebmentionSendTest extends TestCase
         enqueue_outbound($this->postId, $source, $html);
         $row = R::findOne('webmentionoutbox');
         $this->assertSame('sent', $row->status);
+    }
+
+    // enqueue_for_post (reply targets) --------------------------------------
+
+    private function dispenseReply(string $transformed, string $replyTo): \RedBeanPHP\OODBBean
+    {
+        $post = R::dispense('post');
+        $post->body = 'A reply';
+        $post->transformed = $transformed;
+        $post->in_reply_to = $replyTo;
+        $post->created = '2026-01-01 00:00:00';
+        $post->updated = '2026-01-01 00:00:00';
+        $post->version = 1;
+        R::store($post);
+
+        return $post;
+    }
+
+    public function testEnqueueForPostQueuesExternalReplyTarget(): void
+    {
+        $target = 'https://other.example/their-post';
+        $post = $this->dispenseReply('<p>A reply with no links</p>', $target);
+
+        enqueue_for_post($post);
+
+        $row = R::findOne('webmentionoutbox', ' target = ? ', [$target]);
+        $this->assertNotNull($row);
+        $this->assertSame('pending', $row->status);
+        $this->assertSame(ROOT_URL . '/status/' . $post->id, $row->source);
+    }
+
+    public function testEnqueueForPostSkipsSameSiteReplyTarget(): void
+    {
+        $post = $this->dispenseReply('<p>No links</p>', ROOT_URL . '/status/1');
+
+        enqueue_for_post($post);
+
+        $this->assertSame(0, R::count('webmentionoutbox'));
+    }
+
+    public function testEnqueueForPostDeduplicatesReplyTargetAlsoInBody(): void
+    {
+        $target = 'https://other.example/their-post';
+        $post = $this->dispenseReply('<p><a href="' . $target . '">link</a></p>', $target);
+
+        enqueue_for_post($post);
+
+        $this->assertSame(1, R::count('webmentionoutbox', ' target = ? ', [$target]));
     }
 
     // process_outbound ------------------------------------------------------
