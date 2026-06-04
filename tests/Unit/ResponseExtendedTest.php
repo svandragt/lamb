@@ -110,23 +110,23 @@ class ResponseExtendedTest extends TestCase
 
     // upgrade_posts
 
-    public function testUpgradePostsDoesNotModifyVersionOnePosts(): void
+    public function testUpgradePostsDoesNotModifyCurrentVersionPosts(): void
     {
         $bean = R::dispense('post');
         $bean->body = 'Hello world';
         $bean->slug = '';
-        $bean->version = 1;
+        $bean->version = POST_VERSION;
         $bean->transformed = '<p>original</p>';
         R::store($bean);
 
         upgrade_posts([$bean]);
 
         $reloaded = R::load('post', $bean->id);
-        $this->assertSame(1, (int)$reloaded->version);
+        $this->assertSame(POST_VERSION, (int)$reloaded->version);
         $this->assertSame('<p>original</p>', $reloaded->transformed);
     }
 
-    public function testUpgradePostsSetsVersionOneOnUnversionedPost(): void
+    public function testUpgradePostsSetsCurrentVersionOnUnversionedPost(): void
     {
         $bean = R::dispense('post');
         $bean->body = 'Hello world';
@@ -136,7 +136,7 @@ class ResponseExtendedTest extends TestCase
 
         upgrade_posts([$bean]);
 
-        $this->assertSame(1, $bean->version);
+        $this->assertSame(POST_VERSION, $bean->version);
     }
 
     public function testUpgradePostsPopulatesTransformedOnUnversionedPost(): void

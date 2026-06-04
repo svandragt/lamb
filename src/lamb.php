@@ -99,7 +99,12 @@ function parse_bean(OODBBean $bean): void
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
     $front_matter['description'] = $description;
 
-    $front_matter['transformed'] = (parse_tags($markdown));
+    // Protect code blocks from hashtag linking (a `#comment` or a highlighter
+    // colour like `style="color: #005cc5"` must never become a /tag/ link),
+    // then highlight them server-side so visitors get pre-rendered markup.
+    [$markdown_without_code, $code_blocks] = Highlight\extract_code_blocks($markdown);
+    $code_blocks = array_map('Lamb\Highlight\highlight_code_blocks', $code_blocks);
+    $front_matter['transformed'] = Highlight\restore_code_blocks(parse_tags($markdown_without_code), $code_blocks);
 
     // Normalise the reply target. Accept either `in-reply-to` (IndieWeb/Micropub
     // spelling) or `in_reply_to`, and remove both from the blind copy below so the

@@ -49,7 +49,7 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     }
 
     parse_bean($bean);
-    $bean->version = 1;
+    $bean->version = POST_VERSION;
 
     // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
     // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
@@ -113,6 +113,29 @@ function parse_matter(string $body): array
     }
 
     return $matter;
+}
+
+/**
+ * Writes a title into a body's YAML front matter, creating the front matter
+ * block when the body has none.
+ *
+ * Used when upgrading legacy posts (e.g. old feed items) whose title lives
+ * only on the title column: parse_bean() clears titles absent from front
+ * matter, so the stored title is migrated into the body before re-parsing.
+ * The result matches the format modern feed ingestion writes.
+ *
+ * @param string $body The post body, with or without existing front matter.
+ * @param string $title The title to write into the front matter.
+ * @return string The body with the title present in its front matter.
+ */
+function inject_title_matter(string $body, string $title): string
+{
+    $title_line = rtrim(Yaml::dump(['title' => $title]), "\n");
+    if (str_starts_with($body, "---\n")) {
+        return "---\n" . $title_line . "\n" . substr($body, strlen("---\n"));
+    }
+
+    return "---\n" . $title_line . "\n---\n\n" . $body;
 }
 
 function slugify(string $text): string

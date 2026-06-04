@@ -56,3 +56,4 @@ The following sections of the site are special:
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Add a future `created:` date to publish a post later.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %}): Page posts with slugs can be pinned as menu items.
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Add `in-reply-to:` to front-matter to mark a post as a reply to another URL.
+* [Syntax Highlighting]({{ site.baseurl }}{% link syntax-highlighting.md %}): Fenced code blocks with a language hint are highlighted server-side.
