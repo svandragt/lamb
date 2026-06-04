@@ -15,4 +15,5 @@ Feed ingested posts are saved as drafts by default to prioritize authorship over
 - [Post Types]({{ site.baseurl }}{% link post-types.md %}): Front-matter is used to set `draft: true`.
 - [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Hide a post until a future `created` date.
 - [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed ingestion that produces drafts.
+- [Micropub]({{ site.baseurl }}{% link micropub.md %}): Drafts created via Micropub get a 24-hour preview link.
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): The cron endpoint triggers feed ingestion.

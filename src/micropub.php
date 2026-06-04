@@ -11,6 +11,7 @@ use RedBeanPHP\R;
 use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\get_tags;
+use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\Post\parse_matter;
@@ -234,11 +235,25 @@ class LambMicropubAdapter extends MicropubAdapter
         // it is never a draft. Visibility is driven by the future `created` date set
         // above, so it stays hidden from public listings until that time arrives.
 
+        // Unpublished posts 404 anonymously (#284), but clients GET the Location
+        // URL we return to show the just-created post. Attach a short-lived
+        // preview token so that URL works without a Lamb session (#285).
+        $needs_preview = $bean->draft == 1 || is_scheduled($bean);
+        if ($needs_preview) {
+            $bean->preview_token = bin2hex(random_bytes(16));
+            $bean->preview_token_expires = date('Y-m-d H:i:s', time() + 86400);
+        }
+
         R::store($bean);
 
         \Lamb\Webmention\enqueue_for_post($bean);
 
-        return permalink($bean);
+        $location = permalink($bean);
+        if ($needs_preview) {
+            $location .= '?preview=' . $bean->preview_token;
+        }
+
+        return $location;
     }
 
     /**
