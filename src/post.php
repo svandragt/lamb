@@ -9,6 +9,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\parse_bean;
+use function Lamb\Route\is_reserved_route;
 
 /**
  * Populates and returns an OODBBean instance with the given text and optional feed information.
@@ -45,11 +46,14 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     }
 
     parse_bean($bean);
-    // Prefix feed-item slugs with the feed name so same-titled posts from
-    // different feeds don't collide. Applied after parse_bean(), whose
-    // front-matter loop re-derives the slug from the title and would
-    // otherwise clobber the prefix (issue #332).
-    if ($feed_item && $feed_name && $bean->slug) {
+    // Prefix a title-derived feed-item slug with the feed name so same-titled
+    // posts from different feeds don't collide. Applied after parse_bean(),
+    // whose front-matter loop re-derives the slug from the title and would
+    // otherwise clobber the prefix (issue #332). An explicit front-matter slug
+    // (pinned by finalize_slug() on first save) is authoritative and must not
+    // be prefixed again on cron updates.
+    $derived = isset($matter['title']) && $bean->slug === slugify((string) $matter['title']);
+    if ($feed_item && $feed_name && $bean->slug && $derived) {
         $bean->slug = slugify("$feed_name-" . $bean->slug);
     }
     $bean->version = POST_VERSION;
@@ -144,6 +148,92 @@ function inject_title_matter(string $body, string $title): string
 function slugify(string $text): string
 {
     return strtolower(preg_replace('/\W+/m', "-", $text));
+}
+
+/**
+ * Rewrites the `slug` value inside a body's leading YAML front-matter block to
+ * the given actual slug, leaving all other front matter intact.
+ *
+ * This keeps the front matter in sync with the slug the post is actually
+ * served under after adjustments (feed-name prefix, reserved-route or
+ * duplicate suffix), so a later re-parse derives the same slug instead of the
+ * original colliding one. An existing `slug:` line is updated in place; when
+ * the block has none (slug derived from the title) an explicit line is
+ * appended. Bodies without a front-matter block, or whose slug already equals
+ * the actual value, are returned unchanged (no cosmetic churn).
+ *
+ * @param string $body The raw post body.
+ * @param string $slug The slug the post is actually served under.
+ * @return string The body with its front-matter `slug` pinned.
+ */
+function persist_slug(string $body, string $slug): string
+{
+    // Only touch a front-matter block at the very start of the body.
+    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+        return $body;
+    }
+
+    $new_yaml = preg_replace_callback(
+        '/^([ \t]*slug[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        function (array $line) use ($slug): string {
+            $current = trim($line[2], " \t'\"");
+            if ($current === $slug) {
+                return $line[0];
+            }
+            return $line[1] . ' ' . $slug;
+        },
+        $m[2],
+        1,
+        $count
+    );
+
+    if ($count === 0) {
+        $new_yaml = $m[2] . "slug: $slug\n";
+    }
+
+    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+}
+
+/**
+ * Finalises a stored post's slug: guarantees it is unique and not a reserved
+ * route, and pins the result into the body's front matter.
+ *
+ * Duplicate and reserved slugs get the post's id appended (matching the
+ * existing reserved-route convention), so two posts can never be served under
+ * the same slug. The final slug is persisted into the front matter via
+ * persist_slug() whenever it differs from what a re-parse would derive, so the
+ * adjustment survives later edits and cron updates. Must be called after the
+ * first R::store() (the id is part of the suffix); the caller re-stores when
+ * this returns true.
+ *
+ * @param OODBBean $bean A stored post bean.
+ * @return bool True when the slug or body changed and the bean needs re-storing.
+ */
+function finalize_slug(OODBBean $bean): bool
+{
+    $slug = (string) $bean->slug;
+    if ($slug === '') {
+        return false;
+    }
+
+    if (is_reserved_route($slug)) {
+        $slug .= '-' . $bean->id;
+    }
+    while (R::findOne('post', ' slug = ? AND id != ? ', [$slug, $bean->id])) {
+        $slug .= '-' . $bean->id;
+    }
+
+    $body = (string) $bean->body;
+    $matter = parse_matter($body);
+    if (($matter['slug'] ?? '') !== $slug) {
+        $body = persist_slug($body, $slug);
+    }
+
+    $changed = $slug !== (string) $bean->slug || $body !== (string) $bean->body;
+    $bean->slug = $slug;
+    $bean->body = $body;
+
+    return $changed;
 }
 
 /**

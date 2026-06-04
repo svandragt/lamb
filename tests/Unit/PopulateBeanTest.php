@@ -278,35 +278,4 @@ class PopulateBeanTest extends TestCase
         $bean = populate_bean("---\ntitle: Hello World\n---\nContent.");
         $this->assertSame('hello-world', $bean->slug);
     }
-
-    public function testTwoPostsWithSameExplicitSlugShareTheSlug(): void
-    {
-        // Codifies current behaviour: nothing deduplicates an explicit
-        // front-matter slug, so two posts created one after the other with the
-        // same slug both carry it.
-        $text = "---\nslug: shared-slug\n---\nContent.";
-        $first = populate_bean($text);
-        R::store($first);
-        $second = populate_bean($text);
-        R::store($second);
-
-        $this->assertSame('shared-slug', $first->slug);
-        $this->assertSame('shared-slug', $second->slug);
-        $this->assertNotSame($first->id, $second->id);
-    }
-
-    public function testSlugLookupReturnsFirstStoredPostForDuplicateSlug(): void
-    {
-        // Codifies current behaviour: a slug lookup resolves to the
-        // first-stored post; the later duplicate is shadowed and only
-        // reachable via /status/<id>.
-        $text = "---\nslug: shared-lookup-slug\n---\nContent.";
-        $first = populate_bean($text);
-        R::store($first);
-        $second = populate_bean($text);
-        R::store($second);
-
-        $found = R::findOne('post', ' slug = ? ', ['shared-lookup-slug']);
-        $this->assertSame($first->id, $found->id);
-    }
 }

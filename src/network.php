@@ -11,7 +11,7 @@ use SimplePie\SimplePie;
 
 use function Lamb\get_option;
 use function Lamb\Route\register_route;
-use function Lamb\Route\is_reserved_route;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\set_option;
 
@@ -121,6 +121,7 @@ function update_item(SimplePieItem $item, string $name): void
     }
     $bean = prepare_item($item, $name, $bean);
     $bean->updated = $item->get_updated_date("Y-m-d H:i:s");
+    finalize_slug($bean);
 
     try {
         R::store($bean);
@@ -142,11 +143,13 @@ function create_item(SimplePieItem $item, string $name)
     $bean = populate_bean($contents, $item, $name);
 
     try {
-        $id = R::store($bean);
-        if (is_reserved_route($bean->slug)) {
-            $bean->slug .= "-" . $id;
-        }
         R::store($bean);
+        // Reserved-route and duplicate slugs (e.g. two same-titled items in
+        // one feed) get an id suffix; the final slug is pinned into the
+        // body's front matter so cron updates re-derive it unchanged.
+        if (finalize_slug($bean)) {
+            R::store($bean);
+        }
     } catch (SQL) {
         // continue
     }
