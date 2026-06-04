@@ -19,7 +19,18 @@ Barrier free super simple blogging, self-hosted.
 
 # Getting started
 
-[Read the documentation](https://svandragt.github.io/lamb) to get started.
+[Read the documentation](https://svandragt.github.io/lamb) to get started. It is published from the `release`
+branch, so it always matches the latest released version.
+
+To preview the in-development docs on `main` locally:
+
+```bash
+cd docs
+bundle install
+bundle exec jekyll serve
+```
+
+Then open http://localhost:4000/lamb/.
 
 # Screenshots
 
