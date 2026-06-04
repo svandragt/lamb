@@ -97,12 +97,13 @@ function purge_deleted_posts(): int
     }
 
     $sent = \Lamb\Webmention\process_outbound();
-    if ($sent['sent'] || $sent['failed'] || $sent['skipped']) {
+    if ($sent['sent'] || $sent['failed'] || $sent['skipped'] || $sent['cancelled']) {
         printf(
-            "Webmentions sent: %d, failed: %d, skipped: %d" . PHP_EOL,
+            "Webmentions sent: %d, failed: %d, skipped: %d, cancelled: %d" . PHP_EOL,
             $sent['sent'],
             $sent['failed'],
-            $sent['skipped']
+            $sent['skipped'],
+            $sent['cancelled']
         );
     }
 

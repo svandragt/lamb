@@ -34,11 +34,14 @@ When you publish or edit a post, Lamb scans its rendered HTML for links to **oth
 1. Fetches the target page and discovers its webmention endpoint (HTTP `Link` header → `<link rel="webmention">` → `<a rel="webmention">`).
 2. POSTs your post URL (`source`) and the linked URL (`target`) to that endpoint.
 
-Each source/target pair is sent once — re-editing a post does not re-notify targets it already reached, so receivers are not spammed. Drafts, future-scheduled posts, and posts ingested from other feeds do not send webmentions.
+Each source/target pair is sent once — re-editing a post does not re-notify targets it already reached, so receivers are not spammed. Drafts and posts ingested from other feeds do not send webmentions.
+
+[Scheduled posts]({{ site.baseurl }}{% link scheduling.md %}) are queued when you save them, but nothing is sent until the publication time has passed — the first `/_cron` run after the post goes live delivers its webmentions, once the post is publicly reachable for receivers to verify. Editing a scheduled post before it publishes updates the queue (removed links are dropped), and deleting it cancels the queued mentions entirely.
 
 ## Related
 
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Mark a post as `in-reply-to` another URL — the most common webmention type.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts from any Micropub client; uses the same IndieWeb discovery pattern.
 * [Cron / scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How `/_cron` drives feed ingestion and outbound webmentions.
+* [Scheduling posts]({{ site.baseurl }}{% link scheduling.md %}): Scheduled posts send their webmentions when they go live.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Pull posts in from other feeds.

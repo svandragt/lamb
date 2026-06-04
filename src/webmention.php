@@ -8,6 +8,7 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
+use function Lamb\is_scheduled;
 use function Lamb\permalink;
 
 use const ROOT_URL;
@@ -392,8 +393,10 @@ function resolve_url(string $base, string $rel): string
 /**
  * Queue outbound webmentions for a freshly saved post, if it is eligible.
  *
- * Skips ingested feed items (third-party content), drafts, and future-dated
- * scheduled posts — none of which should notify external targets (yet).
+ * Skips ingested feed items (third-party content) and drafts — neither should
+ * notify external targets. Future-dated scheduled posts ARE queued: their rows
+ * wait in the outbox until publication, because process_outbound() only sends
+ * once the source post is publicly visible (#302).
  *
  * @param OODBBean $bean A stored post bean.
  * @return void
@@ -401,9 +404,6 @@ function resolve_url(string $base, string $rel): string
 function enqueue_for_post(OODBBean $bean): void
 {
     if (!$bean->id || !empty($bean->feed_name) || !empty($bean->draft)) {
-        return;
-    }
-    if (!empty($bean->created) && strtotime((string) $bean->created) > time()) {
         return;
     }
 
@@ -420,7 +420,9 @@ function enqueue_for_post(OODBBean $bean): void
  *
  * Idempotent across edits: an existing pending/sent row for the same
  * source+target is left untouched (so receivers are not spammed), while a
- * previously failed row is reset to pending for another attempt.
+ * previously failed or cancelled row is reset to pending for another attempt.
+ * Pending rows whose target no longer appears in the post are cancelled, so a
+ * scheduled post edited to remove a link before publication does not notify it.
  *
  * The reply target (from a post's `in-reply-to` front matter) is treated as an
  * outbound link even when it does not appear in the body, so replies notify the
@@ -441,11 +443,20 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
         $targets[] = $reply_to;
     }
 
+    // Cancel pending rows for links the post no longer contains.
+    $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
+    foreach ($stale as $row) {
+        if (!in_array((string) $row->target, $targets, true)) {
+            $row->status = 'cancelled';
+            R::store($row);
+        }
+    }
+
     $created = 0;
     foreach ($targets as $target) {
         $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
         if ($row) {
-            if ($row->status === 'failed') {
+            if ($row->status === 'failed' || $row->status === 'cancelled') {
                 $row->status = 'pending';
                 R::store($row);
             }
@@ -471,6 +482,14 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
  * Process queued outbound webmentions: discover each target's endpoint and
  * POST the mention. Intended to be driven by the `/_cron` route.
  *
+ * Each row's source post is re-checked before sending: rows for deleted,
+ * draft, or missing posts are cancelled, and rows for still-scheduled posts
+ * are left pending (untouched, no attempt counted) until publication. This
+ * deliberately does not use is_visible(), which trusts logged-in sessions —
+ * a logged-in author hitting /_cron must not leak drafts. Deferred scheduled
+ * rows still occupy part of the LIMIT window; with the default of 20 that is
+ * harmless.
+ *
  * Both network operations are injectable for testing:
  *  - $fetcher fn(string $url): ?array{headers: string[], body: string}
  *  - $sender  fn(string $endpoint, string $source, string $target): int (HTTP status)
@@ -478,17 +497,29 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
  * @param callable|null $fetcher
  * @param callable|null $sender
  * @param int           $limit Maximum rows to process per run.
- * @return array{sent:int, failed:int, skipped:int}
+ * @return array{sent:int, failed:int, skipped:int, cancelled:int}
  */
 function process_outbound(?callable $fetcher = null, ?callable $sender = null, int $limit = 20): array
 {
     $fetcher ??= __NAMESPACE__ . '\\fetch_target';
     $sender ??= __NAMESPACE__ . '\\send_webmention';
 
-    $stats = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
+    $stats = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0];
     $rows = R::find('webmentionoutbox', ' status = ? ORDER BY created ASC LIMIT ? ', ['pending', $limit]);
 
     foreach ($rows as $row) {
+        $post = R::load('post', (int) $row->post_id);
+        if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+            $row->status = 'cancelled';
+            $row->processed_at = date('Y-m-d H:i:s');
+            $stats['cancelled']++;
+            R::store($row);
+            continue;
+        }
+        if (is_scheduled($post)) {
+            continue;
+        }
+
         $row->attempts = (int) $row->attempts + 1;
         $row->processed_at = date('Y-m-d H:i:s');
 
