@@ -34,7 +34,7 @@ Hi I'm John Sheeple and the example author of this site.
 
 Slugs for pages are derived from the title on creation unless you explicitly provide `slug:` in the front-matter. The slug for the example above is `about-me` and the permalink is `/about-me`.
 
-A slug is preserved after creation. Changing the title later does not automatically reslug the post. _Good URLs don't change_, so although it's possible to set a slug in the front-matter when creating a page, Lamb will derive it from the title if it isn't set.
+Editing the `slug:` line (or the title, when no explicit slug is set) reslugs the post, and Lamb automatically stores a 301 redirect from the old slug — _good URLs don't change_, so bookmarks and inbound links keep working. See [Redirections]({{ site.baseurl }}{% link redirections.md %}).
 
 Slugs are unique. If a slug is already taken by another post (or matches a built-in route like `/search`), Lamb appends the post's id to keep the URL distinct, and writes the final slug back into the post's front-matter so you can see — and edit — the slug the post is actually served under.
 
