@@ -40,7 +40,7 @@ git log --format='- %s' <last-tag>..main
 - [ ] **Keep** changes an end user would notice: new/changed features, bug
       fixes affecting the blog or admin, new config keys, install/upgrade
       requirements (e.g. a newly required PHP extension), deployment changes
-      (Docker/Caddy/Nginx/DDev/Devbox).
+      (Docker/FrankenPHP/Nginx/DDev/Devbox).
 - [ ] **Drop** internal-only changes: dev-environment tooling (e.g. Workshop),
       CI, tests, refactors, code-comments/`CLAUDE.md`/`DECISIONS.md`, and
       dependency bumps with no user-visible effect.

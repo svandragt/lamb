@@ -58,3 +58,8 @@ re-download fonts, CSS and images on every visit.
 sudo systemctl restart nginx
 sudo systemctl restart php8.4-fpm
 ```
+
+## Related
+
+- [Installation options]({{ site.baseurl }}{% link index.md %})
+- [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %})

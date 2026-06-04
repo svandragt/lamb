@@ -41,7 +41,7 @@ cd lamb
 php make-password.php <your-password>
 ```
 
-Point your webserver at the `src/` directory ([Caddy]({{ site.baseurl }}{% link caddy.md %}) or [Nginx]({{ site.baseurl }}{% link nginx.md %})). Those pages also cover making `data/` and `src/assets/` writable by the webserver user.
+Point your webserver at the `src/` directory ([FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) or [Nginx]({{ site.baseurl }}{% link nginx.md %})). Those pages also cover making `data/` and `src/assets/` writable by the webserver user.
 
 ### 3. Git checkout
 
@@ -63,7 +63,7 @@ Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
 Webservers:
 
-1. [Caddy]({{ site.baseurl }}{% link caddy.md %})
+1. [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %})
 2. [Nginx]({{ site.baseurl }}{% link nginx.md %})
 
 Containers:
