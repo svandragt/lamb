@@ -27,9 +27,8 @@ class WebsubTest extends TestCase
     public function testPingHubPostsBothFeedUrlsToConfiguredHub(): void
     {
         $pings = [];
-        $sender = function (string $hub, string $topic) use (&$pings): int {
+        $sender = function (string $hub, string $topic) use (&$pings): void {
             $pings[] = [$hub, $topic];
-            return 204;
         };
 
         ping_hub(['websub_hubs' => 'https://hub.example.com/'], $sender);
@@ -43,9 +42,8 @@ class WebsubTest extends TestCase
     public function testPingHubPingsEveryConfiguredHub(): void
     {
         $pings = [];
-        $sender = function (string $hub, string $topic) use (&$pings): int {
+        $sender = function (string $hub, string $topic) use (&$pings): void {
             $pings[] = [$hub, $topic];
-            return 204;
         };
 
         ping_hub(['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/'], $sender);
@@ -75,13 +73,12 @@ class WebsubTest extends TestCase
     public function testPingHubIsNoOpWhenHubNotConfigured(): void
     {
         $called = false;
-        $sender = function () use (&$called): int {
+        $sender = function () use (&$called): void {
             $called = true;
-            return 204;
         };
 
-        $this->assertSame([], ping_hub([], $sender));
-        $this->assertSame([], ping_hub(['websub_hubs' => '  '], $sender));
+        ping_hub([], $sender);
+        ping_hub(['websub_hubs' => '  '], $sender);
         $this->assertFalse($called, 'Sender must not be invoked without a configured hub');
     }
 
@@ -92,9 +89,8 @@ class WebsubTest extends TestCase
         $bean = $this->storedPost();
 
         $pings = 0;
-        ping_for_post($bean, ['websub_hubs' => 'https://hub.example.com/'], function () use (&$pings): int {
+        ping_for_post($bean, ['websub_hubs' => 'https://hub.example.com/'], function () use (&$pings): void {
             $pings++;
-            return 204;
         });
 
         $this->assertSame(2, $pings, 'A published local post should ping the hub for both feeds');
@@ -114,9 +110,8 @@ class WebsubTest extends TestCase
         $unsaved = R::dispense('post');
 
         $called = false;
-        $sender = function () use (&$called): int {
+        $sender = function () use (&$called): void {
             $called = true;
-            return 204;
         };
 
         foreach ([$draft, $feedItem, $scheduled, $unsaved] as $bean) {

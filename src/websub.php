@@ -9,9 +9,10 @@ use RedBeanPHP\OODBBean;
 use const ROOT_URL;
 
 /**
- * Seconds before a hub ping is abandoned.
+ * Seconds before a hub ping is abandoned. Pings run in the publish request,
+ * so this is kept short to avoid a dead hub holding up the redirect.
  */
-const WEBSUB_PING_TIMEOUT = 5;
+const WEBSUB_PING_TIMEOUT = 2;
 
 /**
  * The configured WebSub hub URLs.
@@ -36,29 +37,23 @@ function hub_urls(?array $config = null): array
  * Notify the configured hubs that the site's feeds have new content.
  *
  * Sends one `hub.mode=publish` ping per hub per feed URL (Atom and JSON).
- * A no-op when no hub is configured. The sender is injectable for testing;
- * in production it defaults to {@see send_ping}.
+ * A no-op when no hub is configured. Fire-and-forget: WebSub is best-effort,
+ * subscribers fall back to polling if a ping is missed. The sender is
+ * injectable for testing; in production it defaults to {@see send_ping}.
  *
  * @param array|null    $config Config array; defaults to the global config.
- * @param callable|null $sender fn(string $hub, string $topic): int (HTTP status).
- * @return array<array{hub: string, topic: string, status: int}>
+ * @param callable|null $sender fn(string $hub, string $topic): void.
+ * @return void
  */
-function ping_hub(?array $config = null, ?callable $sender = null): array
+function ping_hub(?array $config = null, ?callable $sender = null): void
 {
-    $hubs = hub_urls($config);
-    if ($hubs === []) {
-        return [];
-    }
-
     $sender ??= __NAMESPACE__ . '\\send_ping';
 
-    $results = [];
-    foreach ($hubs as $hub) {
+    foreach (hub_urls($config) as $hub) {
         foreach ([ROOT_URL . '/feed', ROOT_URL . '/feed.json'] as $topic) {
-            $results[] = ['hub' => $hub, 'topic' => $topic, 'status' => (int) $sender($hub, $topic)];
+            $sender($hub, $topic);
         }
     }
-    return $results;
 }
 
 /**
@@ -85,13 +80,13 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
 }
 
 /**
- * POST a publish notification to the hub and return the HTTP status code.
+ * POST a publish notification to the hub.
  *
  * @param string $hub   The hub endpoint URL.
  * @param string $topic The feed URL that changed.
- * @return int HTTP status code, or 0 on transport failure.
+ * @return void
  */
-function send_ping(string $hub, string $topic): int
+function send_ping(string $hub, string $topic): void
 {
     $context = stream_context_create([
         'http' => [
@@ -106,14 +101,5 @@ function send_ping(string $hub, string $topic): int
         ],
     ]);
 
-    $http_response_header = [];
     @file_get_contents($hub, false, $context);
-
-    $status = 0;
-    foreach ($http_response_header as $header) {
-        if (preg_match('#^HTTP/\S+\s+(\d{3})#', $header, $m)) {
-            $status = (int) $m[1];
-        }
-    }
-    return $status;
 }
