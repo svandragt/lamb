@@ -9,6 +9,8 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\parse_bean;
+use function Lamb\Post\inject_title_matter;
+use function Lamb\Post\parse_matter;
 
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
 
@@ -189,7 +191,26 @@ function upgrade_posts(array $posts): void
         if ((int)$bean->version === POST_VERSION) {
             continue;
         }
+        // An upgrade re-parse is not an edit, so it must not apply edit
+        // semantics to fields the body doesn't carry. Legacy posts (old feed
+        // items) store their title only on the title column: migrate it into
+        // the body's front matter so parse_bean() doesn't clear it. Slugs are
+        // reserved/adjusted at publish time, so the stored slug is restored
+        // unconditionally (good URLs don't change, and slug-less posts must
+        // not be minted one). Column-only drafts (feeds_draft) are restored
+        // when front matter carries no draft key, so the upgrade can't
+        // publish them.
+        $matter = parse_matter($bean->body);
+        if (!empty($bean->title) && !isset($matter['title'])) {
+            $bean->body = inject_title_matter($bean->body, (string)$bean->title);
+        }
+        $previous_slug = $bean->slug;
+        $previous_draft = $bean->draft;
         parse_bean($bean);
+        $bean->slug = $previous_slug;
+        if (!isset($matter['draft'])) {
+            $bean->draft = $previous_draft;
+        }
         try {
             $bean->version = POST_VERSION;
             R::store($bean);
