@@ -231,4 +231,51 @@ class PopulateBeanTest extends TestCase
 
         $this->assertSame('https://example.com/article', $bean->source_url);
     }
+
+    private function makeFeedItem(string $id): SimplePieItem
+    {
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn($id);
+        return $item;
+    }
+
+    public function testFeedItemSlugIsPrefixedWithFeedName(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $bean = populate_bean($text, $this->makeFeedItem('item-1'), 'myfeed');
+
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+    }
+
+    public function testSameTitleFromTwoFeedsYieldsDistinctSlugs(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $a = populate_bean($text, $this->makeFeedItem('item-a'), 'feeda');
+        $b = populate_bean($text, $this->makeFeedItem('item-b'), 'feedb');
+
+        $this->assertSame('feeda-hello-world', $a->slug);
+        $this->assertSame('feedb-hello-world', $b->slug);
+        $this->assertNotSame($a->slug, $b->slug);
+    }
+
+    public function testCronUpdateDoesNotDoublePrefixSlug(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $item = $this->makeFeedItem('item-upd');
+        $bean = populate_bean($text, $item, 'myfeed');
+        R::store($bean);
+
+        // Cron's update_item() runs the same bean through populate_bean again.
+        $bean = populate_bean($text, $item, 'myfeed', $bean);
+
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+    }
+
+    public function testNonFeedPostSlugIsNotPrefixed(): void
+    {
+        $bean = populate_bean("---\ntitle: Hello World\n---\nContent.");
+        $this->assertSame('hello-world', $bean->slug);
+    }
 }

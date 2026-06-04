@@ -14,6 +14,7 @@ use function Lamb\get_tags;
 use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 
@@ -245,6 +246,12 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         R::store($bean);
+        // Reserved-route and duplicate slugs get an id suffix; the final slug
+        // is pinned into the body's front matter and must be settled before
+        // the Location permalink is computed.
+        if (finalize_slug($bean)) {
+            R::store($bean);
+        }
 
         \Lamb\Webmention\enqueue_for_post($bean);
         \Lamb\Websub\ping_for_post($bean);

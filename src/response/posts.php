@@ -13,6 +13,7 @@ use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\parse_bean;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -40,9 +41,10 @@ function redirect_created(): void
     $bean = populate_bean($contents);
 
     try {
-        $id = R::store($bean);
-        if (is_reserved_route($bean->slug)) {
-            $bean->slug .= "-" . $id;
+        R::store($bean);
+        // Reserved-route and duplicate slugs get an id suffix; the final slug
+        // is pinned into the body's front matter so it survives later edits.
+        if (finalize_slug($bean)) {
             R::store($bean);
         }
         // Remove any existing redirect for this slug — the new post takes priority
@@ -185,6 +187,10 @@ function redirect_edited(): void
 
         return;
     }
+
+    // A slug claimed by another post gets an id suffix, and the final slug is
+    // pinned into the body's front matter so the edit form shows it.
+    finalize_slug($bean);
 
     try {
         R::store($bean);
