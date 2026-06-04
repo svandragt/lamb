@@ -119,10 +119,6 @@ function update_item(SimplePieItem $item, string $name): void
         return;
     }
     $bean = prepare_item($item, $name, $bean);
-    if (!$bean) {
-        // Record not found, should not happen as we already checked for existence.
-        return;
-    }
     $bean->updated = $item->get_updated_date("Y-m-d H:i:s");
 
     try {
@@ -132,28 +128,17 @@ function update_item(SimplePieItem $item, string $name): void
     }
 }
 
-function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null): ?OODBBean
+function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null): OODBBean
 {
     $contents = get_structured_content($item, $name);
-    $bean = populate_bean($contents, $item, $name, $bean);
-    if ($bean === null) {
-        $_SESSION['flash'][] = 'Failed to save post';
 
-        return null;
-    }
-
-    return $bean;
+    return populate_bean($contents, $item, $name, $bean);
 }
 
 function create_item(SimplePieItem $item, string $name)
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
-    if ($bean === null) {
-        $_SESSION['flash'][] = 'Failed to save post';
-
-        return;
-    }
 
     try {
         $id = R::store($bean);

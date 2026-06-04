@@ -17,10 +17,10 @@ use function Lamb\parse_bean;
  * @param Item|null $feed_item An optional feed item to extract creation date and ID from.
  * @param string|null $feed_name An optional feed name to prefix the slug and associate with the bean.
  * @param OODBBean|null $bean An optional existing bean to populate. If null, a new 'post' bean is dispensed.
- * @return OODBBean|null The populated bean instance, or null if input is insufficient.
+ * @return OODBBean The populated bean instance.
  * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
-function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): ?OODBBean
+function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): OODBBean
 {
     global $config;
 

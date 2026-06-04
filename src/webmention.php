@@ -120,7 +120,7 @@ function target_post_id(string $target): ?int
 {
     $root_host = parse_url(ROOT_URL, PHP_URL_HOST);
     $target_host = parse_url($target, PHP_URL_HOST);
-    if ($target_host === null || $root_host === null || strcasecmp($target_host, $root_host) !== 0) {
+    if (!is_string($target_host) || !is_string($root_host) || strcasecmp($target_host, $root_host) !== 0) {
         return null;
     }
 
