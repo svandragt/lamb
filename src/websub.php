@@ -14,42 +14,49 @@ use const ROOT_URL;
 const WEBSUB_PING_TIMEOUT = 5;
 
 /**
- * The configured WebSub hub URL, or '' when none is set.
+ * The configured WebSub hub URLs.
+ *
+ * `websub_hubs` is a comma-separated list; most sites need just one.
  *
  * @param array|null $config Config array; defaults to the global config.
- * @return string
+ * @return string[]
  */
-function hub_url(?array $config = null): string
+function hub_urls(?array $config = null): array
 {
     if ($config === null) {
         global $config;
     }
-    return trim((string) (($config ?? [])['websub_hub'] ?? ''));
+    $value = (string) (($config ?? [])['websub_hubs'] ?? '');
+
+    $hubs = array_map('trim', explode(',', $value));
+    return array_values(array_filter($hubs, fn($hub) => $hub !== ''));
 }
 
 /**
- * Notify the configured hub that the site's feeds have new content.
+ * Notify the configured hubs that the site's feeds have new content.
  *
- * Sends one `hub.mode=publish` ping per feed URL (Atom and JSON). A no-op
- * when no hub is configured. The sender is injectable for testing; in
- * production it defaults to {@see send_ping}.
+ * Sends one `hub.mode=publish` ping per hub per feed URL (Atom and JSON).
+ * A no-op when no hub is configured. The sender is injectable for testing;
+ * in production it defaults to {@see send_ping}.
  *
  * @param array|null    $config Config array; defaults to the global config.
  * @param callable|null $sender fn(string $hub, string $topic): int (HTTP status).
- * @return array<string,int> Map of topic URL → HTTP status code.
+ * @return array<array{hub: string, topic: string, status: int}>
  */
 function ping_hub(?array $config = null, ?callable $sender = null): array
 {
-    $hub = hub_url($config);
-    if ($hub === '') {
+    $hubs = hub_urls($config);
+    if ($hubs === []) {
         return [];
     }
 
     $sender ??= __NAMESPACE__ . '\\send_ping';
 
     $results = [];
-    foreach ([ROOT_URL . '/feed', ROOT_URL . '/feed.json'] as $topic) {
-        $results[$topic] = (int) $sender($hub, $topic);
+    foreach ($hubs as $hub) {
+        foreach ([ROOT_URL . '/feed', ROOT_URL . '/feed.json'] as $topic) {
+            $results[] = ['hub' => $hub, 'topic' => $topic, 'status' => (int) $sender($hub, $topic)];
+        }
     }
     return $results;
 }

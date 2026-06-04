@@ -210,7 +210,7 @@ class FeedTemplateTest extends TestCase
         $xml = $this->renderFeedWithPost(
             ['title' => 'Post', 'transformed' => '<p>Body</p>'],
             [],
-            ['websub_hub' => 'https://hub.example.com/']
+            ['websub_hubs' => 'https://hub.example.com/']
         );
 
         $hub = null;
@@ -226,12 +226,37 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedAdvertisesEveryCommaSeparatedHub(): void
+    {
+        $xml = $this->renderFeedWithPost(
+            ['title' => 'Post', 'transformed' => '<p>Body</p>'],
+            [],
+            ['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/']
+        );
+
+        $hubs = [];
+        foreach ($xml->link as $link) {
+            if ((string) $link['rel'] === 'hub') {
+                $hubs[] = (string) $link['href'];
+            }
+        }
+        $this->assertSame(
+            ['https://hub-a.example.com/', 'https://hub-b.example.com/'],
+            $hubs,
+            'Every comma-separated hub should get its own link element'
+        );
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedOmitsHubLinkWhenNotConfigured(): void
     {
         $xml = $this->renderFeedWithPost(['title' => 'Post', 'transformed' => '<p>Body</p>']);
 
         foreach ($xml->link as $link) {
-            $this->assertNotSame('hub', (string) $link['rel'], 'No hub link should be emitted without websub_hub config');
+            $this->assertNotSame('hub', (string) $link['rel'], 'No hub link should be emitted without websub_hubs config');
         }
     }
 

@@ -32,16 +32,44 @@ class WebsubTest extends TestCase
             return 204;
         };
 
-        $results = ping_hub(['websub_hub' => 'https://hub.example.com/'], $sender);
+        ping_hub(['websub_hubs' => 'https://hub.example.com/'], $sender);
 
         $this->assertSame([
             ['https://hub.example.com/', ROOT_URL . '/feed'],
             ['https://hub.example.com/', ROOT_URL . '/feed.json'],
         ], $pings);
+    }
+
+    public function testPingHubPingsEveryConfiguredHub(): void
+    {
+        $pings = [];
+        $sender = function (string $hub, string $topic) use (&$pings): int {
+            $pings[] = [$hub, $topic];
+            return 204;
+        };
+
+        ping_hub(['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/'], $sender);
+
         $this->assertSame([
-            ROOT_URL . '/feed'      => 204,
-            ROOT_URL . '/feed.json' => 204,
-        ], $results);
+            ['https://hub-a.example.com/', ROOT_URL . '/feed'],
+            ['https://hub-a.example.com/', ROOT_URL . '/feed.json'],
+            ['https://hub-b.example.com/', ROOT_URL . '/feed'],
+            ['https://hub-b.example.com/', ROOT_URL . '/feed.json'],
+        ], $pings);
+    }
+
+    public function testHubUrlsParsesCommaSeparatedValues(): void
+    {
+        $this->assertSame([], \Lamb\Websub\hub_urls([]));
+        $this->assertSame([], \Lamb\Websub\hub_urls(['websub_hubs' => ' , ']));
+        $this->assertSame(
+            ['https://hub.example.com/'],
+            \Lamb\Websub\hub_urls(['websub_hubs' => ' https://hub.example.com/ '])
+        );
+        $this->assertSame(
+            ['https://hub-a.example.com/', 'https://hub-b.example.com/'],
+            \Lamb\Websub\hub_urls(['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/,'])
+        );
     }
 
     public function testPingHubIsNoOpWhenHubNotConfigured(): void
@@ -53,7 +81,7 @@ class WebsubTest extends TestCase
         };
 
         $this->assertSame([], ping_hub([], $sender));
-        $this->assertSame([], ping_hub(['websub_hub' => '  '], $sender));
+        $this->assertSame([], ping_hub(['websub_hubs' => '  '], $sender));
         $this->assertFalse($called, 'Sender must not be invoked without a configured hub');
     }
 
@@ -64,7 +92,7 @@ class WebsubTest extends TestCase
         $bean = $this->storedPost();
 
         $pings = 0;
-        ping_for_post($bean, ['websub_hub' => 'https://hub.example.com/'], function () use (&$pings): int {
+        ping_for_post($bean, ['websub_hubs' => 'https://hub.example.com/'], function () use (&$pings): int {
             $pings++;
             return 204;
         });
@@ -92,7 +120,7 @@ class WebsubTest extends TestCase
         };
 
         foreach ([$draft, $feedItem, $scheduled, $unsaved] as $bean) {
-            ping_for_post($bean, ['websub_hub' => 'https://hub.example.com/'], $sender);
+            ping_for_post($bean, ['websub_hubs' => 'https://hub.example.com/'], $sender);
         }
 
         $this->assertFalse($called, 'Drafts, feed items, scheduled and unsaved posts must not ping the hub');

@@ -78,13 +78,34 @@ class FeedJsonTemplateTest extends TestCase
     {
         $json = $this->renderJsonFeedWithPost(
             ['title' => 'Hello', 'transformed' => '<p>Body</p>'],
-            ['websub_hub' => 'https://hub.example.com/']
+            ['websub_hubs' => 'https://hub.example.com/']
         );
 
         $this->assertSame(
             [['type' => 'WebSub', 'url' => 'https://hub.example.com/']],
             $json['hubs'],
             'JSON feed should advertise the configured WebSub hub'
+        );
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonAdvertisesEveryCommaSeparatedHub(): void
+    {
+        $json = $this->renderJsonFeedWithPost(
+            ['title' => 'Hello', 'transformed' => '<p>Body</p>'],
+            ['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/']
+        );
+
+        $this->assertSame(
+            [
+                ['type' => 'WebSub', 'url' => 'https://hub-a.example.com/'],
+                ['type' => 'WebSub', 'url' => 'https://hub-b.example.com/'],
+            ],
+            $json['hubs'],
+            'Every comma-separated hub should appear in the hubs array'
         );
     }
 
@@ -99,7 +120,7 @@ class FeedJsonTemplateTest extends TestCase
             'transformed' => '<p>Body</p>',
         ]);
 
-        $this->assertArrayNotHasKey('hubs', $json, 'No hubs field should be emitted without websub_hub config');
+        $this->assertArrayNotHasKey('hubs', $json, 'No hubs field should be emitted without websub_hubs config');
     }
 
     private function renderJsonFeedWithPost(array $fields, array $extraConfig = []): array

@@ -48,9 +48,10 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Useful where old content is archived to an archive site, or the lamb blog is still under construction but public.
 ;404_fallback = https://my.oldsite.com
 
-;; WebSub hub used to push new posts to feed subscribers in real time.
-;; The hub is advertised in the Atom and JSON feeds, and pinged when you publish.
-;websub_hub = https://hub.example.com/
+;; WebSub hubs used to push new posts to feed subscribers in real time.
+;; Hubs are advertised in the Atom and JSON feeds, and pinged when you publish.
+;; Separate multiple hubs with commas.
+;websub_hubs = https://hub.example.com/
 
 [menu_items]
 ;; Add <label>=<url> entries here where URL is either:

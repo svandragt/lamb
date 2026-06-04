@@ -43,10 +43,11 @@ included when its file exists, so the feed never points at a missing image.
 Feed readers normally poll for changes. With [WebSub](https://www.w3.org/TR/websub/),
 subscribers can instead be pushed new posts the moment you publish.
 
-Set a hub in the [site configuration]({{ site.baseurl }}{% link site-configuration.md %}):
+Set one or more hubs (comma-separated) in the
+[site configuration]({{ site.baseurl }}{% link site-configuration.md %}):
 
 ```
-websub_hub = https://hub.example.com/
+websub_hubs = https://hub.example.com/
 ```
 
 With a hub configured, Lamb:
@@ -61,5 +62,5 @@ Drafts, scheduled posts, and cross-posted feed items do not trigger pings.
 ## Related
 
 * [Cross-posting From Feeds]({{ site.baseurl }}{% link cross-posting.md %}) — consuming external feeds into Lamb
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}) — the `websub_hub` setting
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}) — the `websub_hubs` setting
 * [Themes]({{ site.baseurl }}{% link themes.md %}) — overriding `feed.php` / `feed_json.php` in a custom theme

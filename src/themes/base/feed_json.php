@@ -20,12 +20,13 @@ $feed = [
     'items'         => [],
 ];
 
-// WebSub: advertise the configured hub so subscribers can get real-time pushes.
-$websub_hub = trim((string) ($config['websub_hub'] ?? ''));
-if ($websub_hub !== '') {
-    $feed['hubs'] = [
-        ['type' => 'WebSub', 'url' => $websub_hub],
-    ];
+// WebSub: advertise the configured hubs so subscribers can get real-time pushes.
+$websub_hubs = \Lamb\Websub\hub_urls($config);
+if ($websub_hubs !== []) {
+    $feed['hubs'] = array_map(
+        fn($hub) => ['type' => 'WebSub', 'url' => $hub],
+        $websub_hubs
+    );
 }
 
 foreach ($data['posts'] as $bean) {
