@@ -36,7 +36,7 @@ class MakePasswordTest extends TestCase
         return (string)file_get_contents($this->workspace . '/.env');
     }
 
-    public function test_container_run_points_site_url_at_localhost(): void
+    public function testContainerRunPointsSiteUrlAtLocalhost(): void
     {
         $env = ['PWD' => '/srv/app'];
 
@@ -45,7 +45,7 @@ class MakePasswordTest extends TestCase
         $this->assertStringContainsString("SITE_URL='http://localhost'", $contents);
     }
 
-    public function test_host_run_points_site_url_at_test_port(): void
+    public function testHostRunPointsSiteUrlAtTestPort(): void
     {
         $env = ['PWD' => $this->workspace, 'LAMB_TEST_PORT' => '8747'];
 
