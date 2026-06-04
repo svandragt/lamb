@@ -43,7 +43,7 @@ token_endpoint = https://tokens.indieauth.com/token
 
 ;; WebSub hub used to push new posts to feed subscribers in real time.
 ;; The hub is advertised in the Atom and JSON feeds, and pinged when you publish.
-;websub_hub = https://pubsubhubbub.superfeedr.com/
+;websub_hub = https://hub.example.com/
 
 [menu_items]
 ;; Add <label>=<url> entries. URL can be:

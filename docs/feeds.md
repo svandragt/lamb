@@ -46,7 +46,7 @@ subscribers can instead be pushed new posts the moment you publish.
 Set a hub in the [site configuration]({{ site.baseurl }}{% link site-configuration.md %}):
 
 ```
-websub_hub = https://pubsubhubbub.superfeedr.com/
+websub_hub = https://hub.example.com/
 ```
 
 With a hub configured, Lamb:
@@ -54,8 +54,9 @@ With a hub configured, Lamb:
 * advertises it in the Atom feed (`<link rel="hub">`) and the JSON Feed (`hubs` field), so WebSub-aware readers subscribe automatically;
 * pings the hub whenever a post is published or updated (from the web interface or via Micropub), so it fetches the updated `/feed` and `/feed.json` and pushes them to subscribers.
 
-Any public hub works — [Superfeedr](https://pubsubhubbub.superfeedr.com/) is a free
-option. Drafts, scheduled posts, and cross-posted feed items do not trigger pings.
+Any public hub works — the IndieWeb wiki keeps a
+[list of hubs](https://indieweb.org/WebSub#Hubs) to choose from.
+Drafts, scheduled posts, and cross-posted feed items do not trigger pings.
 
 ## Related
 
