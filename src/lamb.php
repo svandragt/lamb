@@ -117,6 +117,12 @@ function parse_bean(OODBBean $bean): void
     }
     $bean->in_reply_to = is_string($in_reply_to) ? trim($in_reply_to) : '';
 
+    // Reset the title to empty when it is absent from front matter, so removing
+    // the `title:` line (or all front matter) on an edit clears a previously
+    // stored title. The additive loop below only ever sets keys that are
+    // present, so without this an old title would survive every save.
+    $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
+
     // Preserve the existing created date (now for new posts, the stored value for
     // edits, the feed date for ingested items) so an unparseable front-matter date
     // falls back to it rather than leaving a non-date string in the column.
