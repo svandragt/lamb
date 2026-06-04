@@ -10,7 +10,7 @@ use RedBeanPHP\RedException\SQL;
 
 use function Lamb\parse_bean;
 
-define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD"));
+define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
 
 // IMAGE_FILES is defined in constants.php
 

@@ -108,9 +108,6 @@ class LambMicropubAdapter extends MicropubAdapter
         if (strtolower($request->getMethod()) === 'get' && ($request->getQueryParams()['q'] ?? '') === 'config') {
             $this->request = $request;
             $configResult = $this->configurationQueryCallback($request->getQueryParams());
-            if ($configResult instanceof \Psr\Http\Message\ResponseInterface) {
-                return $configResult;
-            }
             return new Response(200, ['content-type' => 'application/json'], json_encode($configResult));
         }
 

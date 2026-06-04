@@ -38,10 +38,6 @@ function redirect_created(): void
     }
 
     $bean = populate_bean($contents);
-    if ($bean === null) {
-        $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
-        return;
-    }
 
     try {
         $id = R::store($bean);
