@@ -231,4 +231,82 @@ class PopulateBeanTest extends TestCase
 
         $this->assertSame('https://example.com/article', $bean->source_url);
     }
+
+    private function makeFeedItem(string $id): SimplePieItem
+    {
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn($id);
+        return $item;
+    }
+
+    public function testFeedItemSlugIsPrefixedWithFeedName(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $bean = populate_bean($text, $this->makeFeedItem('item-1'), 'myfeed');
+
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+    }
+
+    public function testSameTitleFromTwoFeedsYieldsDistinctSlugs(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $a = populate_bean($text, $this->makeFeedItem('item-a'), 'feeda');
+        $b = populate_bean($text, $this->makeFeedItem('item-b'), 'feedb');
+
+        $this->assertSame('feeda-hello-world', $a->slug);
+        $this->assertSame('feedb-hello-world', $b->slug);
+        $this->assertNotSame($a->slug, $b->slug);
+    }
+
+    public function testCronUpdateDoesNotDoublePrefixSlug(): void
+    {
+        $text = "---\ntitle: Hello World\n---\nContent.";
+        $item = $this->makeFeedItem('item-upd');
+        $bean = populate_bean($text, $item, 'myfeed');
+        R::store($bean);
+
+        // Cron's update_item() runs the same bean through populate_bean again.
+        $bean = populate_bean($text, $item, 'myfeed', $bean);
+
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+    }
+
+    public function testNonFeedPostSlugIsNotPrefixed(): void
+    {
+        $bean = populate_bean("---\ntitle: Hello World\n---\nContent.");
+        $this->assertSame('hello-world', $bean->slug);
+    }
+
+    public function testTwoPostsWithSameExplicitSlugShareTheSlug(): void
+    {
+        // Codifies current behaviour: nothing deduplicates an explicit
+        // front-matter slug, so two posts created one after the other with the
+        // same slug both carry it.
+        $text = "---\nslug: shared-slug\n---\nContent.";
+        $first = populate_bean($text);
+        R::store($first);
+        $second = populate_bean($text);
+        R::store($second);
+
+        $this->assertSame('shared-slug', $first->slug);
+        $this->assertSame('shared-slug', $second->slug);
+        $this->assertNotSame($first->id, $second->id);
+    }
+
+    public function testSlugLookupReturnsFirstStoredPostForDuplicateSlug(): void
+    {
+        // Codifies current behaviour: a slug lookup resolves to the
+        // first-stored post; the later duplicate is shadowed and only
+        // reachable via /status/<id>.
+        $text = "---\nslug: shared-lookup-slug\n---\nContent.";
+        $first = populate_bean($text);
+        R::store($first);
+        $second = populate_bean($text);
+        R::store($second);
+
+        $found = R::findOne('post', ' slug = ? ', ['shared-lookup-slug']);
+        $this->assertSame($first->id, $found->id);
+    }
 }

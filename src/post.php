@@ -38,10 +38,6 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
         $bean->created = $feed_item->get_date("Y-m-d H:i:s");
         $bean->updated = $feed_item->get_updated_date("Y-m-d H:i:s");
         if ($feed_name) {
-            if ($bean->slug) {
-                // Prefix with feed name
-                $bean->slug = slugify("$feed_name-" . $bean->slug);
-            }
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
             $bean->feed_name = $feed_name;
         }
@@ -49,6 +45,13 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     }
 
     parse_bean($bean);
+    // Prefix feed-item slugs with the feed name so same-titled posts from
+    // different feeds don't collide. Applied after parse_bean(), whose
+    // front-matter loop re-derives the slug from the title and would
+    // otherwise clobber the prefix (issue #332).
+    if ($feed_item && $feed_name && $bean->slug) {
+        $bean->slug = slugify("$feed_name-" . $bean->slug);
+    }
     $bean->version = POST_VERSION;
 
     // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
