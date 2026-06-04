@@ -14,12 +14,6 @@ sudo -E frankenphp run
 
 (or `composer serve:frankenphp`, which runs the same command). `sudo` is needed to bind port 80; `-E` keeps your environment variables — see below. Update the `lamb.test` site address in the `Caddyfile` to your own domain; with a public domain on port 443 Caddy provisions HTTPS certificates automatically.
 
-Alternatively, serve without any configuration file:
-
-```shell
-sudo -E frankenphp php-server -r src/
-```
-
 ## Logins
 
 To allow logins, set the output of `php make-password.php hackme` (don't use hackme) as the `LAMB_LOGIN_PASSWORD` environment variable for the process:
