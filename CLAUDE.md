@@ -10,7 +10,7 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - When adding new user-facing behaviour, consider whether a new docs page is warranted.
 - Ensure docs pages that are topically related link to each other via a "Related" section.
 
-GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `cd docs && bundle install && bundle exec jekyll serve` (serves at http://localhost:4000/lamb/).
+GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `make docs` (serves at http://localhost:4000/lamb/).
 
 ## Key Commands
 
