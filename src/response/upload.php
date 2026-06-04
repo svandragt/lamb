@@ -118,16 +118,18 @@ function should_convert_to_webp(?string $ext): bool
 /**
  * Re-encodes an image file as WebP, writing the result to $dest_path.
  *
- * Reads $src_path with GD, preserves alpha transparency, and writes a WebP. Returns
- * false (writing nothing) when the source cannot be decoded, so callers can fall back
- * to storing the original bytes.
+ * Reads $src_path with GD, preserves alpha transparency, downscales anything wider
+ * or taller than $max_dimension (so phone-sized screenshots are not served at their
+ * full resolution), and writes a WebP. Returns false (writing nothing) when the
+ * source cannot be decoded, so callers can fall back to storing the original bytes.
  *
- * @param string $src_path  Path to the source image (e.g. an uploaded temp file).
- * @param string $dest_path Path the WebP should be written to.
- * @param int $quality      WebP quality (0-100).
+ * @param string $src_path      Path to the source image (e.g. an uploaded temp file).
+ * @param string $dest_path     Path the WebP should be written to.
+ * @param int    $quality       WebP quality (0-100).
+ * @param int    $max_dimension Longest edge to keep; larger images are scaled down.
  * @return bool True when a WebP was written, false on failure.
  */
-function convert_to_webp(string $src_path, string $dest_path, int $quality = 82): bool
+function convert_to_webp(string $src_path, string $dest_path, int $quality = 82, int $max_dimension = 1600): bool
 {
     $data = @file_get_contents($src_path);
     if ($data === false) {
@@ -144,10 +146,45 @@ function convert_to_webp(string $src_path, string $dest_path, int $quality = 82)
     imagealphablending($image, false);
     imagesavealpha($image, true);
 
+    [$new_width, $new_height] = scaled_dimensions(imagesx($image), imagesy($image), $max_dimension);
+    if ($new_width !== imagesx($image) || $new_height !== imagesy($image)) {
+        $resized = imagecreatetruecolor($new_width, $new_height);
+        imagealphablending($resized, false);
+        imagesavealpha($resized, true);
+        imagecopyresampled($resized, $image, 0, 0, 0, 0, $new_width, $new_height, imagesx($image), imagesy($image));
+        imagedestroy($image);
+        $image = $resized;
+    }
+
     $ok = imagewebp($image, $dest_path, $quality);
     imagedestroy($image);
 
     return $ok;
+}
+
+/**
+ * Scales width/height down so the longest edge is at most $max, preserving aspect ratio.
+ *
+ * Images already within the limit (or with a non-positive longest edge) are returned
+ * unchanged — this never upscales. Scaled edges are clamped to a minimum of 1px.
+ *
+ * @param int $width  Source width in pixels.
+ * @param int $height Source height in pixels.
+ * @param int $max    Maximum length of the longest edge.
+ * @return array{0:int,1:int} The [width, height] to render at.
+ */
+function scaled_dimensions(int $width, int $height, int $max): array
+{
+    $longest = max($width, $height);
+    if ($longest <= $max || $longest <= 0) {
+        return [$width, $height];
+    }
+
+    $ratio = $max / $longest;
+    return [
+        max(1, (int) round($width * $ratio)),
+        max(1, (int) round($height * $ratio)),
+    ];
 }
 
 /**
