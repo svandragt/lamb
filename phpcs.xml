@@ -14,10 +14,11 @@
     <!-- Check PHP files only. -->
     <arg name="extensions" value="php"/>
 
-    <!-- leave only src -->
-    <exclude-pattern>\.*/</exclude-pattern>
+    <!-- Exclude hidden directories (relative, so a checkout under a dotted
+         path such as a .claude/worktrees/ worktree doesn't exclude everything) -->
+    <exclude-pattern type="relative">^\.</exclude-pattern>
     <exclude-pattern>vendor/</exclude-pattern>
-    <exclude-pattern>vendor/</exclude-pattern>
+    <exclude-pattern>node_modules/</exclude-pattern>
 
     <!-- Check for PHP cross-version compatibility. -->
     <rule ref="PHPCompatibility"/>
