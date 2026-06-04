@@ -82,7 +82,7 @@
       "Composer\\Config::disableProcessTimeout",
       "php -S 0.0.0.0:8747 -t src"
     ],
-    "serve:caddy": "sudo caddy run",
+    "serve:frankenphp": "sudo -E frankenphp run",
     "serve:nginx": "sudo systemctl nginx start",
     "test": "vendor/bin/codecept run",
     "coverage": [

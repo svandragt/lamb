@@ -22,5 +22,11 @@ mkdir -p "$APP_ASSETS"
 chown www-data:www-data "$APP_DATA"
 chown www-data:www-data "$APP_ASSETS"
 
-# Any parameters to this script will now be executed (parent entrypoint)
-exec "$@"
+# FrankenPHP runs PHP in-process, so the server itself must run as www-data
+# for uploads and the SQLite database to stay owned by the host user.
+# Caddy needs its state directories writable by that user too.
+chown -R www-data:www-data /data /config
+
+# Any parameters to this script will now be executed as www-data,
+# keeping the container environment (-p) so LAMB_LOGIN_PASSWORD survives.
+exec su -p -s /bin/sh www-data -c "$*"

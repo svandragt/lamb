@@ -8,7 +8,8 @@ $hash = base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));
 $test_port = $_ENV['LAMB_TEST_PORT'] ?? '8747';
 $site_url  = $_ENV['DDEV_PRIMARY_URL'] ?? "http://0.0.0.0:{$test_port}";
 if (($_ENV['PWD'] ?? '') === '/srv/app') {
-    $site_url = 'http://lamb-web';
+    // Inside the Docker dev container FrankenPHP serves the site locally.
+    $site_url = 'http://localhost';
 }
 
 $data  = "SITE_URL='" . $site_url . "'" . PHP_EOL;

@@ -1,14 +1,4 @@
 services:
-  caddy:
-    container_name: lamb-web
-    depends_on:
-      - php
-    image: caddy
-    ports:
-      - "80:80"
-    volumes:
-      - ../src:/srv/app/src
-      - ./Caddyfile:/etc/caddy/Caddyfile
   composer:
     container_name: lamb-deps
     image: composer:2
@@ -16,9 +6,12 @@ services:
       - ../composer.json:/app/composer.json:ro
       - ../composer.lock:/app/composer.lock:ro
       - vendor:/app/vendor
-    command: install --ignore-platform-reqs --no-interaction
+    # --no-scripts: post-install runs phpcs, which fatals in this image
+    # because the composer image lacks the pdo_mysql extension RedBean's
+    # autoloaded functions reference. Linting runs on the host instead.
+    command: install --ignore-platform-reqs --no-interaction --no-scripts
 
-  php:
+  app:
     build:
       context: ..
       dockerfile: .docker/Dockerfile
@@ -28,13 +21,15 @@ services:
         condition: service_completed_successfully
     env_file:
       - ../.ddev/.env
-    image: php:fpm
+    ports:
+      - "80:80"
     volumes:
       # Mount the whole project so Codeception config and tests are available
       # inside the container. The vendor volume is overlaid on top so the
       # container uses the dependencies installed by the composer service.
       - ..:/srv/app
       - vendor:/srv/app/vendor
+      - ./Caddyfile:/etc/frankenphp/Caddyfile
 
 volumes:
   vendor:
