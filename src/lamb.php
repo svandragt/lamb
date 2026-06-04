@@ -128,8 +128,21 @@ function parse_bean(OODBBean $bean): void
     // falls back to it rather than leaving a non-date string in the column.
     $previous_created = $bean->created;
 
+    // A published post's slug is immutable: good URLs don't change. Capture the
+    // stored slug and draft state before the front-matter loop overwrites them.
+    $previous_slug = (string) $bean->slug;
+    $slug_locked = !empty($bean->id) && $previous_slug !== '' && empty($bean->draft);
+
     foreach ($front_matter as $key => $value) {
         $bean->$key = $value;
+    }
+
+    // Ignore slug changes on published posts (whether edited explicitly or
+    // re-derived from a changed title) and reverse the front-matter slug to the
+    // slug the post is actually served under. Drafts can still be re-slugged.
+    if ($slug_locked && (string) $bean->slug !== $previous_slug) {
+        $bean->slug = $previous_slug;
+        $bean->body = Post\persist_slug($bean->body, $previous_slug);
     }
 
     // Normalise a front-matter `created` date into the canonical Y-m-d H:i:s string.

@@ -34,9 +34,9 @@ Hi I'm John Sheeple and the example author of this site.
 
 Slugs for pages are derived from the title on creation unless you explicitly provide `slug:` in the front-matter. The slug for the example above is `about-me` and the permalink is `/about-me`.
 
-A slug is preserved after creation. Changing the title later does not automatically reslug the post. _Good URLs don't change_, so although it's possible to set a slug in the front-matter when creating a page, Lamb will derive it from the title if it isn't set.
+A slug is immutable once the post is published: _good URLs don't change_. Editing the `slug:` line or the title of a published post does not reslug it — Lamb keeps the original slug and reverses the front-matter `slug:` value to match it. Draft posts can still be re-slugged freely until they are published.
 
-Slugs are unique. If a slug is already taken by another post (or matches a built-in route like `/search`), Lamb appends the post's id to keep the URL distinct, and writes the final slug back into the post's front-matter so you can see — and edit — the slug the post is actually served under.
+Slugs are unique. If a slug is already taken by another post (or matches a built-in route like `/search`), Lamb appends the post's id to keep the URL distinct, and writes the final slug back into the post's front-matter so you can always see the slug the post is actually served under.
 
 You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 

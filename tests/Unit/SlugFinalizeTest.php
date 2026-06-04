@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimplePie\Item as SimplePieItem;
 
+use function Lamb\parse_bean;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\persist_slug;
 use function Lamb\Post\populate_bean;
@@ -171,6 +172,85 @@ class SlugFinalizeTest extends TestCase
         $this->assertStringContainsString('slug: myfeed-hello-world', $bean->body);
 
         $bean = populate_bean($bean->body, $item, 'myfeed', $bean);
+
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+    }
+
+    // -------------------------------------------------------------------
+    // Slug immutability after publish — edits to slugs are ignored and the
+    // front-matter slug is reversed to the slug the post is served under.
+    // -------------------------------------------------------------------
+
+    private function makePublishedPost(string $body): \RedBeanPHP\OODBBean
+    {
+        $bean = populate_bean($body);
+        $bean->draft = 0;
+        R::store($bean);
+        finalize_slug($bean);
+        R::store($bean);
+        return $bean;
+    }
+
+    public function testPublishedPostKeepsSlugWhenFrontMatterSlugEdited(): void
+    {
+        $bean = $this->makePublishedPost("---\ntitle: My Page\n---\nContent.");
+
+        $bean->body = "---\ntitle: My Page\nslug: something-else\n---\nContent.";
+        parse_bean($bean);
+
+        $this->assertSame('my-page', $bean->slug);
+        $this->assertStringContainsString('slug: my-page', $bean->body);
+        $this->assertStringNotContainsString('something-else', $bean->body);
+    }
+
+    public function testPublishedPostKeepsSlugWhenTitleEdited(): void
+    {
+        $bean = $this->makePublishedPost("---\ntitle: My Page\n---\nContent.");
+
+        $bean->body = "---\ntitle: A Better Title\n---\nContent.";
+        parse_bean($bean);
+
+        $this->assertSame('my-page', $bean->slug);
+        $this->assertStringContainsString('slug: my-page', $bean->body);
+    }
+
+    public function testDraftPostSlugCanStillBeEdited(): void
+    {
+        $bean = populate_bean("---\ntitle: My Draft\ndraft: true\n---\nContent.");
+        R::store($bean);
+        finalize_slug($bean);
+        R::store($bean);
+
+        $bean->body = "---\ntitle: My Draft\ndraft: true\nslug: better-slug\n---\nContent.";
+        parse_bean($bean);
+
+        $this->assertSame('better-slug', $bean->slug);
+    }
+
+    public function testPublishedSluglessPostCanGainSlug(): void
+    {
+        $bean = populate_bean('Just a status update.');
+        $bean->draft = 0;
+        R::store($bean);
+
+        $bean->body = "---\ntitle: Now A Page\n---\nContent.";
+        parse_bean($bean);
+
+        $this->assertSame('now-a-page', $bean->slug);
+    }
+
+    public function testPublishedFeedItemKeepsSlugWhenUpstreamTitleChanges(): void
+    {
+        $item = $this->makeFeedItem('item-locked');
+        $bean = populate_bean("---\ntitle: Hello World\n---\nContent.", $item, 'myfeed');
+        $bean->draft = 0;
+        R::store($bean);
+        finalize_slug($bean);
+        R::store($bean);
+        $this->assertSame('myfeed-hello-world', $bean->slug);
+
+        // Upstream rewrites the item title; cron update regenerates the body.
+        $bean = populate_bean("---\ntitle: Renamed Post\n---\nContent.", $item, 'myfeed', $bean);
 
         $this->assertSame('myfeed-hello-world', $bean->slug);
     }
