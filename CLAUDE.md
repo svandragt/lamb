@@ -461,6 +461,8 @@ For contributors: always branch from `main` for new features. Open an issue firs
 
 When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
 
+After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
+
 ## Philosophy (from README)
 
 - Simple over complex
