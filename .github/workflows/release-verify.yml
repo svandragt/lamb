@@ -1,0 +1,153 @@
+# Pre-release verification: runs the Codeception Acceptance suite against the
+# server-distinct documented ways of running Lamb that ci.yml does not cover.
+#
+# ci.yml already exercises the built-in PHP server (composer serve) on every PR
+# across PHP 8.2-8.5, so that path is intentionally not duplicated here. This
+# workflow adds:
+#   - the Docker/FrankenPHP release image (.docker/Dockerfile.release, what
+#     release-artifacts.yml publishes to GHCR)
+#   - an nginx + php-fpm install using the shipped .nginx/ configuration
+#
+# Both jobs run codecept on the runner with `--env external` (see
+# tests/Acceptance.suite.yml), pointing SITE_URL at the externally started
+# server. The served instance shares tests/Support/Data with the test runner so
+# the per-test database reset in Tests\Support\Helper\Acceptance keeps working.
+name: Release verification
+
+on:
+  pull_request:
+    branches: [ "release" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker-frankenphp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP (test runner)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: sqlite3, gettext, simplexml, mbstring, curl
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Generate credentials
+        run: |
+          php make-password.php ci-verify-password
+          sed -i "s|^SITE_URL=.*|SITE_URL='http://localhost:8080'|" .env
+
+      - name: Build release image
+        run: docker build -f .docker/Dockerfile.release -t lamb:verify .
+
+      - name: Run container
+        run: |
+          mkdir -p tests/Support/Data
+          chmod 0777 tests/Support/Data
+          HASH=$(grep LAMB_LOGIN_PASSWORD .env | cut -d"'" -f2)
+          docker run -d --name lamb-verify -p 8080:80 \
+            -e LAMB_LOGIN_PASSWORD="$HASH" \
+            -v "$PWD/tests/Support/Data:/app/data" \
+            lamb:verify
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://localhost:8080/ && exit 0
+            sleep 2
+          done
+          docker logs lamb-verify
+          exit 1
+
+      - name: Run acceptance tests against the release image
+        run: vendor/bin/codecept run Acceptance --env external --steps
+
+      - name: Container logs on failure
+        if: failure()
+        run: docker logs lamb-verify
+
+  nginx-fpm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup PHP (test runner)
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: sqlite3, gettext, simplexml, mbstring, curl
+
+      - name: Install dependencies
+        run: composer install --prefer-dist --no-progress
+
+      - name: Generate credentials
+        run: |
+          php make-password.php ci-verify-password
+          sed -i "s|^SITE_URL=.*|SITE_URL='http://127.0.0.1:8080'|" .env
+
+      - name: Install nginx and php-fpm
+        # setup-php adds the ondrej/php PPA, so php8.2-fpm is installable on any runner image.
+        run: sudo apt-get update && sudo apt-get install -y nginx php8.2-fpm php8.2-sqlite3 php8.2-mbstring php8.2-xml
+
+      - name: Configure php-fpm pool
+        run: |
+          mkdir -p tests/Support/Data
+          chmod 0777 tests/Support/Data
+          chmod o+x "$HOME" "$GITHUB_WORKSPACE"
+          HASH=$(grep LAMB_LOGIN_PASSWORD .env | cut -d"'" -f2)
+          POOL=/etc/php/8.2/fpm/pool.d/www.conf
+          sudo tee -a "$POOL" > /dev/null <<EOF
+          clear_env = no
+          env[LAMB_LOGIN_PASSWORD] = $HASH
+          env[LAMB_DATA_DIR] = $GITHUB_WORKSPACE/tests/Support/Data
+          EOF
+          sudo systemctl restart php8.2-fpm
+
+      - name: Configure nginx from the shipped .nginx/ files
+        run: |
+          sudo cp .nginx/snippets/*.conf /etc/nginx/snippets/
+          # Use the documented vhost, adjusted only for the CI environment:
+          # docroot in the workspace, port 8080, catch-all server name.
+          sed -e "s|root .*;|root $GITHUB_WORKSPACE/src;|" \
+              -e "s|listen 80;|listen 8080;|" \
+              -e "s|server_name lamb.test;|server_name _;|" \
+              .nginx/sites-available/lamb.test | sudo tee /etc/nginx/sites-available/lamb-verify > /dev/null
+          sudo ln -s /etc/nginx/sites-available/lamb-verify /etc/nginx/sites-enabled/
+          sudo rm -f /etc/nginx/sites-enabled/default
+          sudo nginx -t
+          sudo systemctl restart nginx
+
+      - name: Wait for server
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8080/ && exit 0
+            sleep 1
+          done
+          sudo tail -50 /var/log/nginx/lamb.test-error.log || true
+          exit 1
+
+      - name: Run acceptance tests against nginx + php-fpm
+        run: vendor/bin/codecept run Acceptance --env external --steps
+
+      - name: Server logs on failure
+        if: failure()
+        run: sudo tail -100 /var/log/nginx/lamb.test-error.log /var/log/nginx/lamb.test-access.log || true
+
+  # Aggregate gate: require this single check on PRs targeting release
+  # (mirrors the `ci` gate job in ci.yml).
+  release-verify:
+    runs-on: ubuntu-latest
+    needs: [ docker-frankenphp, nginx-fpm ]
+    if: always()
+    steps:
+      - name: Check matrix results
+        run: |
+          [ "${{ needs.docker-frankenphp.result }}" = "success" ] || { echo "::error::docker-frankenphp failed"; exit 1; }
+          [ "${{ needs.nginx-fpm.result }}" = "success" ] || { echo "::error::nginx-fpm failed"; exit 1; }

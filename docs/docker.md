@@ -4,6 +4,8 @@ title: Docker
 
 # Docker
 
+> **Well-travelled path.** The release image is verified by the automated acceptance suite before every release (the `release-verify` workflow), so this is a supported, regularly-tested way to run Lamb.
+
 The only requirement in this case is a working Docker setup!
 
 ## Prebuilt image (recommended)

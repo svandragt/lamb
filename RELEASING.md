@@ -63,6 +63,10 @@ gh pr create --base release --head main \
 gh pr merge --merge --subject "Release <version>"
 ```
 
+- [ ] Confirm the **release-verify** check is green on the PR before merging.
+      It runs the Acceptance suite against the Docker/FrankenPHP release image
+      and an nginx + php-fpm install — the well-travelled production paths —
+      in addition to `ci`'s built-in-server run.
 - [ ] If the PR reports `BEHIND`, `release` has commits not on `main` (e.g.
       old release merges). Sync first: branch from `main`, `git merge
       origin/release` (a merge commit, no content changes expected), PR that
