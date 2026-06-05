@@ -9,6 +9,7 @@ use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\scaled_dimensions;
 use function Lamb\Response\should_convert_to_webp;
+use function Lamb\Response\store_webp_copy;
 
 class UploadTest extends TestCase
 {
@@ -274,6 +275,43 @@ class UploadTest extends TestCase
         [$width, $height] = getimagesize($dest);
         $this->assertSame(40, $width);
         $this->assertSame(30, $height);
+    }
+
+    // store_webp_copy — shared decision: convert a JPEG/PNG source to a .webp file
+    // under the destination dir, returning the .webp filename, or null when the
+    // source should not be (or cannot be) converted so callers fall back to the
+    // original extension.
+
+    public function testStoreWebpCopyReturnsWebpFilenameForPng(): void
+    {
+        $src = $this->makePng(40, 30);
+
+        $result = store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertSame('seedhash.webp', $result);
+        $this->assertFileExists($this->tempRootDir . '/seedhash.webp');
+        $this->assertSame('image/webp', mime_content_type($this->tempRootDir . '/seedhash.webp'));
+    }
+
+    public function testStoreWebpCopyReturnsNullForNonConvertibleExtension(): void
+    {
+        $src = $this->makePng(40, 30);
+
+        $result = store_webp_copy($src, 'gif', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+    }
+
+    public function testStoreWebpCopyReturnsNullForGarbageSource(): void
+    {
+        $src = $this->tempRootDir . '/notimage.png';
+        file_put_contents($src, 'this is not an image');
+
+        $result = store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
     }
 
     private function makePng(int $w, int $h): string
