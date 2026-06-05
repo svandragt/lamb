@@ -396,7 +396,7 @@ function is_scheduled(OODBBean $post): bool
  * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
  * @return bool
  */
-function is_visible(OODBBean $post): bool
+function is_viewable(OODBBean $post): bool
 {
     if (empty($post->id) || $post->deleted == 1) {
         return false;
@@ -438,7 +438,7 @@ function preview_token_valid(OODBBean $post, ?string $token): bool
 /**
  * Checks if a post with the given slug exists in the database and may be
  * routed for the current request: published posts for everyone, drafts and
- * scheduled posts for the logged-in author (matching is_visible()) or via a
+ * scheduled posts for the logged-in author (matching is_viewable()) or via a
  * valid preview token.
  *
  * @param string $lookup The slug of the post to look up.
@@ -451,7 +451,7 @@ function post_has_slug(string $lookup): string|null
     if ($post === null || $post->id === 0) {
         return '';
     }
-    if (!is_visible($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
+    if (!is_viewable($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
         return '';
     }
 

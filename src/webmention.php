@@ -475,7 +475,7 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
  * Each row's source post is re-checked before sending: rows for deleted,
  * draft, or missing posts are cancelled, and rows for still-scheduled posts
  * are left pending (untouched, no attempt counted) until publication. This
- * deliberately does not use is_visible(), which trusts logged-in sessions —
+ * deliberately does not use is_viewable(), which trusts logged-in sessions —
  * a logged-in author hitting /_cron must not leak drafts. Deferred scheduled
  * rows still occupy part of the LIMIT window; with the default of 20 that is
  * harmless.
