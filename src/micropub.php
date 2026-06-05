@@ -14,6 +14,7 @@ use function Lamb\get_tags;
 use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
@@ -455,19 +456,15 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $content = $newContent . $hashtagStr;
 
-        $front = [];
+        $matter = [];
         if ($title !== null) {
-            $front[] = "title: $title";
+            $matter['title'] = (string) $title;
         }
         if (is_string($replyTo) && $replyTo !== '') {
-            $front[] = "in-reply-to: $replyTo";
+            $matter['in-reply-to'] = $replyTo;
         }
 
-        if ($front === []) {
-            return $content;
-        }
-
-        return "---\n" . implode("\n", $front) . "\n---\n$content";
+        return build_matter($matter, $content);
     }
 
     /**
@@ -572,17 +569,13 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $matter = [];
         if ($title !== null) {
-            $matter[] = "title: $title";
+            $matter['title'] = (string) $title;
         }
         if (is_string($replyTo) && $replyTo !== '') {
-            $matter[] = "in-reply-to: $replyTo";
+            $matter['in-reply-to'] = $replyTo;
         }
 
-        if ($matter === []) {
-            return $content;
-        }
-
-        return "---\n" . implode("\n", $matter) . "\n---\n$content";
+        return build_matter($matter, $content);
     }
 
     /**

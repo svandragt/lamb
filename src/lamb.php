@@ -16,6 +16,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\parse_matter;
+use function Lamb\Post\set_matter;
 
 /**
  * Retrieves the tags from the given HTML.
@@ -344,30 +345,7 @@ function visible_clause(): array
  */
 function persist_resolved_created(string $body, string $resolved): string
 {
-    // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
-        return $body;
-    }
-
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*created[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
-        function (array $line) use ($resolved): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $resolved) {
-                return $line[0];
-            }
-            return $line[1] . " '" . $resolved . "'";
-        },
-        $m[2],
-        1,
-        $count
-    );
-
-    if ($count === 0) {
-        return $body;
-    }
-
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_matter($body, 'created', $resolved, quote: true, append: false);
 }
 
 /**
