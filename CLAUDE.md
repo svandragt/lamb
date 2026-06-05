@@ -457,6 +457,10 @@ The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
 
 For contributors: always branch from `main` for new features. Open an issue first; get agreement from maintainers before building features.
 
+## Pull Requests
+
+When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
+
 ## Philosophy (from README)
 
 - Simple over complex
