@@ -46,7 +46,7 @@ composer fix
 printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
 # Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
-PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome \
   pnpm run screenshot [/path] [outdir]
 # Before/after: git stash → screenshot → git stash pop → screenshot
 ```
@@ -54,7 +54,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chr
 ### Screenshot notes
 - JS deps: `pnpm install` (not npm); Playwright is `@playwright/test`
 - The PHP dev server must be started with `php -S 0.0.0.0:8747 -t src` (no router script argument)
-- Chromium executable: `/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`
+- Chromium executable: `~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome` (note `chrome-linux64`; version dir may differ per machine — check `ls ~/.cache/ms-playwright/`)
 - Script: `scripts/screenshot.mjs [path] [outdir]`
 
 ## Project Structure

@@ -21,15 +21,24 @@ $feed_statuses = $data['feed_statuses'] ?? [];
     }
     .settings-tabs__nav {
         display: flex;
-        gap: .25rem;
-        border-bottom: 1px solid currentColor;
         margin-bottom: 1rem;
+        /* Neutralise theme styling of bare <nav> (site chrome). */
+        border-bottom: none;
+        background: none;
+        padding: 0;
+    }
+    /* The underline is drawn per-label (plus this filler for the remaining
+       width) so the active tab can open a gap in it. */
+    .settings-tabs__nav::after {
+        content: "";
+        flex: 1;
+        border-bottom: 1px solid currentColor;
     }
     .settings-tabs__nav label {
         cursor: pointer;
         padding: .4rem .9rem;
         border: 1px solid transparent;
-        border-bottom: none;
+        border-bottom: 1px solid currentColor;
         border-radius: .3rem .3rem 0 0;
         opacity: .65;
     }
@@ -43,6 +52,7 @@ $feed_statuses = $data['feed_statuses'] ?? [];
     #settings-tab-logs:checked ~ .settings-tabs__nav label[for="settings-tab-logs"] {
         opacity: 1;
         border-color: currentColor;
+        border-bottom-color: transparent;
         font-weight: bold;
     }
     #settings-tab-config:checked ~ #settings-panel-config,
