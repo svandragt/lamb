@@ -51,6 +51,16 @@ class ReplyContextTest extends TestCase
         $this->assertNull($bean->{'in-reply-to'});
     }
 
+    public function testListInReplyToUsesFirstEntry(): void
+    {
+        // A YAML list (Micropub clients may send multiple reply targets) collapses
+        // to its first entry rather than being stored verbatim.
+        $bean = populate_bean(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+        $this->assertSame('https://first.example/post', $bean->in_reply_to);
+    }
+
     // the_reply_context helper ----------------------------------------------
 
     public function testReplyContextHelperRendersMarkup(): void
