@@ -5,7 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\is_visible;
+use function Lamb\is_viewable;
 use function Lamb\Response\respond_post;
 use function Lamb\Response\respond_status;
 
@@ -58,44 +58,44 @@ class PostVisibilityTest extends TestCase
         return $bean;
     }
 
-    // ---- is_visible() predicate -------------------------------------------
+    // ---- is_viewable() predicate -------------------------------------------
 
     public function testPublishedPostIsVisibleToAnonymous(): void
     {
         $bean = $this->makePost([]);
-        $this->assertTrue(is_visible($bean));
+        $this->assertTrue(is_viewable($bean));
     }
 
     public function testDeletedPostIsNeverVisible(): void
     {
         $bean = $this->makePost(['deleted' => 1]);
-        $this->assertFalse(is_visible($bean));
+        $this->assertFalse(is_viewable($bean));
         $_SESSION[SESSION_LOGIN] = true;
-        $this->assertFalse(is_visible($bean), 'Deleted posts stay hidden even when logged in');
+        $this->assertFalse(is_viewable($bean), 'Deleted posts stay hidden even when logged in');
     }
 
     public function testDraftHiddenFromAnonymousButVisibleToAuthor(): void
     {
         $bean = $this->makePost(['draft' => 1]);
-        $this->assertFalse(is_visible($bean), 'Draft hidden from anonymous visitors');
+        $this->assertFalse(is_viewable($bean), 'Draft hidden from anonymous visitors');
 
         $_SESSION[SESSION_LOGIN] = true;
-        $this->assertTrue(is_visible($bean), 'Logged-in author can preview a draft');
+        $this->assertTrue(is_viewable($bean), 'Logged-in author can preview a draft');
     }
 
     public function testScheduledHiddenFromAnonymousButVisibleToAuthor(): void
     {
         $bean = $this->makePost(['created' => date('Y-m-d H:i:s', time() + 86400)]);
-        $this->assertFalse(is_visible($bean), 'Scheduled post hidden from anonymous visitors');
+        $this->assertFalse(is_viewable($bean), 'Scheduled post hidden from anonymous visitors');
 
         $_SESSION[SESSION_LOGIN] = true;
-        $this->assertTrue(is_visible($bean), 'Logged-in author can preview a scheduled post');
+        $this->assertTrue(is_viewable($bean), 'Logged-in author can preview a scheduled post');
     }
 
     public function testMissingPostIsNotVisible(): void
     {
         $bean = R::load('post', 999999);
-        $this->assertFalse(is_visible($bean));
+        $this->assertFalse(is_viewable($bean));
     }
 
     // ---- respond_status (/status/<id>) ------------------------------------
