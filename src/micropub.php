@@ -154,29 +154,28 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     protected function introspectToken(string $token, string $endpoint): ?array
     {
-        $context = stream_context_create([
-            'http' => [
-                'method'  => 'GET',
-                'header'  => implode("\r\n", [
-                    'Authorization: Bearer ' . $token,
-                    'Accept: application/json',
-                ]),
-                'timeout' => 5,
-                'ignore_errors' => true,
+        $result = \Lamb\Http\fetch($endpoint, [
+            'headers' => [
+                'Authorization: Bearer ' . $token,
+                'Accept: application/json',
             ],
+            'timeout' => 5,
+            // introspectToken historically did not follow redirects explicitly,
+            // relying on PHP's stream defaults; preserve that by omitting them.
+            'follow_location' => null,
+            'max_redirects' => null,
         ]);
 
-        $response = @file_get_contents($endpoint, false, $context);
-        if ($response === false) {
+        if ($result === null) {
             return null;
         }
 
-        $statusLine = $http_response_header[0] ?? '';
+        $statusLine = $result['headers'][0] ?? '';
         if (!str_contains($statusLine, ' 200 ')) {
             return null;
         }
 
-        $data = json_decode($response, true);
+        $data = json_decode($result['body'], true);
         return is_array($data) ? $data : null;
     }
 

@@ -5,6 +5,10 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Webmention\discover_endpoint;
+use function Lamb\Webmention\extract_meta;
+use function Lamb\Webmention\is_external_http_url;
+use function Lamb\Webmention\is_valid_http_url;
 use function Lamb\Webmention\source_mentions_target;
 use function Lamb\Webmention\target_post_id;
 use function Lamb\Webmention\verify_and_store;
@@ -166,5 +170,140 @@ class WebmentionTest extends TestCase
         $mentions = webmentions_for_post($id);
         $this->assertCount(1, $mentions);
         $this->assertSame('https://other.example/reply', $mentions[0]->source);
+    }
+
+    // is_valid_http_url -----------------------------------------------------
+
+    public function testIsValidHttpUrlAcceptsHttpAndHttps(): void
+    {
+        $this->assertTrue(is_valid_http_url('http://example.com/'));
+        $this->assertTrue(is_valid_http_url('https://example.com/path'));
+        // Scheme casing is normalised before the check.
+        $this->assertTrue(is_valid_http_url('HTTPS://EXAMPLE.com/'));
+    }
+
+    public function testIsValidHttpUrlRejectsNonHttpAndHostless(): void
+    {
+        $this->assertFalse(is_valid_http_url('mailto:someone@example.com'));
+        $this->assertFalse(is_valid_http_url('ftp://example.com/'));
+        $this->assertFalse(is_valid_http_url('/relative/path'));
+        $this->assertFalse(is_valid_http_url('not a url'));
+        $this->assertFalse(is_valid_http_url(''));
+    }
+
+    // is_external_http_url --------------------------------------------------
+
+    public function testIsExternalHttpUrlTrueForForeignHost(): void
+    {
+        // Some other unit test may already have defined ROOT_URL; build the
+        // foreign URL from a host that cannot match it.
+        $this->assertTrue(is_external_http_url('https://surely-not-our-host.example/post'));
+    }
+
+    public function testIsExternalHttpUrlFalseForOwnHost(): void
+    {
+        $own_host = (string) parse_url(ROOT_URL, PHP_URL_HOST);
+        $this->assertFalse(is_external_http_url('https://' . $own_host . '/status/1'));
+        // Host comparison is case-insensitive.
+        $this->assertFalse(is_external_http_url('https://' . strtoupper($own_host) . '/status/1'));
+    }
+
+    public function testIsExternalHttpUrlFalseForInvalidUrl(): void
+    {
+        $this->assertFalse(is_external_http_url('mailto:a@example.com'));
+        $this->assertFalse(is_external_http_url('/relative'));
+    }
+
+    // extract_meta ----------------------------------------------------------
+
+    public function testExtractMetaReadsAuthorMetaTag(): void
+    {
+        $html = '<html><head><meta name="author" content="Jane Doe"><title>Hi</title></head></html>';
+        $meta = extract_meta($html);
+        $this->assertSame('Jane Doe', $meta['author']);
+        $this->assertSame('Hi', $meta['content']);
+    }
+
+    public function testExtractMetaFallsBackToRelAuthor(): void
+    {
+        $html = '<a rel="author" href="/me">Jane</a><title>Title Here</title>';
+        $meta = extract_meta($html);
+        $this->assertSame('Jane', $meta['author']);
+        $this->assertSame('Title Here', $meta['content']);
+    }
+
+    public function testExtractMetaReturnsNullsWhenAbsent(): void
+    {
+        $meta = extract_meta('<p>no metadata here</p>');
+        $this->assertNull($meta['author']);
+        $this->assertNull($meta['content']);
+    }
+
+    public function testExtractMetaDecodesTitleEntities(): void
+    {
+        $meta = extract_meta('<title>Tom &amp; Jerry</title>');
+        $this->assertSame('Tom & Jerry', $meta['content']);
+    }
+
+    // discover_endpoint -----------------------------------------------------
+
+    public function testDiscoverEndpointPrefersLinkHeader(): void
+    {
+        $endpoint = discover_endpoint(
+            '<link rel="webmention" href="https://example.com/from-html">',
+            ['<https://example.com/from-header>; rel="webmention"'],
+            'https://example.com/post'
+        );
+        $this->assertSame('https://example.com/from-header', $endpoint);
+    }
+
+    public function testDiscoverEndpointFromHtmlLinkTag(): void
+    {
+        $endpoint = discover_endpoint(
+            '<link rel="webmention" href="https://example.com/wm">',
+            [],
+            'https://example.com/post'
+        );
+        $this->assertSame('https://example.com/wm', $endpoint);
+    }
+
+    public function testDiscoverEndpointFromAnchorTag(): void
+    {
+        $endpoint = discover_endpoint(
+            '<a rel="webmention" href="/wm-endpoint">webmention</a>',
+            [],
+            'https://example.com/blog/post'
+        );
+        $this->assertSame('https://example.com/wm-endpoint', $endpoint);
+    }
+
+    public function testDiscoverEndpointResolvesRelativeHeaderAgainstTarget(): void
+    {
+        $endpoint = discover_endpoint(
+            '',
+            ['</wm>; rel="webmention"'],
+            'https://example.com/blog/post'
+        );
+        $this->assertSame('https://example.com/wm', $endpoint);
+    }
+
+    public function testDiscoverEndpointMatchesWebmentionWithinRelTokenList(): void
+    {
+        $endpoint = discover_endpoint(
+            '<link rel="pingback webmention" href="https://example.com/wm">',
+            [],
+            'https://example.com/post'
+        );
+        $this->assertSame('https://example.com/wm', $endpoint);
+    }
+
+    public function testDiscoverEndpointReturnsNullWhenNoneFound(): void
+    {
+        $endpoint = discover_endpoint(
+            '<link rel="stylesheet" href="/style.css">',
+            ['<https://example.com/x>; rel="canonical"'],
+            'https://example.com/post'
+        );
+        $this->assertNull($endpoint);
     }
 }

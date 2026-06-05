@@ -215,22 +215,12 @@ function extract_meta(string $html): array
  */
 function fetch_source(string $url): ?string
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => implode("\r\n", [
-                'Accept: text/html, */*',
-                'User-Agent: Lamb-Webmention',
-            ]),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'follow_location' => 1,
-            'max_redirects' => 5,
-            'ignore_errors' => true,
-        ],
+    $result = \Lamb\Http\fetch($url, [
+        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
+        'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
 
-    $body = @file_get_contents($url, false, $context);
-    return $body === false ? null : $body;
+    return $result === null ? null : $result['body'];
 }
 
 /**
@@ -508,46 +498,67 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
     $rows = R::find('webmentionoutbox', ' status = ? ORDER BY created ASC LIMIT ? ', ['pending', $limit]);
 
     foreach ($rows as $row) {
-        $post = R::load('post', (int) $row->post_id);
-        if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
-            $row->status = 'cancelled';
-            $row->processed_at = date('Y-m-d H:i:s');
-            $stats['cancelled']++;
-            R::store($row);
-            continue;
+        $outcome = process_outbound_row($row, $fetcher, $sender);
+        if ($outcome !== null) {
+            $stats[$outcome]++;
         }
-        if (is_scheduled($post)) {
-            continue;
-        }
-
-        $row->attempts = (int) $row->attempts + 1;
-        $row->processed_at = date('Y-m-d H:i:s');
-
-        $fetched = $fetcher($row->target);
-        $endpoint = is_array($fetched)
-            ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
-            : null;
-
-        if ($endpoint === null) {
-            $row->status = 'skipped';
-            $stats['skipped']++;
-            R::store($row);
-            continue;
-        }
-
-        $row->endpoint = $endpoint;
-        $code = (int) $sender($endpoint, $row->source, $row->target);
-        if ($code >= 200 && $code < 300) {
-            $row->status = 'sent';
-            $stats['sent']++;
-        } else {
-            $row->status = 'failed';
-            $stats['failed']++;
-        }
-        R::store($row);
     }
 
     return $stats;
+}
+
+/**
+ * Process a single outbox row: re-check its source post, discover the target's
+ * endpoint, and POST the mention. Mutates and stores `$row` as a side effect.
+ *
+ * Returns the stat bucket the row falls into ('cancelled', 'skipped', 'sent' or
+ * 'failed'), or null when the row is deferred — its source post is still
+ * scheduled, so it is left pending and untouched (no attempt counted, no store)
+ * until publication.
+ *
+ * @param OODBBean $row
+ * @param callable $fetcher fn(string $url): ?array{headers: string[], body: string}
+ * @param callable $sender  fn(string $endpoint, string $source, string $target): int
+ * @return string|null Stat bucket name, or null when the row is deferred.
+ */
+function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
+{
+    $post = R::load('post', (int) $row->post_id);
+    if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+        $row->status = 'cancelled';
+        $row->processed_at = date('Y-m-d H:i:s');
+        R::store($row);
+        return 'cancelled';
+    }
+    if (is_scheduled($post)) {
+        return null;
+    }
+
+    $row->attempts = (int) $row->attempts + 1;
+    $row->processed_at = date('Y-m-d H:i:s');
+
+    $fetched = $fetcher($row->target);
+    $endpoint = is_array($fetched)
+        ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
+        : null;
+
+    if ($endpoint === null) {
+        $row->status = 'skipped';
+        R::store($row);
+        return 'skipped';
+    }
+
+    $row->endpoint = $endpoint;
+    $code = (int) $sender($endpoint, $row->source, $row->target);
+    if ($code >= 200 && $code < 300) {
+        $row->status = 'sent';
+        $outcome = 'sent';
+    } else {
+        $row->status = 'failed';
+        $outcome = 'failed';
+    }
+    R::store($row);
+    return $outcome;
 }
 
 /**
@@ -558,31 +569,23 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
  */
 function fetch_target(string $url): ?array
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => implode("\r\n", ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention']),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'follow_location' => 1,
-            'max_redirects' => 5,
-            'ignore_errors' => true,
-        ],
+    $result = \Lamb\Http\fetch($url, [
+        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
+        'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
 
-    $http_response_header = [];
-    $body = @file_get_contents($url, false, $context);
-    if ($body === false) {
+    if ($result === null) {
         return null;
     }
 
     $link_headers = [];
-    foreach ($http_response_header as $header) {
+    foreach ($result['headers'] as $header) {
         if (preg_match('/^link:\s*(.*)$/i', $header, $m)) {
             $link_headers[] = trim($m[1]);
         }
     }
 
-    return ['headers' => $link_headers, 'body' => $body];
+    return ['headers' => $link_headers, 'body' => $result['body']];
 }
 
 /**
