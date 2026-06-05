@@ -240,10 +240,7 @@ class LambMicropubAdapter extends MicropubAdapter
         // URL we return to show the just-created post. Attach a short-lived
         // preview token so that URL works without a Lamb session (#285).
         $needs_preview = $bean->draft == 1 || is_scheduled($bean);
-        if ($needs_preview) {
-            $bean->preview_token = bin2hex(random_bytes(16));
-            $bean->preview_token_expires = date('Y-m-d H:i:s', time() + 86400);
-        }
+        \Lamb\ensure_preview_token($bean);
 
         R::store($bean);
         // Reserved-route and duplicate slugs get an id suffix; the final slug

@@ -39,6 +39,7 @@ function redirect_created(): void
     }
 
     $bean = populate_bean($contents);
+    \Lamb\ensure_preview_token($bean);
 
     try {
         R::store($bean);
@@ -179,6 +180,7 @@ function redirect_edited(): void
     $bean->body = $contents;
 
     parse_bean($bean);
+    \Lamb\ensure_preview_token($bean);
     $bean->version = 1;
     $bean->updated = date("Y-m-d H:i:s");
 

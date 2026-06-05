@@ -6,6 +6,7 @@ global $template;
 
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
+use function Lamb\Theme\action_preview;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
 use function Lamb\Theme\escape;
@@ -49,7 +50,7 @@ else :
             <?= $bean->transformed ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
-                <small><?= link_source($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
             <?php endif; ?>
         </article>
         <?php

@@ -86,6 +86,30 @@ function action_edit(OODBBean $bean): string
 }
 
 /**
+ * Returns a shareable preview link for an unpublished post, or '' when the
+ * user is not logged in or the post has no valid preview token.
+ *
+ * @param OODBBean $bean The post bean to preview.
+ * @return string HTML anchor element, or '' when not applicable.
+ */
+function action_preview(OODBBean $bean): string
+{
+    if (!can_act_on($bean)) {
+        return '';
+    }
+    if (!\Lamb\preview_token_valid($bean, (string) $bean->preview_token)) {
+        return '';
+    }
+    if ($bean->draft != 1 && !\Lamb\is_scheduled($bean)) {
+        return '';
+    }
+
+    $url = permalink($bean) . '?preview=' . $bean->preview_token;
+
+    return sprintf('<a class="link-preview" href="%s">Preview</a>', escape($url));
+}
+
+/**
  * Returns the current session CSRF token, creating one if it does not exist yet.
  *
  * @return string 64-character hex CSRF token (32 random bytes) stored in the session.

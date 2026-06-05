@@ -436,6 +436,30 @@ function preview_token_valid(OODBBean $post, ?string $token): bool
 }
 
 /**
+ * Issues a preview token on a draft or scheduled post when it has none, or
+ * when the existing one has expired. Published posts are left untouched.
+ *
+ * Shared by every way a draft can be made — Micropub createCallback and the
+ * web editor's create/edit handlers — so all unpublished posts get a working
+ * ?preview= link (see issues #285 and #373). The caller stores the bean.
+ *
+ * @param OODBBean $post The post to (maybe) stamp with a token.
+ * @return void
+ */
+function ensure_preview_token(OODBBean $post): void
+{
+    if ($post->draft != 1 && !is_scheduled($post)) {
+        return;
+    }
+    $expires = $post->preview_token_expires ?? '';
+    if (!empty($post->preview_token) && !empty($expires) && strtotime($expires) >= time()) {
+        return;
+    }
+    $post->preview_token         = bin2hex(random_bytes(16));
+    $post->preview_token_expires = date('Y-m-d H:i:s', time() + 86400);
+}
+
+/**
  * Checks if a post with the given slug exists in the database and may be
  * routed for the current request: published posts for everyone, drafts and
  * scheduled posts for the logged-in author (matching is_viewable()) or via a
