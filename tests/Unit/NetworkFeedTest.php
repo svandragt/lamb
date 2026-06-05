@@ -95,6 +95,62 @@ class NetworkFeedTest extends TestCase
         $config = $original;
     }
 
+    public function testGetFeedsSkipsEntriesWithoutValidUrl(): void
+    {
+        global $config;
+        $original = $config;
+        // A misplaced setting under [feeds] (e.g. `feeds_draft = false`) must
+        // not be treated as a feed URL (#cron tried to fetch host "false").
+        $config['feeds']['feeds_draft'] = 'false';
+
+        $result = get_feeds();
+        $this->assertArrayNotHasKey('feeds_draft', $result);
+        $this->assertCount(2, $result);
+
+        $config = $original;
+    }
+
+    public function testGetFeedsSkipsNonHttpSchemes(): void
+    {
+        global $config;
+        $original = $config;
+        $config['feeds']['weird'] = 'file:///etc/passwd';
+
+        $result = get_feeds();
+        $this->assertArrayNotHasKey('weird', $result);
+
+        $config = $original;
+    }
+
+    // ensure_feed_cache
+
+    public function testEnsureFeedCacheCreatesMissingDirectory(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb-test-cache-' . uniqid() . '/simplepie';
+        $this->assertDirectoryDoesNotExist($dir);
+
+        $result = \Lamb\Network\ensure_feed_cache($dir);
+
+        $this->assertSame($dir, $result);
+        $this->assertDirectoryExists($dir);
+
+        rmdir($dir);
+        rmdir(dirname($dir));
+    }
+
+    public function testEnsureFeedCacheReturnsFalseWhenNotCreatable(): void
+    {
+        // Parent is a file, so the directory cannot be created.
+        $file = tempnam(sys_get_temp_dir(), 'lamb-test-');
+        $dir = $file . '/simplepie';
+
+        $result = @\Lamb\Network\ensure_feed_cache($dir);
+
+        $this->assertFalse($result);
+
+        unlink($file);
+    }
+
     // prepare_item
 
     public function testPrepareItemReturnsBean(): void

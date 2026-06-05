@@ -23,7 +23,30 @@ function get_feeds(): array
 {
     global $config;
 
-    return $config['feeds'] ?? [];
+    // A setting accidentally placed under [feeds] (e.g. `feeds_draft = false`)
+    // would otherwise be fetched as a feed URL. Only keep http(s) URLs.
+    return array_filter($config['feeds'] ?? [], function ($url) {
+        return filter_var($url, FILTER_VALIDATE_URL)
+            && in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true);
+    });
+}
+
+/**
+ * Ensures the SimplePie cache directory exists, creating it when missing.
+ *
+ * SimplePie warns loudly (HTML in the text/plain cron output) when the cache
+ * location is not writable, so create it up front and disable caching when
+ * that fails.
+ *
+ * @param string $dir The cache directory path.
+ * @return string|false The directory when usable, false otherwise.
+ */
+function ensure_feed_cache(string $dir): string|false
+{
+    if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+        return false;
+    }
+    return is_writable($dir) ? $dir : false;
 }
 
 /** @noinspection PhpUnused */
@@ -67,8 +90,13 @@ function purge_deleted_posts(): int
         }
 
         $feed = new SimplePie();
-        /** @noinspection PhpDeprecationInspection */
-        $feed->set_cache_location('../data/cache/simplepie');
+        $cache_dir = ensure_feed_cache('../data/cache/simplepie');
+        if ($cache_dir === false) {
+            $feed->enable_cache(false);
+        } else {
+            /** @noinspection PhpDeprecationInspection */
+            $feed->set_cache_location($cache_dir);
+        }
         $feed->set_feed_url($url);
         // Cap each fetch so a slow or hostile feed URL cannot stall the cron run.
         $feed->set_timeout(FEED_FETCH_TIMEOUT);
