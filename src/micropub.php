@@ -727,6 +727,25 @@ function respond_micropub(): void
 }
 
 /**
+ * Emit a JSON Micropub error response and terminate the request.
+ *
+ * Centralises the status code + Content-Type header + {error, error_description}
+ * body that every guard in the media endpoint would otherwise repeat.
+ *
+ * @param int    $status      HTTP status code.
+ * @param string $error       Micropub error code (e.g. 'unauthorized', 'invalid_request').
+ * @param string $description Human-readable error description.
+ * @return never
+ */
+function micropub_error(int $status, string $error, string $description): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => $error, 'error_description' => $description]);
+    exit;
+}
+
+/**
  * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
  * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
  *
@@ -743,42 +762,27 @@ function respond_micropub_media(): void
     }
 
     if (!$token) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Missing bearer token.']);
-        exit;
+        micropub_error(401, 'unauthorized', 'Missing bearer token.');
     }
 
     $adapter = new LambMicropubAdapter();
     $user = $adapter->verifyAccessTokenCallback($token);
     if (!$user) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Invalid or expired token.']);
-        exit;
+        micropub_error(401, 'unauthorized', 'Invalid or expired token.');
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Expected a multipart/form-data POST with a file field.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'Expected a multipart/form-data POST with a file field.');
     }
 
     $file = $_FILES['file'];
     if ((int) $file['error'] !== UPLOAD_ERR_OK) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'File upload failed.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'File upload failed.');
     }
 
     $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
     if ($ext === null) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Unsupported file type.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
 
     $uploadDir = \Lamb\Response\get_upload_dir();
