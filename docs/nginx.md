@@ -4,6 +4,8 @@ title: NGINX configuration
 
 # NGINX configuration
 
+> **Well-travelled path.** The shipped `.nginx/` configuration is deployed and verified by the automated acceptance suite before every release (the `release-verify` workflow), so this is a supported, regularly-tested way to run Lamb.
+
 Copy the files in the `site-available` and `snippets` into the respective directories. The `fastcgi`  and `php`
 configuration files might already exist on the system, in which case you can use these as known-good reference.
 

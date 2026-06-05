@@ -59,6 +59,10 @@ This route gets you the `bin/upgrade` script for one-command (or cron-driven) up
 
 Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
+## Verified setups
+
+The well-travelled paths — verified automatically by the acceptance test suite — are the [Docker image]({{ site.baseurl }}{% link docker.md %}) and [Nginx]({{ site.baseurl }}{% link nginx.md %}) (checked before every release by the `release-verify` workflow), [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) (same runtime as the Docker image), and the [built-in PHP webserver]({{ site.baseurl }}{% link local-php-setup.md %}) (checked on every change). [DDev]({{ site.baseurl }}{% link ddev.md %}) and [Devbox]({{ site.baseurl }}{% link devbox.md %}) are convenience wrappers around these and are not separately tested.
+
 ## Deployment options
 
 Webservers:

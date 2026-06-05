@@ -4,6 +4,8 @@ title: Local PHP setup
 
 # Local PHP setup
 
+> **Well-travelled path.** The built-in PHP webserver is exercised by the full test suite on every change, across PHP 8.2–8.5 (the `ci` workflow).
+
 Make sure everything is installed:
 
 ```bash

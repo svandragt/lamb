@@ -23,3 +23,16 @@ step_decorators:
   - Codeception\Step\ConditionalAssertion
   - Codeception\Step\TryTo
   - Codeception\Step\Retry
+env:
+  # Run against an already-running external server (Docker/FrankenPHP, nginx+fpm):
+  # %SITE_URL% in .env must point at it, and the server must use
+  # tests/Support/Data as its data dir so the per-test DB reset in
+  # Tests\Support\Helper\Acceptance::_before() takes effect.
+  # Usage: vendor/bin/codecept run Acceptance --env external
+  external:
+    extensions:
+      enabled:
+        - Codeception\Extension\RunProcess:
+            # Neutralise the self-started dev server; the external server is already up.
+            0: sleep 86400
+            sleep: 0
