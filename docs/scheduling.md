@@ -50,7 +50,7 @@ Use a name from the [list of supported timezones](https://www.php.net/manual/en/
 
 ## Viewing scheduled posts
 
-When logged in and one or more posts are scheduled, a **Scheduled** link appears in the admin toolbar, listing future-dated posts soonest-first at `/scheduled`. You can still open a scheduled post directly via its `/status/<id>` URL to preview it before it goes live.
+When logged in and one or more posts are scheduled, a **Scheduled** link appears in the admin toolbar, listing future-dated posts soonest-first at `/scheduled`. You can still open a scheduled post directly via its `/status/<id>` URL to preview it before it goes live. Each scheduled post also shows a **Preview** link next to its Edit button — a shareable URL with an expiring 24-hour token that works without being logged in.
 
 ## Via Micropub
 
