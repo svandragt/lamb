@@ -6,6 +6,7 @@ namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use Lamb\Config;
+use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
 
@@ -17,10 +18,10 @@ use Random\RandomException;
  * If the submitted password is incorrect, it sets a flash message and redirects to the root URL.
  * If the login is successful, it sets the SESSION_LOGIN session variable to true, regenerates the session ID, and redirects to the specified URL.
  *
- * @return array|null
+ * @return array
  * @throws RandomException
  */
-function redirect_login(): ?array
+function redirect_login(): array
 {
     // The login page needs a session for the CSRF token and any flash messages,
     // even for an otherwise-anonymous visitor who carries no session cookie yet.
@@ -122,6 +123,7 @@ function respond_settings(): array
     $data = [
         'title' => 'Settings',
         'ini_text' => Config\get_ini_text(),
+        'feed_statuses' => Network\get_feed_statuses(),
     ];
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {

@@ -4,6 +4,8 @@ title: Docker
 
 # Docker
 
+> **Well-travelled path.** The release image is verified by the automated acceptance suite before every release (the `release-verify` workflow), so this is a supported, regularly-tested way to run Lamb.
+
 The only requirement in this case is a working Docker setup!
 
 ## Prebuilt image (recommended)
@@ -46,7 +48,7 @@ Your site is now ready at http://localhost
 
 Uploaded images are stored under `src/assets/` inside the app container.
 
-Errors can be inspected with `docker composer logs -f php`.
+Errors can be inspected with `docker compose logs -f app`.
 
 ### Update
 
@@ -80,10 +82,11 @@ $ docker exec -it lamb-app vendor/bin/codecept run
 ```
 
 Acceptance tests use `SITE_URL`, which `make-password.php` automatically sets to
-`http://lamb-web` (the Caddy container) when run inside the container, so they
-exercise the live Docker stack.
+`http://localhost` (FrankenPHP inside the same container) when run inside the
+container, so they exercise the live Docker stack.
 
 ## Related
 
 - [Installation options]({{ site.baseurl }}{% link index.md %})
+- [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %})
 - [Upgrading]({{ site.baseurl }}{% link upgrading.md %})

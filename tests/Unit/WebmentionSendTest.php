@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\Webmention\discover_endpoint;
+use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_outbound;
 use function Lamb\Webmention\extract_outbound_links;
 use function Lamb\Webmention\process_outbound;
@@ -145,11 +146,148 @@ class WebmentionSendTest extends TestCase
         $this->assertSame('sent', $row->status);
     }
 
+    // enqueue_for_post (reply targets) --------------------------------------
+
+    private function dispenseReply(string $transformed, string $replyTo): \RedBeanPHP\OODBBean
+    {
+        $post = R::dispense('post');
+        $post->body = 'A reply';
+        $post->transformed = $transformed;
+        $post->in_reply_to = $replyTo;
+        $post->created = '2026-01-01 00:00:00';
+        $post->updated = '2026-01-01 00:00:00';
+        $post->version = 1;
+        R::store($post);
+
+        return $post;
+    }
+
+    public function testEnqueueForPostQueuesExternalReplyTarget(): void
+    {
+        $target = 'https://other.example/their-post';
+        $post = $this->dispenseReply('<p>A reply with no links</p>', $target);
+
+        enqueue_for_post($post);
+
+        $row = R::findOne('webmentionoutbox', ' target = ? ', [$target]);
+        $this->assertNotNull($row);
+        $this->assertSame('pending', $row->status);
+        $this->assertSame(ROOT_URL . '/status/' . $post->id, $row->source);
+    }
+
+    public function testEnqueueForPostSkipsSameSiteReplyTarget(): void
+    {
+        $post = $this->dispenseReply('<p>No links</p>', ROOT_URL . '/status/1');
+
+        enqueue_for_post($post);
+
+        $this->assertSame(0, R::count('webmentionoutbox'));
+    }
+
+    public function testEnqueueForPostDeduplicatesReplyTargetAlsoInBody(): void
+    {
+        $target = 'https://other.example/their-post';
+        $post = $this->dispenseReply('<p><a href="' . $target . '">link</a></p>', $target);
+
+        enqueue_for_post($post);
+
+        $this->assertSame(1, R::count('webmentionoutbox', ' target = ? ', [$target]));
+    }
+
+    public function testEnqueueForPostQueuesScheduledPost(): void
+    {
+        $post = R::dispense('post');
+        $post->body = 'Scheduled';
+        $post->transformed = '<p><a href="https://other.example/a">a</a></p>';
+        $post->created = date('Y-m-d H:i:s', time() + 3600);
+        $post->updated = date('Y-m-d H:i:s');
+        $post->version = 1;
+        R::store($post);
+
+        enqueue_for_post($post);
+
+        $this->assertSame(1, R::count('webmentionoutbox', ' status = ? ', ['pending']));
+    }
+
+    public function testEnqueueForPostSkipsFeedItems(): void
+    {
+        $post = R::dispense('post');
+        $post->body = 'Ingested';
+        $post->transformed = '<p><a href="https://other.example/a">a</a></p>';
+        $post->feed_name = 'somefeed';
+        $post->created = '2026-01-01 00:00:00';
+        $post->updated = '2026-01-01 00:00:00';
+        $post->version = 1;
+        R::store($post);
+
+        enqueue_for_post($post);
+
+        $this->assertSame(0, R::count('webmentionoutbox'));
+    }
+
+    // enqueue_outbound (stale rows) ------------------------------------------
+
+    public function testEnqueueCancelsStalePendingRowsForRemovedLinks(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a><a href="https://third.example/b">b</a>');
+
+        enqueue_outbound($this->postId, $source, '<a href="https://third.example/b">b</a>');
+
+        $removed = R::findOne('webmentionoutbox', ' target = ? ', ['https://other.example/a']);
+        $kept = R::findOne('webmentionoutbox', ' target = ? ', ['https://third.example/b']);
+        $this->assertSame('cancelled', $removed->status);
+        $this->assertSame('pending', $kept->status);
+    }
+
+    public function testEnqueueLeavesSentRowsForRemovedLinks(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a>');
+        $row = R::findOne('webmentionoutbox');
+        $row->status = 'sent';
+        R::store($row);
+
+        enqueue_outbound($this->postId, $source, '<p>no links</p>');
+
+        $this->assertSame('sent', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testEnqueueRequeuesCancelledRowWhenLinkRestored(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a>');
+        $row = R::findOne('webmentionoutbox');
+        $row->status = 'cancelled';
+        R::store($row);
+
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a>');
+
+        $this->assertSame('pending', R::findOne('webmentionoutbox')->status);
+    }
+
     // process_outbound ------------------------------------------------------
 
     private function seedPending(string $target): void
     {
         enqueue_outbound($this->postId, ROOT_URL . '/status/1', '<a href="' . $target . '">x</a>');
+    }
+
+    /**
+     * A fetcher/sender pair that fails the test if either is invoked.
+     *
+     * @return array{0: callable, 1: callable}
+     */
+    private function unreachableNetwork(): array
+    {
+        $fetcher = function (string $url): ?array {
+            $this->fail('fetcher must not be called');
+        };
+        $sender = function (string $e, string $s, string $t): int {
+            $this->fail('sender must not be called');
+        };
+
+        return [$fetcher, $sender];
     }
 
     public function testProcessMarksSentOnSuccess(): void
@@ -189,5 +327,77 @@ class WebmentionSendTest extends TestCase
         $result = process_outbound($fetcher, $sender);
         $this->assertSame(1, $result['failed']);
         $this->assertSame('failed', R::findOne('webmentionoutbox')->status);
+    }
+
+    // process_outbound (source-post guard) -----------------------------------
+
+    public function testProcessLeavesRowsPendingWhileSourcePostIsScheduled(): void
+    {
+        $post = R::load('post', $this->postId);
+        $post->created = date('Y-m-d H:i:s', time() + 3600);
+        R::store($post);
+        $this->seedPending('https://other.example/a');
+
+        [$fetcher, $sender] = $this->unreachableNetwork();
+        process_outbound($fetcher, $sender);
+
+        $row = R::findOne('webmentionoutbox');
+        $this->assertSame('pending', $row->status);
+        $this->assertSame(0, (int) $row->attempts);
+    }
+
+    public function testProcessCancelsRowsForDeletedSourcePost(): void
+    {
+        $this->seedPending('https://other.example/a');
+        $post = R::load('post', $this->postId);
+        $post->deleted = 1;
+        R::store($post);
+
+        [$fetcher, $sender] = $this->unreachableNetwork();
+        $result = process_outbound($fetcher, $sender);
+
+        $this->assertSame(1, $result['cancelled']);
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testProcessCancelsRowsForDraftSourcePost(): void
+    {
+        $this->seedPending('https://other.example/a');
+        $post = R::load('post', $this->postId);
+        $post->draft = 1;
+        R::store($post);
+
+        [$fetcher, $sender] = $this->unreachableNetwork();
+        $result = process_outbound($fetcher, $sender);
+
+        $this->assertSame(1, $result['cancelled']);
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testProcessCancelsRowsForMissingSourcePost(): void
+    {
+        $this->seedPending('https://other.example/a');
+        R::trash(R::load('post', $this->postId));
+
+        [$fetcher, $sender] = $this->unreachableNetwork();
+        $result = process_outbound($fetcher, $sender);
+
+        $this->assertSame(1, $result['cancelled']);
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testProcessSendsOnceScheduledPostBecomesPublic(): void
+    {
+        $post = R::load('post', $this->postId);
+        $post->created = date('Y-m-d H:i:s', time() - 60);
+        R::store($post);
+        $this->seedPending('https://other.example/a');
+
+        $fetcher = fn (string $url) => ['headers' => ['<https://other.example/wm>; rel="webmention"'], 'body' => ''];
+        $sender = fn (string $e, string $s, string $t): int => 202;
+
+        $result = process_outbound($fetcher, $sender);
+        $this->assertSame(1, $result['sent']);
+        $this->assertSame('sent', R::findOne('webmentionoutbox')->status);
     }
 }

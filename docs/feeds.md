@@ -38,7 +38,29 @@ The RFC recommends these aspect ratios but does not mandate pixel sizes. Drop
 either file into the `src/` directory (the web root). Each element is only
 included when its file exists, so the feed never points at a missing image.
 
+## Real-time push (WebSub)
+
+Feed readers normally poll for changes. With [WebSub](https://www.w3.org/TR/websub/),
+subscribers can instead be pushed new posts the moment you publish.
+
+Set one or more hubs (comma-separated) in the
+[site configuration]({{ site.baseurl }}{% link site-configuration.md %}):
+
+```
+websub_hubs = https://hub.example.com/
+```
+
+With a hub configured, Lamb:
+
+* advertises it in the Atom feed (`<link rel="hub">`) and the JSON Feed (`hubs` field), so WebSub-aware readers subscribe automatically;
+* pings the hub whenever a post is published or updated (from the web interface or via Micropub), so it fetches the updated `/feed` and `/feed.json` and pushes them to subscribers.
+
+Any public hub works — the IndieWeb wiki keeps a
+[list of hubs](https://indieweb.org/WebSub#Hubs) to choose from.
+Drafts, scheduled posts, and cross-posted feed items do not trigger pings.
+
 ## Related
 
 * [Cross-posting From Feeds]({{ site.baseurl }}{% link cross-posting.md %}) — consuming external feeds into Lamb
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}) — the `websub_hubs` setting
 * [Themes]({{ site.baseurl }}{% link themes.md %}) — overriding `feed.php` / `feed_json.php` in a custom theme

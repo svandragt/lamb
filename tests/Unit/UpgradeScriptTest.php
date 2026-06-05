@@ -124,7 +124,7 @@ class UpgradeScriptTest extends TestCase
         $process = new Process(
             [$this->site . '/bin/upgrade'],
             $this->site,
-            ['PATH' => $this->stubs . ':' . getenv('PATH')]
+            ['PATH' => $this->stubs . ':' . getenv('PATH')] + self::scrubGitEnv()
         );
         $process->run();
 
@@ -146,15 +146,30 @@ class UpgradeScriptTest extends TestCase
             'GIT_COMMITTER_NAME' => 'Test',
             'GIT_COMMITTER_EMAIL' => 'test@example.test',
             'HOME' => $this->workspace,
-        ]);
+        ] + self::scrubGitEnv());
         $process->mustRun();
     }
 
     private function revParse(string $repo): string
     {
-        $process = new Process(['git', 'rev-parse', 'HEAD'], $repo);
+        $process = new Process(['git', 'rev-parse', 'HEAD'], $repo, self::scrubGitEnv());
         $process->mustRun();
 
         return trim($process->getOutput());
+    }
+
+    /**
+     * Git hooks (e.g. pre-push) export GIT_DIR and friends pointing at the
+     * real repository, which would hijack the temporary repos used here.
+     *
+     * @return array<string, false>
+     */
+    private static function scrubGitEnv(): array
+    {
+        return [
+            'GIT_DIR' => false,
+            'GIT_WORK_TREE' => false,
+            'GIT_INDEX_FILE' => false,
+        ];
     }
 }

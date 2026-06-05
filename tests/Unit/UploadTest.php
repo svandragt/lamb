@@ -7,7 +7,9 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\safe_upload_extension;
+use function Lamb\Response\scaled_dimensions;
 use function Lamb\Response\should_convert_to_webp;
+use function Lamb\Response\store_webp_copy;
 
 class UploadTest extends TestCase
 {
@@ -225,6 +227,91 @@ class UploadTest extends TestCase
 
         $this->assertFalse(convert_to_webp($src, $dest));
         $this->assertFileDoesNotExist($dest);
+    }
+
+    // scaled_dimensions — downscale large uploads to a sane maximum edge
+
+    public function testScaledDimensionsUnchangedWhenWithinMax(): void
+    {
+        $this->assertSame([40, 30], scaled_dimensions(40, 30, 1600));
+    }
+
+    public function testScaledDimensionsScalesWidthDominantImage(): void
+    {
+        $this->assertSame([1600, 400], scaled_dimensions(3200, 800, 1600));
+    }
+
+    public function testScaledDimensionsScalesHeightDominantImage(): void
+    {
+        $this->assertSame([400, 1600], scaled_dimensions(800, 3200, 1600));
+    }
+
+    public function testScaledDimensionsNeverReturnsBelowOne(): void
+    {
+        $this->assertSame([1600, 1], scaled_dimensions(16000, 1, 1600));
+    }
+
+    // convert_to_webp downscales images larger than the maximum edge
+
+    public function testConvertDownscalesOversizedImage(): void
+    {
+        $src = $this->makePng(3000, 1000);
+        $dest = $this->tempRootDir . '/big.webp';
+
+        convert_to_webp($src, $dest, 82, 1600);
+
+        [$width, $height] = getimagesize($dest);
+        $this->assertSame(1600, $width);
+        $this->assertSame(533, $height);
+    }
+
+    public function testConvertDoesNotUpscaleSmallImage(): void
+    {
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/small.webp';
+
+        convert_to_webp($src, $dest, 82, 1600);
+
+        [$width, $height] = getimagesize($dest);
+        $this->assertSame(40, $width);
+        $this->assertSame(30, $height);
+    }
+
+    // store_webp_copy — shared decision: convert a JPEG/PNG source to a .webp file
+    // under the destination dir, returning the .webp filename, or null when the
+    // source should not be (or cannot be) converted so callers fall back to the
+    // original extension.
+
+    public function testStoreWebpCopyReturnsWebpFilenameForPng(): void
+    {
+        $src = $this->makePng(40, 30);
+
+        $result = store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertSame('seedhash.webp', $result);
+        $this->assertFileExists($this->tempRootDir . '/seedhash.webp');
+        $this->assertSame('image/webp', mime_content_type($this->tempRootDir . '/seedhash.webp'));
+    }
+
+    public function testStoreWebpCopyReturnsNullForNonConvertibleExtension(): void
+    {
+        $src = $this->makePng(40, 30);
+
+        $result = store_webp_copy($src, 'gif', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+    }
+
+    public function testStoreWebpCopyReturnsNullForGarbageSource(): void
+    {
+        $src = $this->tempRootDir . '/notimage.png';
+        file_put_contents($src, 'this is not an image');
+
+        $result = store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
     }
 
     private function makePng(int $w, int $h): string

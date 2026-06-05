@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\is_scheduled;
+use function Lamb\parse_bean;
 use function Lamb\Post\populate_bean;
 
 class DateParsingTest extends TestCase
@@ -87,5 +88,21 @@ class DateParsingTest extends TestCase
             is_scheduled($bean),
             'An unparseable date must not leave the post scheduled forever'
         );
+    }
+
+    public function testUnparseableDateOnEditFallsBackToThePriorStoredDate(): void
+    {
+        date_default_timezone_set('UTC');
+
+        // Simulate editing an existing post that already has a stored created
+        // date, where the new front matter carries an unparseable value. The
+        // fallback must use the date that existed before front matter was
+        // applied (the prior stored value), not the raw front-matter string.
+        $bean = R::dispense('post');
+        $bean->created = '2020-01-01 00:00:00';
+        $bean->body = "---\ncreated: sometime soon\n---\n\nBody #tag";
+        parse_bean($bean);
+
+        $this->assertSame('2020-01-01 00:00:00', (string) $bean->created);
     }
 }

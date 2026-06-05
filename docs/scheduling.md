@@ -62,3 +62,4 @@ Micropub clients can schedule a post by sending a future `published` date. Sendi
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): Front-matter is used to set the `created` date.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are hidden until published; scheduled posts are hidden until their date.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Scheduling posts from a Micropub client.
+* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions for a scheduled post are sent when it goes live, not when you save it.

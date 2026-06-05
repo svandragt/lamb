@@ -5,5 +5,11 @@
 :80 {
 	root * /app/src
 	encode zstd gzip
+
+	# Static assets are content-hash cache-busted (?ver=) or stored under
+	# hashed names, so they are safe to cache for a year and immutable.
+	@static path /themes/* /scripts/* /assets/*
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
 	php_server
 }

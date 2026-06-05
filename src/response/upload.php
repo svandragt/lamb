@@ -51,24 +51,18 @@ function respond_upload(array $_args): void
             die();
         }
         $temp_fp = $f['tmp_name'];
+        $seed    = sha1($f['name']);
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        if (should_convert_to_webp($ext)) {
-            $webp_fn = sha1($f['name']) . '.webp';
-            $webp_fp = sprintf("%s/%s", get_upload_dir(), $webp_fn);
-            if (convert_to_webp($temp_fp, $webp_fp)) {
-                $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
-                $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$webp_fn");
-                continue;
+        $new_fn = store_webp_copy($temp_fp, $ext, get_upload_dir(), $seed);
+        if ($new_fn === null) {
+            $new_fn = "$seed.$ext";
+            $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
+            if (!move_uploaded_file($temp_fp, $new_fp)) {
+                echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
+                die();
             }
-        }
-
-        $new_fn = sha1($f['name']) . ".$ext";
-        $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
-        if (!move_uploaded_file($temp_fp, $new_fp)) {
-            echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
-            die();
         }
         $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
         $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$new_fn");
@@ -116,18 +110,52 @@ function should_convert_to_webp(?string $ext): bool
 }
 
 /**
+ * Re-encodes an upload to WebP under $dest_dir, or returns null to fall back.
+ *
+ * Owns the shared "convert to WebP or fall back to the original bytes" decision used
+ * by every upload path (web upload, Micropub inline photos, Micropub media endpoint):
+ * the destination filename is the $seed plus the chosen extension. When the extension
+ * is a convertible raster format (should_convert_to_webp()) and convert_to_webp()
+ * succeeds, the WebP is written at "$dest_dir/$seed.webp" and that filename is
+ * returned. Otherwise nothing is written and null is returned, leaving each caller to
+ * store the original bytes under "$seed.$ext" via its own move semantics
+ * (move_uploaded_file() vs UploadedFileInterface::moveTo()) and build its own URL.
+ *
+ * @param string $src_path A readable path to the source image bytes.
+ * @param string $ext      The lower-case extension from safe_upload_extension().
+ * @param string $dest_dir The upload directory from get_upload_dir() (no trailing slash).
+ * @param string $seed     The hashed base filename (without extension).
+ * @return string|null The "$seed.webp" filename on success, or null to fall back.
+ */
+function store_webp_copy(string $src_path, string $ext, string $dest_dir, string $seed): ?string
+{
+    if (!should_convert_to_webp($ext)) {
+        return null;
+    }
+
+    $webp_fn = $seed . '.webp';
+    if (convert_to_webp($src_path, sprintf('%s/%s', $dest_dir, $webp_fn))) {
+        return $webp_fn;
+    }
+
+    return null;
+}
+
+/**
  * Re-encodes an image file as WebP, writing the result to $dest_path.
  *
- * Reads $src_path with GD, preserves alpha transparency, and writes a WebP. Returns
- * false (writing nothing) when the source cannot be decoded, so callers can fall back
- * to storing the original bytes.
+ * Reads $src_path with GD, preserves alpha transparency, downscales anything wider
+ * or taller than $max_dimension (so phone-sized screenshots are not served at their
+ * full resolution), and writes a WebP. Returns false (writing nothing) when the
+ * source cannot be decoded, so callers can fall back to storing the original bytes.
  *
- * @param string $src_path  Path to the source image (e.g. an uploaded temp file).
- * @param string $dest_path Path the WebP should be written to.
- * @param int $quality      WebP quality (0-100).
+ * @param string $src_path      Path to the source image (e.g. an uploaded temp file).
+ * @param string $dest_path     Path the WebP should be written to.
+ * @param int    $quality       WebP quality (0-100).
+ * @param int    $max_dimension Longest edge to keep; larger images are scaled down.
  * @return bool True when a WebP was written, false on failure.
  */
-function convert_to_webp(string $src_path, string $dest_path, int $quality = 82): bool
+function convert_to_webp(string $src_path, string $dest_path, int $quality = 82, int $max_dimension = 1600): bool
 {
     $data = @file_get_contents($src_path);
     if ($data === false) {
@@ -144,10 +172,45 @@ function convert_to_webp(string $src_path, string $dest_path, int $quality = 82)
     imagealphablending($image, false);
     imagesavealpha($image, true);
 
+    [$new_width, $new_height] = scaled_dimensions(imagesx($image), imagesy($image), $max_dimension);
+    if ($new_width !== imagesx($image) || $new_height !== imagesy($image)) {
+        $resized = imagecreatetruecolor($new_width, $new_height);
+        imagealphablending($resized, false);
+        imagesavealpha($resized, true);
+        imagecopyresampled($resized, $image, 0, 0, 0, 0, $new_width, $new_height, imagesx($image), imagesy($image));
+        imagedestroy($image);
+        $image = $resized;
+    }
+
     $ok = imagewebp($image, $dest_path, $quality);
     imagedestroy($image);
 
     return $ok;
+}
+
+/**
+ * Scales width/height down so the longest edge is at most $max, preserving aspect ratio.
+ *
+ * Images already within the limit (or with a non-positive longest edge) are returned
+ * unchanged — this never upscales. Scaled edges are clamped to a minimum of 1px.
+ *
+ * @param int $width  Source width in pixels.
+ * @param int $height Source height in pixels.
+ * @param int $max    Maximum length of the longest edge.
+ * @return array{0:int,1:int} The [width, height] to render at.
+ */
+function scaled_dimensions(int $width, int $height, int $max): array
+{
+    $longest = max($width, $height);
+    if ($longest <= $max || $longest <= 0) {
+        return [$width, $height];
+    }
+
+    $ratio = $max / $longest;
+    return [
+        max(1, (int) round($width * $ratio)),
+        max(1, (int) round($height * $ratio)),
+    ];
 }
 
 /**

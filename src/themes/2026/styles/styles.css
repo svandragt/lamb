@@ -928,4 +928,12 @@ footer a:hover { color: var(--accent-link); }
         --accent-tint:  oklch(28% 0.040 70);
         --selection:    oklch(38% 0.110 75);
     }
+
+    /* Syntax-highlighted code blocks (Phiki) carry inline light-theme colours
+       plus --phiki-dark-* custom properties; switch to the dark set here. */
+    .phiki,
+    .phiki span {
+        color: var(--phiki-dark-color) !important;
+        background-color: var(--phiki-dark-background-color) !important;
+    }
 }

@@ -16,6 +16,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\parse_matter;
+use function Lamb\Post\set_matter;
 
 /**
  * Retrieves the tags from the given HTML.
@@ -85,58 +86,173 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
-    $parts = explode('---', $bean->body);
+    $markdown = render_body($bean->body);
+
+    $front_matter = parse_matter($bean->body);
+    $front_matter['description'] = extract_description($markdown);
+    $front_matter['transformed'] = highlight_and_link($markdown);
+
+    // Capture the existing created date before apply_frontmatter() blind-copies the
+    // raw front-matter `created` value over it, so apply_scheduling() can fall back
+    // to the prior date when the front-matter value is unparseable.
+    $previous_created = $bean->created;
+    apply_frontmatter($bean, $front_matter);
+    apply_scheduling($bean, $front_matter, $previous_created);
+}
+
+/**
+ * Renders the Markdown body (everything after the front-matter block) to HTML
+ * via LambDown with safe mode enabled.
+ *
+ * @param string $body The raw post body, optionally prefixed by front matter.
+ * @return string The rendered HTML.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function render_body(string $body): string
+{
+    $parts = explode('---', $body);
     $md_text = trim($parts[count($parts) - 1]);
     $parser = new LambDown();
     $parser->setSafeMode(true);
-    $markdown = $parser->text($md_text);
 
-    $front_matter = parse_matter($bean->body);
+    return $parser->text($md_text);
+}
+
+/**
+ * Extracts a plain-text, single-line description from rendered post HTML.
+ *
+ * @param string $markdown The rendered post HTML.
+ * @return string The first line of stripped, entity-decoded text.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function extract_description(string $markdown): string
+{
     $description = strtok(strip_tags($markdown), "\n");
     // Decode twice: feed-ingested bodies already contain HTML entities (e.g. `&#039;`),
     // which Parsedown then re-encodes (`&amp;#039;`). A single decode only undoes one layer.
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    $front_matter['description'] = $description;
 
-    $front_matter['transformed'] = (parse_tags($markdown));
+    return html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
 
-    // Normalise the reply target. Accept either `in-reply-to` (IndieWeb/Micropub
-    // spelling) or `in_reply_to`, and remove both from the blind copy below so the
-    // hyphenated key is never written as an invalid column. Empty when absent, so
-    // removing it from front matter on edit clears the stored value.
+/**
+ * Hashtag-links the rendered HTML while server-side highlighting fenced code.
+ *
+ * Code blocks are pulled out before hashtag linking so a `#comment` or a
+ * highlighter colour like `style="color: #005cc5"` can never become a /tag/
+ * link, then highlighted and restored so visitors get pre-rendered markup.
+ * The extract/restore order is load-bearing: linking must run on the
+ * code-free HTML, and the highlighted blocks are spliced back afterwards.
+ *
+ * @param string $markdown The rendered post HTML.
+ * @return string The HTML with hashtag links and highlighted code blocks.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function highlight_and_link(string $markdown): string
+{
+    [$markdown_without_code, $code_blocks] = Highlight\extract_code_blocks($markdown);
+    $code_blocks = array_map('Lamb\Highlight\highlight_code_blocks', $code_blocks);
+
+    return Highlight\restore_code_blocks(parse_tags($markdown_without_code), $code_blocks);
+}
+
+/**
+ * Normalises the reply target from front matter into a single string.
+ *
+ * Accepts either `in-reply-to` (IndieWeb/Micropub spelling) or `in_reply_to`,
+ * collapsing a YAML list to its first entry. Both keys are removed from the
+ * passed-by-reference front matter so the hyphenated key is never written as an
+ * invalid column by the blind copy in apply_frontmatter().
+ *
+ * @param array $front_matter The parsed front matter, modified in place.
+ * @return string The normalised reply target, or '' when absent.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function normalize_in_reply_to(array &$front_matter): string
+{
     $in_reply_to = $front_matter['in-reply-to'] ?? $front_matter['in_reply_to'] ?? null;
     unset($front_matter['in-reply-to'], $front_matter['in_reply_to']);
     if (is_array($in_reply_to)) {
         $in_reply_to = $in_reply_to[0] ?? null;
     }
-    $bean->in_reply_to = is_string($in_reply_to) ? trim($in_reply_to) : '';
 
-    // Preserve the existing created date (now for new posts, the stored value for
-    // edits, the feed date for ingested items) so an unparseable front-matter date
-    // falls back to it rather than leaving a non-date string in the column.
-    $previous_created = $bean->created;
+    return is_string($in_reply_to) ? trim($in_reply_to) : '';
+}
+
+/**
+ * Applies non-date front-matter fields onto the bean.
+ *
+ * Resets `in_reply_to`, `title`, and `draft` to their defaults when absent so
+ * removing a line on edit clears the stored value, then blind-copies the
+ * remaining front-matter keys. Date normalisation is handled separately by
+ * apply_scheduling().
+ *
+ * @param OODBBean $bean         The bean to mutate.
+ * @param array    $front_matter The parsed front matter (including derived keys).
+ * @return void
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function apply_frontmatter(OODBBean $bean, array $front_matter): void
+{
+    // Normalise the reply target. Empty when absent, so removing it from front
+    // matter on edit clears the stored value.
+    $bean->in_reply_to = normalize_in_reply_to($front_matter);
+
+    // Reset the title to empty when it is absent from front matter, so removing
+    // the `title:` line (or all front matter) on an edit clears a previously
+    // stored title. The additive loop below only ever sets keys that are
+    // present, so without this an old title would survive every save.
+    $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
 
     foreach ($front_matter as $key => $value) {
         $bean->$key = $value;
     }
 
-    // Normalise a front-matter `created` date into the canonical Y-m-d H:i:s string.
-    // Accepts absolute dates (kept as the typed wall-clock) and relative strings such
-    // as "next friday 3pm" (resolved in the server timezone). A future date schedules
-    // the post; an unparseable value falls back to the previous date so the post still
-    // publishes rather than staying hidden forever.
-    if (isset($front_matter['created'])) {
-        $bean->created = normalize_datetime($front_matter['created'])
-            ?? ($previous_created ?: date('Y-m-d H:i:s'));
-        // Pin the resolved date back into the body so relative phrases like
-        // "next friday" don't drift to a new date on the next edit.
-        $bean->body = persist_resolved_created($bean->body, $bean->created);
-    }
-
     // Explicitly normalise draft: 1 if truthy in frontmatter, 0 otherwise.
     // This ensures removing "draft: true" from frontmatter publishes the post on next save.
     $bean->draft = !empty($front_matter['draft']) ? 1 : 0;
+}
+
+/**
+ * Normalises a front-matter `created` date onto the bean and schedules accordingly.
+ *
+ * Accepts absolute dates (kept as the typed wall-clock) and relative strings such
+ * as "next friday 3pm" (resolved in the server timezone). A future date schedules
+ * the post; an unparseable value falls back to the date already on the bean so the
+ * post still publishes rather than staying hidden forever. The resolved date is
+ * pinned back into the body so relative phrases don't drift on the next edit.
+ *
+ * Must run after apply_frontmatter(), which has already blind-copied the raw
+ * `created` value onto the bean. The previous (pre-blind-copy) created date is
+ * passed in by parse_bean() so the unparseable-date fallback uses the genuine
+ * prior value rather than the raw front-matter string now sitting on the bean.
+ *
+ * @param OODBBean $bean             The bean to mutate.
+ * @param array    $front_matter     The parsed front matter.
+ * @param mixed    $previous_created The created date held before apply_frontmatter().
+ * @return void
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function apply_scheduling(OODBBean $bean, array $front_matter, mixed $previous_created): void
+{
+    if (!isset($front_matter['created'])) {
+        return;
+    }
+
+    // Preserve the existing created date (now for new posts, the stored value for
+    // edits, the feed date for ingested items) so an unparseable front-matter date
+    // falls back to it rather than leaving a non-date string in the column.
+    $bean->created = normalize_datetime($front_matter['created'])
+        ?? ($previous_created ?: date('Y-m-d H:i:s'));
+    // Pin the resolved date back into the body so relative phrases like
+    // "next friday" don't drift to a new date on the next edit.
+    $bean->body = persist_resolved_created($bean->body, $bean->created);
 }
 
 /**
@@ -229,30 +345,7 @@ function visible_clause(): array
  */
 function persist_resolved_created(string $body, string $resolved): string
 {
-    // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
-        return $body;
-    }
-
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*created[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
-        function (array $line) use ($resolved): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $resolved) {
-                return $line[0];
-            }
-            return $line[1] . " '" . $resolved . "'";
-        },
-        $m[2],
-        1,
-        $count
-    );
-
-    if ($count === 0) {
-        return $body;
-    }
-
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_matter($body, 'created', $resolved, quote: true, append: false);
 }
 
 /**
@@ -315,6 +408,34 @@ function is_visible(OODBBean $post): bool
 }
 
 /**
+ * Returns true when the supplied preview token grants access to an
+ * unpublished post's permalink.
+ *
+ * Micropub createCallback appends ?preview=<token> to the Location header for
+ * draft/scheduled posts so the creating client can show the post it just made
+ * without a Lamb session (see issue #285). Tokens are random per-post secrets
+ * with an expiry; deleted posts never match.
+ *
+ * @param OODBBean    $post  The post to inspect.
+ * @param string|null $token The supplied preview token (e.g. $_GET['preview']).
+ * @return bool
+ */
+function preview_token_valid(OODBBean $post, ?string $token): bool
+{
+    if (empty($post->id) || $post->deleted == 1) {
+        return false;
+    }
+    if (empty($post->preview_token) || $token === null || $token === '') {
+        return false;
+    }
+    if (empty($post->preview_token_expires) || strtotime($post->preview_token_expires) < time()) {
+        return false;
+    }
+
+    return hash_equals((string) $post->preview_token, $token);
+}
+
+/**
  * Checks if a post with the given slug exists in the database.
  *
  * @param string $lookup The slug of the post to look up.
@@ -324,7 +445,11 @@ function is_visible(OODBBean $post): bool
 function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
-    if ($post === null || $post->id === 0 || $post->draft == 1 || is_scheduled($post)) {
+    if ($post === null || $post->id === 0) {
+        return '';
+    }
+    $unpublished = $post->draft == 1 || is_scheduled($post);
+    if ($unpublished && !preview_token_valid($post, $_GET['preview'] ?? null)) {
         return '';
     }
 

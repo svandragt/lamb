@@ -8,6 +8,7 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
+use function Lamb\is_scheduled;
 use function Lamb\permalink;
 
 use const ROOT_URL;
@@ -120,7 +121,7 @@ function target_post_id(string $target): ?int
 {
     $root_host = parse_url(ROOT_URL, PHP_URL_HOST);
     $target_host = parse_url($target, PHP_URL_HOST);
-    if ($target_host === null || $root_host === null || strcasecmp($target_host, $root_host) !== 0) {
+    if (!is_string($target_host) || !is_string($root_host) || strcasecmp($target_host, $root_host) !== 0) {
         return null;
     }
 
@@ -214,22 +215,12 @@ function extract_meta(string $html): array
  */
 function fetch_source(string $url): ?string
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => implode("\r\n", [
-                'Accept: text/html, */*',
-                'User-Agent: Lamb-Webmention',
-            ]),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'follow_location' => 1,
-            'max_redirects' => 5,
-            'ignore_errors' => true,
-        ],
+    $result = \Lamb\Http\fetch($url, [
+        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
+        'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
 
-    $body = @file_get_contents($url, false, $context);
-    return $body === false ? null : $body;
+    return $result === null ? null : $result['body'];
 }
 
 /**
@@ -271,23 +262,34 @@ function response(int $status, string $body): array
  */
 function extract_outbound_links(string $html): array
 {
-    $own_host = strtolower((string) parse_url(ROOT_URL, PHP_URL_HOST));
     $targets = [];
 
     if (preg_match_all('/<a\b[^>]*\bhref\s*=\s*["\']([^"\']+)["\']/i', $html, $matches)) {
         foreach ($matches[1] as $href) {
             $href = html_entity_decode(trim($href), ENT_QUOTES | ENT_HTML5);
-            if (!is_valid_http_url($href)) {
-                continue;
-            }
-            $host = strtolower((string) parse_url($href, PHP_URL_HOST));
-            if ($host !== '' && $host !== $own_host && !in_array($href, $targets, true)) {
+            if (is_external_http_url($href) && !in_array($href, $targets, true)) {
                 $targets[] = $href;
             }
         }
     }
 
     return $targets;
+}
+
+/**
+ * Whether a URL is an absolute http(s) URL pointing at a host other than ours.
+ *
+ * @param string $url
+ * @return bool
+ */
+function is_external_http_url(string $url): bool
+{
+    if (!is_valid_http_url($url)) {
+        return false;
+    }
+    $own_host = strtolower((string) parse_url(ROOT_URL, PHP_URL_HOST));
+    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
+    return $host !== '' && $host !== $own_host;
 }
 
 /**
@@ -381,8 +383,10 @@ function resolve_url(string $base, string $rel): string
 /**
  * Queue outbound webmentions for a freshly saved post, if it is eligible.
  *
- * Skips ingested feed items (third-party content), drafts, and future-dated
- * scheduled posts — none of which should notify external targets (yet).
+ * Skips ingested feed items (third-party content) and drafts — neither should
+ * notify external targets. Future-dated scheduled posts ARE queued: their rows
+ * wait in the outbox until publication, because process_outbound() only sends
+ * once the source post is publicly visible (#302).
  *
  * @param OODBBean $bean A stored post bean.
  * @return void
@@ -392,11 +396,13 @@ function enqueue_for_post(OODBBean $bean): void
     if (!$bean->id || !empty($bean->feed_name) || !empty($bean->draft)) {
         return;
     }
-    if (!empty($bean->created) && strtotime((string) $bean->created) > time()) {
-        return;
-    }
 
-    enqueue_outbound((int) $bean->id, permalink($bean), (string) ($bean->transformed ?? ''));
+    enqueue_outbound(
+        (int) $bean->id,
+        permalink($bean),
+        (string) ($bean->transformed ?? ''),
+        (string) ($bean->in_reply_to ?? '')
+    );
 }
 
 /**
@@ -404,20 +410,43 @@ function enqueue_for_post(OODBBean $bean): void
  *
  * Idempotent across edits: an existing pending/sent row for the same
  * source+target is left untouched (so receivers are not spammed), while a
- * previously failed row is reset to pending for another attempt.
+ * previously failed or cancelled row is reset to pending for another attempt.
+ * Pending rows whose target no longer appears in the post are cancelled, so a
+ * scheduled post edited to remove a link before publication does not notify it.
+ *
+ * The reply target (from a post's `in-reply-to` front matter) is treated as an
+ * outbound link even when it does not appear in the body, so replies notify the
+ * parent. It is subject to the same external-host filter as body links.
  *
  * @param int    $post_id
- * @param string $source  This post's permalink.
- * @param string $html    The post's rendered HTML.
+ * @param string $source   This post's permalink.
+ * @param string $html     The post's rendered HTML.
+ * @param string $reply_to Optional `in-reply-to` target URL.
  * @return int Number of newly created queue rows.
  */
-function enqueue_outbound(int $post_id, string $source, string $html): int
+function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
 {
+    $targets = extract_outbound_links($html);
+
+    $reply_to = trim($reply_to);
+    if ($reply_to !== '' && is_external_http_url($reply_to) && !in_array($reply_to, $targets, true)) {
+        $targets[] = $reply_to;
+    }
+
+    // Cancel pending rows for links the post no longer contains.
+    $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
+    foreach ($stale as $row) {
+        if (!in_array((string) $row->target, $targets, true)) {
+            $row->status = 'cancelled';
+            R::store($row);
+        }
+    }
+
     $created = 0;
-    foreach (extract_outbound_links($html) as $target) {
+    foreach ($targets as $target) {
         $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
         if ($row) {
-            if ($row->status === 'failed') {
+            if ($row->status === 'failed' || $row->status === 'cancelled') {
                 $row->status = 'pending';
                 R::store($row);
             }
@@ -443,6 +472,14 @@ function enqueue_outbound(int $post_id, string $source, string $html): int
  * Process queued outbound webmentions: discover each target's endpoint and
  * POST the mention. Intended to be driven by the `/_cron` route.
  *
+ * Each row's source post is re-checked before sending: rows for deleted,
+ * draft, or missing posts are cancelled, and rows for still-scheduled posts
+ * are left pending (untouched, no attempt counted) until publication. This
+ * deliberately does not use is_visible(), which trusts logged-in sessions —
+ * a logged-in author hitting /_cron must not leak drafts. Deferred scheduled
+ * rows still occupy part of the LIMIT window; with the default of 20 that is
+ * harmless.
+ *
  * Both network operations are injectable for testing:
  *  - $fetcher fn(string $url): ?array{headers: string[], body: string}
  *  - $sender  fn(string $endpoint, string $source, string $target): int (HTTP status)
@@ -450,45 +487,78 @@ function enqueue_outbound(int $post_id, string $source, string $html): int
  * @param callable|null $fetcher
  * @param callable|null $sender
  * @param int           $limit Maximum rows to process per run.
- * @return array{sent:int, failed:int, skipped:int}
+ * @return array{sent:int, failed:int, skipped:int, cancelled:int}
  */
 function process_outbound(?callable $fetcher = null, ?callable $sender = null, int $limit = 20): array
 {
     $fetcher ??= __NAMESPACE__ . '\\fetch_target';
     $sender ??= __NAMESPACE__ . '\\send_webmention';
 
-    $stats = ['sent' => 0, 'failed' => 0, 'skipped' => 0];
+    $stats = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0];
     $rows = R::find('webmentionoutbox', ' status = ? ORDER BY created ASC LIMIT ? ', ['pending', $limit]);
 
     foreach ($rows as $row) {
-        $row->attempts = (int) $row->attempts + 1;
-        $row->processed_at = date('Y-m-d H:i:s');
-
-        $fetched = $fetcher($row->target);
-        $endpoint = is_array($fetched)
-            ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
-            : null;
-
-        if ($endpoint === null) {
-            $row->status = 'skipped';
-            $stats['skipped']++;
-            R::store($row);
-            continue;
+        $outcome = process_outbound_row($row, $fetcher, $sender);
+        if ($outcome !== null) {
+            $stats[$outcome]++;
         }
-
-        $row->endpoint = $endpoint;
-        $code = (int) $sender($endpoint, $row->source, $row->target);
-        if ($code >= 200 && $code < 300) {
-            $row->status = 'sent';
-            $stats['sent']++;
-        } else {
-            $row->status = 'failed';
-            $stats['failed']++;
-        }
-        R::store($row);
     }
 
     return $stats;
+}
+
+/**
+ * Process a single outbox row: re-check its source post, discover the target's
+ * endpoint, and POST the mention. Mutates and stores `$row` as a side effect.
+ *
+ * Returns the stat bucket the row falls into ('cancelled', 'skipped', 'sent' or
+ * 'failed'), or null when the row is deferred — its source post is still
+ * scheduled, so it is left pending and untouched (no attempt counted, no store)
+ * until publication.
+ *
+ * @param OODBBean $row
+ * @param callable $fetcher fn(string $url): ?array{headers: string[], body: string}
+ * @param callable $sender  fn(string $endpoint, string $source, string $target): int
+ * @return string|null Stat bucket name, or null when the row is deferred.
+ */
+function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
+{
+    $post = R::load('post', (int) $row->post_id);
+    if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+        $row->status = 'cancelled';
+        $row->processed_at = date('Y-m-d H:i:s');
+        R::store($row);
+        return 'cancelled';
+    }
+    if (is_scheduled($post)) {
+        return null;
+    }
+
+    $row->attempts = (int) $row->attempts + 1;
+    $row->processed_at = date('Y-m-d H:i:s');
+
+    $fetched = $fetcher($row->target);
+    $endpoint = is_array($fetched)
+        ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
+        : null;
+
+    if ($endpoint === null) {
+        $row->status = 'skipped';
+        R::store($row);
+        return 'skipped';
+    }
+
+    $row->endpoint = $endpoint;
+    $code = (int) $sender($endpoint, $row->source, $row->target);
+    if ($code >= 200 && $code < 300) {
+        $row->status = 'sent';
+        $outcome = 'sent';
+    } else {
+        $row->status = 'failed';
+        $outcome = 'failed';
+    }
+    R::store($row);
+    return $outcome;
 }
 
 /**
@@ -499,31 +569,23 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
  */
 function fetch_target(string $url): ?array
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'GET',
-            'header' => implode("\r\n", ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention']),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'follow_location' => 1,
-            'max_redirects' => 5,
-            'ignore_errors' => true,
-        ],
+    $result = \Lamb\Http\fetch($url, [
+        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
+        'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
 
-    $http_response_header = [];
-    $body = @file_get_contents($url, false, $context);
-    if ($body === false) {
+    if ($result === null) {
         return null;
     }
 
     $link_headers = [];
-    foreach ($http_response_header as $header) {
+    foreach ($result['headers'] as $header) {
         if (preg_match('/^link:\s*(.*)$/i', $header, $m)) {
             $link_headers[] = trim($m[1]);
         }
     }
 
-    return ['headers' => $link_headers, 'body' => $body];
+    return ['headers' => $link_headers, 'body' => $result['body']];
 }
 
 /**

@@ -10,6 +10,8 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - When adding new user-facing behaviour, consider whether a new docs page is warranted.
 - Ensure docs pages that are topically related link to each other via a "Related" section.
 
+GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `make docs` (serves at http://localhost:4000/lamb/).
+
 ## Key Commands
 
 ```bash
@@ -44,7 +46,7 @@ composer fix
 printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
 # Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
-PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome \
+PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome \
   pnpm run screenshot [/path] [outdir]
 # Before/after: git stash → screenshot → git stash pop → screenshot
 ```
@@ -52,7 +54,7 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=/root/.cache/ms-playwright/chromium-1194/chr
 ### Screenshot notes
 - JS deps: `pnpm install` (not npm); Playwright is `@playwright/test`
 - The PHP dev server must be started with `php -S 0.0.0.0:8747 -t src` (no router script argument)
-- Chromium executable: `/root/.cache/ms-playwright/chromium-1194/chrome-linux/chrome`
+- Chromium executable: `~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome` (note `chrome-linux64`; version dir may differ per machine — check `ls ~/.cache/ms-playwright/`)
 - Script: `scripts/screenshot.mjs [path] [outdir]`
 
 ## Project Structure
@@ -323,7 +325,7 @@ Additional helper from `Lamb\Config`:
 
 `the_styles()` takes no arguments and always loads `styles/styles.css` from the active theme. There is no multi-file or concatenation mechanism — put everything in one CSS file per theme.
 
-The URL served is `THEME_URL . 'styles/styles.css'` with a cache-buster query string (`?<md5-of-url>`).
+`Theme\styles_markup()` decides how it is served. When the minified stylesheet is ≤ 20 KB it is **inlined** as a `<style>` tag (minified via `Theme\minify_css()`, with relative `url()` font references rewritten to absolute via `Theme\rewrite_css_urls()`) so first paint isn't blocked on a separate CSS request — the main mobile-PageSpeed win for a single-file theme. Larger or unreadable stylesheets fall back to an external `<link rel="stylesheet">` whose URL is `THEME_URL . 'styles/styles.css'` with a content-hash cache-buster (`?ver=<md5>`). The two preloaded fonts in `html.php` keep their absolute URLs, which match the rewritten `url()` targets, so inlining does not double-fetch them.
 
 ### JavaScript asset loading
 
@@ -345,7 +347,7 @@ When the user is logged in, it also loads:
 
 User-uploaded files live under `src/assets/`, not under theme directories.
 
-`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`); GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`) and downscaled so their longest edge is at most 1600px (`Response\scaled_dimensions()`) — large screenshots are not served at full resolution to phones; GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 
@@ -455,6 +457,12 @@ The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
 
 For contributors: always branch from `main` for new features. Open an issue first; get agreement from maintainers before building features.
 
+## Pull Requests
+
+When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
+
+After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
+
 ## Philosophy (from README)
 
 - Simple over complex
@@ -462,3 +470,27 @@ For contributors: always branch from `main` for new features. Open an issue firs
 - Assume success, communicate failure
 
 When adding features, prefer the minimal implementation. Avoid adding configuration options where a sensible default is sufficient.
+
+<!-- headroom:learn:start -->
+## Headroom Learned Patterns
+*Auto-generated by `headroom learn` on 2026-06-04 — do not edit manually*
+
+### Shell Command Gotchas
+*~2,500 tokens/session saved*
+- A foreground `sleep N` followed by another command is BLOCKED by the harness (e.g. `sleep 30 && gh pr checks`). To wait on a condition use an until-loop `until <check>; do sleep 2; done`, run it in the background, or use Monitor. This was hit repeatedly across sessions.
+- `grep` is proxied to ripgrep (rtk): BRE alternation `\|` and unescaped parens `(` cause `regex parse error: unclosed group`. Use ERE: `grep -E 'a|b'` and escape literal parens as `\(`. `rtk find` also rejects `-exec`/`-not` — call `find` directly for those.
+
+### Running Acceptance Tests
+*~1,500 tokens/session saved*
+- `vendor/bin/codecept run Acceptance` needs `LAMB_LOGIN_PASSWORD` and `SITE_URL` in the environment. Source `.env` first: `set -a; . ./.env; set +a` then run. CI passes it via the acceptance suite server env (tests/Acceptance.suite.yml).
+- Kill stale dev servers on port 8747 before re-running (`pkill -f 'php -S 0.0.0.0:8747'`) or the run hangs/fails.
+
+### Editing Files
+*~1,200 tokens/session saved*
+- Edit/Write fail with "File has not been read yet" unless the file was Read in this session — this fired 15+ times, especially on MEMORY.md, docs/*.md, .gitignore, composer.json, and src files. Read the exact target path before the first Edit/Write to it; don't assume a `git mv`/`sed`-touched file is "read".
+
+### Theme Directory Names
+*~600 tokens/session saved*
+- The base theme directory is `src/themes/base/` (the old `default` was renamed in PR #289). Greps for `src/themes/default` return nothing — search `base`, `2024`, or `2026`.
+
+<!-- headroom:learn:end -->

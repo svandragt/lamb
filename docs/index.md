@@ -41,7 +41,7 @@ cd lamb
 php make-password.php <your-password>
 ```
 
-Point your webserver at the `src/` directory ([Caddy]({{ site.baseurl }}{% link caddy.md %}) or [Nginx]({{ site.baseurl }}{% link nginx.md %})). Those pages also cover making `data/` and `src/assets/` writable by the webserver user.
+Point your webserver at the `src/` directory ([FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) or [Nginx]({{ site.baseurl }}{% link nginx.md %})). Those pages also cover making `data/` and `src/assets/` writable by the webserver user.
 
 ### 3. Git checkout
 
@@ -59,11 +59,15 @@ This route gets you the `bin/upgrade` script for one-command (or cron-driven) up
 
 Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
+## Verified setups
+
+The well-travelled paths — verified automatically by the acceptance test suite — are the [Docker image]({{ site.baseurl }}{% link docker.md %}) and [Nginx]({{ site.baseurl }}{% link nginx.md %}) (checked before every release by the `release-verify` workflow), [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) (same runtime as the Docker image), and the [built-in PHP webserver]({{ site.baseurl }}{% link local-php-setup.md %}) (checked on every change). [Devbox]({{ site.baseurl }}{% link devbox.md %}) wraps the built-in webserver and is the maintainer's daily development environment, so it is well-travelled too. [DDev]({{ site.baseurl }}{% link ddev.md %}) is a convenience wrapper and is not separately tested.
+
 ## Deployment options
 
 Webservers:
 
-1. [Caddy]({{ site.baseurl }}{% link caddy.md %})
+1. [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %})
 2. [Nginx]({{ site.baseurl }}{% link nginx.md %})
 
 Containers:
@@ -87,6 +91,7 @@ Devtools / local environments / sandbox:
 * [Micropub]({{ site.baseurl }}{% link micropub.md %})
 * [Post Types]({{ site.baseurl }}{% link post-types.md %})
 * [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
+* [Project Goals]({{ site.baseurl }}{% link project-goals.md %})
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %})
 * [Search]({{ site.baseurl }}{% link search.md %})

@@ -13,6 +13,7 @@ use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\parse_bean;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -38,15 +39,12 @@ function redirect_created(): void
     }
 
     $bean = populate_bean($contents);
-    if ($bean === null) {
-        $_SESSION['flash'][] = 'Failed to create status: Invalid content.';
-        return;
-    }
 
     try {
-        $id = R::store($bean);
-        if (is_reserved_route($bean->slug)) {
-            $bean->slug .= "-" . $id;
+        R::store($bean);
+        // Reserved-route and duplicate slugs get an id suffix; the final slug
+        // is pinned into the body's front matter so it survives later edits.
+        if (finalize_slug($bean)) {
             R::store($bean);
         }
         // Remove any existing redirect for this slug — the new post takes priority
@@ -62,6 +60,7 @@ function redirect_created(): void
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
     \Lamb\Webmention\enqueue_for_post($bean);
+    \Lamb\Websub\ping_for_post($bean);
     redirect_uri('/');
 }
 
@@ -189,6 +188,10 @@ function redirect_edited(): void
         return;
     }
 
+    // A slug claimed by another post gets an id suffix, and the final slug is
+    // pinned into the body's front matter so the edit form shows it.
+    finalize_slug($bean);
+
     try {
         R::store($bean);
     } catch (SQL $e) {
@@ -215,6 +218,7 @@ function redirect_edited(): void
     }
 
     \Lamb\Webmention\enqueue_for_post($bean);
+    \Lamb\Websub\ping_for_post($bean);
 
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);
@@ -231,7 +235,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!\Lamb\is_visible($bean)) {
+    if (!\Lamb\is_visible($bean) && !\Lamb\preview_token_valid($bean, $_GET['preview'] ?? null)) {
         return respond_404([], true);
     }
 
@@ -275,7 +279,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || !\Lamb\is_visible($post)) {
+    if ($post === null || (!\Lamb\is_visible($post) && !\Lamb\preview_token_valid($post, $_GET['preview'] ?? null))) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

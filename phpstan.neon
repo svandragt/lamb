@@ -2,7 +2,7 @@ includes:
     - phpstan-baseline.neon
 
 parameters:
-    level: 3
+    level: 5
     parallel:
         maximumNumberOfProcesses: 1
     paths:
@@ -14,3 +14,7 @@ parameters:
         - phpstan-bootstrap.php
     universalObjectCratesClasses:
         - RedBeanPHP\OODBBean
+    # ROOT_URL is derived from site config at runtime; don't constant-fold the
+    # placeholder value defined in phpstan-bootstrap.php.
+    dynamicConstantNames:
+        - ROOT_URL
