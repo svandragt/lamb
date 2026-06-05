@@ -51,24 +51,18 @@ function respond_upload(array $_args): void
             die();
         }
         $temp_fp = $f['tmp_name'];
+        $seed    = sha1($f['name']);
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        if (should_convert_to_webp($ext)) {
-            $webp_fn = sha1($f['name']) . '.webp';
-            $webp_fp = sprintf("%s/%s", get_upload_dir(), $webp_fn);
-            if (convert_to_webp($temp_fp, $webp_fp)) {
-                $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
-                $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$webp_fn");
-                continue;
+        $new_fn = store_webp_copy($temp_fp, $ext, get_upload_dir(), $seed);
+        if ($new_fn === null) {
+            $new_fn = "$seed.$ext";
+            $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
+            if (!move_uploaded_file($temp_fp, $new_fp)) {
+                echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
+                die();
             }
-        }
-
-        $new_fn = sha1($f['name']) . ".$ext";
-        $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
-        if (!move_uploaded_file($temp_fp, $new_fp)) {
-            echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
-            die();
         }
         $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
         $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$new_fn");
@@ -113,6 +107,38 @@ function safe_upload_extension(string $filename): ?string
 function should_convert_to_webp(?string $ext): bool
 {
     return in_array($ext, ['jpg', 'jpeg', 'png'], true);
+}
+
+/**
+ * Re-encodes an upload to WebP under $dest_dir, or returns null to fall back.
+ *
+ * Owns the shared "convert to WebP or fall back to the original bytes" decision used
+ * by every upload path (web upload, Micropub inline photos, Micropub media endpoint):
+ * the destination filename is the $seed plus the chosen extension. When the extension
+ * is a convertible raster format (should_convert_to_webp()) and convert_to_webp()
+ * succeeds, the WebP is written at "$dest_dir/$seed.webp" and that filename is
+ * returned. Otherwise nothing is written and null is returned, leaving each caller to
+ * store the original bytes under "$seed.$ext" via its own move semantics
+ * (move_uploaded_file() vs UploadedFileInterface::moveTo()) and build its own URL.
+ *
+ * @param string $src_path A readable path to the source image bytes.
+ * @param string $ext      The lower-case extension from safe_upload_extension().
+ * @param string $dest_dir The upload directory from get_upload_dir() (no trailing slash).
+ * @param string $seed     The hashed base filename (without extension).
+ * @return string|null The "$seed.webp" filename on success, or null to fall back.
+ */
+function store_webp_copy(string $src_path, string $ext, string $dest_dir, string $seed): ?string
+{
+    if (!should_convert_to_webp($ext)) {
+        return null;
+    }
+
+    $webp_fn = $seed . '.webp';
+    if (convert_to_webp($src_path, sprintf('%s/%s', $dest_dir, $webp_fn))) {
+        return $webp_fn;
+    }
+
+    return null;
 }
 
 /**
