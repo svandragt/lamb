@@ -6,6 +6,7 @@ namespace Lamb\Response;
 
 use JetBrains\PhpStorm\NoReturn;
 use Lamb\Config;
+use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
 
@@ -122,6 +123,7 @@ function respond_settings(): array
     $data = [
         'title' => 'Settings',
         'ini_text' => Config\get_ini_text(),
+        'feed_statuses' => Network\get_feed_statuses(),
     ];
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {

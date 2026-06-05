@@ -434,6 +434,14 @@ class ResponseHandlersTest extends TestCase
         $this->assertIsString($result['ini_text']);
     }
 
+    public function testRespondSettingsHasFeedStatusesKey(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        $result = respond_settings();
+        $this->assertArrayHasKey('feed_statuses', $result);
+        $this->assertIsArray($result['feed_statuses']);
+    }
+
     // respond_drafts
 
     public function testRespondDraftsReturnsArray(): void

@@ -80,11 +80,19 @@ function purge_deleted_posts(): int
         echo("Purged $purged deleted post(s)." . PHP_EOL);
     }
 
+    $pruned = prune_feed_status();
+    if ($pruned > 0) {
+        echo("Pruned $pruned stale feed status row(s)." . PHP_EOL);
+    }
+
     echo("Updating feeds..." . PHP_EOL);
     foreach ($feeds as $name => $url) {
         flush();
-        $last_updated = get_option('last_processed_date_' . md5($name . $url), 0);
-        if ((time() - $last_updated->value) < MINUTE_IN_SECONDS * 30) {
+        $status = feed_status_bean($name, $url);
+        // The 30-minute fetch-frequency skip is gated on the last *attempt*, not the
+        // last success, so a failing feed is retried on schedule rather than locked
+        // out (and a healthy feed is not re-fetched within the window).
+        if ((time() - (int)$status->last_attempt) < MINUTE_IN_SECONDS * 30) {
             echo('Skipped ' . $url . PHP_EOL);
             continue;
         }
@@ -103,25 +111,12 @@ function purge_deleted_posts(): int
         $feed->init();
         echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
 
-        if ($feed->data) {
-            /** @var SimplePieItem $item */
-            foreach ($feed->get_items() as $item) {
-                $pub_date = $item->get_date('U');
-                $mod_date = $item->get_updated_date('U');
-
-                // Compare the publication date of the item with the last processed date.
-                if ($pub_date > $last_updated->value) {
-                    create_item($item, $name);
-                    printf("Created: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title());
-                    continue;
-                }
-                if ($mod_date > $last_updated->value) {
-                    update_item($item, $name);
-                    printf("Updated: %s - [%s] %s" . PHP_EOL, $name, $item->get_id(), $item->get_title());
-                }
-            }
+        $result = record_feed_crawl($name, $url, $feed);
+        if ($result['ok']) {
+            printf("OK: %s - %d item(s) ingested" . PHP_EOL, $name, $result['items']);
+        } else {
+            printf("FAILED: %s - %s" . PHP_EOL, $name, $result['error']);
         }
-        set_option($last_updated, (int)date('U'));
     }
 
     $sent = \Lamb\Webmention\process_outbound();
@@ -137,6 +132,148 @@ function purge_deleted_posts(): int
 
     set_option($cron_last_updated, (int)date('U'));
     exit('Done');
+}
+
+/**
+ * Returns (creating if needed) the per-feed status bean keyed by md5(name . url) —
+ * the same key the legacy `last_processed_date_*` option used.
+ *
+ * The bean records crawl *health*; config remains the source of truth for which
+ * feeds exist. A freshly dispensed bean seeds its success watermark from any legacy
+ * `last_processed_date_<key>` option so existing installs do not re-ingest (and
+ * duplicate) every item on the first run after upgrade.
+ *
+ * @param string $name Feed name from config.
+ * @param string $url  Feed URL from config.
+ * @return OODBBean    Existing or freshly dispensed (unsaved) feedstatus bean.
+ */
+function feed_status_bean(string $name, string $url): OODBBean
+{
+    $key  = md5($name . $url);
+    $bean = R::findOneOrDispense('feedstatus', ' feedkey = ? ', [$key]);
+    $bean->feedkey = $key;
+    if ((int)$bean->id === 0) {
+        $bean->name         = $name;
+        $bean->url          = $url;
+        $legacy             = R::findOne('option', ' name = ? ', ['last_processed_date_' . $key]);
+        $bean->last_success = $legacy ? (int)$legacy->value : 0;
+        $bean->last_attempt = 0;
+        $bean->last_error   = 0;
+        $bean->item_count   = 0;
+        $bean->error_message = '';
+    }
+
+    return $bean;
+}
+
+/**
+ * Crawls a single initialised feed and records the outcome on its feedstatus bean.
+ *
+ * A failed fetch (`!$feed->data` or a non-empty `$feed->error()`) does NOT advance the
+ * success watermark — it only stamps `last_attempt` and records the error so the
+ * Logs tab can surface it. On success, items newer than the watermark are created or
+ * updated, the watermark advances, the item count is recorded and any prior error is
+ * cleared.
+ *
+ * @param string    $name Feed name from config.
+ * @param string    $url  Feed URL from config.
+ * @param SimplePie $feed The initialised SimplePie instance.
+ * @return array{ok: bool, items: int, error: ?string}
+ */
+function record_feed_crawl(string $name, string $url, SimplePie $feed): array
+{
+    $status = feed_status_bean($name, $url);
+    $now    = (int)date('U');
+    $status->last_attempt = $now;
+
+    $error = $feed->error();
+    if (is_array($error)) {
+        $error = implode('; ', array_filter($error));
+    }
+
+    if (!$feed->data || $error) {
+        $message = (string)($error ?: 'Feed fetch failed: no data returned.');
+        $status->last_error    = $now;
+        $status->error_message = $message;
+        R::store($status);
+        return ['ok' => false, 'items' => 0, 'error' => $message];
+    }
+
+    $watermark = (int)$status->last_success;
+    $items     = 0;
+    /** @var SimplePieItem $item */
+    foreach ($feed->get_items() as $item) {
+        $pub_date = $item->get_date('U');
+        $mod_date = $item->get_updated_date('U');
+
+        // Compare the publication date of the item with the success watermark.
+        if ($pub_date > $watermark) {
+            create_item($item, $name);
+            $items++;
+            continue;
+        }
+        if ($mod_date > $watermark) {
+            update_item($item, $name);
+            $items++;
+        }
+    }
+
+    $status->last_success  = $now;
+    $status->item_count    = $items;
+    $status->error_message = '';
+    R::store($status);
+
+    return ['ok' => true, 'items' => $items, 'error' => null];
+}
+
+/**
+ * Returns the persisted crawl status for every configured feed, in config order.
+ *
+ * Feeds with no stored health yet (never crawled) get a zeroed row so the Logs tab
+ * lists them too. Config is the source of truth for which feeds exist.
+ *
+ * @return array<int, array{name:string, url:string, last_attempt:int, last_success:int, last_error:int, error_message:string, item_count:int}>
+ */
+function get_feed_statuses(): array
+{
+    $out = [];
+    foreach (get_feeds() as $name => $url) {
+        $bean = R::findOne('feedstatus', ' feedkey = ? ', [md5($name . $url)]);
+        $out[] = [
+            'name'          => (string)$name,
+            'url'           => (string)$url,
+            'last_attempt'  => $bean ? (int)$bean->last_attempt : 0,
+            'last_success'  => $bean ? (int)$bean->last_success : 0,
+            'last_error'    => $bean ? (int)$bean->last_error : 0,
+            'error_message' => $bean ? (string)$bean->error_message : '',
+            'item_count'    => $bean ? (int)$bean->item_count : 0,
+        ];
+    }
+
+    return $out;
+}
+
+/**
+ * Deletes feedstatus beans for feeds that are no longer present in config.
+ *
+ * @return int Number of stale status rows removed.
+ */
+function prune_feed_status(): int
+{
+    $keys = [];
+    foreach (get_feeds() as $name => $url) {
+        $keys[] = md5($name . $url);
+    }
+
+    $removed = 0;
+    foreach (R::findAll('feedstatus') as $bean) {
+        if (!in_array($bean->feedkey, $keys, true)) {
+            R::trash($bean);
+            $removed++;
+        }
+    }
+
+    return $removed;
 }
 
 function update_item(SimplePieItem $item, string $name): void
