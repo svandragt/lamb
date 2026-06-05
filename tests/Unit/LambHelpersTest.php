@@ -124,4 +124,34 @@ class LambHelpersTest extends TestCase
         $result = post_has_slug($bean->slug);
         $this->assertSame('', $result);
     }
+
+    public function testPostHasSlugResolvesDraftForLoggedInAuthor(): void
+    {
+        $bean = R::dispense('post');
+        $bean->slug = 'draft-slug-' . uniqid();
+        $bean->draft = 1;
+        R::store($bean);
+
+        $_SESSION[SESSION_LOGIN] = true;
+        try {
+            $this->assertSame($bean->slug, post_has_slug($bean->slug), 'Logged-in author must reach their slugged draft');
+        } finally {
+            $_SESSION = [];
+        }
+    }
+
+    public function testPostHasSlugResolvesScheduledPostForLoggedInAuthor(): void
+    {
+        $bean = R::dispense('post');
+        $bean->slug = 'scheduled-slug-' . uniqid();
+        $bean->created = date('Y-m-d H:i:s', time() + 86400);
+        R::store($bean);
+
+        $_SESSION[SESSION_LOGIN] = true;
+        try {
+            $this->assertSame($bean->slug, post_has_slug($bean->slug), 'Logged-in author must reach their slugged scheduled post');
+        } finally {
+            $_SESSION = [];
+        }
+    }
 }
