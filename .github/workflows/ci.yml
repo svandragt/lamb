@@ -110,7 +110,7 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
       - name: Install Composer dependencies
         run: composer install --no-dev --no-interaction --no-scripts
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
