@@ -14,6 +14,7 @@ use function Lamb\get_tags;
 use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
@@ -154,29 +155,28 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     protected function introspectToken(string $token, string $endpoint): ?array
     {
-        $context = stream_context_create([
-            'http' => [
-                'method'  => 'GET',
-                'header'  => implode("\r\n", [
-                    'Authorization: Bearer ' . $token,
-                    'Accept: application/json',
-                ]),
-                'timeout' => 5,
-                'ignore_errors' => true,
+        $result = \Lamb\Http\fetch($endpoint, [
+            'headers' => [
+                'Authorization: Bearer ' . $token,
+                'Accept: application/json',
             ],
+            'timeout' => 5,
+            // introspectToken historically did not follow redirects explicitly,
+            // relying on PHP's stream defaults; preserve that by omitting them.
+            'follow_location' => null,
+            'max_redirects' => null,
         ]);
 
-        $response = @file_get_contents($endpoint, false, $context);
-        if ($response === false) {
+        if ($result === null) {
             return null;
         }
 
-        $statusLine = $http_response_header[0] ?? '';
+        $statusLine = $result['headers'][0] ?? '';
         if (!str_contains($statusLine, ' 200 ')) {
             return null;
         }
 
-        $data = json_decode($response, true);
+        $data = json_decode($result['body'], true);
         return is_array($data) ? $data : null;
     }
 
@@ -456,19 +456,15 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $content = $newContent . $hashtagStr;
 
-        $front = [];
+        $matter = [];
         if ($title !== null) {
-            $front[] = "title: $title";
+            $matter['title'] = (string) $title;
         }
         if (is_string($replyTo) && $replyTo !== '') {
-            $front[] = "in-reply-to: $replyTo";
+            $matter['in-reply-to'] = $replyTo;
         }
 
-        if ($front === []) {
-            return $content;
-        }
-
-        return "---\n" . implode("\n", $front) . "\n---\n$content";
+        return build_matter($matter, $content);
     }
 
     /**
@@ -504,9 +500,7 @@ class LambMicropubAdapter extends MicropubAdapter
                 $tmp = tempnam(sys_get_temp_dir(), 'lamb_up_');
                 if ($tmp !== false) {
                     file_put_contents($tmp, (string) $file->getStream());
-                    if (\Lamb\Response\convert_to_webp($tmp, $uploadDir . '/' . $seed . '.webp')) {
-                        $filename = $seed . '.webp';
-                    }
+                    $filename = \Lamb\Response\store_webp_copy($tmp, $ext, $uploadDir, $seed);
                     unlink($tmp);
                 }
             }
@@ -575,17 +569,13 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $matter = [];
         if ($title !== null) {
-            $matter[] = "title: $title";
+            $matter['title'] = (string) $title;
         }
         if (is_string($replyTo) && $replyTo !== '') {
-            $matter[] = "in-reply-to: $replyTo";
+            $matter['in-reply-to'] = $replyTo;
         }
 
-        if ($matter === []) {
-            return $content;
-        }
-
-        return "---\n" . implode("\n", $matter) . "\n---\n$content";
+        return build_matter($matter, $content);
     }
 
     /**
@@ -727,6 +717,25 @@ function respond_micropub(): void
 }
 
 /**
+ * Emit a JSON Micropub error response and terminate the request.
+ *
+ * Centralises the status code + Content-Type header + {error, error_description}
+ * body that every guard in the media endpoint would otherwise repeat.
+ *
+ * @param int    $status      HTTP status code.
+ * @param string $error       Micropub error code (e.g. 'unauthorized', 'invalid_request').
+ * @param string $description Human-readable error description.
+ * @return never
+ */
+function micropub_error(int $status, string $error, string $description): never
+{
+    http_response_code($status);
+    header('Content-Type: application/json');
+    echo json_encode(['error' => $error, 'error_description' => $description]);
+    exit;
+}
+
+/**
  * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
  * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
  *
@@ -743,53 +752,35 @@ function respond_micropub_media(): void
     }
 
     if (!$token) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Missing bearer token.']);
-        exit;
+        micropub_error(401, 'unauthorized', 'Missing bearer token.');
     }
 
     $adapter = new LambMicropubAdapter();
     $user = $adapter->verifyAccessTokenCallback($token);
     if (!$user) {
-        http_response_code(401);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'unauthorized', 'error_description' => 'Invalid or expired token.']);
-        exit;
+        micropub_error(401, 'unauthorized', 'Invalid or expired token.');
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Expected a multipart/form-data POST with a file field.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'Expected a multipart/form-data POST with a file field.');
     }
 
     $file = $_FILES['file'];
     if ((int) $file['error'] !== UPLOAD_ERR_OK) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'File upload failed.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'File upload failed.');
     }
 
     $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
     if ($ext === null) {
-        http_response_code(400);
-        header('Content-Type: application/json');
-        echo json_encode(['error' => 'invalid_request', 'error_description' => 'Unsupported file type.']);
-        exit;
+        micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
 
     $uploadDir = \Lamb\Response\get_upload_dir();
     $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
-    $converted = \Lamb\Response\should_convert_to_webp($ext)
-        && \Lamb\Response\convert_to_webp($file['tmp_name'], $uploadDir . '/' . $seed . '.webp');
-    if ($converted) {
-        $filename = $seed . '.webp';
-    } else {
+    $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);
+    if ($filename === null) {
         $filename = $seed . ".$ext";
         move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
     }

@@ -151,6 +151,84 @@ function slugify(string $text): string
 }
 
 /**
+ * Renders a body from a `key => value` front-matter map plus content.
+ *
+ * Each pair becomes a `key: value` line inside a leading `---` fence; an empty
+ * map returns the content verbatim (no fence). Key order is preserved. This is
+ * the single place that assembles a fresh front-matter block from scratch
+ * (used by Micropub create/update).
+ *
+ * @param array<string, string> $matter Ordered front-matter key/value pairs.
+ * @param string $content The post content to place after the fence.
+ * @return string The assembled body.
+ */
+function build_matter(array $matter, string $content): string
+{
+    if ($matter === []) {
+        return $content;
+    }
+
+    $lines = [];
+    foreach ($matter as $key => $value) {
+        $lines[] = "$key: $value";
+    }
+
+    return "---\n" . implode("\n", $lines) . "\n---\n$content";
+}
+
+/**
+ * Sets a single key in a body's leading YAML front-matter block, leaving all
+ * other front matter intact.
+ *
+ * An existing `key:` line is updated in place (preserving the original key text
+ * and indentation, rewriting only the value with a single separating space).
+ * When the block has no such line and $append is true, an explicit line is
+ * appended to the block. Bodies without a leading front-matter block, or whose
+ * key already holds the target value, are returned unchanged (no cosmetic
+ * churn).
+ *
+ * @param string $body The raw post body.
+ * @param string $key The front-matter key to set.
+ * @param string $value The value to write.
+ * @param bool $quote When true, the value is wrapped in single quotes.
+ * @param bool $append When true, the key is appended if absent (otherwise the
+ *                     body is returned unchanged when the key is missing).
+ * @return string The body with the front-matter key set.
+ */
+function set_matter(string $body, string $key, string $value, bool $quote = false, bool $append = true): string
+{
+    // Only touch a front-matter block at the very start of the body.
+    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+        return $body;
+    }
+
+    $rendered = $quote ? "'" . $value . "'" : $value;
+
+    $new_yaml = preg_replace_callback(
+        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        function (array $line) use ($value, $rendered): string {
+            $current = trim($line[2], " \t'\"");
+            if ($current === $value) {
+                return $line[0];
+            }
+            return $line[1] . ' ' . $rendered;
+        },
+        $m[2],
+        1,
+        $count
+    );
+
+    if ($count === 0) {
+        if (!$append) {
+            return $body;
+        }
+        $new_yaml = $m[2] . "$key: $rendered\n";
+    }
+
+    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+}
+
+/**
  * Rewrites the `slug` value inside a body's leading YAML front-matter block to
  * the given actual slug, leaving all other front matter intact.
  *
@@ -168,30 +246,7 @@ function slugify(string $text): string
  */
 function persist_slug(string $body, string $slug): string
 {
-    // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
-        return $body;
-    }
-
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*slug[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
-        function (array $line) use ($slug): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $slug) {
-                return $line[0];
-            }
-            return $line[1] . ' ' . $slug;
-        },
-        $m[2],
-        1,
-        $count
-    );
-
-    if ($count === 0) {
-        $new_yaml = $m[2] . "slug: $slug\n";
-    }
-
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_matter($body, 'slug', $slug);
 }
 
 /**

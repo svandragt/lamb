@@ -24,7 +24,7 @@ jobs:
       e2e: ${{ steps.filter.outputs.e2e }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -110,7 +110,7 @@ jobs:
           key: composer-${{ hashFiles('composer.lock') }}
       - name: Install Composer dependencies
         run: composer install --no-dev --no-interaction --no-scripts
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:
           node-version: lts/*
@@ -137,7 +137,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
       - name: Run Playwright tests
         run: pnpm exec playwright test
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report

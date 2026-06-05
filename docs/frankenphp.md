@@ -4,6 +4,8 @@ title: FrankenPHP
 
 # FrankenPHP
 
+> **Well-travelled path.** The FrankenPHP runtime is the same one inside the release Docker image, which is verified by the automated acceptance suite before every release (the `release-verify` workflow).
+
 [FrankenPHP](https://frankenphp.dev) is the Caddy webserver with a PHP runtime built in: a single binary serves Lamb with no separate php-fpm service to configure. It is the recommended way to host Lamb on a server you control.
 
 A working `Caddyfile` is provided in the project root. From the project directory:
