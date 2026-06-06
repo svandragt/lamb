@@ -13,7 +13,8 @@ FROM dunglas/frankenphp:php8.2
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 
-RUN install-php-extensions gettext pdo_mysql
+# gd powers WebP upload conversion
+RUN install-php-extensions gettext pdo_mysql gd
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 

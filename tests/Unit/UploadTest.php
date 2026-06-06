@@ -181,6 +181,13 @@ class UploadTest extends TestCase
         $this->assertFalse(should_convert_to_webp(null));
     }
 
+    public function testShouldNotConvertWithoutGd(): void
+    {
+        // Installs without the gd extension must store the original bytes
+        // instead of fataling on undefined GD functions.
+        $this->assertFalse(should_convert_to_webp('jpg', gd_available: false));
+    }
+
     // convert_to_webp — GD-backed re-encode of an uploaded image into WebP
 
     public function testConvertWritesWebpFile(): void
