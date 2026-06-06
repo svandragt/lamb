@@ -9,6 +9,8 @@ updates:
     directory: "/" # Location of package manifests
     schedule:
       interval: "weekly"
+    cooldown: # Covers PHP until Composer ships its own minimum-release-age policy
+      default-days: 3
     groups:
       minor-and-patch:
         update-types:
@@ -29,6 +31,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    cooldown: # Matches min-release-age in .npmrc so Dependabot doesn't propose versions npm/pnpm refuse to install
+      default-days: 3
     groups:
       minor-and-patch:
         update-types:
