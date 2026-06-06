@@ -100,11 +100,11 @@ function og_image(\RedBeanPHP\OODBBean $bean): array
     }
 
     return [
-        'url' => ROOT_URL . '/images/og-image-lamb.jpg',
+        'url' => ROOT_URL . '/images/og-image-lamb.webp',
         'card' => 'summary',
         'width' => '1200',
         'height' => '630',
-        'type' => 'image/jpeg',
+        'type' => 'image/webp',
     ];
 }
 

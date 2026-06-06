@@ -217,7 +217,7 @@ class ThemeMetaTest extends TestCase
         $this->assertStringContainsString('property="og:image" content="' . $url . '"', $output);
         $this->assertStringContainsString('property="twitter:image" content="' . $url . '"', $output);
         $this->assertStringContainsString('content="summary_large_image"', $output);
-        $this->assertStringNotContainsString('og-image-lamb.jpg', $output);
+        $this->assertStringNotContainsString('og-image-lamb.webp', $output);
     }
 
     public function testOpenGraphUsesWebRootOgImageConventionWhenPostHasNoImage(): void
@@ -234,7 +234,7 @@ class ThemeMetaTest extends TestCase
         @unlink($webRoot . '/og-image.png');
 
         $this->assertStringContainsString(ROOT_URL . '/og-image.png', $output);
-        $this->assertStringNotContainsString('/images/og-image-lamb.jpg', $output);
+        $this->assertStringNotContainsString('/images/og-image-lamb.webp', $output);
         $this->assertStringContainsString('og:image:width', $output);
         $this->assertStringContainsString('image/png', $output);
     }
@@ -245,7 +245,7 @@ class ThemeMetaTest extends TestCase
 
         $output = $this->renderStatus(['transformed' => '<p>Just text, no image</p>']);
 
-        $this->assertStringContainsString(ROOT_URL . '/images/og-image-lamb.jpg', $output);
+        $this->assertStringContainsString(ROOT_URL . '/images/og-image-lamb.webp', $output);
         $this->assertStringContainsString('content="summary"', $output);
     }
 

@@ -21,7 +21,7 @@ specific first:
 2. **A site-wide default you provide.** If the post has no image, Lamb looks for
    an `og-image.*` file in the web root (next to `index.php`) and uses it.
 3. **The built-in Lamb card.** If you haven't provided one, the shipped
-   `og-image-lamb.jpg` is used.
+   `og-image-lamb.webp` is used.
 
 ## Setting a site-wide card
 
