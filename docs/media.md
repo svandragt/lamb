@@ -42,6 +42,15 @@ Images sent via Micropub — both inline `photo` files on a post and files sent 
 
 Uploads require the directory `src/assets/` to be writable by the web server or PHP-FPM user.
 
+### Upload size limits
+
+Because uploads are converted to WebP and resized server-side, the original file size mostly doesn't matter — large phone photos are fine. What limits the upload is the server configuration:
+
+- **PHP** caps uploads with `upload_max_filesize` (default **2M**) and `post_max_size` (default **8M**). The Lamb Docker images raise these to `20M` / `25M`; on other hosts raise them in `php.ini` or a `conf.d` file.
+- **NGINX** additionally caps the request body with `client_max_body_size` (default **1m**). The shipped `.nginx/snippets/lamb.conf` sets it to `25m`.
+
+If an upload over the limit fails, it fails silently from the editor's point of view — check the server limits first when a large image won't upload.
+
 WebP conversion relies on PHP's [GD extension](https://www.php.net/manual/en/book.image.php) being built **with WebP support**. This is the common default, but it isn't guaranteed on every host. WebP support is the only thing the conversion needs — if it's missing, nothing breaks: Lamb stores each upload in its original format instead, so JPEG and PNG files are saved as-is rather than being converted. You simply don't get the smaller WebP files.
 
 ### Checking for WebP support

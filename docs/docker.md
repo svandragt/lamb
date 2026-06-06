@@ -48,6 +48,8 @@ Your site is now ready at http://localhost
 
 Uploaded images are stored under `src/assets/` inside the app container.
 
+Both images accept uploads up to 20&nbsp;MB (`upload_max_filesize = 20M`, `post_max_size = 25M`) — see [Media]({{ site.baseurl }}{% link media.md %}).
+
 Errors can be inspected with `docker compose logs -f app`.
 
 ### Update
