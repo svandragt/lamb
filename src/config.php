@@ -26,7 +26,7 @@ theme = 2026
 ;author_name = Joe Sheeple
 
 ;; Title of the site, in html and feed views
-;site_title = My Microblog
+site_title = My Microblog
 
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
 ;; Use a name from https://www.php.net/manual/en/timezones.php.
@@ -61,6 +61,8 @@ token_endpoint = https://tokens.indieauth.com/token
 ;Subscribe = /feed
 ;;   - Full URLs to external sites
 ;Source = https://github.com/svandragt/lamb
+Home = /
+Feed = /feed
 
 [feeds]
 ;; Add feeds whose content gets published into the blog.
@@ -169,7 +171,6 @@ function compose_config(string $stored_ini, string $default_ini): array
     $fallback = [
         'author_email' => 'joe.sheeple@example.com',
         'author_name'  => 'Joe Sheeple',
-        'site_title'   => 'My Microblog',
     ];
 
     return array_merge($fallback, $defaults, $config);
