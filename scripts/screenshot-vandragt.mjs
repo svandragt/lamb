@@ -5,13 +5,13 @@
  * Usage:
  *   node scripts/screenshot-vandragt.mjs [outpath]
  *
- * Defaults to src/images/demo-vandragt.png.
+ * Defaults to docs/demo-vandragt.png.
  */
 
 import { chromium } from '@playwright/test';
 
 const URL = process.env.SCREENSHOT_URL ?? 'https://vandragt.com/';
-const OUT = process.argv[2] ?? 'src/images/demo-vandragt.png';
+const OUT = process.argv[2] ?? 'docs/demo-vandragt.png';
 
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH
   ?? (await chromium.executablePath().catch(() => null));
