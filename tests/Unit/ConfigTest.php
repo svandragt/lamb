@@ -165,6 +165,21 @@ class ConfigTest extends TestCase
         $this->assertSame('my-custom', resolve_theme('my-custom'));
     }
 
+    public function testDefaultIniSetsSiteTitleForNewInstalls(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertSame('My Microblog', $parsed['site_title'] ?? null, 'site_title must be uncommented in the seeded INI');
+    }
+
+    public function testDefaultIniSetsHomeAndFeedMenuItemsForNewInstalls(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertSame('/', $parsed['menu_items']['Home'] ?? null);
+        $this->assertSame('/feed', $parsed['menu_items']['Feed'] ?? null);
+    }
+
     public function testDefaultIniExposesRealDefaultsAtTopLevel(): void
     {
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);

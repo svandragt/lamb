@@ -11,7 +11,7 @@ one value rather than write it from scratch; personal details stay commented:
 
 ```
 ;; Title of the site, shown in the HTML and feed views
-;site_title = My Microblog
+site_title = My Microblog
 
 ;; Author email in feed
 ;author_email = joe.sheeple@example.com
@@ -54,6 +54,8 @@ token_endpoint = https://tokens.indieauth.com/token
 ;Subscribe = /feed
 ;;   - A full URL to an external site
 ;Source = https://github.com/svandragt/lamb
+Home = /
+Feed = /feed
 
 [redirections]
 ;; Add 301 redirects for old URL path segments.
