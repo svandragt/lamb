@@ -358,7 +358,7 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         parse_bean($bean);
-        $bean->updated = date('Y-m-d H:i:s');
+        $bean->updated = \Lamb\now();
         R::store($bean);
 
         \Lamb\Webmention\enqueue_for_post($bean);

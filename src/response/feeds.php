@@ -110,7 +110,7 @@ function respond_scheduled(): array
     Security\require_login();
 
     $data['title'] = 'Scheduled';
-    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [\Lamb\now()]);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -124,7 +124,7 @@ function respond_scheduled(): array
  */
 function count_scheduled(): int
 {
-    return R::count('post', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    return R::count('post', SQL_IS_SCHEDULED, [\Lamb\now()]);
 }
 
 /**
@@ -149,7 +149,7 @@ function redirect_search(string $query): void
 function get_feed_updated_date(array $posts): string
 {
     $first = reset($posts);
-    return $first !== false ? $first->updated : date('Y-m-d H:i:s');
+    return $first !== false ? $first->updated : \Lamb\now();
 }
 
 /**
@@ -179,7 +179,7 @@ function get_feed_data(): array
 
     $first_post = reset($posts);
     return [
-        'updated'  => $first_post['updated'] ?? date('Y-m-d H:i:s'),
+        'updated'  => $first_post['updated'] ?? \Lamb\now(),
         'title'    => $config['site_title'],
         'feed_url' => ROOT_URL . '/feed',
         'posts'    => $posts,

@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\get_option;
+use function Lamb\now;
 use function Lamb\permalink;
 use function Lamb\post_has_slug;
 use function Lamb\set_option;
@@ -22,6 +23,22 @@ class LambHelpersTest extends TestCase
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
         }
+    }
+
+    // now
+
+    public function testNowReturnsCanonicalDatetimeFormat(): void
+    {
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', now());
+    }
+
+    public function testNowReturnsCurrentTime(): void
+    {
+        $before = date('Y-m-d H:i:s');
+        $value = now();
+        $after = date('Y-m-d H:i:s');
+        $this->assertGreaterThanOrEqual($before, $value);
+        $this->assertLessThanOrEqual($after, $value);
     }
 
     // permalink

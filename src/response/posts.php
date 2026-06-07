@@ -120,7 +120,7 @@ function redirect_restored(mixed $args): void
 function soft_delete_post(OODBBean $post): void
 {
     $post->deleted    = 1;
-    $post->deleted_at = date('Y-m-d H:i:s');
+    $post->deleted_at = \Lamb\now();
     R::store($post);
 }
 

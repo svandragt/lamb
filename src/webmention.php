@@ -91,7 +91,7 @@ function verify_and_store(string $source, string $target, ?callable $fetcher = n
     }
 
     $meta = extract_meta($html);
-    $now = date('Y-m-d H:i:s');
+    $now = \Lamb\now();
 
     $mention = $existing ?: R::dispense('webmention');
     $mention->source = $source;
@@ -459,7 +459,7 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
         $row->target = $target;
         $row->status = 'pending';
         $row->attempts = 0;
-        $row->created = date('Y-m-d H:i:s');
+        $row->created = \Lamb\now();
         $row->processed_at = null;
         R::store($row);
         $created++;
@@ -526,7 +526,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
     $post = R::load('post', (int) $row->post_id);
     if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
         $row->status = 'cancelled';
-        $row->processed_at = date('Y-m-d H:i:s');
+        $row->processed_at = \Lamb\now();
         R::store($row);
         return 'cancelled';
     }
@@ -535,7 +535,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
     }
 
     $row->attempts = (int) $row->attempts + 1;
-    $row->processed_at = date('Y-m-d H:i:s');
+    $row->processed_at = \Lamb\now();
 
     $fetched = $fetcher($row->target);
     $endpoint = is_array($fetched)
