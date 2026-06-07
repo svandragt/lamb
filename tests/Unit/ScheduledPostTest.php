@@ -137,7 +137,7 @@ class ScheduledPostTest extends TestCase
     {
         $this->makePost('A scheduled page', $this->future(), 'scheduled-page');
 
-        $this->assertSame('', post_has_slug('scheduled-page'), 'Future-dated slugged posts must not resolve publicly');
+        $this->assertNull(post_has_slug('scheduled-page'), 'Future-dated slugged posts must not resolve publicly');
     }
 
     public function testRespondPostReturns404ForFutureSluggedPost(): void

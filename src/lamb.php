@@ -473,10 +473,10 @@ function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
     if ($post === null || $post->id === 0) {
-        return '';
+        return null;
     }
     if (!is_viewable($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
-        return '';
+        return null;
     }
 
     return $post->slug;

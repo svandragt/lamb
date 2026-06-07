@@ -21,13 +21,19 @@ const PLACEHOLDER_FORMAT = '<!--lamb-code-%d-->';
 function extract_code_blocks(string $html): array
 {
     $blocks = [];
-    $html = preg_replace_callback('/<pre><code[^>]*>.*?<\/code><\/pre>/s', function ($matches) use (&$blocks) {
+    $result = preg_replace_callback('/<pre><code[^>]*>.*?<\/code><\/pre>/s', function ($matches) use (&$blocks) {
         $blocks[] = $matches[0];
 
         return sprintf(PLACEHOLDER_FORMAT, count($blocks) - 1);
     }, $html);
 
-    return [$html, $blocks];
+    // PCRE failure (e.g. backtrack limit on a huge post) returns null — fall
+    // back to the untouched input rather than wiping the post.
+    if ($result === null) {
+        return [$html, []];
+    }
+
+    return [$result, $blocks];
 }
 
 /**
@@ -66,7 +72,7 @@ function highlight_code_blocks(string $html): string
         return $html;
     }
 
-    return preg_replace_callback(CODE_BLOCK_PATTERN, function ($matches) {
+    $result = preg_replace_callback(CODE_BLOCK_PATTERN, function ($matches) {
         $code = html_entity_decode($matches[2], ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
         try {
@@ -78,4 +84,8 @@ function highlight_code_blocks(string $html): string
             return $matches[0];
         }
     }, $html);
+
+    // PCRE failure (e.g. backtrack limit on a huge post) returns null — output
+    // is never worse than the unhighlighted original.
+    return $result ?? $html;
 }

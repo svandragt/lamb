@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Highlight\extract_code_blocks;
 use function Lamb\Highlight\highlight_code_blocks;
 use function Lamb\parse_bean;
 
@@ -57,6 +58,35 @@ class HighlightTest extends TestCase
         $html = '<p>Hello #world</p>';
 
         $this->assertSame($html, highlight_code_blocks($html));
+    }
+
+    public function testHighlightFallsBackToInputOnPcreFailure(): void
+    {
+        $html = '<pre><code class="language-php">' . str_repeat('a', 100000) . '</code></pre>';
+
+        $old = ini_set('pcre.backtrack_limit', '100');
+        try {
+            $result = highlight_code_blocks($html);
+        } finally {
+            ini_set('pcre.backtrack_limit', $old);
+        }
+
+        $this->assertSame($html, $result);
+    }
+
+    public function testExtractFallsBackToInputOnPcreFailure(): void
+    {
+        $html = '<pre><code class="language-php">' . str_repeat('a', 100000) . '</code></pre>';
+
+        $old = ini_set('pcre.backtrack_limit', '100');
+        try {
+            [$out, $blocks] = extract_code_blocks($html);
+        } finally {
+            ini_set('pcre.backtrack_limit', $old);
+        }
+
+        $this->assertSame($html, $out);
+        $this->assertSame([], $blocks);
     }
 
     public function testParseBeanHighlightsFencedCode(): void

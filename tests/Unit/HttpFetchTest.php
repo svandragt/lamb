@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Http\build_http_context_options;
 use function Lamb\Http\fetch;
+use function Lamb\Http\parse_status_line;
 
 class HttpFetchTest extends TestCase
 {
@@ -58,6 +59,25 @@ class HttpFetchTest extends TestCase
 
         $this->assertSame('POST', $opts['method']);
         $this->assertSame('source=a&target=b', $opts['content']);
+    }
+
+    // parse_status_line ------------------------------------------------------
+
+    public function testParseStatusLineWithReasonPhrase(): void
+    {
+        $this->assertSame(200, parse_status_line('HTTP/1.1 200 OK'));
+    }
+
+    public function testParseStatusLineWithoutReasonPhrase(): void
+    {
+        // An empty reason phrase is valid; some servers omit it entirely.
+        $this->assertSame(200, parse_status_line('HTTP/1.1 200'));
+    }
+
+    public function testParseStatusLineReturnsZeroForGarbage(): void
+    {
+        $this->assertSame(0, parse_status_line(''));
+        $this->assertSame(0, parse_status_line('not a status line'));
     }
 
     // fetch -----------------------------------------------------------------
