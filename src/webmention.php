@@ -593,23 +593,10 @@ function fetch_target(string $url): ?array
  */
 function send_webmention(string $endpoint, string $source, string $target): int
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => implode("\r\n", [
-                'Content-Type: application/x-www-form-urlencoded',
-                'User-Agent: Lamb-Webmention',
-            ]),
-            'content' => http_build_query(['source' => $source, 'target' => $target]),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'ignore_errors' => true,
-        ],
-    ]);
-
-    $response = @file_get_contents($endpoint, false, $context);
-    if ($response === false && empty($http_response_header)) {
-        return 0;
-    }
-
-    return \Lamb\Http\parse_status_line($http_response_header[0] ?? '');
+    return \Lamb\Http\post_form(
+        $endpoint,
+        ['source' => $source, 'target' => $target],
+        WEBMENTION_FETCH_TIMEOUT,
+        'Lamb-Webmention'
+    );
 }

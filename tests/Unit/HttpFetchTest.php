@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Http\build_http_context_options;
 use function Lamb\Http\fetch;
 use function Lamb\Http\parse_status_line;
+use function Lamb\Http\post_form;
 
 class HttpFetchTest extends TestCase
 {
@@ -97,5 +98,13 @@ class HttpFetchTest extends TestCase
         $this->assertSame('hello-world', $result['body']);
         $this->assertIsArray($result['headers']);
         $this->assertIsInt($result['status']);
+    }
+
+    // post_form ---------------------------------------------------------------
+
+    public function testPostFormReturnsZeroOnTransportFailure(): void
+    {
+        $status = @post_form('file:///nonexistent/path/at/all', ['a' => 'b'], 1, 'Lamb-Test');
+        $this->assertSame(0, $status);
     }
 }
