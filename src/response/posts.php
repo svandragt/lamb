@@ -138,18 +138,6 @@ function restore_post(OODBBean $post): void
 }
 
 /**
- * Publish a draft post by clearing its draft flag.
- *
- * @param OODBBean $post
- * @return void
- */
-function publish_post(OODBBean $post): void
-{
-    $post->draft = null;
-    R::store($post);
-}
-
-/**
  * Redirects the user after editing a post.
  *
  * Validates the CSRF token and submit button, parses the updated content, stores
