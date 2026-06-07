@@ -10,10 +10,13 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Taproot\Micropub\MicropubAdapter;
 
+use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\remove_body_tags;
+use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
@@ -367,12 +370,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyAdd(OODBBean $bean, string $property, array $values): void
     {
         if ($property === 'category') {
-            $existing = get_tags($bean->body ?? '');
-            $toAdd    = array_diff($values, $existing);
-            if (!empty($toAdd)) {
-                $newTags = implode(' ', array_map(fn($t) => '#' . $t, $toAdd));
-                $bean->body = rtrim($bean->body ?? '') . ' ' . $newTags;
-            }
+            $bean->body = add_body_tags($bean->body ?? '', $values);
         }
     }
 
@@ -386,7 +384,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteProperty(OODBBean $bean, string $property): void
     {
         if ($property === 'category') {
-            $bean->body = rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $bean->body ?? ''));
+            $bean->body = strip_trailing_body_tags($bean->body ?? '');
         }
     }
 
@@ -401,9 +399,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
     {
         if ($property === 'category') {
-            foreach ($values as $tag) {
-                $bean->body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $bean->body ?? '');
-            }
+            $bean->body = remove_body_tags($bean->body ?? '', $values);
         }
     }
 

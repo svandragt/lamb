@@ -29,6 +29,10 @@ function now(): string
     return date('Y-m-d H:i:s');
 }
 
+// Matches a #hashtag preceded by start-of-string, whitespace, or a closing tag
+// bracket. Capture 1 is the preceding character, capture 2 the tag name.
+const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u';
+
 /**
  * Retrieves the tags from the given HTML.
  *
@@ -38,7 +42,7 @@ function now(): string
  */
 function get_tags(string $html): array
 {
-    preg_match_all('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', $html, $matches);
+    preg_match_all(TAG_PATTERN, $html, $matches);
 
     return $matches[2];
 }
@@ -56,9 +60,61 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', function ($matches) {
+    return preg_replace_callback(TAG_PATTERN, function ($matches) {
         return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
     }, $html);
+}
+
+/**
+ * Appends the given tags to a body as trailing hashtags, skipping ones the
+ * body already carries. Returns the body unchanged when nothing is missing.
+ *
+ * Counterpart of get_tags(): used by Micropub category `add` updates, where
+ * categories live in the body as hashtags rather than in a column.
+ *
+ * @param string $body The raw post body.
+ * @param array  $tags Tag names (without `#`).
+ * @return string The body with missing tags appended.
+ */
+function add_body_tags(string $body, array $tags): string
+{
+    $to_add = array_diff($tags, get_tags($body));
+    if (empty($to_add)) {
+        return $body;
+    }
+    $hashtags = implode(' ', array_map(fn($tag) => '#' . $tag, $to_add));
+
+    return rtrim($body) . ' ' . $hashtags;
+}
+
+/**
+ * Removes the run of trailing hashtags from a body, leaving inline tags alone.
+ *
+ * Used by Micropub category delete-property updates (drop all categories).
+ *
+ * @param string $body The raw post body.
+ * @return string The body without its trailing hashtag run.
+ */
+function strip_trailing_body_tags(string $body): string
+{
+    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body));
+}
+
+/**
+ * Removes the named hashtags (and their preceding whitespace) from a body,
+ * wherever they appear. Used by Micropub category delete-values updates.
+ *
+ * @param string $body The raw post body.
+ * @param array  $tags Tag names (without `#`) to remove.
+ * @return string The body without the named tags.
+ */
+function remove_body_tags(string $body, array $tags): string
+{
+    foreach ($tags as $tag) {
+        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body);
+    }
+
+    return $body;
 }
 
 /**
