@@ -91,6 +91,21 @@ INI;
 }
 
 /**
+ * Parses INI text with warnings suppressed, returning [] when unparseable.
+ *
+ * The tolerant counterpart to validate_ini(): readers treat broken INI as
+ * empty config rather than surfacing errors, so a bad edit can't take the
+ * site down between save and fix.
+ *
+ * @param string $ini_text The raw INI text.
+ * @return array The parsed sections/keys, or [] on failure.
+ */
+function parse_ini_safe(string $ini_text): array
+{
+    return @parse_ini_string($ini_text, true, INI_SCANNER_RAW) ?: [];
+}
+
+/**
  * Resolves a configured theme name to the directory that should be rendered.
  *
  * Falls back to the bundled `base` theme (the part-fallback library) when no
@@ -125,8 +140,8 @@ function resolve_theme(?string $configured, string $fallback = 'base'): string
  */
 function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
 {
-    $parsed = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
-    if (is_array($parsed) && array_key_exists('theme', $parsed)) {
+    $parsed = parse_ini_safe($ini_text);
+    if (array_key_exists('theme', $parsed)) {
         return $ini_text;
     }
 
@@ -157,8 +172,8 @@ function load(): array
  */
 function compose_config(string $stored_ini, string $default_ini): array
 {
-    $config = @parse_ini_string($stored_ini, true, INI_SCANNER_RAW) ?: [];
-    $defaults = @parse_ini_string($default_ini, true, INI_SCANNER_RAW) ?: [];
+    $config = parse_ini_safe($stored_ini);
+    $defaults = parse_ini_safe($default_ini);
 
     // Theme is intentionally not defaulted here. An install without an explicit
     // theme is resolved/migrated per-install (see resolve_theme / get_ini_text),

@@ -150,6 +150,25 @@ function date_created(OODBBean $bean): string
 }
 
 /**
+ * Wraps a title in an escaped <h1> for HTML output, or returns it as plain text.
+ *
+ * The shared formatting rule behind site_title()/page_title(): escaping only
+ * applies on the HTML path, since plain-text callers (e.g. <title>) escape at
+ * their own output site.
+ *
+ * @param string $title The raw title text.
+ * @param string $type  Output format: 'html' wraps in <h1>, anything else returns plain text.
+ * @return string HTML or plain-text title.
+ */
+function wrap_title(string $title, string $type): string
+{
+    if ($type !== 'html') {
+        return $title;
+    }
+    return sprintf('<h1>%s</h1>', escape($title));
+}
+
+/**
  * Returns the site title as an <h1> element, or plain text when $type !== 'html'.
  *
  * @param string $type Output format: 'html' (default) wraps in <h1>, anything else returns plain text.
@@ -159,10 +178,7 @@ function site_title($type = 'html'): string
 {
     global $config;
 
-    if ($type !== 'html') {
-        return $config['site_title'];
-    }
-    return sprintf('<h1>%s</h1>', escape($config['site_title']));
+    return wrap_title($config['site_title'], $type);
 }
 
 /**
@@ -197,11 +213,7 @@ function page_title(string $type = 'html'): string
         $title = $data['title'];
     }
 
-    if ($type !== 'html') {
-        return $title;
-    }
-
-    return sprintf('<h1>%s</h1>', escape($title));
+    return wrap_title($title, $type);
 }
 
 /**

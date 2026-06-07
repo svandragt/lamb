@@ -10,6 +10,7 @@ use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
 use function Lamb\get_option;
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\Route\register_route;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
@@ -25,10 +26,7 @@ function get_feeds(): array
 
     // A setting accidentally placed under [feeds] (e.g. `feeds_draft = false`)
     // would otherwise be fetched as a feed URL. Only keep http(s) URLs.
-    return array_filter($config['feeds'] ?? [], function ($url) {
-        return filter_var($url, FILTER_VALIDATE_URL)
-            && in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true);
-    });
+    return array_filter($config['feeds'] ?? [], fn($url) => is_valid_http_url((string) $url));
 }
 
 /**

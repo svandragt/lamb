@@ -8,6 +8,7 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 
@@ -211,18 +212,6 @@ function fetch_source(string $url): ?string
     ]);
 
     return $result === null ? null : $result['body'];
-}
-
-/**
- * Whether a string is an absolute http(s) URL with a host.
- *
- * @param string $url
- * @return bool
- */
-function is_valid_http_url(string $url): bool
-{
-    $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-    return in_array($scheme, ['http', 'https'], true) && parse_url($url, PHP_URL_HOST) !== null;
 }
 
 /**

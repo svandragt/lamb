@@ -4,11 +4,71 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\parse_tags;
+use function Lamb\remove_body_tags;
+use function Lamb\strip_trailing_body_tags;
 
 class LambTest extends TestCase
 {
+    // add_body_tags
+
+    public function testAddBodyTagsAppendsMissingTags()
+    {
+        $this->assertSame('Hello #foo #bar', add_body_tags('Hello', ['foo', 'bar']));
+    }
+
+    public function testAddBodyTagsSkipsTagsAlreadyPresent()
+    {
+        $this->assertSame('Hello #foo #bar', add_body_tags('Hello #foo', ['foo', 'bar']));
+    }
+
+    public function testAddBodyTagsReturnsBodyUnchangedWhenAllPresent()
+    {
+        $body = "Hello #foo\n";
+        $this->assertSame($body, add_body_tags($body, ['foo']));
+    }
+
+    public function testAddBodyTagsTrimsTrailingWhitespaceBeforeAppending()
+    {
+        $this->assertSame('Hello #new', add_body_tags("Hello \n", ['new']));
+    }
+
+    // strip_trailing_body_tags
+
+    public function testStripTrailingBodyTagsRemovesTrailingRun()
+    {
+        $this->assertSame('Some text', strip_trailing_body_tags('Some text #foo #bar'));
+    }
+
+    public function testStripTrailingBodyTagsLeavesInlineTags()
+    {
+        $this->assertSame('Text #foo more text', strip_trailing_body_tags('Text #foo more text'));
+    }
+
+    public function testStripTrailingBodyTagsHandlesBodyWithoutTags()
+    {
+        $this->assertSame('No tags here.', strip_trailing_body_tags('No tags here.'));
+    }
+
+    // remove_body_tags
+
+    public function testRemoveBodyTagsRemovesNamedTagsOnly()
+    {
+        $this->assertSame('Hello #bar', remove_body_tags('Hello #foo #bar', ['foo']));
+    }
+
+    public function testRemoveBodyTagsRemovesMultipleTags()
+    {
+        $this->assertSame('Hello', remove_body_tags('Hello #foo #bar', ['foo', 'bar']));
+    }
+
+    public function testRemoveBodyTagsIgnoresAbsentTags()
+    {
+        $this->assertSame('Hello #foo', remove_body_tags('Hello #foo', ['bar']));
+    }
+
     // get_tags
 
     public function testGetTagsExtractsSingleTag()

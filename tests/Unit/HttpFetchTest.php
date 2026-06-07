@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Http\build_http_context_options;
 use function Lamb\Http\fetch;
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\Http\parse_status_line;
 use function Lamb\Http\post_form;
 
@@ -98,6 +99,25 @@ class HttpFetchTest extends TestCase
         $this->assertSame('hello-world', $result['body']);
         $this->assertIsArray($result['headers']);
         $this->assertIsInt($result['status']);
+    }
+
+    // is_valid_http_url -------------------------------------------------------
+
+    public function testIsValidHttpUrlAcceptsHttpAndHttps(): void
+    {
+        $this->assertTrue(is_valid_http_url('http://example.com/'));
+        $this->assertTrue(is_valid_http_url('https://example.com/path'));
+        // Scheme casing is normalised before the check.
+        $this->assertTrue(is_valid_http_url('HTTPS://EXAMPLE.com/'));
+    }
+
+    public function testIsValidHttpUrlRejectsNonHttpAndHostless(): void
+    {
+        $this->assertFalse(is_valid_http_url('mailto:someone@example.com'));
+        $this->assertFalse(is_valid_http_url('ftp://example.com/'));
+        $this->assertFalse(is_valid_http_url('/relative/path'));
+        $this->assertFalse(is_valid_http_url('not a url'));
+        $this->assertFalse(is_valid_http_url(''));
     }
 
     // post_form ---------------------------------------------------------------

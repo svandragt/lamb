@@ -92,6 +92,22 @@ function build_http_context_options(array $opts): array
 }
 
 /**
+ * Whether a string is an absolute http(s) URL with a host.
+ *
+ * The single URL gate for everything that touches the network: webmention
+ * source/target/endpoint checks, outbound link extraction, and feed-config
+ * filtering all share this definition of "fetchable".
+ *
+ * @param string $url
+ * @return bool
+ */
+function is_valid_http_url(string $url): bool
+{
+    $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+    return in_array($scheme, ['http', 'https'], true) && parse_url($url, PHP_URL_HOST) !== null;
+}
+
+/**
  * Extract the status code from an HTTP status line.
  *
  * Accepts status lines with or without a reason phrase ("HTTP/1.1 200 OK"
