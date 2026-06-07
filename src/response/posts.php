@@ -170,7 +170,7 @@ function redirect_edited(): void
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
     $bean->version = 1;
-    $bean->updated = date("Y-m-d H:i:s");
+    $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
         $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
