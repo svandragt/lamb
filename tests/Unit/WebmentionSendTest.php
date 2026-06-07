@@ -317,6 +317,20 @@ class WebmentionSendTest extends TestCase
         $this->assertSame('skipped', R::findOne('webmentionoutbox')->status);
     }
 
+    public function testProcessSkipsNonHttpDiscoveredEndpoint(): void
+    {
+        $this->seedPending('https://other.example/a');
+
+        $fetcher = fn (string $url) => ['headers' => ['<file:///etc/passwd>; rel="webmention"'], 'body' => ''];
+        $sender = function (string $e, string $s, string $t): int {
+            $this->fail('sender must not be called for a non-http endpoint');
+        };
+
+        $result = process_outbound($fetcher, $sender);
+        $this->assertSame(1, $result['skipped']);
+        $this->assertSame('skipped', R::findOne('webmentionoutbox')->status);
+    }
+
     public function testProcessMarksFailedOnBadStatus(): void
     {
         $this->seedPending('https://other.example/a');

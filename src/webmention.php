@@ -542,6 +542,11 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
         ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
         : null;
 
+    // A target may advertise any URL as its endpoint — only POST to http(s).
+    if ($endpoint !== null && !is_valid_http_url($endpoint)) {
+        $endpoint = null;
+    }
+
     if ($endpoint === null) {
         $row->status = 'skipped';
         R::store($row);
@@ -616,6 +621,5 @@ function send_webmention(string $endpoint, string $source, string $target): int
         return 0;
     }
 
-    $status_line = $http_response_header[0] ?? '';
-    return preg_match('#\s(\d{3})\s#', $status_line, $m) ? (int) $m[1] : 0;
+    return \Lamb\Http\parse_status_line($http_response_header[0] ?? '');
 }

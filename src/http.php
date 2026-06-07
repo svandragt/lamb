@@ -92,6 +92,20 @@ function build_http_context_options(array $opts): array
 }
 
 /**
+ * Extract the status code from an HTTP status line.
+ *
+ * Accepts status lines with or without a reason phrase ("HTTP/1.1 200 OK"
+ * and "HTTP/1.1 200" are both valid — the reason phrase may be empty).
+ *
+ * @param string $line The raw status line.
+ * @return int The status code, or 0 when none can be parsed.
+ */
+function parse_status_line(string $line): int
+{
+    return preg_match('#\s(\d{3})(?:\s|$)#', $line, $m) ? (int) $m[1] : 0;
+}
+
+/**
  * Perform a single HTTP request via the streams wrapper.
  *
  * This is the shared low-level fetch used by webmention discovery/verification
@@ -115,10 +129,6 @@ function fetch(string $url, array $opts = []): ?array
     }
 
     $headers = $http_response_header;
-    $status = 0;
-    if (isset($headers[0]) && preg_match('#\s(\d{3})\s#', $headers[0], $m)) {
-        $status = (int) $m[1];
-    }
 
-    return ['status' => $status, 'headers' => $headers, 'body' => $body];
+    return ['status' => parse_status_line($headers[0] ?? ''), 'headers' => $headers, 'body' => $body];
 }

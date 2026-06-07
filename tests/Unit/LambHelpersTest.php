@@ -98,10 +98,10 @@ class LambHelpersTest extends TestCase
 
     // post_has_slug
 
-    public function testPostHasSlugReturnsEmptyForNonExistentSlug(): void
+    public function testPostHasSlugReturnsNullForNonExistentSlug(): void
     {
         $result = post_has_slug('this-slug-does-not-exist-' . uniqid());
-        $this->assertSame('', $result);
+        $this->assertNull($result);
     }
 
     public function testPostHasSlugReturnsSlugWhenPostExists(): void
@@ -114,7 +114,7 @@ class LambHelpersTest extends TestCase
         $this->assertSame($bean->slug, $result);
     }
 
-    public function testPostHasSlugReturnEmptyForDraftPost(): void
+    public function testPostHasSlugReturnsNullForDraftPost(): void
     {
         $bean = R::dispense('post');
         $bean->slug = 'draft-slug-' . uniqid();
@@ -122,7 +122,7 @@ class LambHelpersTest extends TestCase
         R::store($bean);
 
         $result = post_has_slug($bean->slug);
-        $this->assertSame('', $result);
+        $this->assertNull($result);
     }
 
     public function testPostHasSlugResolvesDraftForLoggedInAuthor(): void
