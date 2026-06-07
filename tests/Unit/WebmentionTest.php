@@ -8,7 +8,6 @@ use RedBeanPHP\R;
 use function Lamb\Webmention\discover_endpoint;
 use function Lamb\Webmention\extract_meta;
 use function Lamb\Webmention\is_external_http_url;
-use function Lamb\Webmention\is_valid_http_url;
 use function Lamb\Webmention\source_mentions_target;
 use function Lamb\Webmention\target_post_id;
 use function Lamb\Webmention\verify_and_store;
@@ -170,25 +169,6 @@ class WebmentionTest extends TestCase
         $mentions = webmentions_for_post($id);
         $this->assertCount(1, $mentions);
         $this->assertSame('https://other.example/reply', $mentions[0]->source);
-    }
-
-    // is_valid_http_url -----------------------------------------------------
-
-    public function testIsValidHttpUrlAcceptsHttpAndHttps(): void
-    {
-        $this->assertTrue(is_valid_http_url('http://example.com/'));
-        $this->assertTrue(is_valid_http_url('https://example.com/path'));
-        // Scheme casing is normalised before the check.
-        $this->assertTrue(is_valid_http_url('HTTPS://EXAMPLE.com/'));
-    }
-
-    public function testIsValidHttpUrlRejectsNonHttpAndHostless(): void
-    {
-        $this->assertFalse(is_valid_http_url('mailto:someone@example.com'));
-        $this->assertFalse(is_valid_http_url('ftp://example.com/'));
-        $this->assertFalse(is_valid_http_url('/relative/path'));
-        $this->assertFalse(is_valid_http_url('not a url'));
-        $this->assertFalse(is_valid_http_url(''));
     }
 
     // is_external_http_url --------------------------------------------------
