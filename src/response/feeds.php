@@ -366,32 +366,20 @@ function respond_search(array $args): array
 
     $data['query'] = $query;
     $data['title'] = 'Searched for "' . $query . '"';
-    $pagination = $paginated['pagination'];
-    return get_results(
-        $pagination['total_posts'],
-        $data,
-        $paginated['items'],
-        $pagination['current'],
-        $pagination['per_page'],
-        $pagination['total_pages'],
-        $pagination['offset']
-    );
+    return get_results($data, $paginated['items'], $paginated['pagination']);
 }
 
 /**
  * Builds the response array for search/tag results, including intro text and pagination.
  *
- * @param int        $total_posts  Total number of matching posts.
- * @param array      $data         Base data array to enrich.
- * @param array      $posts        Posts for the current page.
- * @param mixed      $page         Current page number.
- * @param mixed      $perPage      Items per page.
- * @param int        $total_pages  Total number of pages.
- * @param float|int  $offset       Row offset for the current page.
+ * @param array $data       Base data array to enrich.
+ * @param array $posts      Posts for the current page.
+ * @param array $pagination Pagination metadata, as built by build_pagination_meta().
  * @return array
  */
-function get_results(int $total_posts, array $data, array $posts, mixed $page, mixed $perPage, int $total_pages, float|int $offset): array
+function get_results(array $data, array $posts, array $pagination): array
 {
+    $total_posts = (int) $pagination['total_posts'];
     if ($total_posts > 0) {
         $result = ngettext("result", "results", $total_posts);
         $data['intro'] = $total_posts . " $result found.";
@@ -400,17 +388,7 @@ function get_results(int $total_posts, array $data, array $posts, mixed $page, m
     }
 
     $data['posts'] = $posts;
-
-    // Pagination metadata (same shape as paginate_posts)
-    $data['pagination'] = [
-        'current' => $page,
-        'per_page' => $perPage,
-        'total_posts' => $total_posts,
-        'total_pages' => $total_pages,
-        'prev_page' => $page > 1 ? $page - 1 : null,
-        'next_page' => $page < $total_pages ? $page + 1 : null,
-        'offset' => $offset,
-    ];
+    $data['pagination'] = $pagination;
 
     upgrade_posts($posts);
 
@@ -441,14 +419,5 @@ function respond_tag(array $args): array
 
     $data['title'] = 'Tagged with #' . $tag;
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
-    $pagination = $paginated['pagination'];
-    return get_results(
-        $pagination['total_posts'],
-        $data,
-        $paginated['items'],
-        $pagination['current'],
-        $pagination['per_page'],
-        $pagination['total_pages'],
-        $pagination['offset']
-    );
+    return get_results($data, $paginated['items'], $paginated['pagination']);
 }
