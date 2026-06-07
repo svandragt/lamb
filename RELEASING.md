@@ -109,6 +109,17 @@ gh release create <version> \
 - [ ] Announce / update any demo site if applicable.
 - [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a
       clean checkout of `release` installs and runs.
+- [ ] If a `next` branch exists (work parked for the next version — see
+      `BRANCHES`), open a PR to merge it into `main` now that the release is
+      out:
+
+      ```sh
+      git fetch origin
+      git show-ref --verify --quiet refs/remotes/origin/next && \
+        gh pr create --base main --head next \
+          --title "Merge next into main" \
+          --body "Bring parked next-version work into main after the <version> release."
+      ```
 
 ## Related
 

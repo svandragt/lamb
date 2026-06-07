@@ -101,12 +101,18 @@ function safe_upload_extension(string $filename): ?string
  * formats (webp, avif) are left untouched, and gif is passed through because it may
  * be animated — GD would flatten it to a single frame.
  *
- * @param string|null $ext A lower-case extension as returned by safe_upload_extension().
+ * Conversion also requires the gd extension: without it the original bytes are
+ * stored as-is instead of fataling on undefined GD functions.
+ *
+ * @param string|null $ext          A lower-case extension as returned by safe_upload_extension().
+ * @param bool|null   $gd_available Overrides the gd extension check (for tests); null = detect.
  * @return bool
  */
-function should_convert_to_webp(?string $ext): bool
+function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
 {
-    return in_array($ext, ['jpg', 'jpeg', 'png'], true);
+    $gd_available ??= extension_loaded('gd');
+
+    return $gd_available && in_array($ext, ['jpg', 'jpeg', 'png'], true);
 }
 
 /**

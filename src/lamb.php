@@ -396,7 +396,7 @@ function is_scheduled(OODBBean $post): bool
  * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
  * @return bool
  */
-function is_visible(OODBBean $post): bool
+function is_viewable(OODBBean $post): bool
 {
     if (empty($post->id) || $post->deleted == 1) {
         return false;
@@ -436,7 +436,34 @@ function preview_token_valid(OODBBean $post, ?string $token): bool
 }
 
 /**
- * Checks if a post with the given slug exists in the database.
+ * Issues a preview token on a draft or scheduled post when it has none, or
+ * when the existing one has expired. Published posts are left untouched.
+ *
+ * Shared by every way a draft can be made — Micropub createCallback and the
+ * web editor's create/edit handlers — so all unpublished posts get a working
+ * ?preview= link (see issues #285 and #373). The caller stores the bean.
+ *
+ * @param OODBBean $post The post to (maybe) stamp with a token.
+ * @return void
+ */
+function ensure_preview_token(OODBBean $post): void
+{
+    if ($post->draft != 1 && !is_scheduled($post)) {
+        return;
+    }
+    $expires = $post->preview_token_expires ?? '';
+    if (!empty($post->preview_token) && !empty($expires) && strtotime($expires) >= time()) {
+        return;
+    }
+    $post->preview_token         = bin2hex(random_bytes(16));
+    $post->preview_token_expires = date('Y-m-d H:i:s', time() + 86400);
+}
+
+/**
+ * Checks if a post with the given slug exists in the database and may be
+ * routed for the current request: published posts for everyone, drafts and
+ * scheduled posts for the logged-in author (matching is_viewable()) or via a
+ * valid preview token.
  *
  * @param string $lookup The slug of the post to look up.
  *
@@ -446,11 +473,10 @@ function post_has_slug(string $lookup): string|null
 {
     $post = R::findOne('post', ' slug = ? ', [$lookup]);
     if ($post === null || $post->id === 0) {
-        return '';
+        return null;
     }
-    $unpublished = $post->draft == 1 || is_scheduled($post);
-    if ($unpublished && !preview_token_valid($post, $_GET['preview'] ?? null)) {
-        return '';
+    if (!is_viewable($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
+        return null;
     }
 
     return $post->slug;

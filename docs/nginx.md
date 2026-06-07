@@ -17,6 +17,17 @@ The `data` and `src/assets` directory must be writable by the user php-fpm runs 
 
 `src/assets` is the runtime upload directory used for images dropped into posts. Theme CSS and application JavaScript live elsewhere and do not need to be writable at runtime.
 
+### Upload size limits
+
+PHP's defaults (`upload_max_filesize = 2M`, `post_max_size = 8M`) reject photos larger than 2&nbsp;MB. Raise them in your php.ini or FPM pool, for example:
+
+```text
+upload_max_filesize = 20M
+post_max_size = 25M
+```
+
+The shipped `snippets/lamb.conf` sets the matching NGINX limit (`client_max_body_size 25m;` — its default is only 1m). See [Media]({{ site.baseurl }}{% link media.md %}) for details.
+
 ```shell
 sudo chown $USER:www-data data -R
 sudo chmod g+w data -R

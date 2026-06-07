@@ -190,7 +190,7 @@ class PreviewTokenTest extends TestCase
             'preview_token_expires' => date('Y-m-d H:i:s', time() + 3600),
         ]);
 
-        $this->assertSame('', \Lamb\post_has_slug('routed-preview-draft'), 'Draft slug must not resolve without token');
+        $this->assertNull(\Lamb\post_has_slug('routed-preview-draft'), 'Draft slug must not resolve without token');
 
         $_GET['preview'] = 'secret-token';
         $this->assertSame(

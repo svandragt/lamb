@@ -475,7 +475,7 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
  * Each row's source post is re-checked before sending: rows for deleted,
  * draft, or missing posts are cancelled, and rows for still-scheduled posts
  * are left pending (untouched, no attempt counted) until publication. This
- * deliberately does not use is_visible(), which trusts logged-in sessions —
+ * deliberately does not use is_viewable(), which trusts logged-in sessions —
  * a logged-in author hitting /_cron must not leak drafts. Deferred scheduled
  * rows still occupy part of the LIMIT window; with the default of 20 that is
  * harmless.
@@ -541,6 +541,11 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
     $endpoint = is_array($fetched)
         ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
         : null;
+
+    // A target may advertise any URL as its endpoint — only POST to http(s).
+    if ($endpoint !== null && !is_valid_http_url($endpoint)) {
+        $endpoint = null;
+    }
 
     if ($endpoint === null) {
         $row->status = 'skipped';
@@ -616,6 +621,5 @@ function send_webmention(string $endpoint, string $source, string $target): int
         return 0;
     }
 
-    $status_line = $http_response_header[0] ?? '';
-    return preg_match('#\s(\d{3})\s#', $status_line, $m) ? (int) $m[1] : 0;
+    return \Lamb\Http\parse_status_line($http_response_header[0] ?? '');
 }
