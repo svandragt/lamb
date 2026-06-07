@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\Config\config_modified_timestamp;
 use function Lamb\Config\get_ini_text;
 use function Lamb\Config\load;
+use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\save_ini_text;
 
 class ConfigLoadTest extends TestCase
@@ -20,6 +21,25 @@ class ConfigLoadTest extends TestCase
         R::freeze(false);
         // Remove any cached config option so each test starts fresh
         R::exec("DELETE FROM option WHERE name = 'site_config_ini'");
+    }
+
+    // parse_ini_safe
+
+    public function testParseIniSafeParsesValidIni(): void
+    {
+        $parsed = parse_ini_safe("theme = base\n[menu_items]\nHome = /\n");
+        $this->assertSame('base', $parsed['theme']);
+        $this->assertSame(['Home' => '/'], $parsed['menu_items']);
+    }
+
+    public function testParseIniSafeReturnsEmptyArrayForBrokenIni(): void
+    {
+        $this->assertSame([], parse_ini_safe("[unclosed\n=== not ini ==="));
+    }
+
+    public function testParseIniSafeReturnsEmptyArrayForEmptyText(): void
+    {
+        $this->assertSame([], parse_ini_safe(''));
     }
 
     // get_ini_text
