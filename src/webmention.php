@@ -126,19 +126,9 @@ function target_post_id(string $target): ?int
     }
 
     $path = parse_url($target, PHP_URL_PATH) ?: '';
+    $bean = \Lamb\find_post_by_path($path);
 
-    if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
-        $bean = R::load('post', (int) $matches[1]);
-        return $bean->id ? (int) $bean->id : null;
-    }
-
-    $slug = trim($path, '/');
-    if ($slug !== '') {
-        $bean = R::findOne('post', ' slug = ? ', [$slug]);
-        return $bean ? (int) $bean->id : null;
-    }
-
-    return null;
+    return $bean !== null ? (int) $bean->id : null;
 }
 
 /**

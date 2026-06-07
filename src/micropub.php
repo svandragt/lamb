@@ -52,20 +52,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function findPostByUrl(string $url): ?OODBBean
     {
-        $path = parse_url($url, PHP_URL_PATH) ?? '';
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
 
-        if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
-            $bean = R::load('post', (int) $matches[1]);
-            return $bean->id ? $bean : null;
-        }
-
-        $slug = trim($path, '/');
-        if ($slug !== '') {
-            $bean = R::findOne('post', ' slug = ? ', [$slug]);
-            return $bean ?: null;
-        }
-
-        return null;
+        return \Lamb\find_post_by_path($path);
     }
 
     /**

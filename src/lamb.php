@@ -494,6 +494,32 @@ function post_has_slug(string $lookup): string|null
 }
 
 /**
+ * Resolves a permalink path to the post it points at.
+ *
+ * Recognises the two permalink shapes the app mints: `/status/<id>` for
+ * status posts and `/<slug>` for page-like posts. Shared by the Micropub and
+ * Webmention endpoints, which both map externally supplied URLs back to posts
+ * (each applies its own host policy before/after calling this).
+ *
+ * @param string $path The URL path (e.g. from parse_url(..., PHP_URL_PATH)).
+ * @return OODBBean|null The matching post bean, or null when none exists.
+ */
+function find_post_by_path(string $path): ?OODBBean
+{
+    if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
+        $bean = R::load('post', (int) $matches[1]);
+        return $bean->id ? $bean : null;
+    }
+
+    $slug = trim($path, '/');
+    if ($slug !== '') {
+        return R::findOne('post', ' slug = ? ', [$slug]);
+    }
+
+    return null;
+}
+
+/**
  * Deletes any redirect stored in the DB for the given slug.
  *
  * @param string $slug The from_slug to remove.
