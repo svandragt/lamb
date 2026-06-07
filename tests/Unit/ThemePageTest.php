@@ -8,6 +8,7 @@ use function Lamb\Theme\page_intro;
 use function Lamb\Theme\page_title;
 use function Lamb\Theme\site_or_page_title;
 use function Lamb\Theme\site_title;
+use function Lamb\Theme\wrap_title;
 
 class ThemePageTest extends TestCase
 {
@@ -16,6 +17,24 @@ class ThemePageTest extends TestCase
         global $config, $data;
         $config['site_title'] = 'Test Blog';
         $data = [];
+    }
+
+    // wrap_title
+
+    public function testWrapTitleWrapsInH1ForHtmlType(): void
+    {
+        $this->assertSame('<h1>Hello</h1>', wrap_title('Hello', 'html'));
+    }
+
+    public function testWrapTitleReturnsPlainTextForOtherTypes(): void
+    {
+        $this->assertSame('Hello', wrap_title('Hello', 'text'));
+    }
+
+    public function testWrapTitleEscapesHtmlOnlyWhenWrapping(): void
+    {
+        $this->assertSame('<h1>&lt;b&gt;</h1>', wrap_title('<b>', 'html'));
+        $this->assertSame('<b>', wrap_title('<b>', 'text'));
     }
 
     // site_title
