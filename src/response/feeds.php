@@ -210,6 +210,48 @@ function feed_cache(string $updated): void
 }
 
 /**
+ * Decodes and HTML-escapes the tag name from a tag-feed route's arguments.
+ *
+ * @param array $args Route arguments; the first element is the raw tag segment.
+ * @return string The sanitised tag name.
+ */
+function sanitize_tag_arg(array $args): string
+{
+    [$tag] = $args;
+
+    return htmlspecialchars(urldecode($tag));
+}
+
+/**
+ * Renders a feed template with the given feed data and terminates the request.
+ *
+ * Shared tail of all four feed responders: merge the feed data into the global
+ * view data, emit cache headers (with a conditional-GET 304 short-circuit),
+ * upgrade stale posts, render, die.
+ *
+ * @param array       $feed_data As built by get_feed_data()/get_tag_feed_data().
+ * @param string      $template  Feed template name ('feed' or 'feed_json').
+ * @param string|null $feed_url  Optional feed_url override (the JSON variants).
+ * @return never
+ */
+function emit_feed(array $feed_data, string $template, ?string $feed_url = null): never
+{
+    global $data;
+
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    if ($feed_url !== null) {
+        $data['feed_url'] = $feed_url;
+    }
+    feed_cache($data['updated']);
+    upgrade_posts($data['posts']);
+
+    part($template, '');
+    die();
+}
+
+/**
  * Responds to a feed request by fetching and rendering the Atom feed.
  *
  * @return void
@@ -217,17 +259,7 @@ function feed_cache(string $updated): void
 #[NoReturn]
 function respond_feed(): void
 {
-    global $data;
-
-    $feed_data = get_feed_data();
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed", '');
-    die();
+    emit_feed(get_feed_data(), 'feed');
 }
 
 /**
@@ -238,18 +270,7 @@ function respond_feed(): void
 #[NoReturn]
 function respond_feed_json(): void
 {
-    global $data;
-
-    $feed_data = get_feed_data();
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    $data['feed_url'] = ROOT_URL . '/feed.json';
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed_json", '');
-    die();
+    emit_feed(get_feed_data(), 'feed_json', ROOT_URL . '/feed.json');
 }
 
 /**
@@ -286,21 +307,7 @@ function get_tag_feed_data(string $tag): array
 #[NoReturn]
 function respond_tag_feed(array $args): void
 {
-    global $data;
-
-    [$tag] = $args;
-    $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
-
-    $feed_data = get_tag_feed_data($tag);
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed", '');
-    die();
+    emit_feed(get_tag_feed_data(sanitize_tag_arg($args)), 'feed');
 }
 
 /**
@@ -312,22 +319,8 @@ function respond_tag_feed(array $args): void
 #[NoReturn]
 function respond_tag_feed_json(array $args): void
 {
-    global $data;
-
-    [$tag] = $args;
-    $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
-
-    $feed_data = get_tag_feed_data($tag);
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed_json", '');
-    die();
+    $tag = sanitize_tag_arg($args);
+    emit_feed(get_tag_feed_data($tag), 'feed_json', ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json');
 }
 
 /**
