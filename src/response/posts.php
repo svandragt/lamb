@@ -120,7 +120,7 @@ function redirect_restored(mixed $args): void
 function soft_delete_post(OODBBean $post): void
 {
     $post->deleted    = 1;
-    $post->deleted_at = date('Y-m-d H:i:s');
+    $post->deleted_at = \Lamb\now();
     R::store($post);
 }
 
@@ -134,18 +134,6 @@ function restore_post(OODBBean $post): void
 {
     $post->deleted    = null;
     $post->deleted_at = null;
-    R::store($post);
-}
-
-/**
- * Publish a draft post by clearing its draft flag.
- *
- * @param OODBBean $post
- * @return void
- */
-function publish_post(OODBBean $post): void
-{
-    $post->draft = null;
     R::store($post);
 }
 
@@ -182,7 +170,7 @@ function redirect_edited(): void
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
     $bean->version = 1;
-    $bean->updated = date("Y-m-d H:i:s");
+    $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
         $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';

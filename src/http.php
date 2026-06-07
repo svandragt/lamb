@@ -106,6 +106,38 @@ function parse_status_line(string $line): int
 }
 
 /**
+ * POST a www-form-urlencoded body and return the response HTTP status code.
+ *
+ * The shared outbound notification primitive: webmention sending and WebSub
+ * hub pings both POST a small form and only care about the status (WebSub
+ * ignores even that — it is fire-and-forget). Built on {@see fetch};
+ * follow_location/max_redirects are omitted so PHP's stream defaults apply,
+ * matching the hand-rolled contexts this replaces.
+ *
+ * @param string               $url        The endpoint to POST to.
+ * @param array<string, mixed> $fields     Form fields for the request body.
+ * @param int                  $timeout    Socket timeout in seconds.
+ * @param string               $user_agent User-Agent header value.
+ * @return int HTTP status code, or 0 on transport failure.
+ */
+function post_form(string $url, array $fields, int $timeout, string $user_agent): int
+{
+    $result = fetch($url, [
+        'method' => 'POST',
+        'headers' => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'User-Agent: ' . $user_agent,
+        ],
+        'content' => http_build_query($fields),
+        'timeout' => $timeout,
+        'follow_location' => null,
+        'max_redirects' => null,
+    ]);
+
+    return $result === null ? 0 : $result['status'];
+}
+
+/**
  * Perform a single HTTP request via the streams wrapper.
  *
  * This is the shared low-level fetch used by webmention discovery/verification

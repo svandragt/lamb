@@ -88,18 +88,10 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
  */
 function send_ping(string $hub, string $topic): void
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => implode("\r\n", [
-                'Content-Type: application/x-www-form-urlencoded',
-                'User-Agent: Lamb-WebSub',
-            ]),
-            'content' => http_build_query(['hub.mode' => 'publish', 'hub.url' => $topic]),
-            'timeout' => WEBSUB_PING_TIMEOUT,
-            'ignore_errors' => true,
-        ],
-    ]);
-
-    @file_get_contents($hub, false, $context);
+    \Lamb\Http\post_form(
+        $hub,
+        ['hub.mode' => 'publish', 'hub.url' => $topic],
+        WEBSUB_PING_TIMEOUT,
+        'Lamb-WebSub'
+    );
 }

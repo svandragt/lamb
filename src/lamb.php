@@ -19,6 +19,17 @@ use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
 
 /**
+ * Returns the current time in the canonical `Y-m-d H:i:s` format used for every
+ * datetime column in the app, so the format (and timezone basis) lives in one place.
+ *
+ * @return string The current datetime string.
+ */
+function now(): string
+{
+    return date('Y-m-d H:i:s');
+}
+
+/**
  * Retrieves the tags from the given HTML.
  *
  * @param string $html The HTML content to search for tags.
@@ -249,7 +260,7 @@ function apply_scheduling(OODBBean $bean, array $front_matter, mixed $previous_c
     // edits, the feed date for ingested items) so an unparseable front-matter date
     // falls back to it rather than leaving a non-date string in the column.
     $bean->created = normalize_datetime($front_matter['created'])
-        ?? ($previous_created ?: date('Y-m-d H:i:s'));
+        ?? ($previous_created ?: now());
     // Pin the resolved date back into the body so relative phrases like
     // "next friday" don't drift to a new date on the next edit.
     $bean->body = persist_resolved_created($bean->body, $bean->created);
@@ -304,7 +315,7 @@ function not_scheduled_clause(): array
 {
     return [
         'sql'    => ' (created IS NULL OR created <= ?) ',
-        'params' => [date('Y-m-d H:i:s')],
+        'params' => [now()],
     ];
 }
 
@@ -380,7 +391,7 @@ function normalize_datetime(mixed $value): ?string
  */
 function is_scheduled(OODBBean $post): bool
 {
-    return !empty($post->created) && $post->created > date('Y-m-d H:i:s');
+    return !empty($post->created) && $post->created > now();
 }
 
 /**
@@ -480,6 +491,32 @@ function post_has_slug(string $lookup): string|null
     }
 
     return $post->slug;
+}
+
+/**
+ * Resolves a permalink path to the post it points at.
+ *
+ * Recognises the two permalink shapes the app mints: `/status/<id>` for
+ * status posts and `/<slug>` for page-like posts. Shared by the Micropub and
+ * Webmention endpoints, which both map externally supplied URLs back to posts
+ * (each applies its own host policy before/after calling this).
+ *
+ * @param string $path The URL path (e.g. from parse_url(..., PHP_URL_PATH)).
+ * @return OODBBean|null The matching post bean, or null when none exists.
+ */
+function find_post_by_path(string $path): ?OODBBean
+{
+    if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
+        $bean = R::load('post', (int) $matches[1]);
+        return $bean->id ? $bean : null;
+    }
+
+    $slug = trim($path, '/');
+    if ($slug !== '') {
+        return R::findOne('post', ' slug = ? ', [$slug]);
+    }
+
+    return null;
 }
 
 /**

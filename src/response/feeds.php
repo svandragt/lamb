@@ -110,7 +110,7 @@ function respond_scheduled(): array
     Security\require_login();
 
     $data['title'] = 'Scheduled';
-    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [\Lamb\now()]);
     $data['posts'] = $paginated['items'];
     $data['pagination'] = $paginated['pagination'];
 
@@ -124,7 +124,7 @@ function respond_scheduled(): array
  */
 function count_scheduled(): int
 {
-    return R::count('post', SQL_IS_SCHEDULED, [date('Y-m-d H:i:s')]);
+    return R::count('post', SQL_IS_SCHEDULED, [\Lamb\now()]);
 }
 
 /**
@@ -149,7 +149,7 @@ function redirect_search(string $query): void
 function get_feed_updated_date(array $posts): string
 {
     $first = reset($posts);
-    return $first !== false ? $first->updated : date('Y-m-d H:i:s');
+    return $first !== false ? $first->updated : \Lamb\now();
 }
 
 /**
@@ -179,7 +179,7 @@ function get_feed_data(): array
 
     $first_post = reset($posts);
     return [
-        'updated'  => $first_post['updated'] ?? date('Y-m-d H:i:s'),
+        'updated'  => $first_post['updated'] ?? \Lamb\now(),
         'title'    => $config['site_title'],
         'feed_url' => ROOT_URL . '/feed',
         'posts'    => $posts,
@@ -210,6 +210,48 @@ function feed_cache(string $updated): void
 }
 
 /**
+ * Decodes and HTML-escapes the tag name from a tag-feed route's arguments.
+ *
+ * @param array $args Route arguments; the first element is the raw tag segment.
+ * @return string The sanitised tag name.
+ */
+function sanitize_tag_arg(array $args): string
+{
+    [$tag] = $args;
+
+    return htmlspecialchars(urldecode($tag));
+}
+
+/**
+ * Renders a feed template with the given feed data and terminates the request.
+ *
+ * Shared tail of all four feed responders: merge the feed data into the global
+ * view data, emit cache headers (with a conditional-GET 304 short-circuit),
+ * upgrade stale posts, render, die.
+ *
+ * @param array       $feed_data As built by get_feed_data()/get_tag_feed_data().
+ * @param string      $template  Feed template name ('feed' or 'feed_json').
+ * @param string|null $feed_url  Optional feed_url override (the JSON variants).
+ * @return never
+ */
+function emit_feed(array $feed_data, string $template, ?string $feed_url = null): never
+{
+    global $data;
+
+    foreach ($feed_data as $key => $value) {
+        $data[$key] = $value;
+    }
+    if ($feed_url !== null) {
+        $data['feed_url'] = $feed_url;
+    }
+    feed_cache($data['updated']);
+    upgrade_posts($data['posts']);
+
+    part($template, '');
+    die();
+}
+
+/**
  * Responds to a feed request by fetching and rendering the Atom feed.
  *
  * @return void
@@ -217,17 +259,7 @@ function feed_cache(string $updated): void
 #[NoReturn]
 function respond_feed(): void
 {
-    global $data;
-
-    $feed_data = get_feed_data();
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed", '');
-    die();
+    emit_feed(get_feed_data(), 'feed');
 }
 
 /**
@@ -238,18 +270,7 @@ function respond_feed(): void
 #[NoReturn]
 function respond_feed_json(): void
 {
-    global $data;
-
-    $feed_data = get_feed_data();
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    $data['feed_url'] = ROOT_URL . '/feed.json';
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed_json", '');
-    die();
+    emit_feed(get_feed_data(), 'feed_json', ROOT_URL . '/feed.json');
 }
 
 /**
@@ -286,21 +307,7 @@ function get_tag_feed_data(string $tag): array
 #[NoReturn]
 function respond_tag_feed(array $args): void
 {
-    global $data;
-
-    [$tag] = $args;
-    $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
-
-    $feed_data = get_tag_feed_data($tag);
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed", '');
-    die();
+    emit_feed(get_tag_feed_data(sanitize_tag_arg($args)), 'feed');
 }
 
 /**
@@ -312,22 +319,8 @@ function respond_tag_feed(array $args): void
 #[NoReturn]
 function respond_tag_feed_json(array $args): void
 {
-    global $data;
-
-    [$tag] = $args;
-    $tag = urldecode($tag);
-    $tag = htmlspecialchars($tag);
-
-    $feed_data = get_tag_feed_data($tag);
-    foreach ($feed_data as $key => $value) {
-        $data[$key] = $value;
-    }
-    $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json';
-    feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
-
-    part("feed_json", '');
-    die();
+    $tag = sanitize_tag_arg($args);
+    emit_feed(get_tag_feed_data($tag), 'feed_json', ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed.json');
 }
 
 /**
@@ -366,32 +359,20 @@ function respond_search(array $args): array
 
     $data['query'] = $query;
     $data['title'] = 'Searched for "' . $query . '"';
-    $pagination = $paginated['pagination'];
-    return get_results(
-        $pagination['total_posts'],
-        $data,
-        $paginated['items'],
-        $pagination['current'],
-        $pagination['per_page'],
-        $pagination['total_pages'],
-        $pagination['offset']
-    );
+    return get_results($data, $paginated['items'], $paginated['pagination']);
 }
 
 /**
  * Builds the response array for search/tag results, including intro text and pagination.
  *
- * @param int        $total_posts  Total number of matching posts.
- * @param array      $data         Base data array to enrich.
- * @param array      $posts        Posts for the current page.
- * @param mixed      $page         Current page number.
- * @param mixed      $perPage      Items per page.
- * @param int        $total_pages  Total number of pages.
- * @param float|int  $offset       Row offset for the current page.
+ * @param array $data       Base data array to enrich.
+ * @param array $posts      Posts for the current page.
+ * @param array $pagination Pagination metadata, as built by build_pagination_meta().
  * @return array
  */
-function get_results(int $total_posts, array $data, array $posts, mixed $page, mixed $perPage, int $total_pages, float|int $offset): array
+function get_results(array $data, array $posts, array $pagination): array
 {
+    $total_posts = (int) $pagination['total_posts'];
     if ($total_posts > 0) {
         $result = ngettext("result", "results", $total_posts);
         $data['intro'] = $total_posts . " $result found.";
@@ -400,17 +381,7 @@ function get_results(int $total_posts, array $data, array $posts, mixed $page, m
     }
 
     $data['posts'] = $posts;
-
-    // Pagination metadata (same shape as paginate_posts)
-    $data['pagination'] = [
-        'current' => $page,
-        'per_page' => $perPage,
-        'total_posts' => $total_posts,
-        'total_pages' => $total_pages,
-        'prev_page' => $page > 1 ? $page - 1 : null,
-        'next_page' => $page < $total_pages ? $page + 1 : null,
-        'offset' => $offset,
-    ];
+    $data['pagination'] = $pagination;
 
     upgrade_posts($posts);
 
@@ -441,14 +412,5 @@ function respond_tag(array $args): array
 
     $data['title'] = 'Tagged with #' . $tag;
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
-    $pagination = $paginated['pagination'];
-    return get_results(
-        $pagination['total_posts'],
-        $data,
-        $paginated['items'],
-        $pagination['current'],
-        $pagination['per_page'],
-        $pagination['total_pages'],
-        $pagination['offset']
-    );
+    return get_results($data, $paginated['items'], $paginated['pagination']);
 }
