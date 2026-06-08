@@ -130,8 +130,9 @@ function build_pagination_meta(int $page, int $per_page, int $total_posts, int $
 function redirect_404(string $fallback): void
 {
     global $request_uri;
-    header("Location: $fallback$request_uri");
-    die("Redirecting to $fallback$request_uri");
+    $location = \Lamb\Http\sanitize_location($fallback . $request_uri);
+    header("Location: $location");
+    die();
 }
 
 /**
@@ -169,11 +170,9 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
 #[NoReturn]
 function redirect_uri(string $where): never
 {
-    if (empty($where)) {
-        $where = '/';
-    }
-    header("Location: $where");
-    die("Redirecting to $where");
+    $location = \Lamb\Http\sanitize_location($where);
+    header("Location: $location");
+    die();
 }
 
 /**

@@ -136,8 +136,9 @@ function count_scheduled(): int
 #[NoReturn]
 function redirect_search(string $query): void
 {
-    header("Location: /search/$query");
-    die("Redirecting to /search/$query");
+    $location = \Lamb\Http\sanitize_location("/search/$query");
+    header("Location: $location");
+    die();
 }
 
 /**
