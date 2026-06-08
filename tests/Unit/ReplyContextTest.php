@@ -51,6 +51,18 @@ class ReplyContextTest extends TestCase
         $this->assertNull($bean->{'in-reply-to'});
     }
 
+    public function testCustomMultiWordKeyDoesNotCrashOnStore(): void
+    {
+        // Key normalisation rewrites `reading_time` to `reading-time`; a dashed
+        // key is an invalid RedBean column, so the blind copy in
+        // apply_frontmatter() must skip it rather than crash on store.
+        $bean = populate_bean("---\ntitle: Hi\nreading_time: 5\n---\nBody");
+        $id = R::store($bean);
+        $this->assertGreaterThan(0, $id);
+        $this->assertNull($bean->{'reading-time'});
+        $this->assertNull($bean->{'reading_time'});
+    }
+
     public function testListInReplyToUsesFirstEntry(): void
     {
         // A YAML list (Micropub clients may send multiple reply targets) collapses

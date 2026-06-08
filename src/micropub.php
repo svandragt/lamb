@@ -431,7 +431,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = $bean->body ?? '';
         $matter      = parse_matter($currentBody);
         $title       = $matter['title'] ?? null;
-        $replyTo     = $matter['in-reply-to'] ?? $matter['in_reply_to'] ?? null;
+        $replyTo     = $matter['in-reply-to'] ?? null;
 
         $tags      = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
