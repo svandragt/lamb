@@ -15,6 +15,7 @@ const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (de
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
 
@@ -153,6 +154,14 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
+    // Restore an iOS Smart-Punctuation front-matter fence (e.g. a single em
+    // dash for a typed `---`) before parsing, and persist the normalised body.
+    // This is the single choke point every save path runs through — web
+    // create/edit, Micropub create/update, feed ingestion, upgrade re-parse —
+    // so the recovery is not limited to populate_bean(). Idempotent for bodies
+    // already using a literal `---` fence.
+    $bean->body = normalize_frontmatter_fence($bean->body);
+
     $markdown = render_body($bean->body);
 
     $front_matter = parse_matter($bean->body);

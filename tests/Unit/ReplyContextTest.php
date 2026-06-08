@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\parse_bean;
 use function Lamb\Post\populate_bean;
 use function Lamb\Theme\the_reply_context;
 
@@ -59,6 +60,28 @@ class ReplyContextTest extends TestCase
             "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
         );
         $this->assertSame('https://first.example/post', $bean->in_reply_to);
+    }
+
+    public function testEditPathNormalizesSmartPunctuationFence(): void
+    {
+        // The web edit and Micropub update paths assign $bean->body directly and
+        // call parse_bean() without going through populate_bean(). An iOS
+        // Smart-Punctuation fence (`—-`) added on edit must still be recognised,
+        // its metadata extracted, and the stored body normalised to `---` so the
+        // post no longer renders the fence as literal text.
+        $em = "\xE2\x80\x94"; // — em dash (U+2014)
+
+        $bean = R::dispense('post');
+        $bean->body = "$em-\nin-reply-to: https://other.example/post\n$em-\n\nReplying.";
+        parse_bean($bean);
+
+        $this->assertSame('https://other.example/post', $bean->in_reply_to);
+        $this->assertSame(
+            "---\nin-reply-to: https://other.example/post\n---\n\nReplying.",
+            $bean->body
+        );
+        $this->assertStringNotContainsString($em, (string) $bean->transformed);
+        $this->assertStringContainsString('Replying.', (string) $bean->transformed);
     }
 
     // the_reply_context helper ----------------------------------------------

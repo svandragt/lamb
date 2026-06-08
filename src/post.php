@@ -72,10 +72,13 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
  *
  * Typing `---` on iOS produces em/en dashes (commonly `—-`), which stops the
  * fence from being recognised as a front-matter delimiter. When the body opens
- * with a dash-only fence line and has a matching closing fence line, both are
- * normalised back to a literal `---`. Dashes anywhere else (post body, em-dash
- * punctuation, signatures) are left untouched, and the surrounding whitespace
- * and line endings are preserved.
+ * with a dash-only fence line (two or more dash-like characters) and has a
+ * matching closing fence line, both are normalised back to a literal `---`. A
+ * single dash-like character is never treated as a fence: a lone em/en dash is
+ * ordinary punctuation (or a thematic break) far more often than a mangled
+ * fence, and a lone hyphen could swallow body content. Dashes anywhere else
+ * (post body, em-dash punctuation, signatures) are left untouched, and the
+ * surrounding whitespace and line endings are preserved.
  *
  * @param string $body The raw post body.
  * @return string The body with a normalised opening/closing front-matter fence.
