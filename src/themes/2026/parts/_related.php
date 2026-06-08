@@ -19,7 +19,7 @@ if ($current === null) {
 
 $current_id = (int) $current->id;
 $body = (string) $current->body;
-$related = related_posts($body, $current_id)['posts'] ?? [];
+$related = related_posts($body, $current_id)['posts'];
 
 // Hide menu items from the related list.
 $related = array_values(array_filter($related, static function ($bean) {
@@ -52,7 +52,8 @@ $primary_tag = $tags[0] ?? null;
                 $title = mb_strimwidth($excerpt, 0, 90, '…');
                 $excerpt = '';
             }
-            $human = isset($bean->created) ? human_time(strtotime((string) $bean->created)) : '';
+            $created_ts = isset($bean->created) ? strtotime((string) $bean->created) : false;
+            $human = $created_ts !== false ? human_time($created_ts) : '';
             ?>
             <li class="related-item">
                 <?php if ($human !== '') : ?>

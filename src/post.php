@@ -119,7 +119,7 @@ function split_frontmatter(string $body): array
  * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
  * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
- * @return array An associative array of parsed YAML metadata. Returns an empty array if the YAML is invalid or absent.
+ * @return array<int|string, mixed> An associative array of parsed YAML metadata. Returns an empty array if the YAML is invalid or absent.
  */
 function parse_matter(string $body): array
 {
@@ -163,8 +163,8 @@ function parse_matter(string $body): array
  * sequence indices) are left untouched. When two source keys normalise to the
  * same canonical key, the later one wins.
  *
- * @param array $matter The parsed front matter.
- * @return array The front matter with canonicalised keys.
+ * @param array<int|string, mixed> $matter The parsed front matter.
+ * @return array<int|string, mixed> The front matter with canonicalised keys.
  */
 function normalize_matter_keys(array $matter): array
 {
@@ -204,7 +204,7 @@ function inject_title_matter(string $body, string $title): string
 
 function slugify(string $text): string
 {
-    return strtolower(preg_replace('/\W+/m', "-", $text));
+    return strtolower(preg_replace('/\W+/m', "-", $text) ?? $text);
 }
 
 /**
@@ -357,7 +357,7 @@ function finalize_slug(OODBBean $bean): bool
  * inline tag renderer (Lamb\parse_tags).
  *
  * @param string $tag The tag to match.
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function get_tag_search_conditions(string $tag): array
 {
@@ -388,7 +388,7 @@ function body_has_tag(string $tag, string $body): bool
  *
  * @param string $tag The tag to search for within post content.
  *
- * @return array An array of posts that match the specified tag.
+ * @return list<\RedBeanPHP\OODBBean> An array of posts that match the specified tag.
  */
 function posts_by_tag(string $tag): array
 {

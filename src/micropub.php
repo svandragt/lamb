@@ -29,8 +29,8 @@ class LambMicropubAdapter extends MicropubAdapter
      * Return the source properties of a post identified by URL.
      *
      * @param string $url
-     * @param array|null $properties Specific properties to return; null means all.
-     * @return array|false
+     * @param list<string>|null $properties Specific properties to return; null means all.
+     * @return array{type: list<string>, properties: array<string, mixed>}|false
      */
     public function sourceQueryCallback(string $url, ?array $properties = null)
     {
@@ -65,7 +65,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Convert a post bean to a flat MF2 properties array.
      *
      * @param OODBBean $bean
-     * @return array
+     * @return array<string, mixed>
      */
     private function beanToMf2Properties(OODBBean $bean): array
     {
@@ -74,7 +74,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $content = trim($content);
 
         // Strip trailing hashtags — categories appended by buildBody during creation.
-        $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content));
+        $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content) ?? $content);
 
         $props = ['content' => [$content]];
 
@@ -104,7 +104,7 @@ class LambMicropubAdapter extends MicropubAdapter
         if (strtolower($request->getMethod()) === 'get' && ($request->getQueryParams()['q'] ?? '') === 'config') {
             $this->request = $request;
             $configResult = $this->configurationQueryCallback($request->getQueryParams());
-            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult));
+            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult) ?: '');
         }
 
         return parent::handleRequest($request);
@@ -114,7 +114,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Verify the bearer token by introspecting it against the configured token endpoint.
      *
      * @param string $token
-     * @return array|false
+     * @return array{me: mixed, scope: list<string>}|false
      */
     public function verifyAccessTokenCallback(string $token)
     {
@@ -144,7 +144,7 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param string $token
      * @param string $endpoint
-     * @return array|null
+     * @return array<string, mixed>|null
      */
     protected function introspectToken(string $token, string $endpoint): ?array
     {
@@ -176,9 +176,9 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Handle a micropub create request.
      *
-     * @param array $data  Normalised microformats2 data.
-     * @param array $uploadedFiles
-     * @return string|array|\Psr\Http\Message\ResponseInterface
+     * @param array<string, mixed> $data  Normalised microformats2 data.
+     * @param array<string, mixed> $uploadedFiles
+     * @return string|array<string, mixed>|\Psr\Http\Message\ResponseInterface
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
@@ -192,7 +192,7 @@ class LambMicropubAdapter extends MicropubAdapter
             return new Response(401, ['content-type' => 'application/json'], json_encode([
                 'error' => 'insufficient_scope',
                 'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]));
+            ]) ?: '');
         }
 
         $props = $data['properties'] ?? [];
@@ -257,8 +257,8 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Return the configuration query response including an empty syndicate-to list.
      *
-     * @param array $params
-     * @return array
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
      */
     public function configurationQueryCallback(array $params): array
     {
@@ -311,8 +311,8 @@ class LambMicropubAdapter extends MicropubAdapter
      * Handle a micropub update request (replace/add/delete operations).
      *
      * @param string $url
-     * @param array  $actions
-     * @return true|string|array|\Psr\Http\Message\ResponseInterface
+     * @param array<string, mixed>  $actions
+     * @return true|string|array<string, mixed>|\Psr\Http\Message\ResponseInterface
      */
     public function updateCallback(string $url, array $actions)
     {
@@ -326,7 +326,7 @@ class LambMicropubAdapter extends MicropubAdapter
             return new Response(401, ['content-type' => 'application/json'], json_encode([
                 'error'             => 'insufficient_scope',
                 'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]));
+            ]) ?: '');
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
@@ -363,9 +363,9 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Apply an add operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean     $bean
+     * @param string       $property
+     * @param list<string> $values
      * @return void
      */
     private function applyAdd(OODBBean $bean, string $property, array $values): void
@@ -392,9 +392,9 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Apply a delete-values operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean     $bean
+     * @param string       $property
+     * @param list<string> $values
      * @return void
      */
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
@@ -407,9 +407,9 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Apply a replace operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean    $bean
+     * @param string      $property
+     * @param list<mixed> $values
      * @return void
      */
     private function applyReplace(OODBBean $bean, string $property, array $values): void
@@ -453,8 +453,8 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Save uploaded photo files to the assets directory and return their public URLs.
      *
-     * @param array $uploadedFiles Associative array of field name → UploadedFileInterface (or array thereof).
-     * @return string[]
+     * @param array<string, mixed> $uploadedFiles Associative array of field name → UploadedFileInterface (or array thereof).
+     * @return list<string>
      */
     private function saveUploadedPhotos(array $uploadedFiles): array
     {
@@ -502,7 +502,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Extract content from micropub properties.
      * Returns ['content' => string|null, 'is_html' => bool].
      *
-     * @param array $props
+     * @param array<string, mixed> $props
      * @return array{content: string|null, is_html: bool}
      */
     private function extractContent(array $props): array
@@ -526,7 +526,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Build a Lamb post body (YAML front matter + markdown content).
      *
-     * @param array  $props   Micropub properties.
+     * @param array<string, mixed> $props   Micropub properties.
      * @param string $content Plain-text body content.
      * @return string
      */
@@ -565,7 +565,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Serialize any extra nested MF2 properties (not content/name/category/photo/published)
      * as a JSON code block so they are preserved in storage.
      *
-     * @param array $props
+     * @param array<string, mixed> $props
      * @return string
      */
     private function buildExtraProperties(array $props): string
@@ -600,7 +600,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Convert an array of photo URLs to newline-separated Markdown images.
      *
-     * @param array $photos
+     * @param array<int, mixed> $photos
      * @return string
      */
     private function buildPhotos(array $photos): string
@@ -624,7 +624,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Convert an array of category strings to space-separated hashtags.
      *
-     * @param array $categories
+     * @param array<int, mixed> $categories
      * @return string
      */
     private function buildTags(array $categories): string
@@ -664,8 +664,9 @@ function respond_micropub(): void
         $psr7Files = [];
         foreach ($_FILES as $field => $info) {
             if (is_array($info['tmp_name'])) {
+                $fieldFiles = [];
                 foreach ($info['tmp_name'] as $i => $tmpName) {
-                    $psr7Files[$field][] = new UploadedFile(
+                    $fieldFiles[] = new UploadedFile(
                         $tmpName,
                         (int) $info['size'][$i],
                         (int) $info['error'][$i],
@@ -673,6 +674,7 @@ function respond_micropub(): void
                         $info['type'][$i]
                     );
                 }
+                $psr7Files[$field] = $fieldFiles;
             } else {
                 $psr7Files[$field] = new UploadedFile(
                     $info['tmp_name'],

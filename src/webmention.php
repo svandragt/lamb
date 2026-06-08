@@ -26,7 +26,7 @@ const WEBMENTION_FETCH_TIMEOUT = 10;
  * verifies them, and persists a verified mention. Always terminates the
  * request with a plain-text response.
  *
- * @param array $_args Unused route arguments.
+ * @param array<int, string> $_args Unused route arguments.
  * @return void
  */
 #[NoReturn]
@@ -318,7 +318,7 @@ function discover_endpoint(string $html, array $link_headers, string $target_url
  */
 function rel_has_webmention(string $rel): bool
 {
-    foreach (preg_split('/\s+/', strtolower($rel)) as $token) {
+    foreach (preg_split('/\s+/', strtolower($rel)) ?: [] as $token) {
         if (trim($token, " \t\"'") === 'webmention') {
             return true;
         }
@@ -498,7 +498,7 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
  * @param OODBBean $row
  * @param callable $fetcher fn(string $url): ?array{headers: string[], body: string}
  * @param callable $sender  fn(string $endpoint, string $source, string $target): int
- * @return string|null Stat bucket name, or null when the row is deferred.
+ * @return 'sent'|'failed'|'skipped'|'cancelled'|null Stat bucket name, or null when the row is deferred.
  */
 function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
 {

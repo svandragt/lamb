@@ -19,6 +19,7 @@ if (empty($data['posts'])) :
     <?php
 else :
     foreach ($data['posts'] as $bean) :
+        /** @var \RedBeanPHP\OODBBean $bean */
         if (is_menu_item($bean->is_menu_item ?? $bean->id)) :
             continue;
         endif;
