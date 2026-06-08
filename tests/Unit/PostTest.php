@@ -10,6 +10,7 @@ use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Post\slugify;
+use function Lamb\render_body;
 
 class PostTest extends TestCase
 {
@@ -194,6 +195,63 @@ class PostTest extends TestCase
         $result = parse_matter($body);
         $this->assertSame('custom-slug', $result['slug']);
     }
+
+    // parse_matter — front matter is a *leading* fence only
+
+    public function testParseMatterIgnoresKeyValueLineAfterBodyContent()
+    {
+        // A `key: value` line after a `---` that is *not* the document's leading
+        // fence is body, not front matter. It must not be parsed (and must not
+        // become a bean column).
+        $body = "Check this out\n---\nNote: this is important";
+        $this->assertSame([], parse_matter($body));
+    }
+
+    public function testParseMatterIgnoresInlineTripleDash()
+    {
+        $this->assertSame([], parse_matter('Just a thought --- or three.'));
+    }
+
+    public function testParseMatterReadsLeadingFrontMatterDespiteBodyHorizontalRule()
+    {
+        $body = "---\ntitle: Hello\n---\n\nIntro\n\n---\n\nOutro";
+        $result = parse_matter($body);
+        $this->assertSame('Hello', $result['title']);
+        $this->assertSame('hello', $result['slug']);
+    }
+
+    // render_body — body `---` (horizontal rules, diffs, code) is preserved
+
+    public function testRenderBodyPreservesContentAroundHorizontalRule()
+    {
+        $html = render_body("First paragraph.\n\n---\n\nSecond paragraph.");
+        $this->assertStringContainsString('First paragraph.', $html);
+        $this->assertStringContainsString('Second paragraph.', $html);
+        $this->assertStringContainsString('<hr', $html);
+    }
+
+    public function testRenderBodyPreservesBodyAfterLeadingFrontMatter()
+    {
+        $html = render_body("---\ntitle: Hello\n---\n\nIntro\n\n---\n\nOutro");
+        $this->assertStringNotContainsString('title: Hello', $html);
+        $this->assertStringContainsString('Intro', $html);
+        $this->assertStringContainsString('Outro', $html);
+    }
+
+    public function testRenderBodyPreservesFencedCodeBlockContainingTripleDash()
+    {
+        $body = "Here's a diff:\n\n```diff\n--- a/file\n+++ b/file\n```\n\nAfter the code.";
+        $html = render_body($body);
+        // The lead-in line is dropped by the broken explode('---') split.
+        $this->assertStringContainsString("Here's a diff:", $html);
+        $this->assertStringContainsString('a/file', $html);
+        $this->assertStringContainsString('b/file', $html);
+        $this->assertStringContainsString('After the code.', $html);
+        // The diff lines must stay inside a code block, not leak into a paragraph.
+        $this->assertStringContainsString('<code', $html);
+    }
+
+    // parse_matter — key normalisation (case-insensitive, underscores ↔ dashes)
 
     public function testParseMatterLowercasesCapitalisedKeys()
     {

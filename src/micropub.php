@@ -21,6 +21,7 @@ use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\split_frontmatter;
 
 class LambMicropubAdapter extends MicropubAdapter
 {
@@ -69,8 +70,8 @@ class LambMicropubAdapter extends MicropubAdapter
     private function beanToMf2Properties(OODBBean $bean): array
     {
         $body = $bean->body ?? '';
-        $parts = explode('---', $body, 3);
-        $content = trim(count($parts) === 3 ? $parts[2] : $body);
+        [, $content] = split_frontmatter($body);
+        $content = trim($content);
 
         // Strip trailing hashtags — categories appended by buildBody during creation.
         $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content));

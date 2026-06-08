@@ -72,10 +72,13 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
  *
  * Typing `---` on iOS produces em/en dashes (commonly `—-`), which stops the
  * fence from being recognised as a front-matter delimiter. When the body opens
- * with a dash-only fence line and has a matching closing fence line, both are
- * normalised back to a literal `---`. Dashes anywhere else (post body, em-dash
- * punctuation, signatures) are left untouched, and the surrounding whitespace
- * and line endings are preserved.
+ * with a dash-only fence line (two or more dash-like characters) and has a
+ * matching closing fence line, both are normalised back to a literal `---`. A
+ * single dash-like character is never treated as a fence: a lone em/en dash is
+ * ordinary punctuation (or a thematic break) far more often than a mangled
+ * fence, and a lone hyphen could swallow body content. Dashes anywhere else
+ * (post body, em-dash punctuation, signatures) are left untouched, and the
+ * surrounding whitespace and line endings are preserved.
  *
  * @param string $body The raw post body.
  * @return string The body with a normalised opening/closing front-matter fence.
@@ -90,6 +93,29 @@ function normalize_frontmatter_fence(string $body): string
 }
 
 /**
+ * Splits a body into its leading YAML front-matter block and the remaining
+ * content.
+ *
+ * Front matter is recognised only as a *leading* fenced block: a `---` line at
+ * the very start of the body, the YAML up to the next `---` line on its own,
+ * and everything after that as content. A `---` anywhere else — a Markdown
+ * horizontal rule, a `--- a/file` diff line, or `---` inside a fenced code
+ * block — is body and is preserved verbatim. Bodies without a leading fence
+ * return an empty YAML string and the body unchanged.
+ *
+ * @param string $body The raw post body.
+ * @return array{0: string, 1: string} The YAML block (without fences) and the content.
+ */
+function split_frontmatter(string $body): array
+{
+    if (preg_match('/\A---[ \t]*\R(.*?)\R?---[ \t]*(?:\R|\z)/s', $body, $m)) {
+        return [$m[1], substr($body, strlen($m[0]))];
+    }
+
+    return ['', $body];
+}
+
+/**
  * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
  * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
@@ -97,15 +123,16 @@ function normalize_frontmatter_fence(string $body): string
  */
 function parse_matter(string $body): array
 {
-    $matter = null;
-    $text = explode('---', $body);
+    [$yaml] = split_frontmatter($body);
+    if ($yaml === '') {
+        return [];
+    }
+
     try {
-        if (isset($text[1])) {
-            // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
-            // author's typed wall-clock time, instead of coercing them to UTC Unix
-            // timestamps (which would shift the time by the server's timezone offset).
-            $matter = Yaml::parse($text[1], Yaml::PARSE_DATETIME);
-        }
+        // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
+        // author's typed wall-clock time, instead of coercing them to UTC Unix
+        // timestamps (which would shift the time by the server's timezone offset).
+        $matter = Yaml::parse($yaml, Yaml::PARSE_DATETIME);
     } catch (ParseException) {
         // Invalid YAML
         return [];

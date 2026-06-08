@@ -15,8 +15,10 @@ const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (de
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
+use function Lamb\Post\split_frontmatter;
 
 /**
  * Returns the current time in the canonical `Y-m-d H:i:s` format used for every
@@ -153,6 +155,14 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
+    // Restore an iOS Smart-Punctuation front-matter fence (e.g. a single em
+    // dash for a typed `---`) before parsing, and persist the normalised body.
+    // This is the single choke point every save path runs through — web
+    // create/edit, Micropub create/update, feed ingestion, upgrade re-parse —
+    // so the recovery is not limited to populate_bean(). Idempotent for bodies
+    // already using a literal `---` fence.
+    $bean->body = normalize_frontmatter_fence($bean->body);
+
     $markdown = render_body($bean->body);
 
     $front_matter = parse_matter($bean->body);
@@ -168,8 +178,10 @@ function parse_bean(OODBBean $bean): void
 }
 
 /**
- * Renders the Markdown body (everything after the front-matter block) to HTML
- * via LambDown with safe mode enabled.
+ * Renders the Markdown body (everything after the leading front-matter block)
+ * to HTML via LambDown with safe mode enabled. A `---` in the body itself — a
+ * horizontal rule, a diff line, or `---` inside a fenced code block — is left
+ * for the Markdown parser to handle rather than being mistaken for a fence.
  *
  * @param string $body The raw post body, optionally prefixed by front matter.
  * @return string The rendered HTML.
@@ -178,12 +190,11 @@ function parse_bean(OODBBean $bean): void
  */
 function render_body(string $body): string
 {
-    $parts = explode('---', $body);
-    $md_text = trim($parts[count($parts) - 1]);
+    [, $content] = split_frontmatter($body);
     $parser = new LambDown();
     $parser->setSafeMode(true);
 
-    return $parser->text($md_text);
+    return $parser->text(trim($content));
 }
 
 /**
