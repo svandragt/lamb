@@ -24,6 +24,29 @@ function get_request_uri(): string|false
 }
 
 /**
+ * Sanitises a value bound for a `Location:` header.
+ *
+ * Any request-derived value interpolated into a redirect target (the request
+ * URI, a search query, a fallback URL) is a header-injection surface: a CR or
+ * LF would let a client smuggle extra response headers. They are stripped (along
+ * with null bytes) before output. An empty result falls back to the site root so
+ * callers never emit a bare `Location:`.
+ *
+ * This is the pure core of the redirect helpers — it takes its input as an
+ * argument and returns the safe string, so it is unit-testable without the
+ * surrounding `header()`/`die()` shell.
+ *
+ * @param string $location The proposed redirect target.
+ * @return string The CR/LF-stripped target, or '/' when empty.
+ */
+function sanitize_location(string $location): string
+{
+    $location = str_replace(["\r", "\n", "\0"], '', $location);
+
+    return $location === '' ? '/' : $location;
+}
+
+/**
  * Default User-Agent sent by {@see fetch} when no header overrides it.
  */
 const DEFAULT_USER_AGENT = 'Lamb-Webmention';

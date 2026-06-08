@@ -77,7 +77,7 @@ if (post_has_slug($action) === $action) {
 } elseif ($action !== false && !Route\is_reserved_route($action)) {
     $redirect_url = find_redirect($action);
     if ($redirect_url !== null) {
-        header('Location: ' . $redirect_url, true, 301);
+        header('Location: ' . Http\sanitize_location($redirect_url), true, 301);
         exit;
     }
 }
