@@ -466,6 +466,13 @@ Always follow red-green TDD when adding or changing behaviour:
 
 Never write implementation code before a failing test exists for it.
 
+### After a bugfix
+
+After fixing any bug, always — without being asked:
+
+1. **Sweep related functionality for the same class of bug.** Identify the other call sites, sibling functions, and code paths that share the faulty pattern (the same helper, the same assumption, the same parsing/encoding step) and check each for the same defect. A bug rarely lives alone — e.g. a fix in one save path usually has twins in the other save paths. Add red-green tests for any further bugs found and fix them.
+2. **Identify refactoring opportunities.** Note duplication the fix exposed (e.g. the same logic copy-pasted across sites) and consolidate it behind a single shared helper where doing so removes the duplication without adding complexity. Prefer fixes that collapse the duplication that allowed the bug to diverge in the first place; leave well enough alone when sharing would complicate more than it simplifies.
+
 ## Environment Setup
 
 Authentication password is stored hashed in the `LAMB_LOGIN_PASSWORD` environment variable:
