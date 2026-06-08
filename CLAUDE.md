@@ -172,7 +172,7 @@ title: My Post Title
 Post content here. Use #hashtags inline.
 ```
 
-`parse_matter()` extracts YAML. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 

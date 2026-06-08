@@ -40,6 +40,8 @@ Slugs are unique. If a slug is already taken by another post (or matches a built
 
 You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 
+Front-matter keys are forgiving: they are matched case-insensitively, and underscores and dashes are interchangeable. So `Title`, `title`, `in_reply_to` and `in-reply-to` all work — handy on mobile keyboards that auto-capitalise the first letter of a line.
+
 > **iOS note:** iOS "Smart Punctuation" rewrites a typed `---` into em/en dashes (for example `—-`). Lamb recognises a mangled opening and closing fence and restores it to `---` automatically — whether you add the front-matter when first writing the post or by editing it later — so front-matter still works from an iPhone or iPad. If you'd rather type plain dashes everywhere, turn the feature off under _Settings → General → Keyboard → Smart Punctuation_.
 
 # System types

@@ -240,10 +240,11 @@ function highlight_and_link(string $markdown): string
 /**
  * Normalises the reply target from front matter into a single string.
  *
- * Accepts either `in-reply-to` (IndieWeb/Micropub spelling) or `in_reply_to`,
- * collapsing a YAML list to its first entry. Both keys are removed from the
- * passed-by-reference front matter so the hyphenated key is never written as an
- * invalid column by the blind copy in apply_frontmatter().
+ * Reads the `in-reply-to` key (parse_matter() has already canonicalised the
+ * `in_reply_to` spelling onto it), collapsing a YAML list to its first entry.
+ * The key is removed from the passed-by-reference front matter so the
+ * hyphenated key is never written as an invalid column by the blind copy in
+ * apply_frontmatter().
  *
  * @param array $front_matter The parsed front matter, modified in place.
  * @return string The normalised reply target, or '' when absent.
@@ -252,8 +253,8 @@ function highlight_and_link(string $markdown): string
  */
 function normalize_in_reply_to(array &$front_matter): string
 {
-    $in_reply_to = $front_matter['in-reply-to'] ?? $front_matter['in_reply_to'] ?? null;
-    unset($front_matter['in-reply-to'], $front_matter['in_reply_to']);
+    $in_reply_to = $front_matter['in-reply-to'] ?? null;
+    unset($front_matter['in-reply-to']);
     if (is_array($in_reply_to)) {
         $in_reply_to = $in_reply_to[0] ?? null;
     }
@@ -265,8 +266,11 @@ function normalize_in_reply_to(array &$front_matter): string
  * Applies non-date front-matter fields onto the bean.
  *
  * Resets `in_reply_to`, `title`, and `draft` to their defaults when absent so
- * removing a line on edit clears the stored value, then blind-copies the
- * remaining front-matter keys. Date normalisation is handled separately by
+ * removing a line on edit clears the stored value, then copies the remaining
+ * front-matter keys. Keys that are not valid bean column names (e.g. a
+ * normalised multi-word key like `reading-time`) are skipped rather than
+ * written, since RedBean rejects them — only the recognised single-word fields
+ * map to columns. Date normalisation is handled separately by
  * apply_scheduling().
  *
  * @param OODBBean $bean         The bean to mutate.
@@ -288,6 +292,11 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
 
     foreach ($front_matter as $key => $value) {
+        // RedBean only accepts word-character property names. Skip anything
+        // else (e.g. a normalised `reading-time`) so it never reaches a store.
+        if (!is_string($key) || !preg_match('/\A\w+\z/', $key)) {
+            continue;
+        }
         $bean->$key = $value;
     }
 
