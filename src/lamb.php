@@ -18,6 +18,7 @@ use RedBeanPHP\RedException\SQL;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
+use function Lamb\Post\split_frontmatter;
 
 /**
  * Returns the current time in the canonical `Y-m-d H:i:s` format used for every
@@ -177,8 +178,10 @@ function parse_bean(OODBBean $bean): void
 }
 
 /**
- * Renders the Markdown body (everything after the front-matter block) to HTML
- * via LambDown with safe mode enabled.
+ * Renders the Markdown body (everything after the leading front-matter block)
+ * to HTML via LambDown with safe mode enabled. A `---` in the body itself — a
+ * horizontal rule, a diff line, or `---` inside a fenced code block — is left
+ * for the Markdown parser to handle rather than being mistaken for a fence.
  *
  * @param string $body The raw post body, optionally prefixed by front matter.
  * @return string The rendered HTML.
@@ -187,12 +190,11 @@ function parse_bean(OODBBean $bean): void
  */
 function render_body(string $body): string
 {
-    $parts = explode('---', $body);
-    $md_text = trim($parts[count($parts) - 1]);
+    [, $content] = split_frontmatter($body);
     $parser = new LambDown();
     $parser->setSafeMode(true);
 
-    return $parser->text($md_text);
+    return $parser->text(trim($content));
 }
 
 /**

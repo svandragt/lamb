@@ -395,6 +395,25 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('Slugged source content', $result['properties']['content'][0]);
     }
 
+    public function testSourceQueryPreservesBodyContainingHorizontalRules(): void
+    {
+        // A body whose content carries its own `---` (e.g. horizontal rules)
+        // must be returned whole — not truncated to the slice after the last
+        // `---` (issue: explode-based front-matter split dropped content).
+        $bean = R::dispense('post');
+        $bean->body = "First section\n\n---\n\nSecond section\n\n---\n\nThird section";
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertStringContainsString('First section', $result['properties']['content'][0]);
+        $this->assertStringContainsString('Second section', $result['properties']['content'][0]);
+        $this->assertStringContainsString('Third section', $result['properties']['content'][0]);
+    }
+
     public function testSourceQueryContentExcludesAppendedCategoryHashtags(): void
     {
         $bean = R::dispense('post');
