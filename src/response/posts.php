@@ -157,7 +157,7 @@ function redirect_edited(): void
     }
 
     $contents = trim(($_POST['contents']));
-    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT));
+    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
     if (empty($contents) || empty($id)) {
         return;
     }
@@ -218,8 +218,8 @@ function redirect_edited(): void
 /**
  * Responds with the status of a post.
  *
- * @param array $args An array containing the post ID.
- * @return array The transformed data representing the post's status.
+ * @param array<int, string> $args An array containing the post ID.
+ * @return array<string, mixed> The transformed data representing the post's status.
  */
 function respond_status(array $args): array
 {
@@ -242,8 +242,8 @@ function respond_status(array $args): array
 /**
  * Responds to an edit request, returning the post to render in the edit form.
  *
- * @param array $args The first element should be the post ID.
- * @return array
+ * @param array<int, string> $args The first element should be the post ID.
+ * @return array<string, mixed>
  */
 function respond_edit(array $args): array
 {
@@ -262,8 +262,8 @@ function respond_edit(array $args): array
 /**
  * Responds to a slug-based post request by retrieving and transforming a single post.
  *
- * @param array $args The first element is the post slug.
- * @return array The transformed post.
+ * @param array<int, string> $args The first element is the post slug.
+ * @return array<string, mixed> The transformed post.
  */
 function respond_post(array $args): array
 {
