@@ -115,11 +115,41 @@ function parse_matter(string $body): array
     if (!is_array($matter)) {
         return [];
     }
+
+    $matter = normalize_matter_keys($matter);
+
     if (isset($matter['title']) && !isset($matter['slug'])) {
         $matter['slug'] = slugify($matter['title']);
     }
 
     return $matter;
+}
+
+/**
+ * Normalises front-matter keys to a canonical form before they are matched.
+ *
+ * String keys are lower-cased and underscores are converted to dashes, so
+ * `Title`, `TITLE`, `in_reply_to` and `In-Reply-To` all collapse onto the
+ * canonical `title` / `in-reply-to` keys the rest of the codebase matches on.
+ * This smooths over mobile keyboards that auto-capitalise the first letter of a
+ * line and over the underscore/dash spelling ambiguity. Non-string keys (YAML
+ * sequence indices) are left untouched. When two source keys normalise to the
+ * same canonical key, the later one wins.
+ *
+ * @param array $matter The parsed front matter.
+ * @return array The front matter with canonicalised keys.
+ */
+function normalize_matter_keys(array $matter): array
+{
+    $normalized = [];
+    foreach ($matter as $key => $value) {
+        if (is_string($key)) {
+            $key = str_replace('_', '-', strtolower($key));
+        }
+        $normalized[$key] = $value;
+    }
+
+    return $normalized;
 }
 
 /**
