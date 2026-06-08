@@ -195,6 +195,40 @@ class PostTest extends TestCase
         $this->assertSame('custom-slug', $result['slug']);
     }
 
+    public function testParseMatterLowercasesCapitalisedKeys()
+    {
+        // Mobile keyboards often auto-capitalise the first letter of a line.
+        $body = "---\nTitle: My Post Title\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertArrayNotHasKey('Title', $result);
+        $this->assertSame('My Post Title', $result['title']);
+        // The derived slug still works off the normalised key.
+        $this->assertSame('my-post-title', $result['slug']);
+    }
+
+    public function testParseMatterConvertsUnderscoreKeysToDashes()
+    {
+        $body = "---\nin_reply_to: https://example.com/post\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertArrayNotHasKey('in_reply_to', $result);
+        $this->assertSame('https://example.com/post', $result['in-reply-to']);
+    }
+
+    public function testParseMatterNormalisesMixedCaseAndUnderscores()
+    {
+        $body = "---\nIn_Reply_To: https://example.com/post\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('https://example.com/post', $result['in-reply-to']);
+    }
+
+    public function testParseMatterNormalisesDraftKeyCasing()
+    {
+        $body = "---\nDraft: true\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertArrayNotHasKey('Draft', $result);
+        $this->assertTrue((bool) $result['draft']);
+    }
+
     // posts_by_tag
 
     protected function setUpDb(): void
