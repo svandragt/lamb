@@ -6,7 +6,10 @@ onLoaded(() => {
         const end = ta.selectionEnd
         if (start === end) return // nothing selected
 
-        const pasted = (ev.clipboardData || window.clipboardData).getData('text')
+        // iOS Safari returns an empty string for getData('text'); the
+        // standards-compliant 'text/plain' type works there, so try it first.
+        const clipboard = ev.clipboardData || window.clipboardData
+        const pasted = clipboard.getData('text/plain') || clipboard.getData('text')
         if (!isUrl(pasted)) return
 
         cancel(ev)
