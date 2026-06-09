@@ -349,6 +349,38 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
+ * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
+ *
+ * Task markers are list lines of the form `- [ ] ` / `* [x] ` / `+ [X] `. They
+ * are counted in document order (the same order LambDown numbers the rendered
+ * checkboxes with `data-checkbox-index`), so the Nth rendered checkbox maps to
+ * the Nth source marker. Only the target marker's state character is rewritten;
+ * every other marker and all surrounding text is preserved verbatim. An index
+ * past the last marker returns the body unchanged.
+ *
+ * @param string $body    The raw post body.
+ * @param int    $index   Zero-based index of the marker to toggle.
+ * @param bool   $checked True to check the marker, false to uncheck it.
+ * @return string The body with the target marker toggled.
+ */
+function toggle_checkbox(string $body, int $index, bool $checked): string
+{
+    $seen = 0;
+    return preg_replace_callback(
+        '/^(\s*[-*+]\s+\[)[ xX](\]\s)/m',
+        function (array $m) use (&$seen, $index, $checked): string {
+            $state = $seen === $index ? ($checked ? 'x' : ' ') : null;
+            $seen++;
+            if ($state === null) {
+                return $m[0];
+            }
+            return $m[1] . $state . $m[2];
+        },
+        $body
+    ) ?? $body;
+}
+
+/**
  * Returns a broad SQL prefilter for posts whose body contains the given tag.
  *
  * The SQL is deliberately permissive (it also matches longer tags that share

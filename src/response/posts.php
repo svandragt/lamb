@@ -15,6 +15,7 @@ use function Lamb\delete_redirect_for_slug;
 use function Lamb\parse_bean;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\toggle_checkbox;
 use function Lamb\Route\is_reserved_route;
 
 /**
@@ -213,6 +214,79 @@ function redirect_edited(): void
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);
     redirect_uri($redirect);
+}
+
+/**
+ * Toggles a GitHub-style task-list checkbox and persists it as a post edit.
+ *
+ * AJAX endpoint for the logged-in author: flips the Nth `[ ]`/`[x]` marker in
+ * the post body (the index supplied by the rendered checkbox's
+ * `data-checkbox-index`), re-parses so `transformed` reflects the new state,
+ * and bumps `updated`. Login-only, no CSRF — matching respond_upload() and the
+ * SameSite=Strict session, which already blocks cross-site POSTs. Webmention
+ * and WebSub are intentionally skipped: ticking a box is a minor edit and must
+ * not re-notify subscribers.
+ *
+ * @param array<int, string> $_args Unused route arguments.
+ * @return void
+ * @throws \JsonException
+ */
+#[NoReturn]
+function respond_checkbox(array $_args): void
+{
+    Security\require_login();
+
+    header('Content-Type: application/json');
+
+    $id      = (int) ($_POST['id'] ?? 0);
+    $index   = (int) ($_POST['index'] ?? -1);
+    $checked = filter_var($_POST['checked'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+    if (!apply_checkbox_toggle($id, $index, $checked)) {
+        header('HTTP/1.1 404 Not Found');
+        echo json_encode(['ok' => false], JSON_THROW_ON_ERROR);
+        die();
+    }
+
+    echo json_encode(['ok' => true, 'checked' => $checked], JSON_THROW_ON_ERROR);
+    die();
+}
+
+/**
+ * Toggles a task-list checkbox in a post and persists it as an edit.
+ *
+ * Loads the post, flips the Nth `[ ]`/`[x]` marker in its body, re-parses so
+ * `transformed`/`description` reflect the new state, and bumps `updated`. The
+ * testable core of respond_checkbox() (which adds auth and the JSON response).
+ *
+ * @param int  $id      The post id.
+ * @param int  $index   Zero-based checkbox index.
+ * @param bool $checked The desired checked state.
+ * @return bool True on success, false when the post is missing or the index invalid.
+ */
+function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
+{
+    if ($index < 0) {
+        return false;
+    }
+
+    $bean = R::load('post', $id);
+    if (!$bean->id) {
+        return false;
+    }
+
+    $bean->body = toggle_checkbox((string) $bean->body, $index, $checked);
+    parse_bean($bean);
+    $bean->updated = \Lamb\now();
+
+    try {
+        R::store($bean);
+    } catch (SQL $e) {
+        $_SESSION['flash'][] = 'Failed to update checkbox: ' . $e->getMessage();
+        return false;
+    }
+
+    return true;
 }
 
 /**

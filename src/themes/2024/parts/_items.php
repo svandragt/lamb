@@ -33,7 +33,7 @@ else :
 
         ?>
 
-        <article itemscope itemtype="https://schema.org/BlogPosting">
+        <article data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
             <header>
                 <?php if ($template !== 'status') : ?>
                     <?php $title = title_link($bean); ?>

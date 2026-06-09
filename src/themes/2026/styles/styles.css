@@ -937,3 +937,12 @@ footer a:hover { color: var(--accent-link); }
         background-color: var(--phiki-dark-background-color) !important;
     }
 }
+
+/* GitHub-style task lists */
+.task-list-item {
+    list-style: none;
+}
+
+.task-list-item input[type="checkbox"] {
+    margin: 0 .4em 0 -1.4em;
+}
