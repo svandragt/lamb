@@ -44,6 +44,25 @@ class LambDown extends Parsedown
     }
 
     /**
+     * Classifies the leading task-list marker of a line.
+     *
+     * The single source of truth for what counts as a task marker, shared by
+     * block detection and list-item tagging so the two can never diverge.
+     *
+     * @param string $text The line text (leading/trailing whitespace ignored).
+     * @return bool|null True when checked (`[x] `/`[X] `), false when unchecked
+     *                   (`[ ] `), null when the line is not a task marker.
+     */
+    private function checkboxState(string $text): ?bool
+    {
+        return match (substr(trim($text), 0, 4)) {
+            '[ ] '          => false,
+            '[x] ', '[X] '  => true,
+            default         => null,
+        };
+    }
+
+    /**
      * Detects a task-list marker (`[ ] ` or `[x] `) at the start of a line.
      *
      * @param array<string, mixed> $line The current line.
@@ -52,15 +71,12 @@ class LambDown extends Parsedown
     protected function blockCheckbox($line)
     {
         $text = trim($line['text']);
-        $marker = substr($text, 0, 4);
-        if ($marker === '[ ] ') {
-            return ['handler' => 'checkboxUnchecked', 'text' => substr($text, 4)];
-        }
-        if ($marker === '[x] ' || $marker === '[X] ') {
-            return ['handler' => 'checkboxChecked', 'text' => substr($text, 4)];
+        $checked = $this->checkboxState($text);
+        if ($checked === null) {
+            return null;
         }
 
-        return null;
+        return ['checked' => $checked, 'text' => substr($text, 4)];
     }
 
     /**
@@ -83,7 +99,7 @@ class LambDown extends Parsedown
     protected function blockCheckboxComplete(array $block)
     {
         $block['element'] = [
-            'rawHtml'                => $this->{$block['handler']}($block['text']),
+            'rawHtml'                => $this->renderCheckbox($block['text'], $block['checked']),
             'allowRawHtmlInSafeMode' => true,
         ];
 
@@ -103,8 +119,7 @@ class LambDown extends Parsedown
 
         foreach ($block['element']['elements'] as &$li) {
             foreach ($li['handler']['argument'] as $text) {
-                $marker = substr(trim($text), 0, 4);
-                if ($marker === '[ ] ' || $marker === '[x] ' || $marker === '[X] ') {
+                if ($this->checkboxState($text) !== null) {
                     $li['attributes'] = ['class' => 'task-list-item'];
                     break;
                 }
@@ -116,33 +131,21 @@ class LambDown extends Parsedown
     }
 
     /**
-     * Renders an unchecked task checkbox followed by its inline-formatted label.
+     * Renders a disabled task checkbox followed by its inline-formatted label.
      *
-     * @param string $text The label text.
+     * @param string $text    The label text.
+     * @param bool   $checked Whether the box is ticked.
      * @return string The checkbox HTML.
      */
-    protected function checkboxUnchecked($text)
+    protected function renderCheckbox($text, $checked)
     {
         if ($this->markupEscaped || $this->safeMode) {
             $text = self::escape($text);
         }
 
-        return '<input type="checkbox" disabled> ' . $this->formatLabel($text);
-    }
+        $checkedAttr = $checked ? ' checked' : '';
 
-    /**
-     * Renders a checked task checkbox followed by its inline-formatted label.
-     *
-     * @param string $text The label text.
-     * @return string The checkbox HTML.
-     */
-    protected function checkboxChecked($text)
-    {
-        if ($this->markupEscaped || $this->safeMode) {
-            $text = self::escape($text);
-        }
-
-        return '<input type="checkbox" checked disabled> ' . $this->formatLabel($text);
+        return '<input type="checkbox"' . $checkedAttr . ' disabled> ' . $this->formatLabel($text);
     }
 
     /**
