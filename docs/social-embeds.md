@@ -34,6 +34,11 @@ For example, `src/og-image.png`. No configuration is needed — the file is pick
 up by convention, exactly like the [feed icon and logo]({{ site.baseurl }}{% link feeds.md %}#feed-icon-and-logo).
 A 1200×630 image is the conventional size for a social card.
 
+If your blog is mostly short text posts without images, setting a site-wide
+card is worthwhile: it gives every shared link a consistent, branded preview —
+your *blog's* identity — rather than the generic built-in card. Image posts
+still preview their own first image automatically.
+
 Lamb reads the image's real dimensions and type for the `og:image:width`,
 `og:image:height`, and `og:image:type` tags when the file is readable, so you
 don't need to declare them anywhere.
