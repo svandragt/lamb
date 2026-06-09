@@ -12,16 +12,17 @@ if (!empty($pagination)) :
         return;
     }
 
-    // Parse current request URI and preserve other query params
+    // Derive the base list path from the current request, stripping any existing
+    // /page/N segment and the legacy ?page= query so links stay clean paths.
     $uri = $_SERVER['REQUEST_URI'] ?? '/';
-    $parts = parse_url($uri);
-    parse_str($parts['query'] ?? '', $qs);
+    $path = parse_url($uri, PHP_URL_PATH) ?: '/';
+    $base = rtrim((string)preg_replace('#/page/\d+/?$#', '', $path), '/');
 
-    $build_url = static function (int $page) use ($parts, $qs): string {
-        $qs['page'] = $page;
-        $query = http_build_query($qs);
-        $path = $parts['path'] ?? '/';
-        return $path . ($query ? '?' . $query : '');
+    $build_url = static function (int $page) use ($base): string {
+        if ($page <= 1) {
+            return $base === '' ? '/' : $base;
+        }
+        return $base . '/page/' . $page;
     };
     ?>
     <nav class="pagination" aria-label="Pagination">

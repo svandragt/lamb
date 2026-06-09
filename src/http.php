@@ -24,6 +24,30 @@ function get_request_uri(): string|false
 }
 
 /**
+ * Splits a trailing `/page/<N>` pagination segment off a request path.
+ *
+ * Clean pagination URLs append `/page/N` to whatever list path they paginate
+ * (`/page/2`, `/tag/foo/page/2`, `/search/foo/page/2`, …). Stripping it here,
+ * before the router segments the path, lets every list responder keep routing
+ * on its base path while the page number is fed into the normal `$_GET['page']`
+ * pagination path. A bare `/page/N` collapses to `/home`.
+ *
+ * @param string $uri The request path (no query string).
+ * @return array{0: string, 1: int|null} The page-stripped path and the page
+ *                                        number, or the original path and null
+ *                                        when no numeric page segment is present.
+ */
+function extract_page_segment(string $uri): array
+{
+    if (preg_match('#^(.*)/page/(\d+)/?$#', $uri, $matches) === 1) {
+        $path = $matches[1] === '' ? '/home' : $matches[1];
+        return [$path, max(1, (int)$matches[2])];
+    }
+
+    return [$uri, null];
+}
+
+/**
  * Sanitises a value bound for a `Location:` header.
  *
  * Any request-derived value interpolated into a redirect target (the request
