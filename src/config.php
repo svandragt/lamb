@@ -43,6 +43,11 @@ feeds_draft = true
 authorization_endpoint = https://indieauth.com/auth
 token_endpoint = https://tokens.indieauth.com/token
 
+;; Diagnostic logging for the Micropub endpoint. Off by default. Set to true only to
+;; debug a misbehaving client — it writes request/token-verification details (never the
+;; token itself) to data/micropub.log. Turn it back off when you are done.
+;micropub_debug = false
+
 ;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
 ;; relative path on another site.
 ;; Useful where old content is archived to an archive site, or the lamb blog is still under construction but public.

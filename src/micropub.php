@@ -8,6 +8,7 @@ use Nyholm\Psr7\UploadedFile;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
@@ -122,15 +123,40 @@ class LambMicropubAdapter extends MicropubAdapter
         $endpoint = $config['token_endpoint'] ?? 'https://tokens.indieauth.com/token';
 
         $data = $this->introspectToken($token, $endpoint);
-        if ($data === null || empty($data['me'])) {
+        if ($data === null) {
+            mp_log('token_verify', [
+                'reason'   => 'introspection_failed',
+                'endpoint' => $endpoint,
+                'token'    => token_fingerprint($token),
+            ]);
+            return false;
+        }
+        if (empty($data['me'])) {
+            mp_log('token_verify', [
+                'reason' => 'no_me',
+                'token'  => token_fingerprint($token),
+            ]);
             return false;
         }
 
         if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+            mp_log('token_verify', [
+                'reason'   => 'me_mismatch',
+                'me'       => $data['me'],
+                'expected' => ROOT_URL,
+                'token'    => token_fingerprint($token),
+            ]);
             return false;
         }
 
         $scope = isset($data['scope']) ? explode(' ', $data['scope']) : [];
+
+        mp_log('token_verify', [
+            'reason' => 'ok',
+            'me'     => $data['me'],
+            'scope'  => $scope,
+            'token'  => token_fingerprint($token),
+        ]);
 
         return [
             'me'    => $data['me'],
@@ -161,16 +187,26 @@ class LambMicropubAdapter extends MicropubAdapter
         ]);
 
         if ($result === null) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'fetch_failed']);
             return null;
         }
 
         $statusLine = $result['headers'][0] ?? '';
         if (!str_contains($statusLine, ' 200 ')) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'non_200', 'status' => trim($statusLine)]);
             return null;
         }
 
         $data = json_decode($result['body'], true);
-        return is_array($data) ? $data : null;
+        if (!is_array($data)) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'bad_json']);
+            return null;
+        }
+
+        // Log only the response's keys (e.g. me, scope, client_id) — never the values,
+        // which can echo the token on some endpoints.
+        mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'ok', 'keys' => array_keys($data)]);
+        return $data;
     }
 
     /**
@@ -638,6 +674,89 @@ class LambMicropubAdapter extends MicropubAdapter
 }
 
 /**
+ * A minimal PSR-3 logger that funnels the taproot adapter's own trace into mp_log().
+ *
+ * Wired into the adapter's $logger (only when micropub_debug is on), so its
+ * info/warning/error messages — token verification, query handling, error
+ * responses — land in the same file as Lamb's own diagnostic log points. An
+ * anonymous class keeps micropub.php to a single named class (PSR1).
+ */
+function mp_adapter_logger(): \Psr\Log\LoggerInterface
+{
+    return new class extends AbstractLogger {
+        /**
+         * @param mixed              $level
+         * @param string|\Stringable $message
+         * @param array<mixed>       $context
+         */
+        public function log($level, string|\Stringable $message, array $context = []): void
+        {
+            mp_log('adapter', ['level' => (string) $level, 'message' => (string) $message] + $context);
+        }
+    };
+}
+
+/**
+ * Whether opt-in Micropub diagnostic logging is enabled (config key `micropub_debug`).
+ * Off by default and for any non-truthy value, so no token/PII is ever written unless
+ * the operator explicitly turns it on at /settings to debug a client.
+ */
+function mp_debug_enabled(): bool
+{
+    global $config;
+    $value = $config['micropub_debug'] ?? false;
+    if (is_bool($value)) {
+        return $value;
+    }
+    return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+}
+
+/**
+ * Path of the Micropub diagnostic log. Lives next to the SQLite DB in data/.
+ * Overridable via $GLOBALS['lamb_mp_log_path'] for tests.
+ */
+function mp_log_path(): string
+{
+    if (!empty($GLOBALS['lamb_mp_log_path'])) {
+        return (string) $GLOBALS['lamb_mp_log_path'];
+    }
+    return ROOT_DIR . '/../data/micropub.log';
+}
+
+/**
+ * Append one diagnostic event to the Micropub log. No-op unless micropub_debug is on.
+ *
+ * The token itself is never passed in here — callers log token_fingerprint() instead.
+ *
+ * @param string       $event   Short event name (e.g. 'request', 'token_verify', 'response').
+ * @param array<mixed> $context Structured fields to record alongside the event.
+ */
+function mp_log(string $event, array $context = []): void
+{
+    if (!mp_debug_enabled()) {
+        return;
+    }
+
+    $line = json_encode(
+        ['ts' => \Lamb\now(), 'event' => $event] + $context,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    ) ?: '';
+    @file_put_contents(mp_log_path(), $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * Non-reversible fingerprint of a bearer token: enough to correlate the same token
+ * across log lines without ever writing the secret itself.
+ */
+function token_fingerprint(string $token): string
+{
+    if ($token === '') {
+        return 'empty';
+    }
+    return 'len=' . strlen($token) . ' sha256=' . substr(hash('sha256', $token), 0, 12);
+}
+
+/**
  * Route handler for GET/POST /micropub.
  * Builds a PSR-7 request from globals, delegates to LambMicropubAdapter,
  * emits the response and exits — same pattern as respond_feed.
@@ -688,10 +807,32 @@ function respond_micropub(): void
         $request = $request->withUploadedFiles($psr7Files);
     }
 
-    $adapter  = new LambMicropubAdapter();
+    $lcHeaders = array_change_key_case($headers, CASE_LOWER);
+    mp_log('request', [
+        'method'          => $request->getMethod(),
+        'uri'             => (string) $request->getUri(),
+        'q'               => $request->getQueryParams()['q'] ?? null,
+        'content_type'    => $lcHeaders['content-type'] ?? null,
+        'user_agent'      => $lcHeaders['user-agent'] ?? null,
+        'has_auth_header' => isset($lcHeaders['authorization']),
+        'has_body_token'  => isset($_POST['access_token']),
+        'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
+    ]);
+
+    $adapter = new LambMicropubAdapter();
+    if (mp_debug_enabled()) {
+        $adapter->logger = mp_adapter_logger();
+    }
     $response = $adapter->handleRequest($request);
 
-    http_response_code($response->getStatusCode());
+    $status = $response->getStatusCode();
+    mp_log('response', [
+        'status' => $status,
+        // Only echo the body into the log on failures — it carries the error reason.
+        'body'   => $status >= 400 ? substr((string) $response->getBody(), 0, 300) : null,
+    ]);
+
+    http_response_code($status);
     foreach ($response->getHeaders() as $name => $values) {
         foreach ($values as $value) {
             header("$name: $value", false);
@@ -714,6 +855,7 @@ function respond_micropub(): void
  */
 function micropub_error(int $status, string $error, string $description): never
 {
+    mp_log('response', ['status' => $status, 'error' => $error, 'error_description' => $description]);
     http_response_code($status);
     header('Content-Type: application/json');
     echo json_encode(['error' => $error, 'error_description' => $description]);
@@ -730,6 +872,15 @@ function respond_micropub_media(): void
 {
     $headers = getallheaders() ?: [];
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    $lcHeaders = array_change_key_case($headers, CASE_LOWER);
+
+    mp_log('media_request', [
+        'method'          => $_SERVER['REQUEST_METHOD'] ?? null,
+        'content_type'    => $lcHeaders['content-type'] ?? null,
+        'user_agent'      => $lcHeaders['user-agent'] ?? null,
+        'has_auth_header' => $authHeader !== '',
+        'has_file'        => !empty($_FILES['file']),
+    ]);
 
     $token = null;
     if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
@@ -741,6 +892,9 @@ function respond_micropub_media(): void
     }
 
     $adapter = new LambMicropubAdapter();
+    if (mp_debug_enabled()) {
+        $adapter->logger = mp_adapter_logger();
+    }
     $user = $adapter->verifyAccessTokenCallback($token);
     if (!$user) {
         micropub_error(401, 'unauthorized', 'Invalid or expired token.');

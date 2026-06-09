@@ -53,6 +53,20 @@ A Micropub `h-entry` with a `content` property creates a status post (no title, 
 
 Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a secret preview token to the URL it returns (`?preview=…`). That link shows the unpublished post to anyone who has it — without logging in — and expires after 24 hours. The plain permalink (without the token) stays hidden until the post is published.
 
+## Troubleshooting
+
+If a client can't connect — for example it reports "something went wrong setting up your Micropub endpoint" — you can turn on diagnostic logging to see exactly what the client sent and why Lamb responded as it did.
+
+Add this to your site configuration at `/settings`:
+
+```ini
+micropub_debug = true
+```
+
+Reproduce the problem with your client, then read `data/micropub.log` (next to your `lamb.db`). Each line is one event: the incoming request (method, client `User-Agent`, whether a token was supplied), the token-verification outcome (including a `me_mismatch` reason when the token's identity doesn't match your site URL), and the response status. The bearer token itself is never written — only a non-reversible fingerprint.
+
+Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (`micropub_debug = false`) when you're done** so the log stops growing.
+
 ## How to test
 
 Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's implementation report is available at [micropub.rocks/implementation-reports/servers/962](https://micropub.rocks/implementation-reports/servers/962/GYKIHp3O03m9vNil9Qcq).

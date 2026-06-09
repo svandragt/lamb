@@ -25,6 +25,24 @@ class MicropubAdapterTest extends TestCase
         if (!defined('ROOT_DIR')) {
             define('ROOT_DIR', sys_get_temp_dir() . '/lamb_test');
         }
+
+        // Route any diagnostic logging to an isolated temp file (see mp_log_path()).
+        $path = tempnam(sys_get_temp_dir(), 'lamb_mplog_');
+        if ($path !== false) {
+            // tempnam creates the file; start each test from a clean slate.
+            @unlink($path);
+            $GLOBALS['lamb_mp_log_path'] = $path;
+        }
+    }
+
+    protected function tearDown(): void
+    {
+        global $config;
+        unset($config['micropub_debug']);
+        if (isset($GLOBALS['lamb_mp_log_path'])) {
+            @unlink($GLOBALS['lamb_mp_log_path']);
+            unset($GLOBALS['lamb_mp_log_path']);
+        }
     }
 
     // --- handleRequest ---
@@ -44,6 +62,72 @@ class MicropubAdapterTest extends TestCase
         $body = json_decode((string) $response->getBody(), true);
         $this->assertArrayHasKey('media-endpoint', $body);
         $this->assertArrayHasKey('syndicate-to', $body);
+    }
+
+    // --- diagnostic logging (micropub_debug) ---
+
+    public function testMpLogWritesWhenDebugEnabled(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        \Lamb\Micropub\mp_log('unit_test_event', ['foo' => 'bar']);
+
+        $path = $GLOBALS['lamb_mp_log_path'];
+        $this->assertFileExists($path);
+        $contents = (string) file_get_contents($path);
+        $this->assertStringContainsString('unit_test_event', $contents);
+        $this->assertStringContainsString('bar', $contents);
+    }
+
+    public function testMpLogWritesNothingWhenDebugDisabled(): void
+    {
+        global $config;
+        $config['micropub_debug'] = false;
+
+        \Lamb\Micropub\mp_log('should_not_appear', []);
+
+        $path = $GLOBALS['lamb_mp_log_path'];
+        $this->assertFalse(
+            is_file($path) && str_contains((string) file_get_contents($path), 'should_not_appear'),
+            'mp_log must write nothing when micropub_debug is disabled'
+        );
+    }
+
+    public function testVerifyTokenLogsMeMismatchReasonWithoutLeakingToken(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => 'https://other.example.com/',
+            'scope' => 'create',
+        ];
+        $adapter->verifyAccessTokenCallback('secret-token-value');
+
+        $contents = (string) file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $this->assertStringContainsString('me_mismatch', $contents);
+        $this->assertStringContainsString('https://other.example.com/', $contents);
+        $this->assertStringContainsString(ROOT_URL, $contents);
+        $this->assertStringNotContainsString('secret-token-value', $contents);
+    }
+
+    public function testVerifyTokenLogsOkReasonWithScope(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create update',
+        ];
+        $adapter->verifyAccessTokenCallback('valid-jwt');
+
+        $contents = (string) file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $this->assertStringContainsString('"reason":"ok"', $contents);
+        $this->assertStringContainsString('create', $contents);
     }
 
     // --- verifyAccessTokenCallback ---
