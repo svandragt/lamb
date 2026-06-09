@@ -31,6 +31,32 @@ header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false)
 
 # Routing
 $request_uri = Http\get_request_uri();
+
+# Strip a trailing /page/N pagination segment so list routes keep routing on
+# their base path; the page number flows through the normal $_GET['page'] path.
+[$request_uri, $page_from_path] = Http\extract_page_segment((string)$request_uri);
+if ($page_from_path !== null) {
+    $_GET['page'] = $page_from_path;
+}
+
+# Legacy ?page=N links → permanent redirect to the clean /…/page/N URL.
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (in_array($method, ['GET', 'HEAD'], true)) {
+    parse_str($_SERVER['QUERY_STRING'] ?? '', $query_params);
+    if (isset($query_params['page'])) {
+        $page_num = max(1, (int)$query_params['page']);
+        unset($query_params['page']);
+        $clean_path = (string)strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+        $target = Http\page_path($clean_path, $page_num);
+        $remaining = http_build_query($query_params);
+        if ($remaining !== '') {
+            $target .= '?' . $remaining;
+        }
+        header('Location: ' . Http\sanitize_location($target), true, 301);
+        exit;
+    }
+}
+
 $action = strtok($request_uri, '/');
 $lookup = strtok('/');
 $sublookup = strtok('/');

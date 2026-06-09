@@ -12,17 +12,13 @@ if (!empty($pagination)) :
         return;
     }
 
-    // Parse current request URI and preserve other query params
+    // Pagination links are clean paths: derive the list path from the current
+    // request (dropping any /page/N suffix and the legacy ?page= query) and let
+    // Http\page_path() build each page's URL.
     $uri = $_SERVER['REQUEST_URI'] ?? '/';
-    $parts = parse_url($uri);
-    parse_str($parts['query'] ?? '', $qs);
+    $path = parse_url($uri, PHP_URL_PATH) ?: '/';
 
-    $build_url = static function (int $page) use ($parts, $qs): string {
-        $qs['page'] = $page;
-        $query = http_build_query($qs);
-        $path = $parts['path'] ?? '/';
-        return $path . ($query ? '?' . $query : '');
-    };
+    $build_url = static fn(int $page): string => \Lamb\Http\page_path($path, $page);
     ?>
     <nav class="pagination" aria-label="Pagination">
         <?php if (!empty($pagination['prev_page'])) : ?>
