@@ -186,6 +186,32 @@ class ThemeAssetsTest extends TestCase
         $this->assertStringContainsString('shorthand.js', $output);
     }
 
+    public function testTheScriptsOutputsImageModalJsForAllVisitors(): void
+    {
+        unset($_SESSION[SESSION_LOGIN]);
+
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('image-modal.js', $output);
+    }
+
+    public function testTheScriptsImageModalJsUrlPointsToExistingFile(): void
+    {
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        preg_match('/src="([^"]*image-modal\.js[^"]*)"/', $output, $m);
+        $this->assertNotEmpty($m, 'image-modal.js src attribute not found in output');
+
+        $url_path = parse_url($m[1], PHP_URL_PATH);
+        $project_src = dirname(__DIR__, 2) . '/src/';
+        $file = $project_src . ltrim($url_path, '/');
+        $this->assertFileExists($file, "Script file not found at $file — URL '$url_path' does not resolve to a real file");
+    }
+
     public function testTheScriptsOutputsScriptDeferTag(): void
     {
         ob_start();

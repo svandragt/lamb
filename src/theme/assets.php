@@ -108,7 +108,7 @@ function minify_css(string $css): string
 function the_scripts(): void
 {
     $scripts = [
-        '' => ['shorthand.js'],
+        '' => ['shorthand.js', 'image-modal.js'],
         'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js', 'paste-link.js'],
         'search' => ['search-highlight.js'],
     ];
