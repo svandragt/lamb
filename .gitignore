@@ -1,6 +1,7 @@
 *.db
 /.docker/*.env
 /data/cache/
+/data/*.log
 /src/assets/
 /vendor/
 /src/config.ini
