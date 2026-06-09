@@ -2,13 +2,27 @@ includes:
     - phpstan-baseline.neon
 
 parameters:
-    level: 5
+    level: 8
     parallel:
         maximumNumberOfProcesses: 1
     paths:
         - src
     excludePaths:
         - src/index.php
+    ignoreErrors:
+        # RedBeanPHP's stubs type Facade::find()'s $sql as literal-string to
+        # discourage interpolating user input into SQL. Our listing queries
+        # assemble the clause from constant SQL fragments (SQL_PUBLISHED, the
+        # visibility/pagination helpers) with every value bound as a parameter,
+        # so they are safe but not a single literal — accept the non-literal SQL.
+        -
+            message: '#expects literal-string\|null, non-falsy-string given#'
+            identifier: argument.type
+            paths:
+                - src/post.php
+                - src/response.php
+                - src/response/feeds.php
+                - src/theme.php
     bootstrapFiles:
         - vendor/autoload.php
         - phpstan-bootstrap.php

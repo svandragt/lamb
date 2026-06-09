@@ -15,7 +15,7 @@ use const ROOT_URL;
 /**
  * Responds to an upload request by processing the uploaded files.
  *
- * @param array $_args The arguments for the upload request.
+ * @param array<int, string> $_args The arguments for the upload request.
  * @return void
  * @throws JsonException
  */
@@ -180,7 +180,7 @@ function convert_to_webp(string $src_path, string $dest_path, int $quality = 82,
 
     [$new_width, $new_height] = scaled_dimensions(imagesx($image), imagesy($image), $max_dimension);
     if ($new_width !== imagesx($image) || $new_height !== imagesy($image)) {
-        $resized = imagecreatetruecolor($new_width, $new_height);
+        $resized = imagecreatetruecolor(max(1, $new_width), max(1, $new_height));
         imagealphablending($resized, false);
         imagesavealpha($resized, true);
         imagecopyresampled($resized, $image, 0, 0, 0, 0, $new_width, $new_height, imagesx($image), imagesy($image));

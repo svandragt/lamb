@@ -20,6 +20,9 @@ use function Lamb\set_option;
 
 register_route('_cron', __NAMESPACE__ . '\\process_feeds');
 
+/**
+ * @return array<array-key, mixed> Configured feed URLs keyed by feed name.
+ */
 function get_feeds(): array
 {
     global $config;
@@ -300,7 +303,7 @@ function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null)
     return populate_bean($contents, $item, $name, $bean);
 }
 
-function create_item(SimplePieItem $item, string $name)
+function create_item(SimplePieItem $item, string $name): void
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
@@ -326,7 +329,7 @@ function create_item(SimplePieItem $item, string $name)
 function get_structured_content(SimplePieItem $item, string $name): string
 {
     $contents = attributed_content($item, $name);
-    $title = sanitize_feed_title($item->get_title());
+    $title = sanitize_feed_title($item->get_title() ?? '');
     if (!empty($title)) {
         $contents = <<<MATTER
 ---
@@ -373,7 +376,7 @@ function sanitize_feed_title(string $title): string
  */
 function attributed_content(SimplePieItem $item, string $name): string
 {
-    $contents = strip_tags($item->get_description());
+    $contents = strip_tags($item->get_description() ?? '');
     $lines = explode(PHP_EOL, $contents);
     $lines = array_slice($lines, 0, 5); // Get only the first 5 lines
     foreach ($lines as &$line) {

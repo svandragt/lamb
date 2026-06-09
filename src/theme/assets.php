@@ -78,7 +78,7 @@ function rewrite_css_urls(string $css, string $base_url): string
             return "url('" . $base_url . $url . "')";
         },
         $css
-    );
+    ) ?? $css;
 }
 
 /**
@@ -92,9 +92,9 @@ function rewrite_css_urls(string $css, string $base_url): string
  */
 function minify_css(string $css): string
 {
-    $css = preg_replace('#/\*.*?\*/#s', '', $css);
-    $css = preg_replace('/\s+/', ' ', $css);
-    $css = preg_replace('/\s*([{}:;,>])\s*/', '$1', $css);
+    $css = preg_replace('#/\*.*?\*/#s', '', $css) ?? $css;
+    $css = preg_replace('/\s+/', ' ', $css) ?? $css;
+    $css = preg_replace('/\s*([{}:;,>])\s*/', '$1', $css) ?? $css;
     $css = str_replace(';}', '}', $css);
 
     return trim($css);
@@ -146,9 +146,9 @@ function asset_version(string $local_path, string $href): string
  * - 'logged_in' loaded only when the user is authenticated
  * - any other string is matched against the current $template
  *
- * @param array  $assets    Associative array: key = subdirectory condition, value = array of filenames.
+ * @param array<string, list<string>> $assets Associative array: key = subdirectory condition, value = array of filenames.
  * @param string $asset_dir Base directory for the assets.
- * @return Generator Yields asset_version($contents) => $href for each asset to load.
+ * @return Generator<string, string> Yields asset_version($contents) => $href for each asset to load.
  */
 function asset_loader(array $assets, string $asset_dir): Generator
 {

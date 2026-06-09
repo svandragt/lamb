@@ -95,7 +95,7 @@ function configure_session(): void
  * LAMBSESSID session cookie. Anonymous visitors get no session — and therefore no
  * Set-Cookie and no no-cache headers — so their pages remain cacheable (issue #116).
  *
- * @param array $cookies Typically $_COOKIE.
+ * @param array<string, mixed> $cookies Typically $_COOKIE.
  * @return bool
  */
 function should_start_session(array $cookies): bool
@@ -197,7 +197,7 @@ function content_etag(int $contentTs, int $configTs): string
  * Honours both If-None-Match (against the ETag) and If-Modified-Since (against
  * the last-modified timestamp).
  *
- * @param array  $server          Typically $_SERVER.
+ * @param array<string, mixed> $server          Typically $_SERVER.
  * @param string $etag            The current response ETag.
  * @param int    $lastModifiedTs  The current last-modified Unix timestamp.
  * @return bool

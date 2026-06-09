@@ -40,7 +40,7 @@ const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u';
  *
  * @param string $html The HTML content to search for tags.
  *
- * @return array An array of tags found in the HTML.
+ * @return list<string> An array of tags found in the HTML.
  */
 function get_tags(string $html): array
 {
@@ -64,7 +64,7 @@ function parse_tags(string $html): string
 {
     return preg_replace_callback(TAG_PATTERN, function ($matches) {
         return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
-    }, $html);
+    }, $html) ?? $html;
 }
 
 /**
@@ -74,8 +74,8 @@ function parse_tags(string $html): string
  * Counterpart of get_tags(): used by Micropub category `add` updates, where
  * categories live in the body as hashtags rather than in a column.
  *
- * @param string $body The raw post body.
- * @param array  $tags Tag names (without `#`).
+ * @param string       $body The raw post body.
+ * @param list<string> $tags Tag names (without `#`).
  * @return string The body with missing tags appended.
  */
 function add_body_tags(string $body, array $tags): string
@@ -99,21 +99,21 @@ function add_body_tags(string $body, array $tags): string
  */
 function strip_trailing_body_tags(string $body): string
 {
-    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body));
+    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body) ?? $body);
 }
 
 /**
  * Removes the named hashtags (and their preceding whitespace) from a body,
  * wherever they appear. Used by Micropub category delete-values updates.
  *
- * @param string $body The raw post body.
- * @param array  $tags Tag names (without `#`) to remove.
+ * @param string       $body The raw post body.
+ * @param list<string> $tags Tag names (without `#`) to remove.
  * @return string The body without the named tags.
  */
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
-        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body);
+        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body) ?? $body;
     }
 
     return $body;
@@ -207,7 +207,7 @@ function render_body(string $body): string
  */
 function extract_description(string $markdown): string
 {
-    $description = strtok(strip_tags($markdown), "\n");
+    $description = strtok(strip_tags($markdown), "\n") ?: '';
     // Decode twice: feed-ingested bodies already contain HTML entities (e.g. `&#039;`),
     // which Parsedown then re-encodes (`&amp;#039;`). A single decode only undoes one layer.
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -246,7 +246,7 @@ function highlight_and_link(string $markdown): string
  * hyphenated key is never written as an invalid column by the blind copy in
  * apply_frontmatter().
  *
- * @param array $front_matter The parsed front matter, modified in place.
+ * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
  * @return string The normalised reply target, or '' when absent.
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
@@ -273,8 +273,8 @@ function normalize_in_reply_to(array &$front_matter): string
  * map to columns. Date normalisation is handled separately by
  * apply_scheduling().
  *
- * @param OODBBean $bean         The bean to mutate.
- * @param array    $front_matter The parsed front matter (including derived keys).
+ * @param OODBBean                  $bean         The bean to mutate.
+ * @param array<int|string, mixed>  $front_matter The parsed front matter (including derived keys).
  * @return void
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
@@ -319,9 +319,9 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
  * passed in by parse_bean() so the unparseable-date fallback uses the genuine
  * prior value rather than the raw front-matter string now sitting on the bean.
  *
- * @param OODBBean $bean             The bean to mutate.
- * @param array    $front_matter     The parsed front matter.
- * @param mixed    $previous_created The created date held before apply_frontmatter().
+ * @param OODBBean                 $bean             The bean to mutate.
+ * @param array<int|string, mixed> $front_matter     The parsed front matter.
+ * @param mixed                    $previous_created The created date held before apply_frontmatter().
  * @return void
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
@@ -385,7 +385,7 @@ function set_option(OODBBean $bean, mixed $value): void
  * The current time is bound as a parameter so the comparison uses the same
  * timezone basis as the stored `created` values (both produced by PHP's date()).
  *
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function not_scheduled_clause(): array
 {
@@ -405,7 +405,7 @@ function not_scheduled_clause(): array
  * not_scheduled_clause(), so a new query cannot accidentally omit one of the
  * conditions (which is how scheduled posts leaked into related posts).
  *
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function visible_clause(): array
 {

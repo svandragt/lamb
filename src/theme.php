@@ -236,7 +236,7 @@ function page_intro(): string
  *
  * @param string $body       Post body Markdown text to extract hashtags from.
  * @param int    $exclude_id Post ID to exclude from results.
- * @return array Associative array with a 'posts' key containing matching OODBBean objects.
+ * @return array{posts: list<OODBBean>} Associative array with a 'posts' key containing matching OODBBean objects.
  */
 function related_posts(string $body, int $exclude_id = 0): array
 {
@@ -248,10 +248,10 @@ function related_posts(string $body, int $exclude_id = 0): array
 /**
  * Finds all posts that contain at least one of the given tags, ordered by created date descending.
  *
- * @param array $tags       List of tag strings to search for.
+ * @param list<string> $tags List of tag strings to search for.
  * @param int   $exclude_id Post ID to exclude from results (e.g. the current post).
  * @param int   $limit      Maximum number of posts to return.
- * @return array Unique OODBBean post objects matching any of the tags.
+ * @return list<OODBBean> Unique OODBBean post objects matching any of the tags.
  */
 function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): array
 {

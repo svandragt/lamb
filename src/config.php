@@ -98,7 +98,7 @@ INI;
  * site down between save and fix.
  *
  * @param string $ini_text The raw INI text.
- * @return array The parsed sections/keys, or [] on failure.
+ * @return array<string, mixed> The parsed sections/keys, or [] on failure.
  */
 function parse_ini_safe(string $ini_text): array
 {
@@ -151,7 +151,7 @@ function ensure_explicit_theme(string $ini_text, string $default_theme = 'base')
 /**
  * Loads the configuration settings.
  *
- * @return array The configuration settings.
+ * @return array<string, mixed> The configuration settings.
  */
 function load(): array
 {
@@ -168,7 +168,7 @@ function load(): array
  *
  * @param string $stored_ini  The raw stored INI text.
  * @param string $default_ini The seeded default INI text.
- * @return array The effective configuration.
+ * @return array<string, mixed> The effective configuration.
  */
 function compose_config(string $stored_ini, string $default_ini): array
 {
@@ -199,7 +199,7 @@ function compose_config(string $stored_ini, string $default_ini): array
  * author's wall clock. Falls back to UTC when the configured value is missing or
  * not a recognised timezone identifier.
  *
- * @param array $config The loaded configuration.
+ * @param array<string, mixed> $config The loaded configuration.
  * @return string The timezone identifier that was applied.
  */
 function apply_timezone(array $config): string
@@ -314,7 +314,7 @@ function validate_ini(string $ini_text): array
 /**
  * Retrieves a list of slugs derived from menu items that should be excluded from the timeline.
  *
- * @return array An array of slugs to exclude.
+ * @return list<string> An array of slugs to exclude.
  */
 function get_menu_slugs(): array
 {
@@ -340,11 +340,11 @@ function get_menu_slugs(): array
 
         // Otherwise, if it's not a full URL, we treat it as a slug.
         if (!filter_var($value, FILTER_VALIDATE_URL)) {
-            $slugs[] = $value;
+            $slugs[] = (string) $value;
         }
     }
 
-    return array_unique($slugs);
+    return array_values(array_unique($slugs));
 }
 
 /**

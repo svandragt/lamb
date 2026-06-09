@@ -20,7 +20,7 @@ define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
  * Returns cookie options with the given expiry timestamp.
  *
  * @param int $expires Unix timestamp for cookie expiry.
- * @return array Cookie options array.
+ * @return array<string, mixed> Cookie options array.
  */
 function get_cookie_options(int $expires): array
 {
@@ -82,8 +82,8 @@ function send_304_if_current(int $contentTs, int $configTs): void
 /**
  * Builds a SQL NOT IN clause for excluding posts by slug.
  *
- * @param array $slugs Slugs to exclude.
- * @return array{sql: string, params: array}|null Clause and params, or null when list is empty.
+ * @param list<string> $slugs Slugs to exclude.
+ * @return array{sql: string, params: list<string>}|null Clause and params, or null when list is empty.
  */
 function build_exclude_slugs_clause(array $slugs): ?array
 {
@@ -104,7 +104,7 @@ function build_exclude_slugs_clause(array $slugs): ?array
  * @param int $per_page     Items per page.
  * @param int $total_posts  Total number of matching posts.
  * @param int $offset       Row offset for the current page.
- * @return array
+ * @return array{current: int, per_page: int, total_posts: int, total_pages: int, prev_page: int|null, next_page: int|null, offset: int}
  */
 function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
 {
@@ -138,9 +138,9 @@ function redirect_404(string $fallback): void
 /**
  * Responds with a 404 error page.
  *
- * @param array $_args   Unused.
+ * @param array<int, string> $_args   Unused.
  * @param bool  $use_fallback Whether to redirect to the configured fallback URL.
- * @return array An array containing the title, intro, and action of the 404 error page.
+ * @return array{title: string, intro: string, action: string} An array containing the title, intro, and action of the 404 error page.
  */
 function respond_404(array $_args = [], bool $use_fallback = false): array
 {
@@ -178,13 +178,13 @@ function redirect_uri(string $where): never
 /**
  * Upgrades the given posts by transforming the beans and storing them in the database if not already transformed.
  *
- * @param array $posts The array of posts to upgrade.
+ * @param array<int, mixed> $posts The array of posts to upgrade.
  * @return void
  */
 function upgrade_posts(array $posts): void
 {
     foreach ($posts as $bean) {
-        if ($bean === null) {
+        if (!$bean instanceof \RedBeanPHP\OODBBean) {
             continue;
         }
         if ((int)$bean->version === POST_VERSION) {
@@ -222,10 +222,10 @@ function upgrade_posts(array $posts): void
 /**
  * Paginates an in-memory array of items.
  *
- * @param array $values   Flat array of items to paginate.
+ * @param list<mixed> $values   Flat array of items to paginate.
  * @param int   $page     Current page (1-based, already clamped by caller).
  * @param int   $per_page Items per page.
- * @return array{items: array, pagination: array}
+ * @return array{items: list<mixed>, pagination: array<string, mixed>}
  */
 function paginate_array(array $values, int $page, int $per_page): array
 {
@@ -246,10 +246,10 @@ function paginate_array(array $values, int $page, int $per_page): array
  * @param string      $bean_type       RedBeanPHP bean type.
  * @param string      $order_by_clause SQL ORDER BY expression (without keyword).
  * @param string|null $where_sql       Optional WHERE clause.
- * @param array       $params          Bound parameters for the WHERE clause.
+ * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
  * @param int         $page            Current page (1-based, already clamped by caller).
  * @param int         $per_page        Items per page.
- * @return array{items: array, pagination: array}
+ * @return array{items: array<int, \RedBeanPHP\OODBBean>, pagination: array<string, mixed>}
  */
 function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page, int $per_page): array
 {
@@ -283,10 +283,10 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
  * @param mixed       $source          Array of items, or a bean type string for DB pagination.
  * @param string      $order_by_clause SQL ORDER BY expression (DB path only).
  * @param string|null $where_sql       Optional WHERE clause (DB path only).
- * @param array       $params          Bound parameters for the WHERE clause.
+ * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
  * @param int|null    $per_page        Items per page; falls back to config when null.
  * @param int|null    $page            Current page; falls back to $_GET['page'] when null.
- * @return array{items: array, pagination: array}
+ * @return array{items: array<int, mixed>, pagination: array<string, mixed>}
  */
 function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
 {
