@@ -96,6 +96,7 @@ Route\register_route('webmention', __NAMESPACE__ . '\\Webmention\respond_webment
 Route\register_route('micropub', __NAMESPACE__ . '\\Micropub\respond_micropub');
 Route\register_route('micropub-media', __NAMESPACE__ . '\\Micropub\respond_micropub_media');
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
+Route\register_route('checkbox', __NAMESPACE__ . '\\Response\respond_checkbox', $lookup);
 $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);

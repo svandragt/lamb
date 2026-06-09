@@ -24,7 +24,7 @@ else :
             continue;
         endif;
         ?>
-        <article>
+        <article data-post-id="<?= (int) $bean->id ?>">
             <header>
                 <?php if (!empty($bean->title)) : ?>
                 <h2><?= $template !== 'status' ? title_link($bean) : escape($bean->title) ?></h2>
