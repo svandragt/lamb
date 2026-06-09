@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Http\extract_page_segment;
 use function Lamb\Http\get_request_uri;
+use function Lamb\Http\page_path;
 
 class HttpTest extends TestCase
 {
@@ -84,5 +85,30 @@ class HttpTest extends TestCase
     public function testExtractPageSegmentClampsToAtLeastOne(): void
     {
         $this->assertSame(['/home', 1], extract_page_segment('/page/0'));
+    }
+
+    public function testPagePathAppendsSegmentForLaterPages(): void
+    {
+        $this->assertSame('/tag/foo/page/2', page_path('/tag/foo', 2));
+    }
+
+    public function testPagePathReturnsBaseForFirstPage(): void
+    {
+        $this->assertSame('/tag/foo', page_path('/tag/foo', 1));
+    }
+
+    public function testPagePathHomeFirstPageIsRoot(): void
+    {
+        $this->assertSame('/', page_path('/', 1));
+    }
+
+    public function testPagePathHomeLaterPageHasNoBase(): void
+    {
+        $this->assertSame('/page/3', page_path('/', 3));
+    }
+
+    public function testPagePathStripsExistingPageSegment(): void
+    {
+        $this->assertSame('/tag/foo/page/4', page_path('/tag/foo/page/2', 4));
     }
 }

@@ -48,6 +48,28 @@ function extract_page_segment(string $uri): array
 }
 
 /**
+ * Builds the clean pagination URL for a list path at a given page.
+ *
+ * The inverse of extract_page_segment(): strips any existing trailing
+ * `/page/N` off the path, then appends `/page/N` for page 2 onwards. Page 1
+ * is the bare base path (the homepage collapses to `/`), so the first page has
+ * a single canonical URL with no page segment.
+ *
+ * @param string $path The list path (may itself carry a `/page/N` suffix).
+ * @param int    $page The target page number.
+ * @return string The clean pagination URL.
+ */
+function page_path(string $path, int $page): string
+{
+    $base = rtrim((string)preg_replace('#/page/\d+/?$#', '', $path), '/');
+    if ($page <= 1) {
+        return $base === '' ? '/' : $base;
+    }
+
+    return $base . '/page/' . $page;
+}
+
+/**
  * Sanitises a value bound for a `Location:` header.
  *
  * Any request-derived value interpolated into a redirect target (the request

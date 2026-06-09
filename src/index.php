@@ -46,10 +46,8 @@ if (in_array($method, ['GET', 'HEAD'], true)) {
     if (isset($query_params['page'])) {
         $page_num = max(1, (int)$query_params['page']);
         unset($query_params['page']);
-        $clean_path = rtrim((string)strtok($_SERVER['REQUEST_URI'] ?? '/', '?'), '/');
-        $target = $page_num <= 1
-            ? ($clean_path === '' ? '/' : $clean_path)
-            : $clean_path . '/page/' . $page_num;
+        $clean_path = (string)strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+        $target = Http\page_path($clean_path, $page_num);
         $remaining = http_build_query($query_params);
         if ($remaining !== '') {
             $target .= '?' . $remaining;
