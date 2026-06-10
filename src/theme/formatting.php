@@ -15,6 +15,51 @@ function escape(string $html): string
     return htmlspecialchars($html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE);
 }
 
+/**
+ * Demotes a post body's headings so its highest heading sits at $top, keeping
+ * the levels relative to each other.
+ *
+ * Post bodies are stored at the author's literal heading levels (theme-neutral),
+ * so each theme fits them into its own outline at render time. A theme that
+ * renders the post title at h2 passes $top = 3, so the body's highest heading
+ * becomes h3 (directly under the title) regardless of whether the author started
+ * at `#` or `##`, and deeper headings shift by the same amount — no level is
+ * skipped at the top of the body, which keeps the document outline in order for
+ * screen readers (WCAG heading-order).
+ *
+ * Only ever demotes: the shift is `max(0, $top - highestLevelPresent)`, so a
+ * body already deeper than $top is left untouched rather than promoted. Results
+ * clamp at h6. Open and close tags shift identically and attributes are
+ * preserved. A body with no headings is returned unchanged.
+ *
+ * @param string $html The post body HTML, at the author's literal levels.
+ * @param int    $top  The level the body's highest heading should occupy.
+ * @return string The HTML with headings demoted to fit beneath $top.
+ */
+function demote_headings(string $html, int $top): string
+{
+    preg_match_all('#<h([1-6])\b#i', $html, $m);
+    $levels = array_map('intval', $m[1]);
+    if ($levels === []) {
+        return $html;
+    }
+
+    $highest = min($levels);
+    $by = max(0, $top - $highest);
+    if ($by === 0) {
+        return $html;
+    }
+
+    return preg_replace_callback(
+        '#<(/?)h([1-6])\b([^>]*)>#i',
+        static function (array $m) use ($by): string {
+            $level = min(6, (int) $m[2] + $by);
+            return '<' . $m[1] . 'h' . $level . $m[3] . '>';
+        },
+        $html
+    ) ?? $html;
+}
+
 
 /**
  * Render the reply-context line for a post that is a reply to another URL.
