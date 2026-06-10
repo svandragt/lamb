@@ -180,9 +180,9 @@ function normalize_matter_keys(array $matter): array
 }
 
 /**
- * Consumes a leading level-1 ATX heading as the post title.
+ * Consumes a leading ATX heading as the post title.
  *
- * When a body has no front-matter `title` but its content opens with a `# `
+ * When a body has no front-matter `title` but its content opens with an ATX
  * heading (the Markdown document-title convention), that line is removed from
  * the content and its text written into the body's front matter as `title:`
  * via inject_title_matter() (which creates a front-matter block when the body
@@ -190,13 +190,14 @@ function normalize_matter_keys(array $matter): array
  * flows through the normal parse_matter()/finalize_slug() path, so slug pinning
  * and collision handling need no special casing.
  *
- * Only a single leading `# ` heading is consumed: a `##`+ heading is a section,
- * not the title, and a heading that is not the first content is left in place.
- * Idempotent — once the title is in front matter, a second call is a no-op.
+ * Any leading heading level is recognised (`#` through `######`): the level the
+ * author types for the title is immaterial, the first heading is the title. A
+ * heading that is not the first content is left in place. Idempotent — once the
+ * title is in front matter, a second call is a no-op.
  *
  * @param string $body The raw post body.
  * @return string The body with a leading heading promoted to the title, or the
- *                body unchanged when no leading `# ` heading is present.
+ *                body unchanged when no leading heading is present.
  */
 function consume_leading_heading(string $body): string
 {
@@ -205,7 +206,7 @@ function consume_leading_heading(string $body): string
     }
 
     [, $content] = split_frontmatter($body);
-    if (!preg_match('/\A\s*#[ \t]+(.+?)[ \t]*(?:\R|\z)/', $content, $m)) {
+    if (!preg_match('/\A\s*#{1,6}[ \t]+(.+?)[ \t]*(?:\R|\z)/', $content, $m)) {
         return $body;
     }
 

@@ -9,7 +9,7 @@ use function Lamb\Theme\action_preview;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
 use function Lamb\Config\is_menu_item;
-use function Lamb\Theme\demote_headings;
+use function Lamb\Theme\anchor_headings;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\link_source;
 use function Lamb\Theme\the_reply_context;
@@ -34,7 +34,7 @@ else :
             </header>
             <?= the_reply_context($bean) ?>
             <?php // Post title renders at h2, so the body's top heading sits at h3 (h2 under the site h1 when untitled). ?>
-            <?= demote_headings($bean->transformed, !empty($bean->title) ? 3 : 2) ?>
+            <?= anchor_headings($bean->transformed, !empty($bean->title) ? 3 : 2) ?>
             <footer>
                 <small><?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
             </footer>

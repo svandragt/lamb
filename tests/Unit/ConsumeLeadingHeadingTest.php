@@ -7,7 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\parse_bean;
 use function Lamb\Post\consume_leading_heading;
-use function Lamb\Theme\demote_headings;
+use function Lamb\Theme\anchor_headings;
 
 class ConsumeLeadingHeadingTest extends TestCase
 {
@@ -52,11 +52,15 @@ class ConsumeLeadingHeadingTest extends TestCase
         $this->assertSame($body, consume_leading_heading($body));
     }
 
-    public function testOnlyConsumesLevelOneHeading()
+    public function testConsumesAnyLeadingHeadingLevel()
     {
-        $body = "## A Section\n\nBody.";
+        // The level the author types for the title is immaterial.
+        $result = consume_leading_heading("### My Post\n\nBody.");
 
-        $this->assertSame($body, consume_leading_heading($body));
+        $this->assertStringContainsString('title: ', $result);
+        $this->assertStringContainsString('My Post', $result);
+        $this->assertStringNotContainsString('### My Post', $result);
+        $this->assertStringContainsString('Body.', $result);
     }
 
     public function testPreservesExistingFrontMatterWithoutTitle()
@@ -107,7 +111,7 @@ class ConsumeLeadingHeadingTest extends TestCase
         $this->assertStringContainsString('<h2>Section</h2>', (string) $bean->transformed);
 
         // The theme (title at h2) anchors the body's top heading at h3.
-        $rendered = demote_headings((string) $bean->transformed, 3);
+        $rendered = anchor_headings((string) $bean->transformed, 3);
         $this->assertStringContainsString('<h3>Section</h3>', $rendered);
         $this->assertStringContainsString('<h4>Sub</h4>', $rendered);
         $this->assertStringNotContainsString('<h2>', $rendered);

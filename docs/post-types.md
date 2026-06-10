@@ -51,7 +51,7 @@ You don't have to write front-matter by hand: if a post has no `title:` but its 
 Hi I'm John Sheeple and the example author of this site.
 ```
 
-is the same as the front-matter version above — Lamb moves the heading into a `title:` for you, so the title isn't also repeated as a heading inside the post. (Only a leading `#` heading is consumed; a `##` or lower is left in place as a section.)
+is the same as the front-matter version above — Lamb moves the heading into a `title:` for you, so the title isn't also repeated as a heading inside the post. Any leading heading level works (`#` through `######`); the first heading is the title whatever level you typed. A heading that isn't the very first line is left in place as a section.
 
 Slugs for pages are derived from the title on creation unless you explicitly provide `slug:` in the front-matter. The slug for the example above is `about-me` and the permalink is `/about-me`.
 
