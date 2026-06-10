@@ -70,8 +70,14 @@ function configure_session(): void
     ini_set("session.cookie_secure", $secure ? 1 : 0);
     ini_set("session.use_strict_mode", 1);
 
+    // Remember the login for a week: persist the server-side session that long so
+    // GC doesn't reap it, and give the session cookie a matching lifetime so it
+    // survives a browser restart instead of dying as a session cookie.
+    ini_set("session.gc_maxlifetime", (string) REMEMBER_LIFETIME);
+
     // Prevent the browser from sending cookies along with cross-site requests (CSRF)
     $cookie_params = [
+        'lifetime' => REMEMBER_LIFETIME,
         'samesite' => 'Strict',
         'path' => '/',
         'httponly' => true,
