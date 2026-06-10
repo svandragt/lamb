@@ -117,6 +117,23 @@ class ConsumeLeadingHeadingTest extends TestCase
         $this->assertStringNotContainsString('<h2>', $rendered);
     }
 
+    public function testPastedSubheadingShallowerThanTitleStillAnchorsToHThree()
+    {
+        // The author typed a deep title (#### ) then pasted a shallower heading
+        // (## ). The absolute levels are immaterial: the title renders at h2 and
+        // the body's highest heading re-bases to h3 — no inverted/ skipped outline.
+        $bean = R::dispense('post');
+        $bean->body = "#### My post\n\nThis is my post.\n\n## Pasted content\n\nOh no.";
+
+        parse_bean($bean);
+        $this->assertSame('My post', $bean->title);
+        $this->assertStringContainsString('<h2>Pasted content</h2>', (string) $bean->transformed);
+
+        $rendered = anchor_headings((string) $bean->transformed, 3);
+        $this->assertStringContainsString('<h3>Pasted content</h3>', $rendered);
+        $this->assertStringNotContainsString('<h2>', $rendered);
+    }
+
     public function testParseBeanLeavesPlainStatusUntitled()
     {
         $bean = R::dispense('post');
