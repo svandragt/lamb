@@ -94,19 +94,71 @@ function configure_session(): void
 }
 
 /**
+ * Builds the signed value for the lamb_logged_in marker cookie: a random id
+ * with an HMAC tag so the server can later confirm it issued the cookie without
+ * touching session storage.
+ *
+ * The key is the per-install bcrypt login hash (LAMB_LOGIN_PASSWORD): high
+ * entropy, never sent to the client, and one-way HMAC means the cookie leaks
+ * nothing about it. Changing the password rotates the key and invalidates
+ * outstanding markers (logs the author out everywhere).
+ *
+ * @param string $id     Random opaque identifier.
+ * @param string $secret HMAC key (the bcrypt login hash).
+ * @return string Signed marker value "<id>.<hmac>".
+ */
+function sign_login_marker(string $id, string $secret): string
+{
+    return $id . '.' . hash_hmac('sha256', $id, $secret);
+}
+
+/**
+ * Verifies a lamb_logged_in marker cookie's HMAC in constant time. A missing,
+ * malformed, tampered, or wrong-key value is rejected — so a forged cookie costs
+ * nothing beyond this check and never reaches session_start().
+ *
+ * @param string $value  The cookie value to verify.
+ * @param string $secret HMAC key (the bcrypt login hash).
+ * @return bool
+ */
+function valid_login_marker(string $value, string $secret): bool
+{
+    if ($secret === '') {
+        return false;
+    }
+    $dot = strrpos($value, '.');
+    if ($dot === false) {
+        return false;
+    }
+    $id = substr($value, 0, $dot);
+    $sig = substr($value, $dot + 1);
+    if ($id === '' || $sig === '') {
+        return false;
+    }
+    return hash_equals(hash_hmac('sha256', $id, $secret), $sig);
+}
+
+/**
  * Decides whether a request should resume/start a PHP session.
  *
- * A session is only warranted when the request carries evidence of a (previously)
- * logged-in user: the lamb_logged_in marker cookie set at login, or an existing
- * LAMBSESSID session cookie. Anonymous visitors get no session — and therefore no
- * Set-Cookie and no no-cache headers — so their pages remain cacheable (issue #116).
+ * A session is only warranted when the request carries a lamb_logged_in marker
+ * cookie whose HMAC validates — evidence the server itself issued it at login.
+ * Bare cookie presence (a forged marker, or any LAMBSESSID value) is NOT enough:
+ * starting a session on unvalidated input lets an attacker flood the server with
+ * junk cookies and force a new session file per request (resource-exhaustion DoS).
+ * Anonymous visitors get no session — and therefore no Set-Cookie and no no-cache
+ * headers — so their pages remain cacheable (issue #116).
  *
  * @param array<string, mixed> $cookies Typically $_COOKIE.
  * @return bool
  */
 function should_start_session(array $cookies): bool
 {
-    return isset($cookies['lamb_logged_in']) || isset($cookies['LAMBSESSID']);
+    $marker = $cookies['lamb_logged_in'] ?? null;
+    if (!is_string($marker)) {
+        return false;
+    }
+    return valid_login_marker($marker, (string) getenv('LAMB_LOGIN_PASSWORD'));
 }
 
 /**

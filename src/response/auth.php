@@ -53,7 +53,10 @@ function redirect_login(): array
     session_regenerate_id(true);
 
     $uuid = bin2hex(random_bytes(16)); // Generate a UUID
-    setcookie('lamb_logged_in', $uuid, get_cookie_options(time() + REMEMBER_LIFETIME));
+    // Sign the marker so should_start_session() can confirm we issued it without
+    // touching session storage — a forged cookie can't trigger a session_start().
+    $marker = \Lamb\Bootstrap\sign_login_marker($uuid, LOGIN_PASSWORD);
+    setcookie('lamb_logged_in', $marker, get_cookie_options(time() + REMEMBER_LIFETIME));
     $where = local_redirect_target(filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL) ?: null);
     redirect_uri($where);
 }
