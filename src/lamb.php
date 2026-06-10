@@ -15,6 +15,7 @@ const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (de
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Post\consume_leading_heading;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
@@ -162,6 +163,13 @@ function parse_bean(OODBBean $bean): void
     // so the recovery is not limited to populate_bean(). Idempotent for bodies
     // already using a literal `---` fence.
     $bean->body = normalize_frontmatter_fence($bean->body);
+
+    // Promote a leading `# Heading` to the post title when no front-matter title
+    // exists, so the body's document title isn't rendered as a duplicate heading
+    // inside the content. Runs at the same choke point as the fence recovery, so
+    // every save path benefits, and is idempotent once the title is in front
+    // matter.
+    $bean->body = consume_leading_heading($bean->body);
 
     $markdown = render_body($bean->body);
 

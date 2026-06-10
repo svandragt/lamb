@@ -43,7 +43,19 @@ title: About me
 Hi I'm John Sheeple and the example author of this site.
 ```
 
+You don't have to write front-matter by hand: if a post has no `title:` but its body opens with a top-level Markdown heading, Lamb treats that heading as the title. Writing
+
+```markdown
+# About me
+
+Hi I'm John Sheeple and the example author of this site.
+```
+
+is the same as the front-matter version above — Lamb moves the heading into a `title:` for you, so the title isn't also repeated as a heading inside the post. Any leading heading level works (`#` through `######`); the first heading is the title whatever level you typed. A heading that isn't the very first line is left in place as a section.
+
 Slugs for pages are derived from the title on creation unless you explicitly provide `slug:` in the front-matter. The slug for the example above is `about-me` and the permalink is `/about-me`.
+
+Headings inside a post body are levelled to fit beneath the post title automatically, so the page outline stays in order (the post title is a heading, and your body headings sit one level below it).
 
 Editing the `slug:` line (or the title, when no explicit slug is set) reslugs the post, and Lamb automatically stores a 301 redirect from the old slug — _good URLs don't change_, so bookmarks and inbound links keep working. See [Redirections]({{ site.baseurl }}{% link redirections.md %}).
 
