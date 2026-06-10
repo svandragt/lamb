@@ -204,17 +204,7 @@ function record_feed_crawl(string $name, string $url, SimplePie $feed): array
     $items     = 0;
     /** @var SimplePieItem $item */
     foreach ($feed->get_items() as $item) {
-        $pub_date = $item->get_date('U');
-        $mod_date = $item->get_updated_date('U');
-
-        // Compare the publication date of the item with the success watermark.
-        if ($pub_date > $watermark) {
-            create_item($item, $name);
-            $items++;
-            continue;
-        }
-        if ($mod_date > $watermark) {
-            update_item($item, $name);
+        if (ingest_item($item, $name, $watermark)) {
             $items++;
         }
     }
@@ -275,6 +265,44 @@ function prune_feed_status(): int
     }
 
     return $removed;
+}
+
+/**
+ * Decides whether a single feed item is created, updated, or skipped, keyed on
+ * its `feeditem_uuid` rather than dates alone.
+ *
+ * Deduplication lives here: an item that already has a post is never recreated
+ * (the source of the recreated-draft bug when a feed re-stamps an item's
+ * publication date past the watermark). A brand-new item is created only when
+ * its publication date is newer than the watermark. An already-ingested post is
+ * re-synced from the source only when the item was modified after the watermark
+ * AND the author has not taken the post over via the edit form
+ * (`feed_locked`) — so a published, re-slugged post is left intact.
+ *
+ * @param SimplePieItem $item      The feed item.
+ * @param string        $name      Feed name from config.
+ * @param int           $watermark The feed's last-success timestamp.
+ * @return bool True when a post was created or updated (counts toward the run total).
+ */
+function ingest_item(SimplePieItem $item, string $name, int $watermark): bool
+{
+    $uuid     = md5($name . $item->get_id());
+    $existing = R::findOne('post', ' feeditem_uuid = ? ', [$uuid]);
+
+    if (!$existing) {
+        if ((int) $item->get_date('U') > $watermark) {
+            create_item($item, $name);
+            return true;
+        }
+        return false;
+    }
+
+    if (!$existing->feed_locked && (int) $item->get_updated_date('U') > $watermark) {
+        update_item($item, $name);
+        return true;
+    }
+
+    return false;
 }
 
 function update_item(SimplePieItem $item, string $name): void

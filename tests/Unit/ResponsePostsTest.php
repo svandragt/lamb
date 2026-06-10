@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\Response\apply_checkbox_toggle;
+use function Lamb\Response\lock_if_feed_sourced;
 use function Lamb\Response\redirect_created;
 use function Lamb\Response\redirect_edited;
 use function Lamb\Response\respond_edit;
@@ -260,5 +261,29 @@ class ResponsePostsTest extends TestCase
         R::store($post);
 
         $this->assertFalse(apply_checkbox_toggle($post->id, -1, true));
+    }
+
+    // -------------------------------------------------------------------------
+    // lock_if_feed_sourced
+    // -------------------------------------------------------------------------
+
+    public function testLockIfFeedSourcedLocksFeedPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = md5('Feed' . 'item-id');
+
+        lock_if_feed_sourced($bean);
+
+        $this->assertSame(1, (int) $bean->feed_locked);
+    }
+
+    public function testLockIfFeedSourcedLeavesNonFeedPostUntouched(): void
+    {
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = '';
+
+        lock_if_feed_sourced($bean);
+
+        $this->assertEmpty($bean->feed_locked);
     }
 }

@@ -36,6 +36,12 @@ The first cron run after adding a feed imports every item currently present in t
 
 After that first run, only items published or updated since the previous run are imported.
 
+An item is matched to its existing post by a stable identifier, so a later crawl never creates a duplicate of something it has already imported — even if the publisher restamps the item's date.
+
+## Editing an imported post
+
+Imported posts start as [drafts]({{ site.baseurl }}{% link drafts.md %}) by default. As soon as you edit one through Lamb — for example to publish it, change its slug, or tidy the text — Lamb treats it as yours: later crawls stop syncing changes from the source onto it, so your edits are never overwritten (and it is still never duplicated). Posts you have not edited continue to pick up updates from the source feed as before.
+
 ## Checking crawl status
 
 When `/_cron` runs unattended you don't see its live output, so Lamb records the health
