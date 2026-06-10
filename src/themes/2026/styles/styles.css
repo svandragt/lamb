@@ -711,6 +711,11 @@ section.entry-form {
 
 textarea {
     font: 400 var(--text-sm)/1.5 var(--font-mono);
+    /* Geist Mono ligates triple characters (###, ---, ===); the fused glyph
+       overhangs left and looks like a negative indent in the editor. Keep
+       literal characters when typing Markdown. */
+    font-variant-ligatures: none;
+    font-feature-settings: "liga" 0, "calt" 0;
     width: 100%;
     max-width: 100%;
     min-height: 7em;
