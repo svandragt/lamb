@@ -6,17 +6,44 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Bootstrap\should_start_session;
 use function Lamb\Bootstrap\cache_headers;
+use function Lamb\Bootstrap\configure_session;
+use function Lamb\Bootstrap\sign_login_marker;
+use function Lamb\Bootstrap\valid_login_marker;
 
 /**
  * Sessions for previously logged-in users only (issue #116).
  *
  * Anonymous visitors must not get a session started: that forces a Set-Cookie
  * and PHP's no-cache headers, which makes every public page uncacheable.
- * A session is only started when the request carries evidence of a logged-in
- * user (the lamb_logged_in marker cookie, or an existing LAMBSESSID).
+ *
+ * A session is only started when the request carries a lamb_logged_in marker
+ * cookie whose HMAC validates against the server secret. Bare cookie presence
+ * is not enough: forged markers (and a bare LAMBSESSID) must NOT start a session,
+ * or an attacker could flood requests with junk cookies and make the server
+ * write a new session file per request (resource-exhaustion DoS).
  */
 class SessionBootstrapTest extends TestCase
 {
+    private const SECRET = 'test-bcrypt-hash-secret';
+
+    /** @var string|false */
+    private $previous_secret;
+
+    protected function setUp(): void
+    {
+        $this->previous_secret = getenv('LAMB_LOGIN_PASSWORD');
+        putenv('LAMB_LOGIN_PASSWORD=' . self::SECRET);
+    }
+
+    protected function tearDown(): void
+    {
+        if ($this->previous_secret === false) {
+            putenv('LAMB_LOGIN_PASSWORD');
+        } else {
+            putenv('LAMB_LOGIN_PASSWORD=' . $this->previous_secret);
+        }
+    }
+
     public function testAnonymousVisitorWithNoCookiesDoesNotStartSession(): void
     {
         $this->assertFalse(should_start_session([]));
@@ -27,14 +54,40 @@ class SessionBootstrapTest extends TestCase
         $this->assertFalse(should_start_session(['theme' => 'dark', 'consent' => '1']));
     }
 
-    public function testLoginMarkerCookieStartsSession(): void
+    public function testValidlySignedMarkerStartsSession(): void
     {
-        $this->assertTrue(should_start_session(['lamb_logged_in' => 'abc123']));
+        $marker = sign_login_marker('deadbeef', self::SECRET);
+        $this->assertTrue(should_start_session(['lamb_logged_in' => $marker]));
     }
 
-    public function testExistingSessionCookieStartsSession(): void
+    public function testForgedUnsignedMarkerDoesNotStartSession(): void
     {
-        $this->assertTrue(should_start_session(['LAMBSESSID' => 'deadbeef']));
+        $this->assertFalse(should_start_session(['lamb_logged_in' => 'abc123']));
+    }
+
+    public function testTamperedMarkerDoesNotStartSession(): void
+    {
+        $marker = sign_login_marker('deadbeef', self::SECRET) . 'x';
+        $this->assertFalse(should_start_session(['lamb_logged_in' => $marker]));
+    }
+
+    public function testMarkerSignedWithWrongSecretDoesNotStartSession(): void
+    {
+        $marker = sign_login_marker('deadbeef', 'a-different-secret');
+        $this->assertFalse(should_start_session(['lamb_logged_in' => $marker]));
+    }
+
+    public function testBareSessionCookieDoesNotStartSession(): void
+    {
+        // The whole point of the marker gate: a forged LAMBSESSID must not be
+        // enough to trigger session_start() and a per-request disk write.
+        $this->assertFalse(should_start_session(['LAMBSESSID' => 'deadbeef']));
+    }
+
+    public function testValidMarkerRejectedWhenNoServerSecretConfigured(): void
+    {
+        putenv('LAMB_LOGIN_PASSWORD');
+        $this->assertFalse(valid_login_marker(sign_login_marker('deadbeef', ''), ''));
     }
 
     public function testAnonymousPagesAreCacheable(): void
@@ -57,5 +110,33 @@ class SessionBootstrapTest extends TestCase
     {
         $this->assertStringContainsString('Vary: Cookie', implode("\n", cache_headers(false)));
         $this->assertStringContainsString('Vary: Cookie', implode("\n", cache_headers(true)));
+    }
+
+    /**
+     * Remember-me: the session cookie persists for a week rather than dying on
+     * browser close, so logins survive restarts (no checkbox — always on).
+     */
+    public function testSessionCookiePersistsForRememberLifetime(): void
+    {
+        // configure_session() runs at bootstrap before any session is active;
+        // in the shared test process another test may have left one open.
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        configure_session();
+        $this->assertSame(REMEMBER_LIFETIME, session_get_cookie_params()['lifetime']);
+    }
+
+    /**
+     * The server-side session must outlive the cookie too, or GC reaps the
+     * session data before the persistent cookie expires.
+     */
+    public function testServerSessionLifetimeMatchesRememberLifetime(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        configure_session();
+        $this->assertSame((string) REMEMBER_LIFETIME, ini_get('session.gc_maxlifetime'));
     }
 }
