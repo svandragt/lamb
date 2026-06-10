@@ -183,6 +183,10 @@ function redirect_edited(): void
     // pinned into the body's front matter so the edit form shows it.
     finalize_slug($bean);
 
+    // Editing a feed-sourced post through the form marks it author-owned, so
+    // later crawls stop overwriting it (they still never duplicate it).
+    lock_if_feed_sourced($bean);
+
     try {
         R::store($bean);
     } catch (SQL $e) {
@@ -214,6 +218,25 @@ function redirect_edited(): void
     $redirect = $_SESSION['edit-referrer'];
     unset($_SESSION['edit-referrer']);
     redirect_uri($redirect);
+}
+
+/**
+ * Marks a feed-sourced post as author-owned so feed re-ingestion leaves it alone.
+ *
+ * Feed crawls dedupe on `feeditem_uuid` and re-sync source updates onto matching
+ * posts. Once the author edits such a post through the edit form, that auto-sync
+ * would clobber their changes, so set `feed_locked` to opt the post out of future
+ * updates. Posts that did not originate from a feed (`feeditem_uuid` empty) are
+ * left untouched.
+ *
+ * @param OODBBean $bean The post being saved.
+ * @return void
+ */
+function lock_if_feed_sourced(OODBBean $bean): void
+{
+    if (!empty($bean->feeditem_uuid)) {
+        $bean->feed_locked = 1;
+    }
 }
 
 /**
