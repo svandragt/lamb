@@ -33,8 +33,11 @@ function redirect_login(): array
     header("Pragma: no-cache");
 
     if (isset($_SESSION[SESSION_LOGIN])) {
-        // Already logged in
+        // Already logged in (e.g. an existing session adopted via LAMBSESSID).
+        // Reissue the marker too: the session is authoritative, but without a
+        // valid marker the next request treats the visitor as anonymous.
         session_regenerate_id(true);
+        set_login_marker();
         redirect_uri('/');
     }
     if (!isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
@@ -51,14 +54,28 @@ function redirect_login(): array
 
     $_SESSION[SESSION_LOGIN] = true;
     session_regenerate_id(true);
-
-    $uuid = bin2hex(random_bytes(16)); // Generate a UUID
-    // Sign the marker so should_start_session() can confirm we issued it without
-    // touching session storage — a forged cookie can't trigger a session_start().
-    $marker = \Lamb\Bootstrap\sign_login_marker($uuid, LOGIN_PASSWORD);
-    setcookie('lamb_logged_in', $marker, get_cookie_options(time() + REMEMBER_LIFETIME));
+    set_login_marker();
     $where = local_redirect_target(filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL) ?: null);
     redirect_uri($where);
+}
+
+/**
+ * Issues the signed lamb_logged_in marker cookie for the current login.
+ *
+ * The marker is a random id signed with the per-install login hash so
+ * should_start_session() can confirm we issued it without touching session
+ * storage — a forged cookie can't trigger a session_start(). Called on every
+ * path that concludes the visitor is authenticated, so the marker never drifts
+ * out of sync with the session.
+ *
+ * @return void
+ * @throws RandomException
+ */
+function set_login_marker(): void
+{
+    $uuid = bin2hex(random_bytes(16));
+    $marker = \Lamb\Bootstrap\sign_login_marker($uuid, LOGIN_PASSWORD);
+    setcookie('lamb_logged_in', $marker, get_cookie_options(time() + REMEMBER_LIFETIME));
 }
 
 /**
