@@ -33,6 +33,14 @@ onLoaded(() => {
     // Clicking anywhere in the dialog (image or backdrop) closes it.
     dialog.on('click', () => dialog.close())
 
+    // A native <dialog> does not lock the page behind it, so the content
+    // underneath the backdrop stays scrollable while the modal is open. Pin the
+    // body's overflow while the modal is shown and restore it on close (covers
+    // Escape, backdrop click, and image click alike).
+    dialog.on('close', () => {
+        document.body.style.overflow = ''
+    })
+
     /**
      * Marks an image as zoomable when the layout renders it smaller than its
      * natural size.
@@ -60,6 +68,7 @@ onLoaded(() => {
             cancel(ev)
             modalImg.src = img.currentSrc || img.src
             modalImg.alt = img.alt
+            document.body.style.overflow = 'hidden'
             dialog.showModal()
         })
     })
