@@ -8,6 +8,7 @@
     "jsdom": "^29.1.1"
   },
   "scripts": {
-    "screenshot": "pnpm exec node scripts/screenshot.mjs"
+    "screenshot": "pnpm exec node scripts/screenshot.mjs",
+    "test": "node --test \"tests/js/**/*.test.mjs\""
   }
 }

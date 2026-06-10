@@ -33,6 +33,9 @@ vendor/bin/codecept run Unit
 # Run acceptance tests (requires SITE_URL in .env)
 vendor/bin/codecept run Acceptance
 
+# Run client-side JavaScript unit tests (node:test + jsdom)
+pnpm test
+
 # Generate password hash and write .env
 php make-password.php <your-password>
 
@@ -455,6 +458,12 @@ Tests use **Codeception 5** with PHPUnit underneath.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
 Config in `codeception.yml` reads env from `.env`.
+
+### JavaScript unit tests
+
+Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test runner (`node:test`) plus `jsdom` — no extra framework. Run them with `pnpm test` (`node --test "tests/js/**/*.test.mjs"`); CI runs the same via the `js-test` job.
+
+The scripts ship as plain `<script>`-tag globals (no module exports), so tests don't import them. Instead `tests/js/helpers.mjs` (`loadScripts()`) concatenates the source(s), evaluates them inside a `jsdom` window (`runScripts: 'outside-only'`), and returns the requested globals — keeping the shipped files untouched. Handlers registered via `onLoaded` (DOMContentLoaded) attach only after you dispatch a `DOMContentLoaded` event, since jsdom finishes parsing before the eval. See `tests/js/paste-link.test.mjs` for the pattern (faking a `paste` event with `clipboardData.getData`).
 
 ### Red-Green TDD
 

@@ -88,6 +88,27 @@ jobs:
         if: matrix.php-version == '8.2'
         run: composer coverage
 
+  # Client-side JavaScript unit tests (node:test + jsdom). Fast and
+  # dependency-light, so it always runs and feeds the aggregate `ci` gate.
+  js-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+      - name: Cache pnpm store
+        uses: actions/cache@v5
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: pnpm-
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run JS tests
+        run: pnpm test
+
   # Browser end-to-end suite. Only runs when e2e-relevant files change
   # (see the `changes` job); otherwise it is skipped and the gate below
   # treats that as a pass.
@@ -152,16 +173,17 @@ jobs:
   # passing — which would let a red PR merge.
   ci:
     runs-on: ubuntu-latest
-    needs: [quality, test, playwright]
+    needs: [quality, test, js-test, playwright]
     if: always()
     steps:
       - name: Verify required jobs succeeded
         run: |
           echo "quality:    ${{ needs.quality.result }}"
           echo "test:       ${{ needs.test.result }}"
+          echo "js-test:    ${{ needs.js-test.result }}"
           echo "playwright: ${{ needs.playwright.result }}"
-          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ]; then
-            echo "::error::quality or test did not succeed"
+          if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.js-test.result }}" != "success" ]; then
+            echo "::error::quality, test or js-test did not succeed"
             exit 1
           fi
           # playwright is skipped on PRs that don't touch e2e-relevant paths;
