@@ -9,8 +9,9 @@ define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
 
-Bootstrap\bootstrap_db(getenv('LAMB_DATA_DIR') ?: '../data');
-Bootstrap\bootstrap_session();
+$data_dir = getenv('LAMB_DATA_DIR') ?: '../data';
+Bootstrap\bootstrap_db($data_dir);
+Bootstrap\bootstrap_session($data_dir);
 
 $config = Config\load();
 Config\apply_timezone($config);

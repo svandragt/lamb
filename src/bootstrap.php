@@ -179,13 +179,40 @@ function start_session(): void
 }
 
 /**
- * Initializes and secures a session, starting it only for (previously) logged-in users.
+ * Points PHP's session storage at a dedicated directory under the app's data dir.
  *
+ * The default save_path is usually shared with every other PHP app on the host.
+ * Because PHP's GC sweeps the whole save_path against the running request's
+ * gc_maxlifetime, Lamb's week-long lifetime would otherwise spare other apps'
+ * short-lived sessions (they linger), and their shorter GC would reap Lamb's
+ * week-long sessions early. A dedicated directory isolates Lamb's GC to its own
+ * files in both directions, and putting it under the persistent data dir means
+ * a deploy or container restart that wipes ephemeral storage no longer logs the
+ * author out before the marker cookie expires.
+ *
+ * @param string $data_dir The app data directory (same one that holds lamb.db).
  * @return void
  */
-function bootstrap_session(): void
+function configure_session_save_path(string $data_dir): void
+{
+    $path = $data_dir . '/sessions';
+    if (!is_dir($path)) {
+        // 0700: only the web-server/PHP user should read session files.
+        mkdir($path, 0700, true);
+    }
+    ini_set('session.save_path', $path);
+}
+
+/**
+ * Initializes and secures a session, starting it only for (previously) logged-in users.
+ *
+ * @param string $data_dir The app data directory (same one that holds lamb.db).
+ * @return void
+ */
+function bootstrap_session(string $data_dir): void
 {
     configure_session();
+    configure_session_save_path($data_dir);
     if (should_start_session($_COOKIE)) {
         start_session();
     }

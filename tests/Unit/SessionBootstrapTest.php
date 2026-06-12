@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Bootstrap\should_start_session;
 use function Lamb\Bootstrap\cache_headers;
 use function Lamb\Bootstrap\configure_session;
+use function Lamb\Bootstrap\configure_session_save_path;
 use function Lamb\Bootstrap\sign_login_marker;
 use function Lamb\Bootstrap\valid_login_marker;
 
@@ -138,5 +139,29 @@ class SessionBootstrapTest extends TestCase
         }
         configure_session();
         $this->assertSame((string) REMEMBER_LIFETIME, ini_get('session.gc_maxlifetime'));
+    }
+
+    /**
+     * Sessions live in a dedicated directory under the app's persistent data dir,
+     * not the shared system default. This isolates Lamb's week-long GC from other
+     * PHP apps on the host (no cross-app session-lifetime bleed in either
+     * direction) and survives deploys/restarts that wipe ephemeral session stores.
+     */
+    public function testSessionSavePathIsDedicatedDirectoryUnderDataDir(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        $data_dir = sys_get_temp_dir() . '/lamb-session-test-' . getmypid();
+        @mkdir($data_dir, 0700, true);
+
+        configure_session_save_path($data_dir);
+
+        $expected = $data_dir . '/sessions';
+        $this->assertSame($expected, ini_get('session.save_path'));
+        $this->assertDirectoryExists($expected);
+
+        @rmdir($expected);
+        @rmdir($data_dir);
     }
 }
