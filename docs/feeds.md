@@ -57,7 +57,10 @@ With a hub configured, Lamb:
 
 Any public hub works — the IndieWeb wiki keeps a
 [list of hubs](https://indieweb.org/WebSub#Hubs) to choose from.
-Drafts, scheduled posts, and cross-posted feed items do not trigger pings.
+Drafts and cross-posted feed items do not trigger pings. A **scheduled** post
+can't ping at save time (its publication time hasn't arrived yet), so the hub
+is pinged for it on the next [`/_cron`]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
+run after it goes live — keep `/_cron` on a schedule for timely real-time push of scheduled posts.
 
 ## Related
 

@@ -120,6 +120,11 @@ function purge_deleted_posts(): int
         }
     }
 
+    $published = \Lamb\Websub\ping_scheduled_publishes();
+    if ($published > 0) {
+        printf("WebSub: pinged hub for %d scheduled post(s) now published." . PHP_EOL, $published);
+    }
+
     $sent = \Lamb\Webmention\process_outbound();
     if ($sent['sent'] || $sent['failed'] || $sent['skipped'] || $sent['cancelled']) {
         printf(
