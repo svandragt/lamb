@@ -86,6 +86,11 @@ function purge_deleted_posts(): int
         echo("Pruned $pruned stale feed status row(s)." . PHP_EOL);
     }
 
+    $flattened = \Lamb\flatten_redirects();
+    if ($flattened > 0) {
+        echo("Flattened $flattened redirect(s)." . PHP_EOL);
+    }
+
     echo("Updating feeds..." . PHP_EOL);
     foreach ($feeds as $name => $url) {
         flush();
