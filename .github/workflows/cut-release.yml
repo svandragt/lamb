@@ -1,0 +1,61 @@
+name: Cut release
+
+# Creates the GitHub Release (and its tag) at the tip of `release`. Publishing the
+# release fires `release-artifacts.yml` (on `release: published`), which builds the
+# no-Composer tarball and the Docker image. Run this *after* promoting main → release
+# (see RELEASING.md): the release is tagged at the current `release` tip.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag, e.g. 0.11.0 or 0.11.0-rc1'
+        required: true
+        type: string
+      prerelease:
+        description: 'Mark as a pre-release (use for -rcN tags)'
+        type: boolean
+        default: false
+      latest:
+        description: 'Mark as the latest release (final releases only)'
+        type: boolean
+        default: false
+      notes:
+        description: 'Release notes in Markdown'
+        required: true
+        type: string
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release
+          fetch-depth: 0
+
+      - name: Create release
+        # All inputs are passed via env (never interpolated into the script) so
+        # release notes can contain quotes/backticks without breaking the shell.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          NOTES: ${{ inputs.notes }}
+          PRERELEASE: ${{ inputs.prerelease }}
+          LATEST: ${{ inputs.latest }}
+        run: |
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+            echo "Release $VERSION already exists — refusing to overwrite." >&2
+            exit 1
+          fi
+          printf '%s' "$NOTES" > "$RUNNER_TEMP/notes.md"
+          flags=()
+          [ "$PRERELEASE" = "true" ] && flags+=(--prerelease)
+          [ "$LATEST" = "true" ] && flags+=(--latest)
+          gh release create "$VERSION" \
+            --target release \
+            --title "Lamb $VERSION" \
+            --notes-file "$RUNNER_TEMP/notes.md" \
+            "${flags[@]}"

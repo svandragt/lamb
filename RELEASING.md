@@ -89,6 +89,21 @@ gh release create <version> \
 # add --latest to mark a final release as the latest
 ```
 
+**No local `gh`?** The `Cut release` workflow (`.github/workflows/cut-release.yml`)
+does the same `gh release create --target release` server-side from a
+`workflow_dispatch`, so it can be driven without a local checkout or token (e.g.
+from an automation session that can trigger workflows but not create releases):
+
+```sh
+gh workflow run cut-release.yml \
+  -f version=<version> \
+  -f prerelease=true \
+  -f notes="$(cat /tmp/notes.md)"
+# omit prerelease (or set =false) for a final; add -f latest=true to mark it latest
+```
+
+It tags the current `release` tip, so promote main → release (step 4) first.
+
 - [ ] Merge the release PR (step 4) first, so `--target release` tags the
       intended commit. If the tag landed on the wrong commit, move it — the
       release object and its notes follow the tag:
