@@ -174,7 +174,13 @@ function parse_bean(OODBBean $bean): void
     $markdown = render_body($bean->body);
 
     $front_matter = parse_matter($bean->body);
-    $front_matter['description'] = extract_description($markdown);
+    // A hand-written `summary` (or `description`) in front matter wins over the
+    // auto-extracted first line; both feed the post's `description` column, which
+    // drives the feeds and the OpenGraph/meta tags.
+    $front_matter['description'] = front_matter_summary($front_matter) ?? extract_description($markdown);
+    // The summary is stored as the description, so drop the raw `summary` key
+    // before apply_frontmatter()'s blind copy persists it as a stray column.
+    unset($front_matter['summary']);
     $front_matter['transformed'] = highlight_and_link($markdown);
 
     // Capture the existing created date before apply_frontmatter() blind-copies the
@@ -221,6 +227,31 @@ function extract_description(string $markdown): string
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
     return html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+/**
+ * Returns the author's hand-written summary from front matter, or null when none.
+ *
+ * Accepts `summary` (the canonical key) and `description` as an alias;
+ * parse_matter() has already lower-cased the keys and converted underscores to
+ * dashes. A whitespace-only value is treated as absent, so an empty line falls
+ * back to the auto-generated description.
+ *
+ * @param array<int|string, mixed> $front_matter The parsed front matter.
+ * @return string|null The trimmed manual summary, or null to fall back to auto.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function front_matter_summary(array $front_matter): ?string
+{
+    foreach (['summary', 'description'] as $key) {
+        $value = $front_matter[$key] ?? null;
+        if (is_string($value) && trim($value) !== '') {
+            return trim($value);
+        }
+    }
+
+    return null;
 }
 
 /**
