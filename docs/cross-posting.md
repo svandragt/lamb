@@ -11,7 +11,10 @@ enables the creation of a group or team blog by subscribing to other Lamb blogs,
 from accounts on other services.
 
 All [feed types supported by SimplePie](https://www.simplepie.org/wiki/faq/what_versions_of_rss_or_atom_do_you_support)
-are supported.
+(RSS and Atom) are supported, as well as [JSON Feed](https://www.jsonfeed.org/) (v1 and v1.1).
+A feed whose URL ends in `.json` is parsed as JSON Feed; everything else is handled as RSS/Atom.
+Imported items get the same treatment whatever the source format: drafted by default, deduplicated,
+and shown with a citation back to the original.
 
 ## Setup
 
