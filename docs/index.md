@@ -97,6 +97,7 @@ Devtools / local environments / sandbox:
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %})
 * [Search]({{ site.baseurl }}{% link search.md %})
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %})
+* [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %})
 * [Themes]({{ site.baseurl }}{% link themes.md %})
 * [Trash]({{ site.baseurl }}{% link trash.md %})
 * [Upgrading]({{ site.baseurl }}{% link upgrading.md %})

@@ -60,4 +60,5 @@ Any suggestions to improve theming are welcomed.
 
 ## Related
 
+* [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %}): reference for the helper functions theme parts call.
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set the `theme` key in the config to activate a theme.
