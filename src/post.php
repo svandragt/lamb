@@ -2,6 +2,7 @@
 
 namespace Lamb\Post;
 
+use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use SimplePie\Item;
@@ -15,13 +16,13 @@ use function Lamb\Route\is_reserved_route;
  * Populates and returns an OODBBean instance with the given text and optional feed information.
  *
  * @param string $text The text content to be set in the bean.
- * @param Item|null $feed_item An optional feed item to extract creation date and ID from.
+ * @param Item|JsonFeedItem|null $feed_item An optional feed item to extract creation date and ID from.
  * @param string|null $feed_name An optional feed name to prefix the slug and associate with the bean.
  * @param OODBBean|null $bean An optional existing bean to populate. If null, a new 'post' bean is dispensed.
  * @return OODBBean The populated bean instance.
  * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
-function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): OODBBean
+function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): OODBBean
 {
     global $config;
 

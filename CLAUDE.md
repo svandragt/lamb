@@ -81,7 +81,8 @@ lamb/
 │   ├── security.php      # require_login(), require_csrf()
 │   ├── theme.php         # Template helpers, part(); more helpers in theme/
 │   ├── theme/            # Theme helper split: assets.php (styles/scripts), formatting.php (escape, human_time), meta.php (opengraph, titles)
-│   ├── network.php       # Feed ingestion via SimplePie (_cron route)
+│   ├── network.php       # Feed ingestion cron orchestrator (_cron route); helpers split into network/
+│   ├── network/          # Feed ingestion split: sources.php (config/SimplePie/RSS crawl), json_feed.php (JSON Feed parse + adapter), ingest.php (item→post pipeline), status.php (feedstatus health bean)
 │   ├── http.php          # get_request_uri(); shared HTTP client: fetch(), parse_status_line()
 │   ├── micropub.php      # Micropub endpoint (taproot/micropub-adapter subclass) + media endpoint
 │   ├── webmention.php    # Webmention receiving + outbound sending queue (via /_cron)
@@ -133,7 +134,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
 | `micropub.php` | `Lamb\Micropub` |
-| `network.php` | `Lamb\Network` |
+| `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
 | `response.php` + `response/*.php` | `Lamb\Response` |
 | `routes.php` | `Lamb\Route` |
@@ -142,7 +143,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `webmention.php` | `Lamb\Webmention` |
 | `websub.php` | `Lamb\Websub` |
 
-`response/` and `theme/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
+`response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
 ### Database
 
