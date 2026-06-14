@@ -9,7 +9,6 @@ use function Lamb\Config\ensure_explicit_theme;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
-use function Lamb\Config\resolve_theme;
 
 // Since we need to test a function that depends on global $config, we'll mock it or set it.
 class ConfigTest extends TestCase
@@ -149,20 +148,36 @@ class ConfigTest extends TestCase
         $this->assertSame($once, $twice);
     }
 
-    public function testResolveThemeFallsBackToBaseWhenUnset(): void
+    public function testEnsureExplicitThemeMigratesLegacyDefaultToBase(): void
     {
-        $this->assertSame('base', resolve_theme(null));
+        $ini = "theme = default\nsite_title = Example\n";
+
+        $migrated = ensure_explicit_theme($ini);
+        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
+
+        $this->assertSame('base', $parsed['theme']);
+        // Existing content is preserved.
+        $this->assertSame('Example', $parsed['site_title']);
     }
 
-    public function testResolveThemeMapsLegacyDefaultToBase(): void
+    public function testEnsureExplicitThemeReplacesEmptyThemeWithBase(): void
     {
-        $this->assertSame('base', resolve_theme('default'));
+        $ini = "theme =\nsite_title = Example\n";
+
+        $migrated = ensure_explicit_theme($ini);
+        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
+
+        $this->assertSame('base', $parsed['theme']);
+        $this->assertSame('Example', $parsed['site_title']);
     }
 
-    public function testResolveThemePassesThroughOtherThemes(): void
+    public function testEnsureExplicitThemeLeavesCustomThemeUntouched(): void
     {
-        $this->assertSame('2026', resolve_theme('2026'));
-        $this->assertSame('my-custom', resolve_theme('my-custom'));
+        $this->assertSame('my-custom', parse_ini_string(
+            ensure_explicit_theme("theme = my-custom\n"),
+            true,
+            INI_SCANNER_RAW
+        )['theme']);
     }
 
     public function testDefaultIniSetsSiteTitleForNewInstalls(): void

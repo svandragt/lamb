@@ -17,7 +17,9 @@ $config = Config\load();
 Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
-define("THEME", Config\resolve_theme($config['theme'] ?? null));
+// Config\ensure_explicit_theme() guarantees a renderable theme value on read,
+// so no runtime fallback/alias is needed here (see #291).
+define("THEME", (string) $config['theme']);
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 
