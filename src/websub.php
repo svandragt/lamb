@@ -5,8 +5,17 @@
 namespace Lamb\Websub;
 
 use RedBeanPHP\OODBBean;
+use RedBeanPHP\R;
+
+use function Lamb\get_option;
+use function Lamb\set_option;
 
 use const ROOT_URL;
+
+/**
+ * Option key holding the wall-clock time of the last scheduled-publish sweep.
+ */
+const SCHEDULED_PUBLISH_WATERMARK = 'websub_last_scheduled_publish';
 
 /**
  * Seconds before a hub ping is abandoned. Pings run in the publish request,
@@ -94,4 +103,56 @@ function send_ping(string $hub, string $topic): void
         WEBSUB_PING_TIMEOUT,
         'Lamb-WebSub'
     );
+}
+
+/**
+ * Ping the hub for scheduled posts whose publication time has arrived since the
+ * last cron run. Intended to run from `/_cron`.
+ *
+ * ping_for_post() skips future-dated posts at save time, and a scheduled post
+ * with no external links has no webmention queue row to piggyback on, so the
+ * publication-time notification has to happen here. A watermark records the
+ * wall-clock time of the previous sweep; a scheduled post that crossed from the
+ * future into the past during the window pings the hub once (one ping covers
+ * all crossings in the window, since the feed is the topic).
+ *
+ * Scheduled posts are distinguished from ordinary posts — which already pinged
+ * at save time — by `created > updated`: their publish date is later than the
+ * last save. The first sweep on an install records the watermark without
+ * pinging, so a backlog of already-published posts is not swept into a single
+ * catch-up ping.
+ *
+ * @param array<string, mixed>|null $config Config array; defaults to the global config.
+ * @param callable|null $sender Injectable sender, see {@see ping_hub}.
+ * @return int Number of scheduled posts found to have published this run.
+ */
+function ping_scheduled_publishes(?array $config = null, ?callable $sender = null): int
+{
+    $option = get_option(SCHEDULED_PUBLISH_WATERMARK, 0);
+    $now    = time();
+
+    if ((int) $option->id === 0) {
+        set_option($option, $now);
+        return 0;
+    }
+
+    $since   = date('Y-m-d H:i:s', (int) $option->value);
+    $now_str = date('Y-m-d H:i:s', $now);
+
+    $posts = R::find(
+        'post',
+        ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) '
+        . " AND (feed_name IS NULL OR feed_name = '') "
+        . ' AND created > updated AND created > ? AND created <= ? ',
+        [$since, $now_str]
+    );
+
+    $count = count($posts);
+    if ($count > 0) {
+        ping_hub($config, $sender);
+    }
+
+    set_option($option, $now);
+
+    return $count;
 }
