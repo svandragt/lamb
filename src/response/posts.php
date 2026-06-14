@@ -123,6 +123,10 @@ function soft_delete_post(OODBBean $post): void
     $post->deleted    = 1;
     $post->deleted_at = \Lamb\now();
     R::store($post);
+
+    // Re-send any webmentions this post previously sent so receivers re-fetch
+    // the now-gone source and drop the displayed mention (#331).
+    \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
 }
 
 /**
@@ -136,6 +140,10 @@ function restore_post(OODBBean $post): void
     $post->deleted    = null;
     $post->deleted_at = null;
     R::store($post);
+
+    // The post is back, so abandon any deletion re-sends queued on delete that
+    // /_cron has not yet drained (#331).
+    \Lamb\Webmention\cancel_deletion_resends((int) $post->id);
 }
 
 /**
