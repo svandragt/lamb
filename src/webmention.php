@@ -475,31 +475,48 @@ function enqueue_deletion_resends(int $post_id): int
 }
 
 /**
- * Cancel pending deletion re-sends for a restored post, reverting them to their
- * prior `sent` state so receivers are not told a now-live post was deleted.
+ * Reconcile a post's deletion re-sends when it is restored, depending on whether
+ * /_cron had already drained them. Counterpart to enqueue_deletion_resends().
  *
- * Counterpart to enqueue_deletion_resends(): called when a soft-deleted post is
- * restored before /_cron has drained the queue. Filters the `resend` marker in
- * PHP so it works before any row has caused the column to be created.
+ * A re-send row carries the `resend` marker. Its status tells us what the
+ * receiver currently shows:
+ *  - still `pending`: the deletion notification never went out, so the receiver
+ *    still displays the mention — revert the row to `sent` and drop the marker
+ *    (cancel, no network).
+ *  - already `sent`: the deletion notification was delivered and the receiver
+ *    removed the mention — re-queue the row (back to `pending`, marker cleared)
+ *    so the next /_cron re-sends a normal webmention and the receiver re-fetches
+ *    the now-live source and re-displays it.
+ *
+ * The `resend` marker is filtered in PHP so this works before any row has
+ * caused the column to be created.
  *
  * @param int $post_id The restored post's id.
- * @return int Number of re-sends cancelled.
+ * @return int Number of re-send rows reconciled (cancelled or re-queued).
  */
-function cancel_deletion_resends(int $post_id): int
+function reconcile_resends_on_restore(int $post_id): int
 {
-    $rows = R::find('webmentionoutbox', ' post_id = ? AND status = ? ', [$post_id, 'pending']);
-    $cancelled = 0;
+    $rows = R::find('webmentionoutbox', ' post_id = ? ', [$post_id]);
+    $reconciled = 0;
     foreach ($rows as $row) {
         if (empty($row->resend)) {
             continue;
         }
-        $row->status = 'sent';
-        $row->resend = 0;
+        if ($row->status === 'sent') {
+            // Deletion was delivered; re-publish so the mention reappears.
+            $row->status = 'pending';
+            $row->resend = 0;
+            $row->processed_at = null;
+        } else {
+            // Deletion never went out; just abandon it.
+            $row->status = 'sent';
+            $row->resend = 0;
+        }
         R::store($row);
-        $cancelled++;
+        $reconciled++;
     }
 
-    return $cancelled;
+    return $reconciled;
 }
 
 /**

@@ -141,9 +141,10 @@ function restore_post(OODBBean $post): void
     $post->deleted_at = null;
     R::store($post);
 
-    // The post is back, so abandon any deletion re-sends queued on delete that
-    // /_cron has not yet drained (#331).
-    \Lamb\Webmention\cancel_deletion_resends((int) $post->id);
+    // The post is back: abandon deletion re-sends /_cron has not yet drained,
+    // and re-queue any it already delivered so receivers re-display the mention
+    // (#331).
+    \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
 }
 
 /**

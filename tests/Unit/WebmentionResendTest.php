@@ -5,9 +5,10 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\Webmention\cancel_deletion_resends;
+use function Lamb\Response\soft_delete_post;
 use function Lamb\Webmention\enqueue_deletion_resends;
 use function Lamb\Webmention\process_outbound;
+use function Lamb\Webmention\reconcile_resends_on_restore;
 
 class WebmentionResendTest extends TestCase
 {
@@ -120,17 +121,55 @@ class WebmentionResendTest extends TestCase
         $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
     }
 
-    public function testCancelResendsRevertsPendingResendsToSent(): void
+    public function testRestoreBeforeCronRevertsPendingResendToSent(): void
     {
         $id = $this->seedRow('sent');
         enqueue_deletion_resends($this->postId);
 
-        $count = cancel_deletion_resends($this->postId);
+        // Restored before /_cron drained the queue: the deletion never went out.
+        $count = reconcile_resends_on_restore($this->postId);
 
         $this->assertSame(1, $count);
         $row = R::load('webmentionoutbox', $id);
         $this->assertSame('sent', $row->status);
         $this->assertEmpty($row->resend);
+    }
+
+    public function testRestoreAfterCronSentResendRequeuesForRedisplay(): void
+    {
+        // The deletion re-send was already delivered by /_cron (status 'sent',
+        // still carrying the resend marker) before the author restored the post.
+        $row = R::dispense('webmentionoutbox');
+        $row->post_id = $this->postId;
+        $row->source = ROOT_URL . '/status/' . $this->postId;
+        $row->target = 'https://other.example/a';
+        $row->endpoint = 'https://other.example/wm';
+        $row->status = 'sent';
+        $row->resend = 1;
+        $row->attempts = 2;
+        $row->created = '2026-01-01 00:00:00';
+        $id = (int) R::store($row);
+
+        $count = reconcile_resends_on_restore($this->postId);
+
+        $this->assertSame(1, $count);
+        $reloaded = R::load('webmentionoutbox', $id);
+        // Re-queued so the next cron re-sends a normal webmention and the
+        // receiver re-fetches the now-live source and re-displays the mention.
+        $this->assertSame('pending', $reloaded->status);
+        $this->assertEmpty($reloaded->resend);
+    }
+
+    public function testSoftDeletePostEnqueuesResendForSentRow(): void
+    {
+        $id = $this->seedRow('sent');
+
+        $post = R::load('post', $this->postId);
+        soft_delete_post($post);
+
+        $row = R::load('webmentionoutbox', $id);
+        $this->assertSame('pending', $row->status);
+        $this->assertEquals(1, $row->resend);
     }
 
     public function testProcessAbandonsResendWhenPostIsAliveAgain(): void
