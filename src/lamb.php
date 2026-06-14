@@ -645,3 +645,115 @@ function find_redirect(string $slug): ?string
 
     return null;
 }
+
+/**
+ * Returns the bare slug a redirect target points at when it can chain to another
+ * redirect's `from_slug`, or null when the target is terminal.
+ *
+ * Only an internal, single-segment target (`/slug`) can chain. External URLs,
+ * multi-segment paths (`/a/b`), and the root (`/`) are terminal destinations.
+ *
+ * @param string $to_url The redirect's stored destination.
+ * @return string|null The chainable target slug, or null when terminal.
+ */
+function redirect_target_slug(string $to_url): ?string
+{
+    if (!str_starts_with($to_url, '/')) {
+        return null;
+    }
+    $slug = ltrim($to_url, '/');
+    if ($slug === '' || str_contains($slug, '/')) {
+        return null;
+    }
+
+    return $slug;
+}
+
+/**
+ * Flattens stored redirect chains so each hop points straight at its final
+ * destination, breaks loops, and drops redirects whose destination no longer
+ * resolves to a post. Intended to run as periodic maintenance from `/_cron`.
+ *
+ * - A chain `a → /b`, `b → /c` is rewritten so `a → /c` (one 301 instead of two).
+ * - A loop (`a → /b`, `b → /a`) cannot resolve, so its rows are deleted.
+ * - A redirect whose final single-segment destination has no post is deleted,
+ *   unless a soft-deleted (trashed) post still holds that slug — it may be
+ *   restored, so the redirect is kept.
+ *
+ * @return int The number of redirect rows rewritten or deleted.
+ */
+function flatten_redirects(): int
+{
+    $redirects = R::findAll('redirect');
+
+    /** @var array<string, \RedBeanPHP\OODBBean> $by_from */
+    $by_from = [];
+    foreach ($redirects as $redirect) {
+        if (is_string($redirect->from_slug) && $redirect->from_slug !== '') {
+            $by_from[$redirect->from_slug] = $redirect;
+        }
+    }
+
+    $delete  = [];
+    $changes = 0;
+
+    // 1. Resolve each redirect to its final destination, collecting loop members.
+    foreach ($by_from as $from => $redirect) {
+        $path  = [];
+        $index = [];
+        $node  = $from;
+        $final = $redirect->to_url;
+        $loop  = null;
+
+        while (true) {
+            $index[$node] = count($path);
+            $path[]       = $node;
+            $final        = $by_from[$node]->to_url;
+
+            $target = redirect_target_slug((string) $by_from[$node]->to_url);
+            if ($target === null || !isset($by_from[$target])) {
+                break;
+            }
+            if (isset($index[$target])) {
+                $loop = $target;
+                break;
+            }
+            $node = $target;
+        }
+
+        if ($loop !== null) {
+            for ($i = $index[$loop]; $i < count($path); $i++) {
+                $delete[$path[$i]] = $by_from[$path[$i]];
+            }
+            continue;
+        }
+
+        if ($final !== $redirect->to_url) {
+            $redirect->to_url = $final;
+            R::store($redirect);
+            $changes++;
+        }
+    }
+
+    // 2. Drop redirects whose final destination resolves to no post, keeping
+    //    those whose slug is still held by a trashed (restorable) post.
+    foreach ($by_from as $from => $redirect) {
+        if (isset($delete[$from])) {
+            continue;
+        }
+        $target = redirect_target_slug((string) $redirect->to_url);
+        if ($target === null) {
+            continue;
+        }
+        if (R::findOne('post', ' slug = ? ', [$target]) === null) {
+            $delete[$from] = $redirect;
+        }
+    }
+
+    foreach ($delete as $redirect) {
+        R::trash($redirect);
+        $changes++;
+    }
+
+    return $changes;
+}
