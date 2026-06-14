@@ -318,8 +318,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = 1;
-        R::store($bean);
+        // Share the web delete path so a Micropub delete also stamps deleted_at
+        // (for purging) and re-sends webmentions for the now-gone post (#331).
+        \Lamb\Response\soft_delete_post($bean);
 
         return true;
     }
@@ -337,8 +338,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = null;
-        R::store($bean);
+        // Share the web restore path so a Micropub undelete also reconciles any
+        // deletion webmention re-sends (#331).
+        \Lamb\Response\restore_post($bean);
 
         return true;
     }
