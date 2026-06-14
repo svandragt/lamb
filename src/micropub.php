@@ -8,16 +8,21 @@ use Nyholm\Psr7\UploadedFile;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
+use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_scheduled;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
+use function Lamb\remove_body_tags;
+use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\split_frontmatter;
 
 class LambMicropubAdapter extends MicropubAdapter
 {
@@ -25,8 +30,8 @@ class LambMicropubAdapter extends MicropubAdapter
      * Return the source properties of a post identified by URL.
      *
      * @param string $url
-     * @param array|null $properties Specific properties to return; null means all.
-     * @return array|false
+     * @param list<string>|null $properties Specific properties to return; null means all.
+     * @return array{type: list<string>, properties: array<string, mixed>}|false
      */
     public function sourceQueryCallback(string $url, ?array $properties = null)
     {
@@ -52,36 +57,25 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function findPostByUrl(string $url): ?OODBBean
     {
-        $path = parse_url($url, PHP_URL_PATH) ?? '';
+        $path = parse_url($url, PHP_URL_PATH) ?: '';
 
-        if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
-            $bean = R::load('post', (int) $matches[1]);
-            return $bean->id ? $bean : null;
-        }
-
-        $slug = trim($path, '/');
-        if ($slug !== '') {
-            $bean = R::findOne('post', ' slug = ? ', [$slug]);
-            return $bean ?: null;
-        }
-
-        return null;
+        return \Lamb\find_post_by_path($path);
     }
 
     /**
      * Convert a post bean to a flat MF2 properties array.
      *
      * @param OODBBean $bean
-     * @return array
+     * @return array<string, mixed>
      */
     private function beanToMf2Properties(OODBBean $bean): array
     {
         $body = $bean->body ?? '';
-        $parts = explode('---', $body, 3);
-        $content = trim(count($parts) === 3 ? $parts[2] : $body);
+        [, $content] = split_frontmatter($body);
+        $content = trim($content);
 
         // Strip trailing hashtags — categories appended by buildBody during creation.
-        $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content));
+        $content = rtrim(preg_replace('/([ \t]+#\S+)+$/', '', $content) ?? $content);
 
         $props = ['content' => [$content]];
 
@@ -111,7 +105,7 @@ class LambMicropubAdapter extends MicropubAdapter
         if (strtolower($request->getMethod()) === 'get' && ($request->getQueryParams()['q'] ?? '') === 'config') {
             $this->request = $request;
             $configResult = $this->configurationQueryCallback($request->getQueryParams());
-            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult));
+            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult) ?: '');
         }
 
         return parent::handleRequest($request);
@@ -121,7 +115,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Verify the bearer token by introspecting it against the configured token endpoint.
      *
      * @param string $token
-     * @return array|false
+     * @return array{me: mixed, scope: list<string>}|false
      */
     public function verifyAccessTokenCallback(string $token)
     {
@@ -129,15 +123,40 @@ class LambMicropubAdapter extends MicropubAdapter
         $endpoint = $config['token_endpoint'] ?? 'https://tokens.indieauth.com/token';
 
         $data = $this->introspectToken($token, $endpoint);
-        if ($data === null || empty($data['me'])) {
+        if ($data === null) {
+            mp_log('token_verify', [
+                'reason'   => 'introspection_failed',
+                'endpoint' => $endpoint,
+                'token'    => token_fingerprint($token),
+            ]);
+            return false;
+        }
+        if (empty($data['me'])) {
+            mp_log('token_verify', [
+                'reason' => 'no_me',
+                'token'  => token_fingerprint($token),
+            ]);
             return false;
         }
 
         if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+            mp_log('token_verify', [
+                'reason'   => 'me_mismatch',
+                'me'       => $data['me'],
+                'expected' => ROOT_URL,
+                'token'    => token_fingerprint($token),
+            ]);
             return false;
         }
 
         $scope = isset($data['scope']) ? explode(' ', $data['scope']) : [];
+
+        mp_log('token_verify', [
+            'reason' => 'ok',
+            'me'     => $data['me'],
+            'scope'  => $scope,
+            'token'  => token_fingerprint($token),
+        ]);
 
         return [
             'me'    => $data['me'],
@@ -151,7 +170,7 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param string $token
      * @param string $endpoint
-     * @return array|null
+     * @return array<string, mixed>|null
      */
     protected function introspectToken(string $token, string $endpoint): ?array
     {
@@ -168,24 +187,34 @@ class LambMicropubAdapter extends MicropubAdapter
         ]);
 
         if ($result === null) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'fetch_failed']);
             return null;
         }
 
         $statusLine = $result['headers'][0] ?? '';
         if (!str_contains($statusLine, ' 200 ')) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'non_200', 'status' => trim($statusLine)]);
             return null;
         }
 
         $data = json_decode($result['body'], true);
-        return is_array($data) ? $data : null;
+        if (!is_array($data)) {
+            mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'bad_json']);
+            return null;
+        }
+
+        // Log only the response's keys (e.g. me, scope, client_id) — never the values,
+        // which can echo the token on some endpoints.
+        mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'ok', 'keys' => array_keys($data)]);
+        return $data;
     }
 
     /**
      * Handle a micropub create request.
      *
-     * @param array $data  Normalised microformats2 data.
-     * @param array $uploadedFiles
-     * @return string|array|\Psr\Http\Message\ResponseInterface
+     * @param array<string, mixed> $data  Normalised microformats2 data.
+     * @param array<string, mixed> $uploadedFiles
+     * @return string|array<string, mixed>|\Psr\Http\Message\ResponseInterface
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
@@ -199,7 +228,7 @@ class LambMicropubAdapter extends MicropubAdapter
             return new Response(401, ['content-type' => 'application/json'], json_encode([
                 'error' => 'insufficient_scope',
                 'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]));
+            ]) ?: '');
         }
 
         $props = $data['properties'] ?? [];
@@ -264,8 +293,8 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Return the configuration query response including an empty syndicate-to list.
      *
-     * @param array $params
-     * @return array
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
      */
     public function configurationQueryCallback(array $params): array
     {
@@ -318,8 +347,8 @@ class LambMicropubAdapter extends MicropubAdapter
      * Handle a micropub update request (replace/add/delete operations).
      *
      * @param string $url
-     * @param array  $actions
-     * @return true|string|array|\Psr\Http\Message\ResponseInterface
+     * @param array<string, mixed>  $actions
+     * @return true|string|array<string, mixed>|\Psr\Http\Message\ResponseInterface
      */
     public function updateCallback(string $url, array $actions)
     {
@@ -333,7 +362,7 @@ class LambMicropubAdapter extends MicropubAdapter
             return new Response(401, ['content-type' => 'application/json'], json_encode([
                 'error'             => 'insufficient_scope',
                 'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]));
+            ]) ?: '');
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
@@ -358,7 +387,7 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         parse_bean($bean);
-        $bean->updated = date('Y-m-d H:i:s');
+        $bean->updated = \Lamb\now();
         R::store($bean);
 
         \Lamb\Webmention\enqueue_for_post($bean);
@@ -370,20 +399,15 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Apply an add operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean     $bean
+     * @param string       $property
+     * @param list<string> $values
      * @return void
      */
     private function applyAdd(OODBBean $bean, string $property, array $values): void
     {
         if ($property === 'category') {
-            $existing = get_tags($bean->body ?? '');
-            $toAdd    = array_diff($values, $existing);
-            if (!empty($toAdd)) {
-                $newTags = implode(' ', array_map(fn($t) => '#' . $t, $toAdd));
-                $bean->body = rtrim($bean->body ?? '') . ' ' . $newTags;
-            }
+            $bean->body = add_body_tags($bean->body ?? '', $values);
         }
     }
 
@@ -397,33 +421,31 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteProperty(OODBBean $bean, string $property): void
     {
         if ($property === 'category') {
-            $bean->body = rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $bean->body ?? ''));
+            $bean->body = strip_trailing_body_tags($bean->body ?? '');
         }
     }
 
     /**
      * Apply a delete-values operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean     $bean
+     * @param string       $property
+     * @param list<string> $values
      * @return void
      */
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
     {
         if ($property === 'category') {
-            foreach ($values as $tag) {
-                $bean->body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $bean->body ?? '');
-            }
+            $bean->body = remove_body_tags($bean->body ?? '', $values);
         }
     }
 
     /**
      * Apply a replace operation for a single property to a post bean.
      *
-     * @param OODBBean $bean
-     * @param string   $property
-     * @param array    $values
+     * @param OODBBean    $bean
+     * @param string      $property
+     * @param list<mixed> $values
      * @return void
      */
     private function applyReplace(OODBBean $bean, string $property, array $values): void
@@ -446,7 +468,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = $bean->body ?? '';
         $matter      = parse_matter($currentBody);
         $title       = $matter['title'] ?? null;
-        $replyTo     = $matter['in-reply-to'] ?? $matter['in_reply_to'] ?? null;
+        $replyTo     = $matter['in-reply-to'] ?? null;
 
         $tags      = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
@@ -467,8 +489,8 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Save uploaded photo files to the assets directory and return their public URLs.
      *
-     * @param array $uploadedFiles Associative array of field name → UploadedFileInterface (or array thereof).
-     * @return string[]
+     * @param array<string, mixed> $uploadedFiles Associative array of field name → UploadedFileInterface (or array thereof).
+     * @return list<string>
      */
     private function saveUploadedPhotos(array $uploadedFiles): array
     {
@@ -516,7 +538,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Extract content from micropub properties.
      * Returns ['content' => string|null, 'is_html' => bool].
      *
-     * @param array $props
+     * @param array<string, mixed> $props
      * @return array{content: string|null, is_html: bool}
      */
     private function extractContent(array $props): array
@@ -540,7 +562,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Build a Lamb post body (YAML front matter + markdown content).
      *
-     * @param array  $props   Micropub properties.
+     * @param array<string, mixed> $props   Micropub properties.
      * @param string $content Plain-text body content.
      * @return string
      */
@@ -579,7 +601,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Serialize any extra nested MF2 properties (not content/name/category/photo/published)
      * as a JSON code block so they are preserved in storage.
      *
-     * @param array $props
+     * @param array<string, mixed> $props
      * @return string
      */
     private function buildExtraProperties(array $props): string
@@ -614,7 +636,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Convert an array of photo URLs to newline-separated Markdown images.
      *
-     * @param array $photos
+     * @param array<int, mixed> $photos
      * @return string
      */
     private function buildPhotos(array $photos): string
@@ -638,7 +660,7 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Convert an array of category strings to space-separated hashtags.
      *
-     * @param array $categories
+     * @param array<int, mixed> $categories
      * @return string
      */
     private function buildTags(array $categories): string
@@ -649,6 +671,89 @@ class LambMicropubAdapter extends MicropubAdapter
 
         return implode(' ', array_map(fn($c) => '#' . $c, $categories));
     }
+}
+
+/**
+ * A minimal PSR-3 logger that funnels the taproot adapter's own trace into mp_log().
+ *
+ * Wired into the adapter's $logger (only when micropub_debug is on), so its
+ * info/warning/error messages — token verification, query handling, error
+ * responses — land in the same file as Lamb's own diagnostic log points. An
+ * anonymous class keeps micropub.php to a single named class (PSR1).
+ */
+function mp_adapter_logger(): \Psr\Log\LoggerInterface
+{
+    return new class extends AbstractLogger {
+        /**
+         * @param mixed              $level
+         * @param string|\Stringable $message
+         * @param array<mixed>       $context
+         */
+        public function log($level, string|\Stringable $message, array $context = []): void
+        {
+            mp_log('adapter', ['level' => (string) $level, 'message' => (string) $message] + $context);
+        }
+    };
+}
+
+/**
+ * Whether opt-in Micropub diagnostic logging is enabled (config key `micropub_debug`).
+ * Off by default and for any non-truthy value, so no token/PII is ever written unless
+ * the operator explicitly turns it on at /settings to debug a client.
+ */
+function mp_debug_enabled(): bool
+{
+    global $config;
+    $value = $config['micropub_debug'] ?? false;
+    if (is_bool($value)) {
+        return $value;
+    }
+    return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
+}
+
+/**
+ * Path of the Micropub diagnostic log. Lives next to the SQLite DB in data/.
+ * Overridable via $GLOBALS['lamb_mp_log_path'] for tests.
+ */
+function mp_log_path(): string
+{
+    if (!empty($GLOBALS['lamb_mp_log_path'])) {
+        return (string) $GLOBALS['lamb_mp_log_path'];
+    }
+    return ROOT_DIR . '/../data/micropub.log';
+}
+
+/**
+ * Append one diagnostic event to the Micropub log. No-op unless micropub_debug is on.
+ *
+ * The token itself is never passed in here — callers log token_fingerprint() instead.
+ *
+ * @param string       $event   Short event name (e.g. 'request', 'token_verify', 'response').
+ * @param array<mixed> $context Structured fields to record alongside the event.
+ */
+function mp_log(string $event, array $context = []): void
+{
+    if (!mp_debug_enabled()) {
+        return;
+    }
+
+    $line = json_encode(
+        ['ts' => \Lamb\now(), 'event' => $event] + $context,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+    ) ?: '';
+    @file_put_contents(mp_log_path(), $line . PHP_EOL, FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * Non-reversible fingerprint of a bearer token: enough to correlate the same token
+ * across log lines without ever writing the secret itself.
+ */
+function token_fingerprint(string $token): string
+{
+    if ($token === '') {
+        return 'empty';
+    }
+    return 'len=' . strlen($token) . ' sha256=' . substr(hash('sha256', $token), 0, 12);
 }
 
 /**
@@ -678,8 +783,9 @@ function respond_micropub(): void
         $psr7Files = [];
         foreach ($_FILES as $field => $info) {
             if (is_array($info['tmp_name'])) {
+                $fieldFiles = [];
                 foreach ($info['tmp_name'] as $i => $tmpName) {
-                    $psr7Files[$field][] = new UploadedFile(
+                    $fieldFiles[] = new UploadedFile(
                         $tmpName,
                         (int) $info['size'][$i],
                         (int) $info['error'][$i],
@@ -687,6 +793,7 @@ function respond_micropub(): void
                         $info['type'][$i]
                     );
                 }
+                $psr7Files[$field] = $fieldFiles;
             } else {
                 $psr7Files[$field] = new UploadedFile(
                     $info['tmp_name'],
@@ -700,10 +807,32 @@ function respond_micropub(): void
         $request = $request->withUploadedFiles($psr7Files);
     }
 
-    $adapter  = new LambMicropubAdapter();
+    $lcHeaders = array_change_key_case($headers, CASE_LOWER);
+    mp_log('request', [
+        'method'          => $request->getMethod(),
+        'uri'             => (string) $request->getUri(),
+        'q'               => $request->getQueryParams()['q'] ?? null,
+        'content_type'    => $lcHeaders['content-type'] ?? null,
+        'user_agent'      => $lcHeaders['user-agent'] ?? null,
+        'has_auth_header' => isset($lcHeaders['authorization']),
+        'has_body_token'  => isset($_POST['access_token']),
+        'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
+    ]);
+
+    $adapter = new LambMicropubAdapter();
+    if (mp_debug_enabled()) {
+        $adapter->logger = mp_adapter_logger();
+    }
     $response = $adapter->handleRequest($request);
 
-    http_response_code($response->getStatusCode());
+    $status = $response->getStatusCode();
+    mp_log('response', [
+        'status' => $status,
+        // Only echo the body into the log on failures — it carries the error reason.
+        'body'   => $status >= 400 ? substr((string) $response->getBody(), 0, 300) : null,
+    ]);
+
+    http_response_code($status);
     foreach ($response->getHeaders() as $name => $values) {
         foreach ($values as $value) {
             header("$name: $value", false);
@@ -726,6 +855,7 @@ function respond_micropub(): void
  */
 function micropub_error(int $status, string $error, string $description): never
 {
+    mp_log('response', ['status' => $status, 'error' => $error, 'error_description' => $description]);
     http_response_code($status);
     header('Content-Type: application/json');
     echo json_encode(['error' => $error, 'error_description' => $description]);
@@ -742,6 +872,15 @@ function respond_micropub_media(): void
 {
     $headers = getallheaders() ?: [];
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
+    $lcHeaders = array_change_key_case($headers, CASE_LOWER);
+
+    mp_log('media_request', [
+        'method'          => $_SERVER['REQUEST_METHOD'] ?? null,
+        'content_type'    => $lcHeaders['content-type'] ?? null,
+        'user_agent'      => $lcHeaders['user-agent'] ?? null,
+        'has_auth_header' => $authHeader !== '',
+        'has_file'        => !empty($_FILES['file']),
+    ]);
 
     $token = null;
     if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
@@ -753,6 +892,9 @@ function respond_micropub_media(): void
     }
 
     $adapter = new LambMicropubAdapter();
+    if (mp_debug_enabled()) {
+        $adapter->logger = mp_adapter_logger();
+    }
     $user = $adapter->verifyAccessTokenCallback($token);
     if (!$user) {
         micropub_error(401, 'unauthorized', 'Invalid or expired token.');

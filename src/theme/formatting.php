@@ -15,6 +15,48 @@ function escape(string $html): string
     return htmlspecialchars($html, ENT_HTML5 | ENT_QUOTES | ENT_SUBSTITUTE);
 }
 
+/**
+ * Re-levels a post body's headings so its highest heading sits at $top, keeping
+ * the levels relative to each other.
+ *
+ * Post bodies are stored at the author's literal heading levels (theme-neutral),
+ * so each theme fits them into its own outline at render time. A theme that
+ * renders the post title at h2 passes $top = 3, so the body's highest heading
+ * becomes h3 (directly under the title) and the rest shift by the same amount —
+ * the level the author actually typed is immaterial, and no level is skipped at
+ * the top of the body, which keeps the document outline in order for screen
+ * readers (WCAG heading-order). The shift is signed: a body written deeper than
+ * $top is pulled up just as one written shallower is pushed down. Results clamp
+ * at h6. Open and close tags shift identically, attributes are preserved, and a
+ * body with no headings is returned unchanged.
+ *
+ * @param string $html The post body HTML, at the author's literal levels.
+ * @param int    $top  The level the body's highest heading should occupy.
+ * @return string The HTML with headings re-levelled to start at $top.
+ */
+function anchor_headings(string $html, int $top): string
+{
+    preg_match_all('#<h([1-6])\b#i', $html, $m);
+    $levels = array_map('intval', $m[1]);
+    if ($levels === []) {
+        return $html;
+    }
+
+    $by = $top - min($levels);
+    if ($by === 0) {
+        return $html;
+    }
+
+    return preg_replace_callback(
+        '#<(/?)h([1-6])\b([^>]*)>#i',
+        static function (array $m) use ($by): string {
+            $level = max(1, min(6, (int) $m[2] + $by));
+            return '<' . $m[1] . 'h' . $level . $m[3] . '>';
+        },
+        $html
+    ) ?? $html;
+}
+
 
 /**
  * Render the reply-context line for a post that is a reply to another URL.

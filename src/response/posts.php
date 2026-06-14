@@ -15,6 +15,7 @@ use function Lamb\delete_redirect_for_slug;
 use function Lamb\parse_bean;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\toggle_checkbox;
 use function Lamb\Route\is_reserved_route;
 
 /**
@@ -120,7 +121,7 @@ function redirect_restored(mixed $args): void
 function soft_delete_post(OODBBean $post): void
 {
     $post->deleted    = 1;
-    $post->deleted_at = date('Y-m-d H:i:s');
+    $post->deleted_at = \Lamb\now();
     R::store($post);
 }
 
@@ -134,18 +135,6 @@ function restore_post(OODBBean $post): void
 {
     $post->deleted    = null;
     $post->deleted_at = null;
-    R::store($post);
-}
-
-/**
- * Publish a draft post by clearing its draft flag.
- *
- * @param OODBBean $post
- * @return void
- */
-function publish_post(OODBBean $post): void
-{
-    $post->draft = null;
     R::store($post);
 }
 
@@ -169,7 +158,7 @@ function redirect_edited(): void
     }
 
     $contents = trim(($_POST['contents']));
-    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT));
+    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
     if (empty($contents) || empty($id)) {
         return;
     }
@@ -182,7 +171,7 @@ function redirect_edited(): void
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
     $bean->version = 1;
-    $bean->updated = date("Y-m-d H:i:s");
+    $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
         $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
@@ -193,6 +182,10 @@ function redirect_edited(): void
     // A slug claimed by another post gets an id suffix, and the final slug is
     // pinned into the body's front matter so the edit form shows it.
     finalize_slug($bean);
+
+    // Editing a feed-sourced post through the form marks it author-owned, so
+    // later crawls stop overwriting it (they still never duplicate it).
+    lock_if_feed_sourced($bean);
 
     try {
         R::store($bean);
@@ -228,10 +221,102 @@ function redirect_edited(): void
 }
 
 /**
+ * Marks a feed-sourced post as author-owned so feed re-ingestion leaves it alone.
+ *
+ * Feed crawls dedupe on `feeditem_uuid` and re-sync source updates onto matching
+ * posts. Once the author edits such a post through the edit form, that auto-sync
+ * would clobber their changes, so set `feed_locked` to opt the post out of future
+ * updates. Posts that did not originate from a feed (`feeditem_uuid` empty) are
+ * left untouched.
+ *
+ * @param OODBBean $bean The post being saved.
+ * @return void
+ */
+function lock_if_feed_sourced(OODBBean $bean): void
+{
+    if (!empty($bean->feeditem_uuid)) {
+        $bean->feed_locked = 1;
+    }
+}
+
+/**
+ * Toggles a GitHub-style task-list checkbox and persists it as a post edit.
+ *
+ * AJAX endpoint for the logged-in author: flips the Nth `[ ]`/`[x]` marker in
+ * the post body (the index supplied by the rendered checkbox's
+ * `data-checkbox-index`), re-parses so `transformed` reflects the new state,
+ * and bumps `updated`. Login-only, no CSRF — matching respond_upload() and the
+ * SameSite=Strict session, which already blocks cross-site POSTs. Webmention
+ * and WebSub are intentionally skipped: ticking a box is a minor edit and must
+ * not re-notify subscribers.
+ *
+ * @param array<int, string> $_args Unused route arguments.
+ * @return void
+ * @throws \JsonException
+ */
+#[NoReturn]
+function respond_checkbox(array $_args): void
+{
+    Security\require_login();
+
+    header('Content-Type: application/json');
+
+    $id      = (int) ($_POST['id'] ?? 0);
+    $index   = (int) ($_POST['index'] ?? -1);
+    $checked = filter_var($_POST['checked'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+    if (!apply_checkbox_toggle($id, $index, $checked)) {
+        header('HTTP/1.1 404 Not Found');
+        echo json_encode(['ok' => false], JSON_THROW_ON_ERROR);
+        die();
+    }
+
+    echo json_encode(['ok' => true, 'checked' => $checked], JSON_THROW_ON_ERROR);
+    die();
+}
+
+/**
+ * Toggles a task-list checkbox in a post and persists it as an edit.
+ *
+ * Loads the post, flips the Nth `[ ]`/`[x]` marker in its body, re-parses so
+ * `transformed`/`description` reflect the new state, and bumps `updated`. The
+ * testable core of respond_checkbox() (which adds auth and the JSON response).
+ *
+ * @param int  $id      The post id.
+ * @param int  $index   Zero-based checkbox index.
+ * @param bool $checked The desired checked state.
+ * @return bool True on success, false when the post is missing or the index invalid.
+ */
+function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
+{
+    if ($index < 0) {
+        return false;
+    }
+
+    $bean = R::load('post', $id);
+    if (!$bean->id) {
+        return false;
+    }
+
+    $bean->body = toggle_checkbox((string) $bean->body, $index, $checked);
+    parse_bean($bean);
+    $bean->updated = \Lamb\now();
+
+    try {
+        R::store($bean);
+    } catch (SQL $e) {
+        $_SESSION['flash'][] = 'Failed to update checkbox: ' . $e->getMessage();
+        return false;
+    }
+
+    return true;
+}
+
+/**
  * Responds with the status of a post.
  *
- * @param array $args An array containing the post ID.
- * @return array The transformed data representing the post's status.
+ * @param array<int, string> $args An array containing the post ID.
+ * @return array<string, mixed> The transformed data representing the post's status.
  */
 function respond_status(array $args): array
 {
@@ -254,8 +339,8 @@ function respond_status(array $args): array
 /**
  * Responds to an edit request, returning the post to render in the edit form.
  *
- * @param array $args The first element should be the post ID.
- * @return array
+ * @param array<int, string> $args The first element should be the post ID.
+ * @return array<string, mixed>
  */
 function respond_edit(array $args): array
 {
@@ -274,8 +359,8 @@ function respond_edit(array $args): array
 /**
  * Responds to a slug-based post request by retrieving and transforming a single post.
  *
- * @param array $args The first element is the post slug.
- * @return array The transformed post.
+ * @param array<int, string> $args The first element is the post slug.
+ * @return array<string, mixed> The transformed post.
  */
 function respond_post(array $args): array
 {

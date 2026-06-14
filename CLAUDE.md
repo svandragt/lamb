@@ -33,6 +33,9 @@ vendor/bin/codecept run Unit
 # Run acceptance tests (requires SITE_URL in .env)
 vendor/bin/codecept run Acceptance
 
+# Run client-side JavaScript unit tests (node:test + jsdom)
+pnpm test
+
 # Generate password hash and write .env
 php make-password.php <your-password>
 
@@ -65,18 +68,30 @@ lamb/
 │   ├── index.php         # Entry point: bootstrap, routing, view dispatch
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
+│   ├── constants.php     # Static app-wide constants (POST_VERSION, SESSION_LOGIN, …)
 │   ├── routes.php        # register_route() / call_route() helpers
-│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, find_redirect, delete_redirect_for_slug
-│   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify
-│   ├── response.php      # All route handlers (respond_*, redirect_*)
+│   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, visibility clauses, redirects
+│   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify, finalize_slug
+│   ├── response.php      # Response helpers: pagination, conditional GET/304, 404, upgrade_posts
+│   ├── response/         # Route handlers (respond_*, redirect_*), split by area
+│   │   ├── auth.php      # Login/logout/settings
+│   │   ├── feeds.php     # Home, drafts/trash/scheduled, search, tag, Atom + JSON feeds
+│   │   ├── posts.php     # Status/slug pages, create/edit/delete/restore
+│   │   └── upload.php    # Image upload + WebP conversion
 │   ├── security.php      # require_login(), require_csrf()
-│   ├── theme.php         # Template helpers, asset loader, part()
+│   ├── theme.php         # Template helpers, part(); more helpers in theme/
+│   ├── theme/            # Theme helper split: assets.php (styles/scripts), formatting.php (escape, human_time), meta.php (opengraph, titles)
 │   ├── network.php       # Feed ingestion via SimplePie (_cron route)
-│   ├── http.php          # get_request_uri() — normalises / → /home
+│   ├── http.php          # get_request_uri(); shared HTTP client: fetch(), parse_status_line()
+│   ├── micropub.php      # Micropub endpoint (taproot/micropub-adapter subclass) + media endpoint
+│   ├── webmention.php    # Webmention receiving + outbound sending queue (via /_cron)
+│   ├── websub.php        # WebSub hub pings on publish
+│   ├── highlight.php     # Syntax highlighting of fenced code blocks (Phiki)
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
 │   ├── assets/           # Runtime upload storage (created under YYYY/MM)
+│   ├── images/           # Shipped static images (default social embed image)
 │   ├── themes/
-│   │   ├── base/         # Base theme + fallback library (HTML, parts, feed, CSS)
+│   │   ├── base/         # Base theme + fallback library (HTML, parts, feeds, CSS)
 │   │   ├── 2024/         # Alternative theme (overrides parts as needed)
 │   │   └── 2026/         # "Notes" theme — default for new installs
 │   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
@@ -114,14 +129,20 @@ Each file declares a namespace; functions are called with the namespace prefix:
 |------|-----------|
 | `bootstrap.php` | `Lamb\Bootstrap` |
 | `config.php` | `Lamb\Config` |
+| `highlight.php` | `Lamb\Highlight` |
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
+| `micropub.php` | `Lamb\Micropub` |
 | `network.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
-| `response.php` | `Lamb\Response` |
+| `response.php` + `response/*.php` | `Lamb\Response` |
 | `routes.php` | `Lamb\Route` |
 | `security.php` | `Lamb\Security` |
-| `theme.php` | `Lamb\Theme` |
+| `theme.php` + `theme/*.php` | `Lamb\Theme` |
+| `webmention.php` | `Lamb\Webmention` |
+| `websub.php` | `Lamb\Websub` |
+
+`response/` and `theme/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
 ### Database
 
@@ -131,6 +152,8 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
+- `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
+- `webmentionoutbox` — outbound webmention queue processed by `/_cron`; columns: `post_id`, `source`, `target`, `endpoint`, `status`, `attempts`, `created`, `processed_at`
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
 
@@ -152,7 +175,7 @@ title: My Post Title
 Post content here. Use #hashtags inline.
 ```
 
-`parse_matter()` extracts YAML. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
@@ -165,10 +188,12 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 **Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
 - `feed.php` — Atom feed output
-- `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`
+- `feed_json.php` — JSON Feed output
+- `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `scheduled.php`, `trash.php`
 - `parts/_items.php` — post list partial
 - `parts/_pagination.php` — pagination partial
 - `parts/_related.php` — related posts partial
+- `parts/_webmentions.php` — received-webmentions partial (status pages)
 
 ---
 
@@ -403,7 +428,14 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### Feed Ingestion (Cron)
 
-`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication.
+`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication. The same run also drains the outbound webmention queue via `Webmention\process_outbound()`.
+
+### IndieWeb Endpoints
+
+- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); bearer tokens are introspected against the configured `token_endpoint`
+- `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered by `parts/_webmentions.php`); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
+- WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
+- `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
 
 ### Pagination
 
@@ -427,6 +459,12 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
+### JavaScript unit tests
+
+Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test runner (`node:test`) plus `jsdom` — no extra framework. Run them with `pnpm test` (`node --test "tests/js/**/*.test.mjs"`); CI runs the same via the `js-test` job.
+
+The scripts ship as plain `<script>`-tag globals (no module exports), so tests don't import them. Instead `tests/js/helpers.mjs` (`loadScripts()`) concatenates the source(s), evaluates them inside a `jsdom` window (`runScripts: 'outside-only'`), and returns the requested globals — keeping the shipped files untouched. Handlers registered via `onLoaded` (DOMContentLoaded) attach only after you dispatch a `DOMContentLoaded` event, since jsdom finishes parsing before the eval. See `tests/js/paste-link.test.mjs` for the pattern (faking a `paste` event with `clipboardData.getData`).
+
 ### Red-Green TDD
 
 Always follow red-green TDD when adding or changing behaviour:
@@ -436,6 +474,13 @@ Always follow red-green TDD when adding or changing behaviour:
 3. **Run again** to confirm green.
 
 Never write implementation code before a failing test exists for it.
+
+### After a bugfix
+
+After fixing any bug, always — without being asked:
+
+1. **Sweep related functionality for the same class of bug.** Identify the other call sites, sibling functions, and code paths that share the faulty pattern (the same helper, the same assumption, the same parsing/encoding step) and check each for the same defect. A bug rarely lives alone — e.g. a fix in one save path usually has twins in the other save paths. Add red-green tests for any further bugs found and fix them.
+2. **Identify refactoring opportunities.** Note duplication the fix exposed (e.g. the same logic copy-pasted across sites) and consolidate it behind a single shared helper where doing so removes the duplication without adding complexity. Prefer fixes that collapse the duplication that allowed the bug to diverge in the first place; leave well enough alone when sharing would complicate more than it simplifies.
 
 ## Environment Setup
 

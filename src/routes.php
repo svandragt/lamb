@@ -24,7 +24,7 @@ function register_route(bool|string $action, string $callback, mixed ...$args): 
  *
  * @param bool|string $action The action to call the callback function for.
  *
- * @return array The result of the callback function.
+ * @return array<string, mixed> The result of the callback function.
  */
 function call_route(bool|string $action): array
 {

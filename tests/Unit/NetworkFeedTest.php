@@ -8,6 +8,7 @@ use SimplePie\Item as SimplePieItem;
 
 use function Lamb\Network\create_item;
 use function Lamb\Network\get_feeds;
+use function Lamb\Network\ingest_item;
 use function Lamb\Network\prepare_item;
 use function Lamb\Network\update_item;
 
@@ -295,5 +296,91 @@ class NetworkFeedTest extends TestCase
         update_item($item, 'TestBlog');
 
         $this->assertSame($countBefore, R::count('post'));
+    }
+
+    // ingest_item — create/update decision keyed on feeditem_uuid
+
+    public function testIngestItemDoesNotDuplicateExistingPost(): void
+    {
+        // An already-ingested item (post exists with this uuid) must never be
+        // recreated, even when its pub_date is past the watermark — the
+        // feed-reingest duplicate-draft bug.
+        $uuid = md5('TestBlog' . 'existing-id');
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = $uuid;
+        $bean->body = 'Original body';
+        $bean->version = 1;
+        $bean->created = '2024-01-01 10:00:00';
+        $bean->updated = '2024-01-01 10:00:00';
+        R::store($bean);
+
+        $countBefore = R::count('post');
+        $item = $this->makeItem('Title', 'Body', 'https://example.com', 'existing-id');
+        ingest_item($item, 'TestBlog', 0);
+
+        // The existing row may be re-synced, but no duplicate is ever inserted.
+        $this->assertSame($countBefore, R::count('post'));
+    }
+
+    public function testIngestItemCreatesNewItemWhenNewerThanWatermark(): void
+    {
+        $countBefore = R::count('post');
+        $item = $this->makeItem('Fresh', 'Body', 'https://example.com', 'fresh-id');
+        $created = ingest_item($item, 'TestBlog', 0);
+
+        $this->assertTrue($created);
+        $this->assertSame($countBefore + 1, R::count('post'));
+    }
+
+    public function testIngestItemSkipsNewItemOlderThanWatermark(): void
+    {
+        $countBefore = R::count('post');
+        // makeItem date '2024-...' casts to 2024; a large watermark is "newer".
+        $item = $this->makeItem('Old', 'Body', 'https://example.com', 'old-id');
+        $created = ingest_item($item, 'TestBlog', PHP_INT_MAX);
+
+        $this->assertFalse($created);
+        $this->assertSame($countBefore, R::count('post'));
+    }
+
+    public function testIngestItemUpdatesUnlockedExistingPostOnModification(): void
+    {
+        $uuid = md5('TestBlog' . 'unlocked-id');
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = $uuid;
+        $bean->body = 'Original body';
+        $bean->version = 1;
+        $bean->created = '2024-01-01 10:00:00';
+        $bean->updated = '2024-01-01 10:00:00';
+        R::store($bean);
+
+        // mod_date '2024-06-01...' casts to 2024 > watermark 0.
+        $item = $this->makeItem('New Title', 'New body', 'https://example.com', 'unlocked-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $changed = ingest_item($item, 'TestBlog', 0);
+
+        $this->assertTrue($changed);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('2024-06-01 15:00:00', $updated->updated);
+    }
+
+    public function testIngestItemDoesNotUpdateLockedExistingPost(): void
+    {
+        $uuid = md5('TestBlog' . 'locked-id');
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = $uuid;
+        $bean->feed_locked = 1;
+        $bean->body = 'Author edited body';
+        $bean->version = 1;
+        $bean->created = '2024-01-01 10:00:00';
+        $bean->updated = '2024-01-01 10:00:00';
+        R::store($bean);
+
+        $item = $this->makeItem('New Title', 'New body', 'https://example.com', 'locked-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $changed = ingest_item($item, 'TestBlog', 0);
+
+        $this->assertFalse($changed);
+        $reloaded = R::load('post', $bean->id);
+        $this->assertSame('Author edited body', $reloaded->body);
+        $this->assertSame('2024-01-01 10:00:00', $reloaded->updated);
     }
 }

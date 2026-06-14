@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\Response\get_feed_data;
 use function Lamb\Response\get_tag_feed_data;
+use function Lamb\Response\sanitize_tag_arg;
 
 class ResponseFeedTest extends TestCase
 {
@@ -24,6 +25,23 @@ class ResponseFeedTest extends TestCase
 
         global $config;
         $config = ['site_title' => 'Test Blog'];
+    }
+
+    // sanitize_tag_arg
+
+    public function testSanitizeTagArgUrlDecodes(): void
+    {
+        $this->assertSame('café', sanitize_tag_arg(['caf%C3%A9']));
+    }
+
+    public function testSanitizeTagArgEscapesHtmlMetacharacters(): void
+    {
+        $this->assertSame('&lt;b&gt;', sanitize_tag_arg(['<b>']));
+    }
+
+    public function testSanitizeTagArgPassesPlainTagThrough(): void
+    {
+        $this->assertSame('lamb', sanitize_tag_arg(['lamb']));
     }
 
     // get_feed_data

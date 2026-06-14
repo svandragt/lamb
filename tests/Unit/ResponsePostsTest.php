@@ -5,6 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Response\apply_checkbox_toggle;
+use function Lamb\Response\lock_if_feed_sourced;
 use function Lamb\Response\redirect_created;
 use function Lamb\Response\redirect_edited;
 use function Lamb\Response\respond_edit;
@@ -207,5 +209,81 @@ class ResponsePostsTest extends TestCase
         respond_edit([$post->id]);
 
         $this->assertNull($_SESSION['edit-referrer']);
+    }
+
+    // -------------------------------------------------------------------------
+    // apply_checkbox_toggle
+    // -------------------------------------------------------------------------
+
+    public function testApplyCheckboxToggleChecksMarkerAndReparses(): void
+    {
+        $post          = R::dispense('post');
+        $post->body    = "- [ ] one\n- [ ] two\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        $post->updated = '2000-01-01 00:00:00';
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 1, true));
+
+        $reloaded = R::load('post', $post->id);
+        $this->assertSame("- [ ] one\n- [x] two\n", $reloaded->body);
+        // Re-parsed: stored HTML reflects the new checked state.
+        $this->assertStringContainsString('checked', (string) $reloaded->transformed);
+        // Saved as an edit: updated bumped away from the seeded value.
+        $this->assertNotSame('2000-01-01 00:00:00', $reloaded->updated);
+    }
+
+    public function testApplyCheckboxToggleUnchecks(): void
+    {
+        $post          = R::dispense('post');
+        $post->body    = "- [x] done\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, false));
+
+        $this->assertSame("- [ ] done\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleFailsForMissingPost(): void
+    {
+        $this->assertFalse(apply_checkbox_toggle(99999, 0, true));
+    }
+
+    public function testApplyCheckboxToggleFailsForNegativeIndex(): void
+    {
+        $post          = R::dispense('post');
+        $post->body    = "- [ ] one\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertFalse(apply_checkbox_toggle($post->id, -1, true));
+    }
+
+    // -------------------------------------------------------------------------
+    // lock_if_feed_sourced
+    // -------------------------------------------------------------------------
+
+    public function testLockIfFeedSourcedLocksFeedPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = md5('Feed' . 'item-id');
+
+        lock_if_feed_sourced($bean);
+
+        $this->assertSame(1, (int) $bean->feed_locked);
+    }
+
+    public function testLockIfFeedSourcedLeavesNonFeedPostUntouched(): void
+    {
+        $bean = R::dispense('post');
+        $bean->feeditem_uuid = '';
+
+        lock_if_feed_sourced($bean);
+
+        $this->assertEmpty($bean->feed_locked);
     }
 }

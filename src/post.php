@@ -33,8 +33,8 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
     }
     $bean->body = $text;
     $bean->slug = $matter['slug'] ?? '';
-    $bean->created = date("Y-m-d H:i:s");
-    $bean->updated = date("Y-m-d H:i:s");
+    $bean->created = \Lamb\now();
+    $bean->updated = \Lamb\now();
     if ($feed_item) {
         $bean->created = $feed_item->get_date("Y-m-d H:i:s");
         $bean->updated = $feed_item->get_updated_date("Y-m-d H:i:s");
@@ -72,10 +72,13 @@ function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name
  *
  * Typing `---` on iOS produces em/en dashes (commonly `—-`), which stops the
  * fence from being recognised as a front-matter delimiter. When the body opens
- * with a dash-only fence line and has a matching closing fence line, both are
- * normalised back to a literal `---`. Dashes anywhere else (post body, em-dash
- * punctuation, signatures) are left untouched, and the surrounding whitespace
- * and line endings are preserved.
+ * with a dash-only fence line (two or more dash-like characters) and has a
+ * matching closing fence line, both are normalised back to a literal `---`. A
+ * single dash-like character is never treated as a fence: a lone em/en dash is
+ * ordinary punctuation (or a thematic break) far more often than a mangled
+ * fence, and a lone hyphen could swallow body content. Dashes anywhere else
+ * (post body, em-dash punctuation, signatures) are left untouched, and the
+ * surrounding whitespace and line endings are preserved.
  *
  * @param string $body The raw post body.
  * @return string The body with a normalised opening/closing front-matter fence.
@@ -90,22 +93,46 @@ function normalize_frontmatter_fence(string $body): string
 }
 
 /**
+ * Splits a body into its leading YAML front-matter block and the remaining
+ * content.
+ *
+ * Front matter is recognised only as a *leading* fenced block: a `---` line at
+ * the very start of the body, the YAML up to the next `---` line on its own,
+ * and everything after that as content. A `---` anywhere else — a Markdown
+ * horizontal rule, a `--- a/file` diff line, or `---` inside a fenced code
+ * block — is body and is preserved verbatim. Bodies without a leading fence
+ * return an empty YAML string and the body unchanged.
+ *
+ * @param string $body The raw post body.
+ * @return array{0: string, 1: string} The YAML block (without fences) and the content.
+ */
+function split_frontmatter(string $body): array
+{
+    if (preg_match('/\A---[ \t]*\R(.*?)\R?---[ \t]*(?:\R|\z)/s', $body, $m)) {
+        return [$m[1], substr($body, strlen($m[0]))];
+    }
+
+    return ['', $body];
+}
+
+/**
  * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
  * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
- * @return array An associative array of parsed YAML metadata. Returns an empty array if the YAML is invalid or absent.
+ * @return array<int|string, mixed> An associative array of parsed YAML metadata. Returns an empty array if the YAML is invalid or absent.
  */
 function parse_matter(string $body): array
 {
-    $matter = null;
-    $text = explode('---', $body);
+    [$yaml] = split_frontmatter($body);
+    if ($yaml === '') {
+        return [];
+    }
+
     try {
-        if (isset($text[1])) {
-            // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
-            // author's typed wall-clock time, instead of coercing them to UTC Unix
-            // timestamps (which would shift the time by the server's timezone offset).
-            $matter = Yaml::parse($text[1], Yaml::PARSE_DATETIME);
-        }
+        // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
+        // author's typed wall-clock time, instead of coercing them to UTC Unix
+        // timestamps (which would shift the time by the server's timezone offset).
+        $matter = Yaml::parse($yaml, Yaml::PARSE_DATETIME);
     } catch (ParseException) {
         // Invalid YAML
         return [];
@@ -115,11 +142,79 @@ function parse_matter(string $body): array
     if (!is_array($matter)) {
         return [];
     }
+
+    $matter = normalize_matter_keys($matter);
+
     if (isset($matter['title']) && !isset($matter['slug'])) {
         $matter['slug'] = slugify($matter['title']);
     }
 
     return $matter;
+}
+
+/**
+ * Normalises front-matter keys to a canonical form before they are matched.
+ *
+ * String keys are lower-cased and underscores are converted to dashes, so
+ * `Title`, `TITLE`, `in_reply_to` and `In-Reply-To` all collapse onto the
+ * canonical `title` / `in-reply-to` keys the rest of the codebase matches on.
+ * This smooths over mobile keyboards that auto-capitalise the first letter of a
+ * line and over the underscore/dash spelling ambiguity. Non-string keys (YAML
+ * sequence indices) are left untouched. When two source keys normalise to the
+ * same canonical key, the later one wins.
+ *
+ * @param array<int|string, mixed> $matter The parsed front matter.
+ * @return array<int|string, mixed> The front matter with canonicalised keys.
+ */
+function normalize_matter_keys(array $matter): array
+{
+    $normalized = [];
+    foreach ($matter as $key => $value) {
+        if (is_string($key)) {
+            $key = str_replace('_', '-', strtolower($key));
+        }
+        $normalized[$key] = $value;
+    }
+
+    return $normalized;
+}
+
+/**
+ * Consumes a leading ATX heading as the post title.
+ *
+ * When a body has no front-matter `title` but its content opens with an ATX
+ * heading (the Markdown document-title convention), that line is removed from
+ * the content and its text written into the body's front matter as `title:`
+ * via inject_title_matter() (which creates a front-matter block when the body
+ * has none, or inserts the title into an existing block). The derived slug then
+ * flows through the normal parse_matter()/finalize_slug() path, so slug pinning
+ * and collision handling need no special casing.
+ *
+ * Any leading heading level is recognised (`#` through `######`): the level the
+ * author types for the title is immaterial, the first heading is the title. A
+ * heading that is not the first content is left in place. Idempotent — once the
+ * title is in front matter, a second call is a no-op.
+ *
+ * @param string $body The raw post body.
+ * @return string The body with a leading heading promoted to the title, or the
+ *                body unchanged when no leading heading is present.
+ */
+function consume_leading_heading(string $body): string
+{
+    if (isset(parse_matter($body)['title'])) {
+        return $body;
+    }
+
+    [, $content] = split_frontmatter($body);
+    if (!preg_match('/\A\s*#{1,6}[ \t]+(.+?)[ \t]*(?:\R|\z)/', $content, $m)) {
+        return $body;
+    }
+
+    $title = $m[1];
+    $prefix = substr($body, 0, strlen($body) - strlen($content));
+    $remaining = ltrim(substr($content, strlen($m[0])), "\r\n");
+
+    return inject_title_matter($prefix . $remaining, $title);
 }
 
 /**
@@ -147,7 +242,7 @@ function inject_title_matter(string $body, string $title): string
 
 function slugify(string $text): string
 {
-    return strtolower(preg_replace('/\W+/m', "-", $text));
+    return strtolower(preg_replace('/\W+/m', "-", $text) ?? $text);
 }
 
 /**
@@ -292,6 +387,38 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
+ * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
+ *
+ * Task markers are list lines of the form `- [ ] ` / `* [x] ` / `+ [X] `. They
+ * are counted in document order (the same order LambDown numbers the rendered
+ * checkboxes with `data-checkbox-index`), so the Nth rendered checkbox maps to
+ * the Nth source marker. Only the target marker's state character is rewritten;
+ * every other marker and all surrounding text is preserved verbatim. An index
+ * past the last marker returns the body unchanged.
+ *
+ * @param string $body    The raw post body.
+ * @param int    $index   Zero-based index of the marker to toggle.
+ * @param bool   $checked True to check the marker, false to uncheck it.
+ * @return string The body with the target marker toggled.
+ */
+function toggle_checkbox(string $body, int $index, bool $checked): string
+{
+    $seen = 0;
+    return preg_replace_callback(
+        '/^(\s*[-*+]\s+\[)[ xX](\]\s)/m',
+        function (array $m) use (&$seen, $index, $checked): string {
+            $state = $seen === $index ? ($checked ? 'x' : ' ') : null;
+            $seen++;
+            if ($state === null) {
+                return $m[0];
+            }
+            return $m[1] . $state . $m[2];
+        },
+        $body
+    ) ?? $body;
+}
+
+/**
  * Returns a broad SQL prefilter for posts whose body contains the given tag.
  *
  * The SQL is deliberately permissive (it also matches longer tags that share
@@ -300,7 +427,7 @@ function finalize_slug(OODBBean $bean): bool
  * inline tag renderer (Lamb\parse_tags).
  *
  * @param string $tag The tag to match.
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function get_tag_search_conditions(string $tag): array
 {
@@ -331,7 +458,7 @@ function body_has_tag(string $tag, string $body): bool
  *
  * @param string $tag The tag to search for within post content.
  *
- * @return array An array of posts that match the specified tag.
+ * @return list<\RedBeanPHP\OODBBean> An array of posts that match the specified tag.
  */
 function posts_by_tag(string $tag): array
 {

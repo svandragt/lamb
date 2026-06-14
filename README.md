@@ -1,4 +1,4 @@
-![Lamb made out of circuitry](src/images/og-image-lamb.jpg)
+![Lamb made out of circuitry](src/images/og-image-lamb.webp)
 
 Lamb — Literally Another Micro Blog.
 
@@ -26,7 +26,7 @@ To preview the in-development docs on `main` locally, run `make docs` and open h
 # Screenshots
 
 An example blog running the 2026 theme at [vandragt.com](https://vandragt.com):
-![Demo Lamb instance](src/images/demo-vandragt.png "Sander van Dragt's Notes, running Lamb with the 2026 theme")
+![Demo Lamb instance](docs/demo-vandragt.webp "Sander van Dragt's Notes, running Lamb with the 2026 theme")
 
 Dropping images into a post ala GitHub:
 ![Drag and drop image demo](https://vandragt.com/assets/2023/12/6c5e64336afdd939f9c9768ac07b35551de8043b.gif "Creating a post with an image")

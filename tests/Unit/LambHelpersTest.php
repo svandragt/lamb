@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\find_post_by_path;
 use function Lamb\get_option;
+use function Lamb\now;
 use function Lamb\permalink;
 use function Lamb\post_has_slug;
 use function Lamb\set_option;
@@ -22,6 +24,62 @@ class LambHelpersTest extends TestCase
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
         }
+    }
+
+    // now
+
+    public function testNowReturnsCanonicalDatetimeFormat(): void
+    {
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/', now());
+    }
+
+    public function testNowReturnsCurrentTime(): void
+    {
+        $before = date('Y-m-d H:i:s');
+        $value = now();
+        $after = date('Y-m-d H:i:s');
+        $this->assertGreaterThanOrEqual($before, $value);
+        $this->assertLessThanOrEqual($after, $value);
+    }
+
+    // find_post_by_path
+
+    public function testFindPostByPathResolvesStatusPath(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'A status post';
+        R::store($bean);
+
+        $found = find_post_by_path('/status/' . $bean->id);
+        $this->assertNotNull($found);
+        $this->assertEquals($bean->id, $found->id);
+    }
+
+    public function testFindPostByPathResolvesSlugPath(): void
+    {
+        $bean = R::dispense('post');
+        $bean->slug = 'resolver-slug-' . uniqid();
+        R::store($bean);
+
+        $found = find_post_by_path('/' . $bean->slug);
+        $this->assertNotNull($found);
+        $this->assertEquals($bean->id, $found->id);
+    }
+
+    public function testFindPostByPathReturnsNullForUnknownStatusId(): void
+    {
+        $this->assertNull(find_post_by_path('/status/999999999'));
+    }
+
+    public function testFindPostByPathReturnsNullForUnknownSlug(): void
+    {
+        $this->assertNull(find_post_by_path('/no-such-slug-' . uniqid()));
+    }
+
+    public function testFindPostByPathReturnsNullForRootPath(): void
+    {
+        $this->assertNull(find_post_by_path('/'));
+        $this->assertNull(find_post_by_path(''));
     }
 
     // permalink

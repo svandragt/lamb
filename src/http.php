@@ -24,6 +24,75 @@ function get_request_uri(): string|false
 }
 
 /**
+ * Splits a trailing `/page/<N>` pagination segment off a request path.
+ *
+ * Clean pagination URLs append `/page/N` to whatever list path they paginate
+ * (`/page/2`, `/tag/foo/page/2`, `/search/foo/page/2`, …). Stripping it here,
+ * before the router segments the path, lets every list responder keep routing
+ * on its base path while the page number is fed into the normal `$_GET['page']`
+ * pagination path. A bare `/page/N` collapses to `/home`.
+ *
+ * @param string $uri The request path (no query string).
+ * @return array{0: string, 1: int|null} The page-stripped path and the page
+ *                                        number, or the original path and null
+ *                                        when no numeric page segment is present.
+ */
+function extract_page_segment(string $uri): array
+{
+    if (preg_match('#^(.*)/page/(\d+)/?$#', $uri, $matches) === 1) {
+        $path = $matches[1] === '' ? '/home' : $matches[1];
+        return [$path, max(1, (int)$matches[2])];
+    }
+
+    return [$uri, null];
+}
+
+/**
+ * Builds the clean pagination URL for a list path at a given page.
+ *
+ * The inverse of extract_page_segment(): strips any existing trailing
+ * `/page/N` off the path, then appends `/page/N` for page 2 onwards. Page 1
+ * is the bare base path (the homepage collapses to `/`), so the first page has
+ * a single canonical URL with no page segment.
+ *
+ * @param string $path The list path (may itself carry a `/page/N` suffix).
+ * @param int    $page The target page number.
+ * @return string The clean pagination URL.
+ */
+function page_path(string $path, int $page): string
+{
+    $base = rtrim((string)preg_replace('#/page/\d+/?$#', '', $path), '/');
+    if ($page <= 1) {
+        return $base === '' ? '/' : $base;
+    }
+
+    return $base . '/page/' . $page;
+}
+
+/**
+ * Sanitises a value bound for a `Location:` header.
+ *
+ * Any request-derived value interpolated into a redirect target (the request
+ * URI, a search query, a fallback URL) is a header-injection surface: a CR or
+ * LF would let a client smuggle extra response headers. They are stripped (along
+ * with null bytes) before output. An empty result falls back to the site root so
+ * callers never emit a bare `Location:`.
+ *
+ * This is the pure core of the redirect helpers — it takes its input as an
+ * argument and returns the safe string, so it is unit-testable without the
+ * surrounding `header()`/`die()` shell.
+ *
+ * @param string $location The proposed redirect target.
+ * @return string The CR/LF-stripped target, or '/' when empty.
+ */
+function sanitize_location(string $location): string
+{
+    $location = str_replace(["\r", "\n", "\0"], '', $location);
+
+    return $location === '' ? '/' : $location;
+}
+
+/**
  * Default User-Agent sent by {@see fetch} when no header overrides it.
  */
 const DEFAULT_USER_AGENT = 'Lamb-Webmention';
@@ -92,6 +161,22 @@ function build_http_context_options(array $opts): array
 }
 
 /**
+ * Whether a string is an absolute http(s) URL with a host.
+ *
+ * The single URL gate for everything that touches the network: webmention
+ * source/target/endpoint checks, outbound link extraction, and feed-config
+ * filtering all share this definition of "fetchable".
+ *
+ * @param string $url
+ * @return bool
+ */
+function is_valid_http_url(string $url): bool
+{
+    $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
+    return in_array($scheme, ['http', 'https'], true) && parse_url($url, PHP_URL_HOST) !== null;
+}
+
+/**
  * Extract the status code from an HTTP status line.
  *
  * Accepts status lines with or without a reason phrase ("HTTP/1.1 200 OK"
@@ -103,6 +188,38 @@ function build_http_context_options(array $opts): array
 function parse_status_line(string $line): int
 {
     return preg_match('#\s(\d{3})(?:\s|$)#', $line, $m) ? (int) $m[1] : 0;
+}
+
+/**
+ * POST a www-form-urlencoded body and return the response HTTP status code.
+ *
+ * The shared outbound notification primitive: webmention sending and WebSub
+ * hub pings both POST a small form and only care about the status (WebSub
+ * ignores even that — it is fire-and-forget). Built on {@see fetch};
+ * follow_location/max_redirects are omitted so PHP's stream defaults apply,
+ * matching the hand-rolled contexts this replaces.
+ *
+ * @param string               $url        The endpoint to POST to.
+ * @param array<string, mixed> $fields     Form fields for the request body.
+ * @param int                  $timeout    Socket timeout in seconds.
+ * @param string               $user_agent User-Agent header value.
+ * @return int HTTP status code, or 0 on transport failure.
+ */
+function post_form(string $url, array $fields, int $timeout, string $user_agent): int
+{
+    $result = fetch($url, [
+        'method' => 'POST',
+        'headers' => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'User-Agent: ' . $user_agent,
+        ],
+        'content' => http_build_query($fields),
+        'timeout' => $timeout,
+        'follow_location' => null,
+        'max_redirects' => null,
+    ]);
+
+    return $result === null ? 0 : $result['status'];
 }
 
 /**

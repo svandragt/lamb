@@ -8,7 +8,6 @@ use RedBeanPHP\R;
 use function Lamb\Bootstrap\ensure_post_columns;
 use function Lamb\Response\count_drafts;
 use function Lamb\Response\count_trash;
-use function Lamb\Response\publish_post;
 use function Lamb\Response\respond_404;
 use function Lamb\Response\respond_drafts;
 use function Lamb\Response\respond_home;
@@ -690,7 +689,7 @@ class ResponseHandlersTest extends TestCase
         $this->assertSame(1, count_trash());
     }
 
-    // restore_post / publish_post
+    // restore_post
 
     public function testRestorePostClearsDeletedFlag(): void
     {
@@ -707,21 +706,6 @@ class ResponseHandlersTest extends TestCase
         $loaded = R::load('post', $bean->id);
         $this->assertEmpty($loaded->deleted);
         $this->assertEmpty($loaded->deleted_at);
-    }
-
-    public function testPublishPostClearsDraftFlag(): void
-    {
-        $bean = R::dispense('post');
-        $bean->body    = 'Draft post';
-        $bean->draft   = 1;
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
-
-        publish_post($bean);
-
-        $loaded = R::load('post', $bean->id);
-        $this->assertEmpty($loaded->draft);
     }
 
     public function testRespondSearchExcludesDeletedPosts(): void

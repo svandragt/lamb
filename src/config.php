@@ -26,7 +26,7 @@ theme = 2026
 ;author_name = Joe Sheeple
 
 ;; Title of the site, in html and feed views
-;site_title = My Microblog
+site_title = My Microblog
 
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
 ;; Use a name from https://www.php.net/manual/en/timezones.php.
@@ -42,6 +42,11 @@ feeds_draft = true
 ;; IndieAuth endpoints used for Micropub discovery. Override to use your own server.
 authorization_endpoint = https://indieauth.com/auth
 token_endpoint = https://tokens.indieauth.com/token
+
+;; Diagnostic logging for the Micropub endpoint. Off by default. Set to true only to
+;; debug a misbehaving client — it writes request/token-verification details (never the
+;; token itself) to data/micropub.log. Turn it back off when you are done.
+;micropub_debug = false
 
 ;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
 ;; relative path on another site.
@@ -61,6 +66,8 @@ token_endpoint = https://tokens.indieauth.com/token
 ;Subscribe = /feed
 ;;   - Full URLs to external sites
 ;Source = https://github.com/svandragt/lamb
+Home = /
+Feed = /feed
 
 [feeds]
 ;; Add feeds whose content gets published into the blog.
@@ -86,6 +93,21 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Destination can be a root-relative URL, a bare slug, or a full external URL.
 ;old-post = /new-post
 INI;
+}
+
+/**
+ * Parses INI text with warnings suppressed, returning [] when unparseable.
+ *
+ * The tolerant counterpart to validate_ini(): readers treat broken INI as
+ * empty config rather than surfacing errors, so a bad edit can't take the
+ * site down between save and fix.
+ *
+ * @param string $ini_text The raw INI text.
+ * @return array<string, mixed> The parsed sections/keys, or [] on failure.
+ */
+function parse_ini_safe(string $ini_text): array
+{
+    return @parse_ini_string($ini_text, true, INI_SCANNER_RAW) ?: [];
 }
 
 /**
@@ -123,8 +145,8 @@ function resolve_theme(?string $configured, string $fallback = 'base'): string
  */
 function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
 {
-    $parsed = @parse_ini_string($ini_text, true, INI_SCANNER_RAW);
-    if (is_array($parsed) && array_key_exists('theme', $parsed)) {
+    $parsed = parse_ini_safe($ini_text);
+    if (array_key_exists('theme', $parsed)) {
         return $ini_text;
     }
 
@@ -134,7 +156,7 @@ function ensure_explicit_theme(string $ini_text, string $default_theme = 'base')
 /**
  * Loads the configuration settings.
  *
- * @return array The configuration settings.
+ * @return array<string, mixed> The configuration settings.
  */
 function load(): array
 {
@@ -151,12 +173,12 @@ function load(): array
  *
  * @param string $stored_ini  The raw stored INI text.
  * @param string $default_ini The seeded default INI text.
- * @return array The effective configuration.
+ * @return array<string, mixed> The effective configuration.
  */
 function compose_config(string $stored_ini, string $default_ini): array
 {
-    $config = @parse_ini_string($stored_ini, true, INI_SCANNER_RAW) ?: [];
-    $defaults = @parse_ini_string($default_ini, true, INI_SCANNER_RAW) ?: [];
+    $config = parse_ini_safe($stored_ini);
+    $defaults = parse_ini_safe($default_ini);
 
     // Theme is intentionally not defaulted here. An install without an explicit
     // theme is resolved/migrated per-install (see resolve_theme / get_ini_text),
@@ -169,7 +191,6 @@ function compose_config(string $stored_ini, string $default_ini): array
     $fallback = [
         'author_email' => 'joe.sheeple@example.com',
         'author_name'  => 'Joe Sheeple',
-        'site_title'   => 'My Microblog',
     ];
 
     return array_merge($fallback, $defaults, $config);
@@ -183,7 +204,7 @@ function compose_config(string $stored_ini, string $default_ini): array
  * author's wall clock. Falls back to UTC when the configured value is missing or
  * not a recognised timezone identifier.
  *
- * @param array $config The loaded configuration.
+ * @param array<string, mixed> $config The loaded configuration.
  * @return string The timezone identifier that was applied.
  */
 function apply_timezone(array $config): string
@@ -298,7 +319,7 @@ function validate_ini(string $ini_text): array
 /**
  * Retrieves a list of slugs derived from menu items that should be excluded from the timeline.
  *
- * @return array An array of slugs to exclude.
+ * @return list<string> An array of slugs to exclude.
  */
 function get_menu_slugs(): array
 {
@@ -324,11 +345,11 @@ function get_menu_slugs(): array
 
         // Otherwise, if it's not a full URL, we treat it as a slug.
         if (!filter_var($value, FILTER_VALIDATE_URL)) {
-            $slugs[] = $value;
+            $slugs[] = (string) $value;
         }
     }
 
-    return array_unique($slugs);
+    return array_values(array_unique($slugs));
 }
 
 /**

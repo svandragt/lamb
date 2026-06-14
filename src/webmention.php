@@ -8,6 +8,7 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 
@@ -25,7 +26,7 @@ const WEBMENTION_FETCH_TIMEOUT = 10;
  * verifies them, and persists a verified mention. Always terminates the
  * request with a plain-text response.
  *
- * @param array $_args Unused route arguments.
+ * @param array<int, string> $_args Unused route arguments.
  * @return void
  */
 #[NoReturn]
@@ -91,7 +92,7 @@ function verify_and_store(string $source, string $target, ?callable $fetcher = n
     }
 
     $meta = extract_meta($html);
-    $now = date('Y-m-d H:i:s');
+    $now = \Lamb\now();
 
     $mention = $existing ?: R::dispense('webmention');
     $mention->source = $source;
@@ -126,19 +127,9 @@ function target_post_id(string $target): ?int
     }
 
     $path = parse_url($target, PHP_URL_PATH) ?: '';
+    $bean = \Lamb\find_post_by_path($path);
 
-    if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
-        $bean = R::load('post', (int) $matches[1]);
-        return $bean->id ? (int) $bean->id : null;
-    }
-
-    $slug = trim($path, '/');
-    if ($slug !== '') {
-        $bean = R::findOne('post', ' slug = ? ', [$slug]);
-        return $bean ? (int) $bean->id : null;
-    }
-
-    return null;
+    return $bean !== null ? (int) $bean->id : null;
 }
 
 /**
@@ -221,18 +212,6 @@ function fetch_source(string $url): ?string
     ]);
 
     return $result === null ? null : $result['body'];
-}
-
-/**
- * Whether a string is an absolute http(s) URL with a host.
- *
- * @param string $url
- * @return bool
- */
-function is_valid_http_url(string $url): bool
-{
-    $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
-    return in_array($scheme, ['http', 'https'], true) && parse_url($url, PHP_URL_HOST) !== null;
 }
 
 /**
@@ -339,7 +318,7 @@ function discover_endpoint(string $html, array $link_headers, string $target_url
  */
 function rel_has_webmention(string $rel): bool
 {
-    foreach (preg_split('/\s+/', strtolower($rel)) as $token) {
+    foreach (preg_split('/\s+/', strtolower($rel)) ?: [] as $token) {
         if (trim($token, " \t\"'") === 'webmention') {
             return true;
         }
@@ -459,7 +438,7 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
         $row->target = $target;
         $row->status = 'pending';
         $row->attempts = 0;
-        $row->created = date('Y-m-d H:i:s');
+        $row->created = \Lamb\now();
         $row->processed_at = null;
         R::store($row);
         $created++;
@@ -519,14 +498,14 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
  * @param OODBBean $row
  * @param callable $fetcher fn(string $url): ?array{headers: string[], body: string}
  * @param callable $sender  fn(string $endpoint, string $source, string $target): int
- * @return string|null Stat bucket name, or null when the row is deferred.
+ * @return 'sent'|'failed'|'skipped'|'cancelled'|null Stat bucket name, or null when the row is deferred.
  */
 function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
 {
     $post = R::load('post', (int) $row->post_id);
     if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
         $row->status = 'cancelled';
-        $row->processed_at = date('Y-m-d H:i:s');
+        $row->processed_at = \Lamb\now();
         R::store($row);
         return 'cancelled';
     }
@@ -535,7 +514,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
     }
 
     $row->attempts = (int) $row->attempts + 1;
-    $row->processed_at = date('Y-m-d H:i:s');
+    $row->processed_at = \Lamb\now();
 
     $fetched = $fetcher($row->target);
     $endpoint = is_array($fetched)
@@ -603,23 +582,10 @@ function fetch_target(string $url): ?array
  */
 function send_webmention(string $endpoint, string $source, string $target): int
 {
-    $context = stream_context_create([
-        'http' => [
-            'method' => 'POST',
-            'header' => implode("\r\n", [
-                'Content-Type: application/x-www-form-urlencoded',
-                'User-Agent: Lamb-Webmention',
-            ]),
-            'content' => http_build_query(['source' => $source, 'target' => $target]),
-            'timeout' => WEBMENTION_FETCH_TIMEOUT,
-            'ignore_errors' => true,
-        ],
-    ]);
-
-    $response = @file_get_contents($endpoint, false, $context);
-    if ($response === false && empty($http_response_header)) {
-        return 0;
-    }
-
-    return \Lamb\Http\parse_status_line($http_response_header[0] ?? '');
+    return \Lamb\Http\post_form(
+        $endpoint,
+        ['source' => $source, 'target' => $target],
+        WEBMENTION_FETCH_TIMEOUT,
+        'Lamb-Webmention'
+    );
 }

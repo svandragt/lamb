@@ -200,4 +200,97 @@ class ThemeMetaTest extends TestCase
 
         $this->assertStringNotContainsString('<script>', $output);
     }
+
+    // -------------------------------------------------------------------------
+    // the_opengraph — embed image selection: post image → web-root default → shipped
+    // -------------------------------------------------------------------------
+
+    public function testOpenGraphUsesFirstEmbeddedPostImage(): void
+    {
+        $url = 'http://localhost/assets/2024/06/example.webp';
+        $output = $this->renderStatus([
+            'transformed' => '<p>Hi</p>'
+                . '<img src="' . $url . '" alt="x">'
+                . '<img src="http://localhost/assets/2024/06/second.webp">',
+        ]);
+
+        $this->assertStringContainsString('property="og:image" content="' . $url . '"', $output);
+        $this->assertStringContainsString('property="twitter:image" content="' . $url . '"', $output);
+        $this->assertStringContainsString('content="summary_large_image"', $output);
+        $this->assertStringNotContainsString('og-image-lamb.webp', $output);
+    }
+
+    public function testOpenGraphUsesWebRootOgImageConventionWhenPostHasNoImage(): void
+    {
+        $webRoot = $this->resetWebRoot();
+        // A real 1x1 PNG so getimagesize() can read its dimensions/type.
+        file_put_contents(
+            $webRoot . '/og-image.png',
+            base64_decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=')
+        );
+
+        $output = $this->renderStatus(['transformed' => '<p>No image here</p>']);
+
+        @unlink($webRoot . '/og-image.png');
+
+        $this->assertStringContainsString(ROOT_URL . '/og-image.png', $output);
+        $this->assertStringNotContainsString('/images/og-image-lamb.webp', $output);
+        $this->assertStringContainsString('og:image:width', $output);
+        $this->assertStringContainsString('image/png', $output);
+    }
+
+    public function testOpenGraphFallsBackToShippedDefaultWhenNoConvention(): void
+    {
+        $this->resetWebRoot();
+
+        $output = $this->renderStatus(['transformed' => '<p>Just text, no image</p>']);
+
+        $this->assertStringContainsString(ROOT_URL . '/images/og-image-lamb.webp', $output);
+        $this->assertStringContainsString('content="summary"', $output);
+    }
+
+    /**
+     * Ensures ROOT_DIR points at a (temp) web root and clears any og-image.* convention
+     * files from it. ROOT_DIR is a process-wide constant that other unit tests may have
+     * already pointed at their own temp dir, so we operate on the actual ROOT_DIR rather
+     * than assume our define() wins.
+     */
+    private function resetWebRoot(): string
+    {
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_og_test_' . getmypid());
+        }
+        $dir = ROOT_DIR;
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        foreach (['png', 'jpg', 'jpeg', 'webp', 'gif'] as $ext) {
+            @unlink($dir . '/og-image.' . $ext);
+        }
+        return $dir;
+    }
+
+    /**
+     * Renders the_opengraph() for a status post and returns the emitted markup.
+     *
+     * @param array $fields Post bean fields (transformed, title, description).
+     */
+    private function renderStatus(array $fields = []): string
+    {
+        global $template, $data;
+        $template = 'status';
+
+        $bean              = R::dispense('post');
+        $bean->title       = $fields['title'] ?? 'Image Post';
+        $bean->description = $fields['description'] ?? 'A description';
+        $bean->transformed = $fields['transformed'] ?? '';
+        $bean->created     = date('Y-m-d H:i:s');
+        $bean->updated     = date('Y-m-d H:i:s');
+        R::store($bean);
+        $data = ['posts' => [$bean]];
+
+        ob_start();
+        the_opengraph();
+        return ob_get_clean();
+    }
 }

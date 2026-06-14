@@ -9,8 +9,9 @@ define('ROOT_DIR', __DIR__);
 
 require '../vendor/autoload.php';
 
-Bootstrap\bootstrap_db(getenv('LAMB_DATA_DIR') ?: '../data');
-Bootstrap\bootstrap_session();
+$data_dir = getenv('LAMB_DATA_DIR') ?: '../data';
+Bootstrap\bootstrap_db($data_dir);
+Bootstrap\bootstrap_session($data_dir);
 
 $config = Config\load();
 Config\apply_timezone($config);
@@ -31,6 +32,32 @@ header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false)
 
 # Routing
 $request_uri = Http\get_request_uri();
+
+# Strip a trailing /page/N pagination segment so list routes keep routing on
+# their base path; the page number flows through the normal $_GET['page'] path.
+[$request_uri, $page_from_path] = Http\extract_page_segment((string)$request_uri);
+if ($page_from_path !== null) {
+    $_GET['page'] = $page_from_path;
+}
+
+# Legacy ?page=N links → permanent redirect to the clean /…/page/N URL.
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if (in_array($method, ['GET', 'HEAD'], true)) {
+    parse_str($_SERVER['QUERY_STRING'] ?? '', $query_params);
+    if (isset($query_params['page'])) {
+        $page_num = max(1, (int)$query_params['page']);
+        unset($query_params['page']);
+        $clean_path = (string)strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+        $target = Http\page_path($clean_path, $page_num);
+        $remaining = http_build_query($query_params);
+        if ($remaining !== '') {
+            $target .= '?' . $remaining;
+        }
+        header('Location: ' . Http\sanitize_location($target), true, 301);
+        exit;
+    }
+}
+
 $action = strtok($request_uri, '/');
 $lookup = strtok('/');
 $sublookup = strtok('/');
@@ -70,6 +97,7 @@ Route\register_route('webmention', __NAMESPACE__ . '\\Webmention\respond_webment
 Route\register_route('micropub', __NAMESPACE__ . '\\Micropub\respond_micropub');
 Route\register_route('micropub-media', __NAMESPACE__ . '\\Micropub\respond_micropub_media');
 Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
+Route\register_route('checkbox', __NAMESPACE__ . '\\Response\respond_checkbox', $lookup);
 $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);
@@ -77,7 +105,7 @@ if (post_has_slug($action) === $action) {
 } elseif ($action !== false && !Route\is_reserved_route($action)) {
     $redirect_url = find_redirect($action);
     if ($redirect_url !== null) {
-        header('Location: ' . $redirect_url, true, 301);
+        header('Location: ' . Http\sanitize_location($redirect_url), true, 301);
         exit;
     }
 }

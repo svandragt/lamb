@@ -10,6 +10,7 @@ use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
 use function Lamb\get_option;
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\Route\register_route;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
@@ -19,16 +20,16 @@ use function Lamb\set_option;
 
 register_route('_cron', __NAMESPACE__ . '\\process_feeds');
 
+/**
+ * @return array<array-key, mixed> Configured feed URLs keyed by feed name.
+ */
 function get_feeds(): array
 {
     global $config;
 
     // A setting accidentally placed under [feeds] (e.g. `feeds_draft = false`)
     // would otherwise be fetched as a feed URL. Only keep http(s) URLs.
-    return array_filter($config['feeds'] ?? [], function ($url) {
-        return filter_var($url, FILTER_VALIDATE_URL)
-            && in_array(parse_url($url, PHP_URL_SCHEME), ['http', 'https'], true);
-    });
+    return array_filter($config['feeds'] ?? [], fn($url) => is_valid_http_url((string) $url));
 }
 
 /**
@@ -203,17 +204,7 @@ function record_feed_crawl(string $name, string $url, SimplePie $feed): array
     $items     = 0;
     /** @var SimplePieItem $item */
     foreach ($feed->get_items() as $item) {
-        $pub_date = $item->get_date('U');
-        $mod_date = $item->get_updated_date('U');
-
-        // Compare the publication date of the item with the success watermark.
-        if ($pub_date > $watermark) {
-            create_item($item, $name);
-            $items++;
-            continue;
-        }
-        if ($mod_date > $watermark) {
-            update_item($item, $name);
+        if (ingest_item($item, $name, $watermark)) {
             $items++;
         }
     }
@@ -276,6 +267,44 @@ function prune_feed_status(): int
     return $removed;
 }
 
+/**
+ * Decides whether a single feed item is created, updated, or skipped, keyed on
+ * its `feeditem_uuid` rather than dates alone.
+ *
+ * Deduplication lives here: an item that already has a post is never recreated
+ * (the source of the recreated-draft bug when a feed re-stamps an item's
+ * publication date past the watermark). A brand-new item is created only when
+ * its publication date is newer than the watermark. An already-ingested post is
+ * re-synced from the source only when the item was modified after the watermark
+ * AND the author has not taken the post over via the edit form
+ * (`feed_locked`) — so a published, re-slugged post is left intact.
+ *
+ * @param SimplePieItem $item      The feed item.
+ * @param string        $name      Feed name from config.
+ * @param int           $watermark The feed's last-success timestamp.
+ * @return bool True when a post was created or updated (counts toward the run total).
+ */
+function ingest_item(SimplePieItem $item, string $name, int $watermark): bool
+{
+    $uuid     = md5($name . $item->get_id());
+    $existing = R::findOne('post', ' feeditem_uuid = ? ', [$uuid]);
+
+    if (!$existing) {
+        if ((int) $item->get_date('U') > $watermark) {
+            create_item($item, $name);
+            return true;
+        }
+        return false;
+    }
+
+    if (!$existing->feed_locked && (int) $item->get_updated_date('U') > $watermark) {
+        update_item($item, $name);
+        return true;
+    }
+
+    return false;
+}
+
 function update_item(SimplePieItem $item, string $name): void
 {
     $uuid = md5($name . $item->get_id());
@@ -302,7 +331,7 @@ function prepare_item(SimplePieItem $item, string $name, ?OODBBean $bean = null)
     return populate_bean($contents, $item, $name, $bean);
 }
 
-function create_item(SimplePieItem $item, string $name)
+function create_item(SimplePieItem $item, string $name): void
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
@@ -328,7 +357,7 @@ function create_item(SimplePieItem $item, string $name)
 function get_structured_content(SimplePieItem $item, string $name): string
 {
     $contents = attributed_content($item, $name);
-    $title = sanitize_feed_title($item->get_title());
+    $title = sanitize_feed_title($item->get_title() ?? '');
     if (!empty($title)) {
         $contents = <<<MATTER
 ---
@@ -375,7 +404,7 @@ function sanitize_feed_title(string $title): string
  */
 function attributed_content(SimplePieItem $item, string $name): string
 {
-    $contents = strip_tags($item->get_description());
+    $contents = strip_tags($item->get_description() ?? '');
     $lines = explode(PHP_EOL, $contents);
     $lines = array_slice($lines, 0, 5); // Get only the first 5 lines
     foreach ($lines as &$line) {

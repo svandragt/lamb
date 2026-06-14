@@ -15,19 +15,37 @@ const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (de
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Post\consume_leading_heading;
+use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
+use function Lamb\Post\split_frontmatter;
+
+/**
+ * Returns the current time in the canonical `Y-m-d H:i:s` format used for every
+ * datetime column in the app, so the format (and timezone basis) lives in one place.
+ *
+ * @return string The current datetime string.
+ */
+function now(): string
+{
+    return date('Y-m-d H:i:s');
+}
+
+// Matches a #hashtag preceded by start-of-string, whitespace, or a closing tag
+// bracket. Capture 1 is the preceding character, capture 2 the tag name.
+const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u';
 
 /**
  * Retrieves the tags from the given HTML.
  *
  * @param string $html The HTML content to search for tags.
  *
- * @return array An array of tags found in the HTML.
+ * @return list<string> An array of tags found in the HTML.
  */
 function get_tags(string $html): array
 {
-    preg_match_all('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', $html, $matches);
+    preg_match_all(TAG_PATTERN, $html, $matches);
 
     return $matches[2];
 }
@@ -45,9 +63,61 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback('/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u', function ($matches) {
+    return preg_replace_callback(TAG_PATTERN, function ($matches) {
         return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
-    }, $html);
+    }, $html) ?? $html;
+}
+
+/**
+ * Appends the given tags to a body as trailing hashtags, skipping ones the
+ * body already carries. Returns the body unchanged when nothing is missing.
+ *
+ * Counterpart of get_tags(): used by Micropub category `add` updates, where
+ * categories live in the body as hashtags rather than in a column.
+ *
+ * @param string       $body The raw post body.
+ * @param list<string> $tags Tag names (without `#`).
+ * @return string The body with missing tags appended.
+ */
+function add_body_tags(string $body, array $tags): string
+{
+    $to_add = array_diff($tags, get_tags($body));
+    if (empty($to_add)) {
+        return $body;
+    }
+    $hashtags = implode(' ', array_map(fn($tag) => '#' . $tag, $to_add));
+
+    return rtrim($body) . ' ' . $hashtags;
+}
+
+/**
+ * Removes the run of trailing hashtags from a body, leaving inline tags alone.
+ *
+ * Used by Micropub category delete-property updates (drop all categories).
+ *
+ * @param string $body The raw post body.
+ * @return string The body without its trailing hashtag run.
+ */
+function strip_trailing_body_tags(string $body): string
+{
+    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body) ?? $body);
+}
+
+/**
+ * Removes the named hashtags (and their preceding whitespace) from a body,
+ * wherever they appear. Used by Micropub category delete-values updates.
+ *
+ * @param string       $body The raw post body.
+ * @param list<string> $tags Tag names (without `#`) to remove.
+ * @return string The body without the named tags.
+ */
+function remove_body_tags(string $body, array $tags): string
+{
+    foreach ($tags as $tag) {
+        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body) ?? $body;
+    }
+
+    return $body;
 }
 
 /**
@@ -86,6 +156,21 @@ function permalink(OODBBean $bean): string
  */
 function parse_bean(OODBBean $bean): void
 {
+    // Restore an iOS Smart-Punctuation front-matter fence (e.g. a single em
+    // dash for a typed `---`) before parsing, and persist the normalised body.
+    // This is the single choke point every save path runs through — web
+    // create/edit, Micropub create/update, feed ingestion, upgrade re-parse —
+    // so the recovery is not limited to populate_bean(). Idempotent for bodies
+    // already using a literal `---` fence.
+    $bean->body = normalize_frontmatter_fence($bean->body);
+
+    // Promote a leading `# Heading` to the post title when no front-matter title
+    // exists, so the body's document title isn't rendered as a duplicate heading
+    // inside the content. Runs at the same choke point as the fence recovery, so
+    // every save path benefits, and is idempotent once the title is in front
+    // matter.
+    $bean->body = consume_leading_heading($bean->body);
+
     $markdown = render_body($bean->body);
 
     $front_matter = parse_matter($bean->body);
@@ -101,8 +186,10 @@ function parse_bean(OODBBean $bean): void
 }
 
 /**
- * Renders the Markdown body (everything after the front-matter block) to HTML
- * via LambDown with safe mode enabled.
+ * Renders the Markdown body (everything after the leading front-matter block)
+ * to HTML via LambDown with safe mode enabled. A `---` in the body itself — a
+ * horizontal rule, a diff line, or `---` inside a fenced code block — is left
+ * for the Markdown parser to handle rather than being mistaken for a fence.
  *
  * @param string $body The raw post body, optionally prefixed by front matter.
  * @return string The rendered HTML.
@@ -111,12 +198,11 @@ function parse_bean(OODBBean $bean): void
  */
 function render_body(string $body): string
 {
-    $parts = explode('---', $body);
-    $md_text = trim($parts[count($parts) - 1]);
+    [, $content] = split_frontmatter($body);
     $parser = new LambDown();
     $parser->setSafeMode(true);
 
-    return $parser->text($md_text);
+    return $parser->text(trim($content));
 }
 
 /**
@@ -129,7 +215,7 @@ function render_body(string $body): string
  */
 function extract_description(string $markdown): string
 {
-    $description = strtok(strip_tags($markdown), "\n");
+    $description = strtok(strip_tags($markdown), "\n") ?: '';
     // Decode twice: feed-ingested bodies already contain HTML entities (e.g. `&#039;`),
     // which Parsedown then re-encodes (`&amp;#039;`). A single decode only undoes one layer.
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -162,20 +248,21 @@ function highlight_and_link(string $markdown): string
 /**
  * Normalises the reply target from front matter into a single string.
  *
- * Accepts either `in-reply-to` (IndieWeb/Micropub spelling) or `in_reply_to`,
- * collapsing a YAML list to its first entry. Both keys are removed from the
- * passed-by-reference front matter so the hyphenated key is never written as an
- * invalid column by the blind copy in apply_frontmatter().
+ * Reads the `in-reply-to` key (parse_matter() has already canonicalised the
+ * `in_reply_to` spelling onto it), collapsing a YAML list to its first entry.
+ * The key is removed from the passed-by-reference front matter so the
+ * hyphenated key is never written as an invalid column by the blind copy in
+ * apply_frontmatter().
  *
- * @param array $front_matter The parsed front matter, modified in place.
+ * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
  * @return string The normalised reply target, or '' when absent.
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
  */
 function normalize_in_reply_to(array &$front_matter): string
 {
-    $in_reply_to = $front_matter['in-reply-to'] ?? $front_matter['in_reply_to'] ?? null;
-    unset($front_matter['in-reply-to'], $front_matter['in_reply_to']);
+    $in_reply_to = $front_matter['in-reply-to'] ?? null;
+    unset($front_matter['in-reply-to']);
     if (is_array($in_reply_to)) {
         $in_reply_to = $in_reply_to[0] ?? null;
     }
@@ -187,12 +274,15 @@ function normalize_in_reply_to(array &$front_matter): string
  * Applies non-date front-matter fields onto the bean.
  *
  * Resets `in_reply_to`, `title`, and `draft` to their defaults when absent so
- * removing a line on edit clears the stored value, then blind-copies the
- * remaining front-matter keys. Date normalisation is handled separately by
+ * removing a line on edit clears the stored value, then copies the remaining
+ * front-matter keys. Keys that are not valid bean column names (e.g. a
+ * normalised multi-word key like `reading-time`) are skipped rather than
+ * written, since RedBean rejects them — only the recognised single-word fields
+ * map to columns. Date normalisation is handled separately by
  * apply_scheduling().
  *
- * @param OODBBean $bean         The bean to mutate.
- * @param array    $front_matter The parsed front matter (including derived keys).
+ * @param OODBBean                  $bean         The bean to mutate.
+ * @param array<int|string, mixed>  $front_matter The parsed front matter (including derived keys).
  * @return void
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
@@ -210,6 +300,11 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
 
     foreach ($front_matter as $key => $value) {
+        // RedBean only accepts word-character property names. Skip anything
+        // else (e.g. a normalised `reading-time`) so it never reaches a store.
+        if (!is_string($key) || !preg_match('/\A\w+\z/', $key)) {
+            continue;
+        }
         $bean->$key = $value;
     }
 
@@ -232,9 +327,9 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
  * passed in by parse_bean() so the unparseable-date fallback uses the genuine
  * prior value rather than the raw front-matter string now sitting on the bean.
  *
- * @param OODBBean $bean             The bean to mutate.
- * @param array    $front_matter     The parsed front matter.
- * @param mixed    $previous_created The created date held before apply_frontmatter().
+ * @param OODBBean                 $bean             The bean to mutate.
+ * @param array<int|string, mixed> $front_matter     The parsed front matter.
+ * @param mixed                    $previous_created The created date held before apply_frontmatter().
  * @return void
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
@@ -249,7 +344,7 @@ function apply_scheduling(OODBBean $bean, array $front_matter, mixed $previous_c
     // edits, the feed date for ingested items) so an unparseable front-matter date
     // falls back to it rather than leaving a non-date string in the column.
     $bean->created = normalize_datetime($front_matter['created'])
-        ?? ($previous_created ?: date('Y-m-d H:i:s'));
+        ?? ($previous_created ?: now());
     // Pin the resolved date back into the body so relative phrases like
     // "next friday" don't drift to a new date on the next edit.
     $bean->body = persist_resolved_created($bean->body, $bean->created);
@@ -298,13 +393,13 @@ function set_option(OODBBean $bean, mixed $value): void
  * The current time is bound as a parameter so the comparison uses the same
  * timezone basis as the stored `created` values (both produced by PHP's date()).
  *
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function not_scheduled_clause(): array
 {
     return [
         'sql'    => ' (created IS NULL OR created <= ?) ',
-        'params' => [date('Y-m-d H:i:s')],
+        'params' => [now()],
     ];
 }
 
@@ -318,7 +413,7 @@ function not_scheduled_clause(): array
  * not_scheduled_clause(), so a new query cannot accidentally omit one of the
  * conditions (which is how scheduled posts leaked into related posts).
  *
- * @return array{sql: string, params: array}
+ * @return array{sql: string, params: array<int, string>}
  */
 function visible_clause(): array
 {
@@ -380,7 +475,7 @@ function normalize_datetime(mixed $value): ?string
  */
 function is_scheduled(OODBBean $post): bool
 {
-    return !empty($post->created) && $post->created > date('Y-m-d H:i:s');
+    return !empty($post->created) && $post->created > now();
 }
 
 /**
@@ -480,6 +575,32 @@ function post_has_slug(string $lookup): string|null
     }
 
     return $post->slug;
+}
+
+/**
+ * Resolves a permalink path to the post it points at.
+ *
+ * Recognises the two permalink shapes the app mints: `/status/<id>` for
+ * status posts and `/<slug>` for page-like posts. Shared by the Micropub and
+ * Webmention endpoints, which both map externally supplied URLs back to posts
+ * (each applies its own host policy before/after calling this).
+ *
+ * @param string $path The URL path (e.g. from parse_url(..., PHP_URL_PATH)).
+ * @return OODBBean|null The matching post bean, or null when none exists.
+ */
+function find_post_by_path(string $path): ?OODBBean
+{
+    if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
+        $bean = R::load('post', (int) $matches[1]);
+        return $bean->id ? $bean : null;
+    }
+
+    $slug = trim($path, '/');
+    if ($slug !== '') {
+        return R::findOne('post', ' slug = ? ', [$slug]);
+    }
+
+    return null;
 }
 
 /**
