@@ -59,3 +59,13 @@ jobs:
             --title "Lamb $VERSION" \
             --notes-file "$RUNNER_TEMP/notes.md" \
             "${flags[@]}"
+
+      - name: Build release artifacts
+        # A release created with GITHUB_TOKEN does not fire the `release: published`
+        # event (GitHub suppresses GITHUB_TOKEN-triggered events to avoid recursion),
+        # so release-artifacts.yml won't auto-run. workflow_dispatch is the documented
+        # exception to that rule, so trigger the build explicitly here.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: gh workflow run release-artifacts.yml -f tag="$VERSION"
