@@ -29,10 +29,13 @@ if (($_ENV['PWD'] ?? '') === '/srv/app') {
 $data  = "SITE_URL='" . $site_url . "'" . PHP_EOL;
 $data .= "LAMB_TEST_PORT='" . $test_port . "'" . PHP_EOL;
 $data .= "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
-// The plaintext password is only useful to the acceptance suite (LogoutCest).
-// Keep it out of .env by default so a self-hoster's setup file never carries
-// the cleartext secret; the test harness opts in via LAMB_WRITE_TEST_PASSWORD.
-if (!empty($_ENV['LAMB_WRITE_TEST_PASSWORD'])) {
+// The plaintext password is only useful to the acceptance suite (it logs in
+// with $_ENV['LAMB_TEST_PASSWORD']). Keep it out of .env by default so a
+// self-hoster's setup file never carries the cleartext secret; the test harness
+// opts in via LAMB_WRITE_TEST_PASSWORD. Use getenv() rather than $_ENV here: CI
+// runs this script under a variables_order that does not populate $_ENV from the
+// environment, but getenv() reads the process environment regardless.
+if (getenv('LAMB_WRITE_TEST_PASSWORD')) {
     $data .= "LAMB_TEST_PASSWORD='" . $password . "'" . PHP_EOL;
 }
 $env_out = file_put_contents('.env', $data);

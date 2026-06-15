@@ -101,4 +101,20 @@ class MakePasswordTest extends TestCase
 
         $this->assertStringContainsString("LAMB_TEST_PASSWORD='hackme'", $contents);
     }
+
+    public function testOptInIsReadFromProcessEnvNotVariablesOrder(): void
+    {
+        // Mirror CI: run with the stock variables_order (which omits 'E', so
+        // $_ENV is not populated from the environment). The opt-in must still
+        // be honoured because it is read with getenv(), not $_ENV.
+        $process = new Process(
+            ['php', '-d', 'variables_order=GPCS', codecept_root_dir('make-password.php'), 'hackme'],
+            $this->workspace,
+            ['LAMB_WRITE_TEST_PASSWORD' => '1']
+        );
+        $process->mustRun();
+
+        $contents = (string)file_get_contents($this->workspace . '/.env');
+        $this->assertStringContainsString("LAMB_TEST_PASSWORD='hackme'", $contents);
+    }
 }
