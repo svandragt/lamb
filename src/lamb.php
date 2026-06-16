@@ -586,6 +586,23 @@ function ensure_preview_token(OODBBean $post): void
 }
 
 /**
+ * Fans out publish notifications for a freshly stored post.
+ *
+ * Both the web form and Micropub run the same two steps after saving: queue
+ * outbound webmentions for the post's external links and ping the WebSub hubs.
+ * Each callee already skips ineligible posts (drafts, feed items, future-dated
+ * scheduled posts), so this is safe to call unconditionally from every save path.
+ *
+ * @param OODBBean $bean A stored post bean.
+ * @return void
+ */
+function notify_post_subscribers(OODBBean $bean): void
+{
+    Webmention\enqueue_for_post($bean);
+    Websub\ping_for_post($bean);
+}
+
+/**
  * Checks if a post with the given slug exists in the database and may be
  * routed for the current request: published posts for everyone, drafts and
  * scheduled posts for the logged-in author (matching is_viewable()) or via a

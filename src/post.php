@@ -388,6 +388,26 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
+ * Stores a freshly populated post and pins its finalized slug.
+ *
+ * Every create path follows the same idiom: store once to mint an id (the id is
+ * part of any dedup suffix), then finalize_slug() — which reserves/suffixes the
+ * slug and pins it into the body's front matter — and re-store only when that
+ * changed something. Centralising it keeps the create paths (web form, Micropub,
+ * feed ingestion) from drifting apart.
+ *
+ * @param OODBBean $bean An unsaved or partially-saved post bean.
+ * @return void
+ */
+function finalize_and_store_post(OODBBean $bean): void
+{
+    R::store($bean);
+    if (finalize_slug($bean)) {
+        R::store($bean);
+    }
+}
+
+/**
  * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
  *
  * Task markers are list lines of the form `- [ ] ` / `* [x] ` / `+ [X] `. They
