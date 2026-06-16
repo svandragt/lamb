@@ -18,6 +18,10 @@ class MicropubAdapterTest extends TestCase
 
         global $config;
         $config = $config ?? [];
+        // Config\load() always provides site_title in production; respond_home()
+        // reads it unguarded, so seed it here rather than relying on a sibling
+        // test having populated the global $config first.
+        $config['site_title'] = $config['site_title'] ?? 'Test Blog';
 
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');

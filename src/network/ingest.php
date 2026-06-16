@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use SimplePie\Item as SimplePieItem;
 
+use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 
@@ -80,13 +81,10 @@ function create_item(SimplePieItem|JsonFeedItem $item, string $name): void
     $bean = populate_bean($contents, $item, $name);
 
     try {
-        R::store($bean);
         // Reserved-route and duplicate slugs (e.g. two same-titled items in
         // one feed) get an id suffix; the final slug is pinned into the
         // body's front matter so cron updates re-derive it unchanged.
-        if (finalize_slug($bean)) {
-            R::store($bean);
-        }
+        finalize_and_store_post($bean);
     } catch (SQL) {
         // continue
     }
