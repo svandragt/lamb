@@ -12,6 +12,13 @@ use function Lamb\parse_bean;
 use function Lamb\Post\inject_title_matter;
 use function Lamb\Post\parse_matter;
 
+// The built-in dev server (`composer serve`) does not load .env, so read it here
+// before LOGIN_PASSWORD is captured. Restricted to the cli-server SAPI so it only
+// affects local development — production (fpm/cli) keeps using real env vars.
+if (PHP_SAPI === 'cli-server') {
+    \Lamb\Bootstrap\load_dotenv(dirname(__DIR__));
+}
+
 define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
 
 // IMAGE_FILES is defined in constants.php

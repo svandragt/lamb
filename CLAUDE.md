@@ -494,7 +494,12 @@ php make-password.php mysecretpassword
 # writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
-The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
+The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime. Production deployments
+(FrankenPHP, nginx+php-fpm, Docker) set it as a real environment variable. The PHP
+built-in dev server (`composer serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
+reads it in — but **only under the `cli-server` SAPI** and **non-overriding** (a real
+env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
+this no-ops on a `--no-dev` install.
 
 ## Branching
 
