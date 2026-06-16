@@ -142,10 +142,36 @@ function date_created(OODBBean $bean): string
     }
 
     return sprintf(
-        '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
+        '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
         ltrim($slug, '/'),
         $bean->created,
         $human_created
+    );
+}
+
+/**
+ * Returns a representative author h-card for the configured author, or '' when
+ * no author name is set.
+ *
+ * Emitted inside each h-entry as its `p-author` so Webmention receivers and
+ * other microformats2 parsers can attribute the post to its author. For a
+ * single-author blog the author's URL is the site root (ROOT_URL).
+ *
+ * @return string HTML anchor carrying the `p-author h-card` classes, or ''.
+ */
+function author_card(): string
+{
+    global $config;
+
+    $name = trim((string) ($config['author_name'] ?? ''));
+    if ($name === '') {
+        return '';
+    }
+
+    return sprintf(
+        '<a class="p-author h-card" href="%s">%s</a>',
+        escape(ROOT_URL),
+        escape($name)
     );
 }
 
@@ -292,7 +318,7 @@ function title_link(OODBBean $bean): string
     if (empty($bean->title)) {
         return '';
     }
-    return sprintf('<a class="title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
+    return sprintf('<a class="p-name title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
 }
 
 /**

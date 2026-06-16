@@ -52,8 +52,9 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `date_created($bean)` | `string` | An `<a>` wrapping a `<time>` element, linking to the post permalink with a human-readable timestamp. `''` when the bean has no created date. |
-| `title_link($bean)` | `string` | An `<a>` linking the post title to its permalink, or `''` when the post has no title. |
+| `date_created($bean)` | `string` | An `<a class="u-url">` wrapping a `<time class="dt-published">` element, linking to the post permalink with a human-readable timestamp. `''` when the bean has no created date. |
+| `title_link($bean)` | `string` | An `<a class="p-name title-link">` linking the post title to its permalink, or `''` when the post has no title. |
+| `author_card()` | `string` | A representative author `<a class="p-author h-card">` (name from `$config['author_name']`, linked to the site root), or `''` when no author name is set. Emit it inside each post's `h-entry`. |
 | `link_source($bean)` | `string` | A "Via …" attribution link for feed-ingested posts (uses `source_url`, falling back to the configured feed URL), or `''` for ordinary posts. |
 | `the_reply_context($bean)` | `string` | A "In reply to …" line with the `u-in-reply-to` microformats class when the post replies to another URL, or `''`. |
 | `anchor_headings($html, $top)` | `string` | Shifts the heading levels in a rendered body so its highest heading sits at level `$top`, keeping the rest relative (clamped at `<h6>`). The built-in themes title posts at `<h2>` and pass `$top = 3`. |
@@ -111,8 +112,22 @@ logged in.
 | `redirect_to()` | `string` | The sanitised `?redirect_to=` query value (used by the login form). |
 | `preload_text()` | `string` | The escaped `?text=` query value, used to pre-fill the entry form. |
 
+## Microformats2 (h-entry / h-card)
+
+The built-in themes mark each post up with [microformats2](https://microformats.org/wiki/h-entry) so Webmention receivers, readers, and other parsers can extract the author, content, permalink and timestamp. If you build a custom `_items.php`, mirror this markup so your outgoing mentions stay parseable:
+
+* `class="h-entry"` on the post's `<article>`.
+* `class="e-content"` on the element wrapping the rendered body.
+* `class="p-name"` on the post title (the helpers above already add it).
+* `date_created($bean)` supplies `u-url` + `dt-published`.
+* `author_card()` supplies the `p-author h-card`, placed inside the `h-entry`.
+* `the_reply_context($bean)` supplies `u-in-reply-to` for replies.
+
+The classes coexist with the schema.org markup the themes also emit, and can be hidden visually (e.g. with `screen-reader-text`) without affecting parsers.
+
 ## Related
 
+* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): how Lamb sends and receives mentions — the microformats2 markup above is what receivers parse.
 * [Themes]({{ site.baseurl }}{% link themes.md %}): how themes are structured, the fallback to `base`, and the part resolution rules.
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): the `theme` key and the config values exposed in `$config`.
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): how status posts and page-style posts differ, which affects `$bean->slug` and permalinks.
