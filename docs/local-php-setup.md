@@ -19,8 +19,12 @@ sudo apt install php8.4 php8.4-gettext php8.4-mbstring php8.4-sqlite3 php8.4-xml
 # install project packages
 composer install
 
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
+# Set your /login password - change `hackme` to something more secure.
+# This writes the hashed password to .env.
+php make-password.php hackme
+
+# Run lamb - the dev server reads .env automatically.
+composer serve
 ```
 
 Uploaded images are stored under `src/assets/`, so if you are serving Lamb through PHP-FPM or another web server user, make sure that directory is writable at runtime.
