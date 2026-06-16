@@ -90,7 +90,11 @@ function render_sitemap(array $urls): string
     ];
     foreach ($urls as $url) {
         $lines[] = '  <url>';
-        $lines[] = '    <loc>' . htmlspecialchars($url['loc'], ENT_XML1) . '</loc>';
+        // Match the Atom feed's escaping (themes/base/feed.php): ENT_SUBSTITUTE
+        // means a malformed UTF-8 byte degrades to U+FFFD instead of making
+        // htmlspecialchars() return '' for the whole string — which would emit
+        // an empty, invalid <loc>.
+        $lines[] = '    <loc>' . htmlspecialchars($url['loc'], ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE) . '</loc>';
         if (!empty($url['lastmod'])) {
             $lines[] = '    <lastmod>' . $url['lastmod'] . '</lastmod>';
         }
