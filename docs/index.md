@@ -96,6 +96,7 @@ Devtools / local environments / sandbox:
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %})
 * [Search]({{ site.baseurl }}{% link search.md %})
+* [Search Engines]({{ site.baseurl }}{% link search-engines.md %})
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %})
 * [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %})
 * [Themes]({{ site.baseurl }}{% link themes.md %})

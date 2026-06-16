@@ -52,6 +52,7 @@
       "src/post.php",
       "src/response.php",
       "src/response/auth.php",
+      "src/response/discovery.php",
       "src/response/feeds.php",
       "src/response/posts.php",
       "src/response/upload.php",

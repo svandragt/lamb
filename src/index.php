@@ -76,6 +76,8 @@ Route\register_route('trash', __NAMESPACE__ . '\\Response\respond_trash');
 Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
 Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');
 Route\register_route('feed.json', __NAMESPACE__ . '\\Response\respond_feed_json');
+Route\register_route('sitemap.xml', __NAMESPACE__ . '\\Response\respond_sitemap');
+Route\register_route('robots.txt', __NAMESPACE__ . '\\Response\respond_robots');
 if ($action === 'home' && $lookup === 'feed') {
     Route\register_route('home', __NAMESPACE__ . '\\Response\respond_feed');
 } elseif ($action === 'home' && $lookup === 'feed.json') {

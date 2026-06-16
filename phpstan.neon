@@ -21,6 +21,7 @@ parameters:
             paths:
                 - src/post.php
                 - src/response.php
+                - src/response/discovery.php
                 - src/response/feeds.php
                 - src/theme.php
     bootstrapFiles:
