@@ -5,10 +5,14 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\local_redirect_target;
+use function Lamb\Response\log_failed_login;
 use function Lamb\Response\redirect_login;
 
 class ResponseAuthTest extends TestCase
 {
+    /** @var string|false */
+    private $previousErrorLog;
+
     protected function setUp(): void
     {
         $_SESSION = [];
@@ -19,12 +23,60 @@ class ResponseAuthTest extends TestCase
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
         }
+
+        $this->previousErrorLog = ini_get('error_log');
     }
 
     protected function tearDown(): void
     {
         $_SESSION = [];
         $_POST    = [];
+        unset($_SERVER['REMOTE_ADDR']);
+        ini_set('error_log', $this->previousErrorLog === false ? '' : $this->previousErrorLog);
+    }
+
+    /**
+     * Routes error_log() to a temp file, runs the callback, returns the captured log.
+     */
+    private function captureErrorLog(callable $fn): string
+    {
+        $tmp = tempnam(sys_get_temp_dir(), 'lamb-log');
+        ini_set('error_log', $tmp);
+        try {
+            $fn();
+            return file_get_contents($tmp) ?: '';
+        } finally {
+            @unlink($tmp);
+        }
+    }
+
+    // log_failed_login — audit trail for failed admin login attempts (issue #444)
+
+    public function testLogFailedLoginWritesMarkerAndClientIp(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        $log = $this->captureErrorLog(static fn() => log_failed_login());
+
+        $this->assertStringContainsString('failed admin login', $log);
+        $this->assertStringContainsString('203.0.113.7', $log);
+    }
+
+    public function testLogFailedLoginFallsBackWhenIpMissing(): void
+    {
+        unset($_SERVER['REMOTE_ADDR']);
+        $log = $this->captureErrorLog(static fn() => log_failed_login());
+
+        $this->assertStringContainsString('failed admin login', $log);
+        $this->assertStringContainsString('unknown', $log);
+    }
+
+    public function testLogFailedLoginNeverIncludesSubmittedPassword(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        $_POST['password']      = 'hunter2-secret';
+        $log = $this->captureErrorLog(static fn() => log_failed_login());
+
+        $this->assertStringNotContainsString('hunter2-secret', $log);
     }
 
     // redirect_login — paths that return without calling die()

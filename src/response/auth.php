@@ -48,6 +48,7 @@ function redirect_login(): array
 
     $user_pass = $_POST['password'];
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
+        log_failed_login();
         $_SESSION['flash'][] = 'Password is incorrect, please try again.';
         redirect_uri('/');
     }
@@ -57,6 +58,29 @@ function redirect_login(): array
     set_login_marker();
     $where = local_redirect_target(filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL) ?: null);
     redirect_uri($where);
+}
+
+/**
+ * Writes an audit line for a failed admin login attempt via error_log().
+ *
+ * The line carries a fixed "failed admin login" marker (easy to grep) and the
+ * client IP from REMOTE_ADDR, falling back to "unknown" when it is absent. It
+ * deliberately records no secret — never the submitted password. error_log()
+ * respects the host's configured log destination (web server / PHP-FPM), so a
+ * self-hoster needs no new dependency to capture brute-force attempts.
+ *
+ * Trust the IP only behind a known proxy: REMOTE_ADDR is the immediate peer, so
+ * behind a reverse proxy it is the proxy's address rather than the real client.
+ *
+ * @return void
+ */
+function log_failed_login(): void
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (!is_string($ip) || $ip === '') {
+        $ip = 'unknown';
+    }
+    error_log(sprintf('failed admin login from %s', $ip));
 }
 
 /**
