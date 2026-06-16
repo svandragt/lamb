@@ -15,6 +15,13 @@ class PostDraftVisibilityTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+
+        // Production's bootstrap_db() guarantees the post table carries the
+        // soft-delete and draft columns. Replicate that here so visible_clause()
+        // — which filters on `deleted` — resolves against a real column instead
+        // of silently matching nothing in an isolated in-memory schema.
+        R::store(R::dispense('post'));
+        \Lamb\Bootstrap\ensure_post_columns();
         R::exec('DELETE FROM post');
     }
 
