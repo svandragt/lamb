@@ -64,9 +64,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
-      # Run every PHP leg to completion even when one fails, so an intermittent
-      # failure on a single version doesn't mask the status of the others.
-      fail-fast: false
       matrix:
         php-version: [ '8.2', '8.3', '8.4', '8.5' ]
 

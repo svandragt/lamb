@@ -8,18 +8,8 @@ modules:
   enabled:
     - PhpBrowser:
         url: "%SITE_URL%"
-        # Force a fresh connection per request and ask the server to close it.
-        # PHP's single-threaded built-in server (`php -S`) can deadlock when a
-        # client holds a keep-alive socket open: the one worker blocks waiting
-        # for the next request on that socket while a new connection waits to be
-        # accepted, and the whole suite wedges (every later request times out
-        # with cURL "Operation timed out"). Disabling keep-alive sidesteps it.
-        headers:
-          Connection: close
         curl:
           CURLOPT_PROXY: ""
-          CURLOPT_FORBID_REUSE: true
-          CURLOPT_FRESH_CONNECT: true
     - \Tests\Support\Helper\Acceptance
 extensions:
   enabled:
@@ -27,7 +17,15 @@ extensions:
         # Pass LAMB_LOGIN_PASSWORD through to the test web server: the app reads it
         # via getenv(), but .env is only loaded into Codeception's %param% space, not
         # exported to this child process. Without it, every login-gated test fails.
-        0: env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD=%LAMB_LOGIN_PASSWORD% php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
+        #
+        # Redirect the server's stderr to a log file. `php -S` writes one access-log
+        # line per request to stderr; RunProcess starts the server via Symfony Process
+        # but never drains its output pipe until suite end, so once that pipe's OS
+        # buffer (~64 KB) fills, the server blocks on write() and stops responding —
+        # every later request then fails with cURL "Operation timed out after 30s"
+        # (a 0-byte read). Sending the log to a file keeps the pipe empty (and the
+        # log inspectable) so a long suite no longer wedges the server.
+        0: sh -c "env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD='%LAMB_LOGIN_PASSWORD%' php -S 0.0.0.0:%LAMB_TEST_PORT% -t src 2> tests/_output/dev-server.log"
         sleep: 1
 step_decorators:
   - Codeception\Step\ConditionalAssertion
