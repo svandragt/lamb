@@ -1,4 +1,5 @@
 *.db
+/tests/Support/Data/sessions/
 /.docker/*.env
 /data/cache/
 /data/*.log
