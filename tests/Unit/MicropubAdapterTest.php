@@ -727,9 +727,17 @@ class MicropubAdapterTest extends TestCase
         ];
         $result = $adapter->createCallback($data, []);
         $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
-        $this->assertSame(401, $result->getStatusCode());
+        // RFC 6750 §3.1 and the W3C Micropub spec both map insufficient_scope to 403
+        // (a valid token lacking the required scope), not 401.
+        $this->assertSame(403, $result->getStatusCode());
         $body = json_decode((string) $result->getBody(), true);
         $this->assertSame('insufficient_scope', $body['error']);
+        // The 403 still carries a Bearer challenge naming the error and the scope
+        // required for the action (RFC 6750 §3).
+        $this->assertSame(
+            'Bearer error="insufficient_scope", scope="create"',
+            $result->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     // --- updateCallback ---
@@ -1129,8 +1137,36 @@ class MicropubAdapterTest extends TestCase
         );
 
         $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
-        $this->assertSame(401, $result->getStatusCode());
+        $this->assertSame(403, $result->getStatusCode());
         $body = json_decode((string) $result->getBody(), true);
         $this->assertSame('insufficient_scope', $body['error']);
+        $this->assertSame(
+            'Bearer error="insufficient_scope", scope="update"',
+            $result->getHeaderLine('WWW-Authenticate')
+        );
+    }
+
+    // --- bearer_challenge (RFC 6750 §3 WWW-Authenticate value) ---
+
+    public function testBearerChallengeWithNoArgumentsOmitsErrorCode(): void
+    {
+        // RFC 6750 §3.1: a request lacking any credentials SHOULD NOT carry an error code.
+        $this->assertSame('Bearer', \Lamb\Micropub\bearer_challenge());
+    }
+
+    public function testBearerChallengeWithErrorAndDescription(): void
+    {
+        $this->assertSame(
+            'Bearer error="invalid_token", error_description="The access token is invalid or expired."',
+            \Lamb\Micropub\bearer_challenge('invalid_token', null, 'The access token is invalid or expired.')
+        );
+    }
+
+    public function testBearerChallengeWithErrorAndScope(): void
+    {
+        $this->assertSame(
+            'Bearer error="insufficient_scope", scope="create"',
+            \Lamb\Micropub\bearer_challenge('insufficient_scope', 'create')
+        );
     }
 }

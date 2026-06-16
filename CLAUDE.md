@@ -36,8 +36,11 @@ vendor/bin/codecept run Acceptance
 # Run client-side JavaScript unit tests (node:test + jsdom)
 pnpm test
 
-# Generate password hash and write .env
+# Generate password hash and write .env (warns on STDERR if the password is weak).
+# By default the cleartext password is NOT written to .env; the acceptance suite
+# opts in via LAMB_WRITE_TEST_PASSWORD=1 to get LAMB_TEST_PASSWORD.
 php make-password.php <your-password>
+LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <your-password>   # for acceptance tests
 
 # Static analysis
 composer analyse
@@ -455,7 +458,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 Tests use **Codeception 5** with PHPUnit underneath.
 
 - **Unit** (`tests/Unit/`): pure PHP, no HTTP.
-- **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
+- **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` and `LAMB_TEST_PASSWORD` in `.env`. Generate it with `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` — `make-password.php` omits the cleartext `LAMB_TEST_PASSWORD` unless that flag is set.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
 Config in `codeception.yml` reads env from `.env`.
@@ -492,7 +495,12 @@ php make-password.php mysecretpassword
 # writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
-The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
+The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime. Production deployments
+(FrankenPHP, nginx+php-fpm, Docker) set it as a real environment variable. The PHP
+built-in dev server (`composer serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
+reads it in — but **only under the `cli-server` SAPI** and **non-overriding** (a real
+env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
+this no-ops on a `--no-dev` install.
 
 ## Branching
 

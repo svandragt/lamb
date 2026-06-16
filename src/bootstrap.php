@@ -2,8 +2,39 @@
 
 namespace Lamb\Bootstrap;
 
+use Dotenv\Dotenv;
+use Dotenv\Repository\Adapter\PutenvAdapter;
+use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
+
+/**
+ * Loads the project's .env file into the process environment for the dev server.
+ *
+ * The PHP built-in server (`composer serve`) does not read .env, so
+ * LAMB_LOGIN_PASSWORD would be unset and every login would fail. This pulls it
+ * in via getenv() (the Putenv adapter — phpdotenv populates only $_ENV/$_SERVER
+ * by default). Loading is immutable, so a real environment variable always wins
+ * over the file; production deployments set LAMB_LOGIN_PASSWORD directly and are
+ * never affected. phpdotenv is a dev dependency, so this no-ops when it is absent
+ * (e.g. a `--no-dev` production install).
+ *
+ * @param string $root Directory containing the .env file (project root).
+ * @return void
+ */
+function load_dotenv(string $root): void
+{
+    if (!class_exists(Dotenv::class)) {
+        return;
+    }
+
+    $repository = RepositoryBuilder::createWithDefaultAdapters()
+        ->addAdapter(PutenvAdapter::class)
+        ->immutable()
+        ->make();
+
+    Dotenv::create($repository, $root)->safeLoad();
+}
 
 /**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.

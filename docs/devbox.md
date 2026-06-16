@@ -10,7 +10,10 @@ devbox shell
 # In the shell from now on
 composer install
 
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-LAMB_LOGIN_PASSWORD=$(php make-password.php hackme) composer serve
+# Set your /login password - change `hackme` to something more secure.
+php make-password.php hackme
+
+# Run lamb - the dev server reads .env automatically.
+composer serve
 
 ```

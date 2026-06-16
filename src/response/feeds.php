@@ -29,7 +29,7 @@ function respond_home(): array
         redirect_created();
     }
 
-    $data['title'] = $config['site_title'];
+    $data['title'] = $config['site_title'] ?? '';
 
     $visible = \Lamb\visible_clause();
     $where_sql = $visible['sql'];
@@ -181,7 +181,7 @@ function get_feed_data(): array
     $first_post = reset($posts);
     return [
         'updated'  => $first_post['updated'] ?? \Lamb\now(),
-        'title'    => $config['site_title'],
+        'title'    => $config['site_title'] ?? '',
         'feed_url' => ROOT_URL . '/feed',
         'posts'    => $posts,
     ];
@@ -292,7 +292,7 @@ function get_tag_feed_data(string $tag): array
 
     return [
         'updated'  => get_feed_updated_date($posts),
-        'title'    => $config['site_title'] . ' — #' . $tag,
+        'title'    => ($config['site_title'] ?? '') . ' — #' . $tag,
         'feed_url' => ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed',
         'posts'    => $posts,
     ];
