@@ -142,6 +142,17 @@ class SitemapTest extends TestCase
         $this->assertStringNotContainsString('&c=2', $xml);
     }
 
+    public function testRenderSitemapKeepsLocWithMalformedUtf8(): void
+    {
+        // A slug may carry a malformed UTF-8 byte. Without ENT_SUBSTITUTE,
+        // htmlspecialchars() returns '' for the whole string, emitting an empty
+        // <loc></loc> — invalid, since <loc> is required. The bad byte must
+        // degrade to U+FFFD instead, leaving the rest of the URL intact.
+        $xml = render_sitemap([['loc' => "https://example.com/b\xC3\x28d", 'lastmod' => null]]);
+        $this->assertStringNotContainsString('<loc></loc>', $xml);
+        $this->assertStringContainsString('https://example.com/b', $xml);
+    }
+
     public function testRenderSitemapOmitsEmptyLastmod(): void
     {
         $xml = render_sitemap([['loc' => 'https://example.com/', 'lastmod' => null]]);
