@@ -17,7 +17,13 @@ extensions:
         # Pass LAMB_LOGIN_PASSWORD through to the test web server: the app reads it
         # via getenv(), but .env is only loaded into Codeception's %param% space, not
         # exported to this child process. Without it, every login-gated test fails.
-        0: env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD=%LAMB_LOGIN_PASSWORD% php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
+        #
+        # PHP_CLI_SERVER_WORKERS makes `php -S` fork multiple worker processes
+        # instead of serving every request from a single thread. The single-threaded
+        # built-in server wedges once a run accumulates enough requests (one stuck
+        # request blocks all that follow, surfacing as cURL "Operation timed out"
+        # errors); spawning workers keeps the suite from hanging as it grows.
+        0: env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD=%LAMB_LOGIN_PASSWORD% PHP_CLI_SERVER_WORKERS=4 php -S 0.0.0.0:%LAMB_TEST_PORT% -t src
         sleep: 1
 step_decorators:
   - Codeception\Step\ConditionalAssertion
