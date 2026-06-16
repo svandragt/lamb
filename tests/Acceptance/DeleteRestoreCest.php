@@ -66,6 +66,28 @@ class DeleteRestoreCest
         $I->seeElement('form');
     }
 
+    public function testDeleteReturnsToListingPageNotHomepage(AcceptanceTester $I): void
+    {
+        $this->login($I);
+
+        $tag    = 'deltag' . substr(md5(uniqid()), 0, 8);
+        $marker = 'delete-listing-test-' . uniqid();
+        $I->amOnPage('/');
+        $I->fillField('contents', $marker . ' #' . $tag);
+        $I->click('Create post');
+
+        // Delete from the tag listing — we should land back on it, not the homepage.
+        $I->amOnPage('/tag/' . $tag);
+        $I->see($marker);
+        $I->submitForm(
+            '//article[contains(., "' . $marker . '")]//form[contains(@class,"form-delete")]',
+            []
+        );
+
+        $I->seeCurrentUrlEquals('/tag/' . $tag);
+        $I->dontSee($marker);
+    }
+
     public function testDeleteHasNoErrors(AcceptanceTester $I): void
     {
         $this->login($I);
