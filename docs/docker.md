@@ -73,7 +73,10 @@ at `/srv/app`, so the test suites and configuration are available there.
 
 The test runner reads `.env` for its parameters, so make sure you have generated
 one with the `make-password.php` step from [Build from source](#build-from-source) before running the
-tests.
+tests. The acceptance suite also needs the cleartext `LAMB_TEST_PASSWORD`, which is
+omitted from `.env` by default — generate the file with `LAMB_WRITE_TEST_PASSWORD=1`
+set (e.g. `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php hackme`) when you intend
+to run acceptance tests.
 
 ```shell
 # Unit tests (fast, no server required)

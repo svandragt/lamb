@@ -14,8 +14,10 @@ no version string in the code — **the Git tag is the source of truth**.
 - [ ] All intended PRs are merged into `main`; nothing release-worthy is still open.
 - [ ] Working tree is clean and `main` is up to date: `git checkout main && git pull`.
 - [ ] Tests pass: `vendor/bin/codecept run` (Unit + Acceptance).
-      Acceptance needs `.env` (`SITE_URL`, `LAMB_TEST_PASSWORD`); it starts its
-      own server, so don't have another server on the test port.
+      Acceptance needs `.env` (`SITE_URL`, `LAMB_TEST_PASSWORD`); generate it with
+      `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` so the cleartext
+      `LAMB_TEST_PASSWORD` is written (it is omitted by default). Acceptance starts
+      its own server, so don't have another server on the test port.
 - [ ] Static checks pass: `composer lint` && `composer analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
 

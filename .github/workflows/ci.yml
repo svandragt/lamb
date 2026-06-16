@@ -81,7 +81,7 @@ jobs:
 
       - name: Run Codeception tests
         run: |
-          php make-password.php $GITHUB_REF
+          LAMB_WRITE_TEST_PASSWORD=1 php make-password.php $GITHUB_REF
           vendor/bin/codecept run --steps
 
       - name: Check code coverage
