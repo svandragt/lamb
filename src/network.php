@@ -6,7 +6,6 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\R;
 
 use function Lamb\get_option;
-use function Lamb\Route\register_route;
 use function Lamb\set_option;
 
 // MINUTE_IN_SECONDS is defined in constants.php
@@ -16,8 +15,8 @@ use function Lamb\set_option;
 //   - json_feed.php JSON Feed (jsonfeed.org) detection, parsing and adapter
 //   - ingest.php    turning a feed item into a post (dedup, slug, citation)
 //   - status.php    the per-feed `feedstatus` health bean (read by the Logs tab)
-
-register_route('_cron', __NAMESPACE__ . '\\process_feeds');
+//
+// The `/_cron` route is registered centrally in Lamb\Route\register_app_routes().
 
 #[NoReturn] function process_feeds(): void
 {

@@ -11,13 +11,6 @@ use const ROOT_DIR;
 use const ROOT_URL;
 
 /**
- * Login-gated routes that crawlers should not waste budget on. They are already
- * inaccessible to anonymous visitors, so this is a hint rather than a security
- * control. Kept in sync with the admin routes registered in index.php.
- */
-const ROBOTS_DISALLOW = ['/login', '/logout', '/settings', '/edit', '/drafts', '/trash', '/scheduled', '/_cron'];
-
-/**
  * Formats a stored `Y-m-d H:i:s` datetime as a W3C/ISO-8601 string for a sitemap
  * `<lastmod>`. Returns null for empty/unparseable input so the element is omitted.
  *
@@ -121,14 +114,26 @@ function respond_sitemap(): never
 
 /**
  * Builds the default robots.txt body: allow crawling, point at the sitemap, and
- * disallow the login-gated admin routes.
+ * disallow every private route.
+ *
+ * The Disallow list is derived from the routes registered via
+ * Lamb\Route\register_private_route() — the single source of truth — so it can
+ * never drift out of sync with the admin/internal routes it is meant to cover.
+ * It is already inaccessible to anonymous visitors, so this is a hint to
+ * crawlers rather than a security control. Sorted for deterministic output.
  *
  * @return string The robots.txt content.
  */
 function robots_txt_body(): string
 {
+    $paths = array_map(
+        static fn ($action): string => '/' . ltrim((string) $action, '/'),
+        \Lamb\Route\private_routes()
+    );
+    sort($paths);
+
     $lines = ['User-agent: *', 'Allow: /'];
-    foreach (ROBOTS_DISALLOW as $path) {
+    foreach ($paths as $path) {
         $lines[] = 'Disallow: ' . $path;
     }
     $lines[] = '';
