@@ -86,6 +86,36 @@ class SitemapTest extends TestCase
         $this->assertNotContains(ROOT_URL . "/status/$id", $this->locs());
     }
 
+    public function testDeduplicatesPostsSharingASlug(): void
+    {
+        // Two distinct posts can end up with the same slug; the sitemap must
+        // still list that canonical URL only once (duplicate <loc>s are invalid).
+        $this->makePost(['slug' => 'dup', 'updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'dup', 'updated' => '2026-06-02 09:00:00']);
+
+        $locs = $this->locs();
+        $matches = array_filter($locs, static fn ($loc) => $loc === ROOT_URL . '/dup');
+        $this->assertCount(1, $matches);
+    }
+
+    public function testDeduplicatedEntryKeepsNewestLastmod(): void
+    {
+        // Posts are ordered newest-first, so the surviving entry keeps the
+        // freshest post's lastmod.
+        $this->makePost(['slug' => 'dup', 'updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'dup', 'updated' => '2026-06-02 09:00:00']);
+
+        $entry = null;
+        foreach (sitemap_urls() as $url) {
+            if ($url['loc'] === ROOT_URL . '/dup') {
+                $entry = $url;
+                break;
+            }
+        }
+        $this->assertNotNull($entry);
+        $this->assertSame(date('c', strtotime('2026-06-02 09:00:00')), $entry['lastmod']);
+    }
+
     public function testEntryCarriesIso8601Lastmod(): void
     {
         $this->makePost(['updated' => '2026-06-01 09:30:00']);
