@@ -66,42 +66,7 @@ $sublookup = strtok('/');
 
 $request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 
-Route\register_route(false, __NAMESPACE__ . '\\Response\respond_404');
-Route\register_route('404', __NAMESPACE__ . '\\Response\respond_404');
-Route\register_route('delete', __NAMESPACE__ . '\\Response\redirect_deleted', $lookup);
-Route\register_route('restore', __NAMESPACE__ . '\\Response\redirect_restored', $lookup);
-Route\register_route('drafts', __NAMESPACE__ . '\\Response\respond_drafts');
-Route\register_route('scheduled', __NAMESPACE__ . '\\Response\respond_scheduled');
-Route\register_route('trash', __NAMESPACE__ . '\\Response\respond_trash');
-Route\register_route('edit', __NAMESPACE__ . '\\Response\respond_edit', $lookup);
-Route\register_route('feed', __NAMESPACE__ . '\\Response\respond_feed');
-Route\register_route('feed.json', __NAMESPACE__ . '\\Response\respond_feed_json');
-Route\register_route('sitemap.xml', __NAMESPACE__ . '\\Response\respond_sitemap');
-Route\register_route('robots.txt', __NAMESPACE__ . '\\Response\respond_robots');
-if ($action === 'home' && $lookup === 'feed') {
-    Route\register_route('home', __NAMESPACE__ . '\\Response\respond_feed');
-} elseif ($action === 'home' && $lookup === 'feed.json') {
-    Route\register_route('home', __NAMESPACE__ . '\\Response\respond_feed_json');
-} else {
-    Route\register_route('home', __NAMESPACE__ . '\\Response\respond_home');
-}
-Route\register_route('login', __NAMESPACE__ . '\\Response\redirect_login');
-Route\register_route('logout', __NAMESPACE__ . '\\Response\redirect_logout');
-Route\register_route('search', __NAMESPACE__ . '\\Response\respond_search', $lookup);
-Route\register_route('settings', __NAMESPACE__ . '\\Response\respond_settings');
-Route\register_route('status', __NAMESPACE__ . '\\Response\respond_status', $lookup);
-if ($action === 'tag' && $sublookup === 'feed') {
-    Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag_feed', $lookup);
-} elseif ($action === 'tag' && $sublookup === 'feed.json') {
-    Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag_feed_json', $lookup);
-} else {
-    Route\register_route('tag', __NAMESPACE__ . '\\Response\respond_tag', $lookup);
-}
-Route\register_route('webmention', __NAMESPACE__ . '\\Webmention\respond_webmention');
-Route\register_route('micropub', __NAMESPACE__ . '\\Micropub\respond_micropub');
-Route\register_route('micropub-media', __NAMESPACE__ . '\\Micropub\respond_micropub_media');
-Route\register_route('upload', __NAMESPACE__ . '\\Response\respond_upload', $lookup);
-Route\register_route('checkbox', __NAMESPACE__ . '\\Response\respond_checkbox', $lookup);
+Route\register_app_routes($action, $lookup, $sublookup);
 $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);

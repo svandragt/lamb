@@ -38,9 +38,12 @@ revisit it only re-download it when your content has actually changed.
 ## robots.txt
 
 `/robots.txt` allows crawling, advertises the sitemap, and asks crawlers not to
-waste time on the login-gated admin routes (`/login`, `/logout`, `/settings`,
-`/edit`, `/drafts`, `/trash`, `/scheduled`, `/_cron`). Those routes already
-require a login, so this is a hint to crawlers rather than a security control.
+waste time on the private routes — the login-gated admin pages and actions
+(`/settings`, `/edit`, `/drafts`, `/trash`, `/scheduled`, `/delete`, `/restore`,
+`/upload`, `/checkbox`) plus the internal `/login`, `/logout`, and `/_cron`
+endpoints. The list is derived automatically from the routes themselves, so it
+stays complete as the app grows. Those routes already require a login (or are
+internal), so this is a hint to crawlers rather than a security control.
 
 ### Overriding robots.txt
 
