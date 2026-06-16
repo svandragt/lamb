@@ -726,6 +726,12 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame(401, $result->getStatusCode());
         $body = json_decode((string) $result->getBody(), true);
         $this->assertSame('insufficient_scope', $body['error']);
+        // RFC 6750 §3: a 401 insufficient_scope response carries a Bearer challenge
+        // naming the error and the scope required for the action.
+        $this->assertSame(
+            'Bearer error="insufficient_scope", scope="create"',
+            $result->getHeaderLine('WWW-Authenticate')
+        );
     }
 
     // --- updateCallback ---
@@ -1101,5 +1107,9 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame(401, $result->getStatusCode());
         $body = json_decode((string) $result->getBody(), true);
         $this->assertSame('insufficient_scope', $body['error']);
+        $this->assertSame(
+            'Bearer error="insufficient_scope", scope="update"',
+            $result->getHeaderLine('WWW-Authenticate')
+        );
     }
 }

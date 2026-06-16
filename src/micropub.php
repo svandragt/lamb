@@ -210,6 +210,32 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * Build the 401 response for a token that lacks the scope an action requires.
+     *
+     * The W3C Micropub spec (§error-response) and OAuth bearer-token RFC 6750 (§3)
+     * require HTTP 401 with a `WWW-Authenticate: Bearer` challenge naming the error
+     * and the scope needed. taproot/micropub-adapter maps insufficient_scope to 403,
+     * so the callbacks bypass toResponse() by returning this ResponseInterface directly.
+     *
+     * @param string $requiredScope The scope the rejected action needs (e.g. 'create', 'update').
+     * @return Response
+     */
+    private function insufficientScopeResponse(string $requiredScope): Response
+    {
+        return new Response(
+            401,
+            [
+                'content-type'     => 'application/json',
+                'www-authenticate' => 'Bearer error="insufficient_scope", scope="' . $requiredScope . '"',
+            ],
+            json_encode([
+                'error'             => 'insufficient_scope',
+                'error_description' => 'Your access token does not grant the scope required for this action.',
+            ]) ?: ''
+        );
+    }
+
+    /**
      * Handle a micropub create request.
      *
      * @param array<string, mixed> $data  Normalised microformats2 data.
@@ -218,17 +244,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
-        // W3C Micropub spec §error-response requires HTTP 401 for insufficient_scope.
-        // taproot/micropub-adapter maps it to 403 instead, so we bypass toResponse() by
-        // returning a ResponseInterface directly from this callback.
-        // TODO: report upstream to taproot/micropub-adapter that insufficient_scope should
-        //       map to HTTP 401 per the W3C Micropub spec.
         $scope = $this->user['scope'] ?? [];
         if ($this->user !== null && !in_array('create', $scope)) {
-            return new Response(401, ['content-type' => 'application/json'], json_encode([
-                'error' => 'insufficient_scope',
-                'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]) ?: '');
+            return $this->insufficientScopeResponse('create');
         }
 
         $props = $data['properties'] ?? [];
@@ -359,10 +377,7 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $scope = $this->user['scope'] ?? [];
         if ($this->user !== null && !in_array('update', $scope)) {
-            return new Response(401, ['content-type' => 'application/json'], json_encode([
-                'error'             => 'insufficient_scope',
-                'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]) ?: '');
+            return $this->insufficientScopeResponse('update');
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
