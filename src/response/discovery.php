@@ -42,6 +42,10 @@ function sitemap_date(?string $datetime): ?string
  * them. Menu/standalone pages are intentionally included — unlike the home and
  * Atom feeds they are real public URLs worth indexing.
  *
+ * Two distinct posts can share a slug (slugs are not DB-unique), which would
+ * otherwise emit the same <loc> twice — invalid for a sitemap. Entries are
+ * deduplicated by URL, keeping the first (newest, since ordered by updated DESC).
+ *
  * @return list<array{loc: string, lastmod: string|null}>
  */
 function sitemap_urls(): array
@@ -50,9 +54,15 @@ function sitemap_urls(): array
     $posts = R::find('post', $visible['sql'] . 'ORDER BY updated DESC', $visible['params']);
 
     $entries = [];
+    $seen = [];
     foreach ($posts as $post) {
+        $loc = \Lamb\permalink($post);
+        if (isset($seen[$loc])) {
+            continue;
+        }
+        $seen[$loc] = true;
         $entries[] = [
-            'loc'     => \Lamb\permalink($post),
+            'loc'     => $loc,
             'lastmod' => sitemap_date($post->updated),
         ];
     }
