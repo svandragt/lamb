@@ -17,6 +17,7 @@ class ResponseAuthTest extends TestCase
     {
         $_SESSION = [];
         $_POST    = [];
+        $_COOKIE  = [];
         $_SERVER['SERVER_PROTOCOL'] = 'HTTP/1.1';
         $_SERVER['REQUEST_URI']     = '/';
 
@@ -31,6 +32,7 @@ class ResponseAuthTest extends TestCase
     {
         $_SESSION = [];
         $_POST    = [];
+        $_COOKIE  = [];
         unset($_SERVER['REMOTE_ADDR']);
         ini_set('error_log', $this->previousErrorLog === false ? '' : $this->previousErrorLog);
     }
@@ -80,37 +82,68 @@ class ResponseAuthTest extends TestCase
     }
 
     // redirect_login — paths that return without calling die()
+    //
+    // The login page is now stateless for anonymous visitors (issue #462): no
+    // session is started, and the form's CSRF token rides in a signed cookie +
+    // hidden field instead of the session. So "show the login page" no longer
+    // means an empty array — it means an array carrying the double-submit token
+    // (login_csrf) and no authenticated session.
 
-    public function testRedirectLoginReturnsEmptyArrayWhenNoPostData(): void
+    public function testRedirectLoginShowsFormWhenNoPostData(): void
     {
         // No POST at all — login form should be rendered
         $result = redirect_login();
         $this->assertIsArray($result);
-        $this->assertCount(0, $result);
+        $this->assertArrayHasKey('login_csrf', $result);
+        $this->assertArrayNotHasKey('login_error', $result);
+        $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
     }
 
-    public function testRedirectLoginReturnsEmptyArrayWhenSubmitKeyAbsent(): void
+    public function testRedirectLoginShowsFormWhenSubmitKeyAbsent(): void
     {
         $_POST['other_field'] = 'value';
         $result = redirect_login();
         $this->assertIsArray($result);
-        $this->assertCount(0, $result);
+        $this->assertArrayHasKey('login_csrf', $result);
+        $this->assertArrayNotHasKey('login_error', $result);
     }
 
-    public function testRedirectLoginReturnsEmptyArrayWhenSubmitValueIsNotLogin(): void
+    public function testRedirectLoginShowsFormWhenSubmitValueIsNotLogin(): void
     {
         $_POST['submit'] = 'some other action';
         $result = redirect_login();
         $this->assertIsArray($result);
-        $this->assertCount(0, $result);
+        $this->assertArrayHasKey('login_csrf', $result);
     }
 
-    public function testRedirectLoginReturnsEmptyArrayWhenSubmitValueIsEmpty(): void
+    public function testRedirectLoginShowsFormWhenSubmitValueIsEmpty(): void
     {
         $_POST['submit'] = '';
         $result = redirect_login();
         $this->assertIsArray($result);
-        $this->assertCount(0, $result);
+        $this->assertArrayHasKey('login_csrf', $result);
+    }
+
+    /**
+     * Wrong password re-renders the login page in place with the error rather
+     * than redirecting through a session flash (issue #462): the flash carrier
+     * is gone now that /login is sessionless, so the message must travel in the
+     * returned data. The visitor must remain anonymous (no session started).
+     */
+    public function testRedirectLoginWrongPasswordRendersErrorWithoutSession(): void
+    {
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']          = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME]  = $token;
+        $_POST['password']        = 'definitely-the-wrong-password-xyz';
+
+        $result = redirect_login();
+
+        $this->assertIsArray($result);
+        $this->assertArrayHasKey('login_error', $result);
+        $this->assertSame('Password is incorrect, please try again.', $result['login_error']);
+        $this->assertArrayHasKey('login_csrf', $result);
+        $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
     }
 
     // local_redirect_target — the post-login redirect must stay on this site

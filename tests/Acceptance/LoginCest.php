@@ -48,6 +48,36 @@ class LoginCest
         $I->see('Password is incorrect, please try again.');
     }
 
+    /**
+     * The heart of #462: an anonymous GET /login must not start a server-side
+     * session, so it never writes a session file (the disk-exhaustion DoS).
+     */
+    public function testAnonymousLoginPageStartsNoSession(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/login');
+        $I->seeResponseCodeIs(200);
+        $I->dontSeeResponseHeaderContains('Set-Cookie', 'LAMBSESSID');
+    }
+
+    /**
+     * A rejected login must also leave no session behind: the failure is
+     * re-rendered in place, not flashed through a freshly minted session.
+     */
+    public function testWrongPasswordStartsNoSession(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/login');
+        $I->fillField('password', 'definitely-not-the-password');
+        $I->click('Log in');
+        $I->dontSeeResponseHeaderContains('Set-Cookie', 'LAMBSESSID');
+    }
+
+    public function testGatedPagePromptsToLogIn(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/settings');
+        $I->seeInCurrentUrl('/login');
+        $I->see('Please login');
+    }
+
     public function testSettingsPageRequiresLogin(AcceptanceTester $I): void
     {
         $I->amOnPage('/settings');

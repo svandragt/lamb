@@ -52,24 +52,23 @@ class CacheHeadersCest
     }
 
     /**
-     * Regression: visiting /login while the session is still authenticated
-     * server-side but the marker cookie is stale/invalid (e.g. an old cookie
-     * from before marker signing) must re-issue a valid marker. Otherwise the
-     * already-logged-in branch redirects without a marker and the next request
-     * sees an invalid one, leaving the visitor stuck appearing logged out until
-     * they clear cookies.
+     * A stale or invalid lamb_logged_in marker makes the visitor anonymous
+     * everywhere (issue #462): /login no longer starts a session off a lingering
+     * LAMBSESSID cookie — doing so would write a session file off the very
+     * unvalidated cookie input the marker gate exists to refuse. The marker is
+     * therefore the single source of truth, so a stale one means anonymous and
+     * a gated page bounces to /login (re-entering the password recovers, as the
+     * other login tests cover).
      */
-    public function reloginReissuesMarkerWhenSessionAlreadyAuthenticated(AcceptanceTester $I): void
+    public function staleMarkerFallsBackToAnonymous(AcceptanceTester $I): void
     {
         $this->login($I);
-        // Stale, no-longer-valid marker; the LAMBSESSID session stays authed.
+        // Corrupt the marker; the lingering server-side session must NOT be
+        // resumed — the visitor is treated as anonymous and gated from /settings.
         $I->setCookie('lamb_logged_in', 'stale-unsigned-value');
-        // GET /login lands in the already-logged-in branch and redirects home.
-        $I->amOnPage('/login');
-        // The reissued marker must let the next request resume the session.
         $I->amOnPage('/settings');
-        $I->seeResponseCodeIs(200);
-        $I->dontSeeInCurrentUrl('/login');
+        $I->seeInCurrentUrl('/login');
+        $I->dontSeeElement('//textarea[@name="contents"]');
     }
 
     public function afterLogoutHomepageIsCacheableAgain(AcceptanceTester $I): void
