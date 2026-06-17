@@ -36,6 +36,18 @@ class LoginCest
         $I->dontSee('Warning:');
     }
 
+    public function testWrongPasswordShowsFlashMessage(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/login');
+        $I->fillField('password', 'definitely-not-the-password');
+        $I->click('Log in');
+
+        // The failure must be communicated: the visitor is bounced back to the
+        // login page with the error flash, not silently dropped on the homepage.
+        $I->seeInCurrentUrl('/login');
+        $I->see('Password is incorrect, please try again.');
+    }
+
     public function testSettingsPageRequiresLogin(AcceptanceTester $I): void
     {
         $I->amOnPage('/settings');
