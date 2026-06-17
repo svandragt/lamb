@@ -35,9 +35,11 @@ function get_login_url(string $current_uri): string
 function require_login(): void
 {
     if (! isset($_SESSION[SESSION_LOGIN])) {
-        // Anonymous visitors carry no session; start one so the flash survives the redirect.
-        \Lamb\Bootstrap\start_session();
-        $_SESSION['flash'][] = "Please login";
+        // Don't start a session for an anonymous visitor: that would write a
+        // per-request session file off unauthenticated input (the DoS surface
+        // #462 closes for /login). The redirect carries ?redirect_to=, which the
+        // sessionless login page renders as the "Please login" prompt in place of
+        // a session flash.
         Response\redirect_uri(get_login_url($_SERVER['REQUEST_URI'] ?? ''));
     }
 }
