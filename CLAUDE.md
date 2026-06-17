@@ -516,6 +516,12 @@ When a task's work is complete and pushed, open a pull request for it by default
 
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
 
+### Closing issues for non-default-branch merges
+
+GitHub only auto-closes an issue from a PR's `Closes #NNN` / `Fixes #NNN` keyword when that PR merges into the **default branch** (`main`). PRs merged into `next` (or any other non-default branch) leave their referenced issues open even though the keyword is present.
+
+So when a merged PR targeting a non-default branch references an issue with a closing keyword, close that issue manually: add a short comment noting it was completed in the PR (and which branch it merged to), then close it as completed. This mirrors what GitHub would have done on a default-branch merge.
+
 ## Philosophy (from README)
 
 - Simple over complex
