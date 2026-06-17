@@ -15,7 +15,7 @@ use Random\RandomException;
  *
  * If the user is already logged in, their session is regenerated and they are redirected to the root URL.
  * If the login form has not been submitted or the submitted value is not SUBMIT_LOGIN, it returns an empty array to show the login page.
- * If the submitted password is incorrect, it sets a flash message and redirects to the root URL.
+ * If the submitted password is incorrect, it sets a flash message and redirects back to the login page so the failure is communicated.
  * If the login is successful, it sets the SESSION_LOGIN session variable to true, regenerates the session ID, and redirects to the specified URL.
  *
  * @return array<string, mixed>
@@ -48,8 +48,12 @@ function redirect_login(): array
 
     $user_pass = $_POST['password'];
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
+        // Redirect back to /login, not /: redirect_login() always starts a
+        // session (for the CSRF token), so the login page reliably renders the
+        // flash. The anonymous homepage starts no session for a failed login
+        // (no marker cookie), which would silently swallow the message (#460).
         $_SESSION['flash'][] = 'Password is incorrect, please try again.';
-        redirect_uri('/');
+        redirect_uri('/login');
     }
 
     $_SESSION[SESSION_LOGIN] = true;
