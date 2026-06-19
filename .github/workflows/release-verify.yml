@@ -39,8 +39,10 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Generate credentials
+        # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to
+        # .env (omitted by default); the Acceptance login steps read it via $_ENV.
         run: |
-          php make-password.php ci-verify-password
+          LAMB_WRITE_TEST_PASSWORD=1 php make-password.php ci-verify-password
           sed -i "s|^SITE_URL=.*|SITE_URL='http://localhost:8080'|" .env
 
       - name: Build release image
@@ -88,13 +90,19 @@ jobs:
         run: composer install --prefer-dist --no-progress
 
       - name: Generate credentials
+        # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to
+        # .env (omitted by default); the Acceptance login steps read it via $_ENV.
         run: |
-          php make-password.php ci-verify-password
+          LAMB_WRITE_TEST_PASSWORD=1 php make-password.php ci-verify-password
           sed -i "s|^SITE_URL=.*|SITE_URL='http://127.0.0.1:8080'|" .env
 
       - name: Install nginx and php-fpm
-        # setup-php adds the ondrej/php PPA, so php8.2-fpm is installable on any runner image.
-        run: sudo apt-get update && sudo apt-get install -y nginx php8.2-fpm php8.2-sqlite3 php8.2-mbstring php8.2-xml
+        # Add the ondrej/php PPA explicitly so php8.2-* is installable on runner
+        # images whose default PHP is newer (e.g. Ubuntu 24.04 ships 8.3).
+        run: |
+          sudo add-apt-repository -y ppa:ondrej/php
+          sudo apt-get update
+          sudo apt-get install -y nginx php8.2-fpm php8.2-sqlite3 php8.2-mbstring php8.2-xml
 
       - name: Configure php-fpm pool
         run: |

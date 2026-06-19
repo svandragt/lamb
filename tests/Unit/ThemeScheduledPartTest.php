@@ -21,10 +21,36 @@ class ThemeScheduledPartTest extends TestCase
         );
     }
 
-    public function testScheduledPartRendersPostListAndPagination(): void
+    public function testScheduledPartRendersPostList(): void
     {
         $source = file_get_contents($this->partsDir() . '/scheduled.php');
         $this->assertStringContainsString("part('_items')", $source);
-        $this->assertStringContainsString("part('_pagination')", $source);
+    }
+
+    /**
+     * html.php renders the pagination part once for every template, so the
+     * admin list parts must NOT render it again — doing so produced two
+     * pagination navs on /drafts, /trash and /scheduled.
+     *
+     * @dataProvider adminListParts
+     */
+    public function testAdminListPartDoesNotDoublePaginate(string $part): void
+    {
+        $source = file_get_contents($this->partsDir() . '/' . $part);
+        $this->assertStringNotContainsString(
+            "part('_pagination')",
+            $source,
+            "$part must not render _pagination — html.php already does, which double-paginates the page"
+        );
+    }
+
+    /** @return array<string, array{string}> */
+    public static function adminListParts(): array
+    {
+        return [
+            'drafts'    => ['drafts.php'],
+            'trash'     => ['trash.php'],
+            'scheduled' => ['scheduled.php'],
+        ];
     }
 }
