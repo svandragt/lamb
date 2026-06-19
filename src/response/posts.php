@@ -67,7 +67,62 @@ function redirect_created(): void
 }
 
 /**
- * Soft-deletes a post and redirects to the homepage.
+ * Reduces a request Referer to a safe same-origin redirect target (path plus
+ * query), or '/' when it is missing, unparseable, or points at another origin.
+ *
+ * This is the open-redirect guard the redirect-after-action handlers share:
+ * redirect_uri()/sanitize_location() only strip control characters and do not
+ * check the host, so an off-site Referer would otherwise redirect off-site.
+ *
+ * @param string|null $referer The request Referer header (may be null).
+ * @return string A same-origin path (with query), or '/'.
+ */
+function safe_referer_path(?string $referer): string
+{
+    if ($referer === null || $referer === '') {
+        return '/';
+    }
+    $parts = parse_url($referer);
+    if ($parts === false) {
+        return '/';
+    }
+    if (isset($parts['host']) && $parts['host'] !== parse_url(ROOT_URL, PHP_URL_HOST)) {
+        return '/';
+    }
+    $path = $parts['path'] ?? '/';
+    if ($path === '') {
+        return '/';
+    }
+    if (isset($parts['query']) && $parts['query'] !== '') {
+        $path .= '?' . $parts['query'];
+    }
+    return $path;
+}
+
+/**
+ * Computes where to send the user after deleting a post: back to the page the
+ * delete button was pressed on (the request Referer), so deleting from a tag,
+ * search, or drafts listing no longer bounces them to the home page.
+ *
+ * Falls back to the home page when there is no usable same-origin Referer (see
+ * safe_referer_path()), or when it is the deleted post's own permalink — that
+ * page now 404s, so a delete from a status page still lands on the home page.
+ *
+ * @param string|null $referer  The request Referer header.
+ * @param string      $own_path The deleted post's permalink path (e.g. /status/12).
+ * @return string A same-origin path to redirect to, or '/'.
+ */
+function delete_return_path(?string $referer, string $own_path): string
+{
+    $target = safe_referer_path($referer);
+    if (explode('?', $target, 2)[0] === $own_path) {
+        return '/';
+    }
+    return $target;
+}
+
+/**
+ * Soft-deletes a post and redirects back to the page the delete was pressed on.
  *
  * @param mixed $args Expects first element to be the post ID.
  * @return void
@@ -83,10 +138,11 @@ function redirect_deleted(mixed $args): void
 
     [$id] = $args;
     $post = R::load('post', (int)$id);
+    $own_path = (string) parse_url(\Lamb\permalink($post), PHP_URL_PATH);
     if ($post->id) {
         soft_delete_post($post);
     }
-    redirect_uri('/');
+    redirect_uri(delete_return_path($_SERVER['HTTP_REFERER'] ?? null, $own_path));
 }
 
 /**
@@ -215,7 +271,7 @@ function redirect_edited(): void
     \Lamb\Webmention\enqueue_for_post($bean);
     \Lamb\Websub\ping_for_post($bean);
 
-    $redirect = $_SESSION['edit-referrer'];
+    $redirect = safe_referer_path($_SESSION['edit-referrer'] ?? null);
     unset($_SESSION['edit-referrer']);
     redirect_uri($redirect);
 }

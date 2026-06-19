@@ -14,8 +14,10 @@ no version string in the code — **the Git tag is the source of truth**.
 - [ ] All intended PRs are merged into `main`; nothing release-worthy is still open.
 - [ ] Working tree is clean and `main` is up to date: `git checkout main && git pull`.
 - [ ] Tests pass: `vendor/bin/codecept run` (Unit + Acceptance).
-      Acceptance needs `.env` (`SITE_URL`, `LAMB_TEST_PASSWORD`); it starts its
-      own server, so don't have another server on the test port.
+      Acceptance needs `.env` (`SITE_URL`, `LAMB_TEST_PASSWORD`); generate it with
+      `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` so the cleartext
+      `LAMB_TEST_PASSWORD` is written (it is omitted by default). Acceptance starts
+      its own server, so don't have another server on the test port.
 - [ ] Static checks pass: `composer lint` && `composer analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
 
@@ -88,6 +90,21 @@ gh release create <version> \
 # add --prerelease for an -rcN tag
 # add --latest to mark a final release as the latest
 ```
+
+**No local `gh`?** The `Cut release` workflow (`.github/workflows/cut-release.yml`)
+does the same `gh release create --target release` server-side from a
+`workflow_dispatch`, so it can be driven without a local checkout or token (e.g.
+from an automation session that can trigger workflows but not create releases):
+
+```sh
+gh workflow run cut-release.yml \
+  -f version=<version> \
+  -f prerelease=true \
+  -f notes="$(cat /tmp/notes.md)"
+# omit prerelease (or set =false) for a final; add -f latest=true to mark it latest
+```
+
+It tags the current `release` tip, so promote main → release (step 4) first.
 
 - [ ] Merge the release PR (step 4) first, so `--target release` tags the
       intended commit. If the tag landed on the wrong commit, move it — the

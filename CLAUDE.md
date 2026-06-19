@@ -36,8 +36,11 @@ vendor/bin/codecept run Acceptance
 # Run client-side JavaScript unit tests (node:test + jsdom)
 pnpm test
 
-# Generate password hash and write .env
+# Generate password hash and write .env (warns on STDERR if the password is weak).
+# By default the cleartext password is NOT written to .env; the acceptance suite
+# opts in via LAMB_WRITE_TEST_PASSWORD=1 to get LAMB_TEST_PASSWORD.
 php make-password.php <your-password>
+LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <your-password>   # for acceptance tests
 
 # Static analysis
 composer analyse
@@ -454,7 +457,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 Tests use **Codeception 5** with PHPUnit underneath.
 
 - **Unit** (`tests/Unit/`): pure PHP, no HTTP.
-- **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` set in `.env` (written by `make-password.php`).
+- **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` and `LAMB_TEST_PASSWORD` in `.env`. Generate it with `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` — `make-password.php` omits the cleartext `LAMB_TEST_PASSWORD` unless that flag is set.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
 Config in `codeception.yml` reads env from `.env`.
@@ -491,7 +494,12 @@ php make-password.php mysecretpassword
 # writes LAMB_LOGIN_PASSWORD, SITE_URL to .env
 ```
 
-The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime.
+The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime. Production deployments
+(FrankenPHP, nginx+php-fpm, Docker) set it as a real environment variable. The PHP
+built-in dev server (`composer serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
+reads it in — but **only under the `cli-server` SAPI** and **non-overriding** (a real
+env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
+this no-ops on a `--no-dev` install.
 
 ## Branching
 
@@ -507,6 +515,12 @@ For contributors: always branch from `main` for new features. Open an issue firs
 When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
 
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
+
+### Closing issues for non-default-branch merges
+
+GitHub only auto-closes an issue from a PR's `Closes #NNN` / `Fixes #NNN` keyword when that PR merges into the **default branch** (`main`). PRs merged into `next` (or any other non-default branch) leave their referenced issues open even though the keyword is present.
+
+So when a merged PR targeting a non-default branch references an issue with a closing keyword, close that issue manually: add a short comment noting it was completed in the PR (and which branch it merged to), then close it as completed. This mirrors what GitHub would have done on a default-branch merge.
 
 ## Philosophy (from README)
 

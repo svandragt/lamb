@@ -6,10 +6,12 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
 use function Lamb\Response\apply_checkbox_toggle;
+use function Lamb\Response\delete_return_path;
 use function Lamb\Response\lock_if_feed_sourced;
 use function Lamb\Response\redirect_created;
 use function Lamb\Response\redirect_edited;
 use function Lamb\Response\respond_edit;
+use function Lamb\Response\safe_referer_path;
 
 class ResponsePostsTest extends TestCase
 {
@@ -209,6 +211,75 @@ class ResponsePostsTest extends TestCase
         respond_edit([$post->id]);
 
         $this->assertNull($_SESSION['edit-referrer']);
+    }
+
+    // -------------------------------------------------------------------------
+    // safe_referer_path
+    // -------------------------------------------------------------------------
+
+    public function testSafeRefererPathReturnsSameOriginPath(): void
+    {
+        $this->assertSame('/tag/lamb', safe_referer_path(ROOT_URL . '/tag/lamb'));
+    }
+
+    public function testSafeRefererPathPreservesQuery(): void
+    {
+        $this->assertSame('/?page=2', safe_referer_path(ROOT_URL . '/?page=2'));
+    }
+
+    public function testSafeRefererPathFallsBackToHomeForNullOrEmpty(): void
+    {
+        $this->assertSame('/', safe_referer_path(null));
+        $this->assertSame('/', safe_referer_path(''));
+    }
+
+    public function testSafeRefererPathRejectsCrossOrigin(): void
+    {
+        $this->assertSame('/', safe_referer_path('https://evil.example/phish'));
+    }
+
+    public function testSafeRefererPathKeepsHostlessRelativeReferer(): void
+    {
+        $this->assertSame('/drafts', safe_referer_path('/drafts'));
+    }
+
+    // -------------------------------------------------------------------------
+    // delete_return_path
+    // -------------------------------------------------------------------------
+
+    public function testDeleteReturnPathKeepsSameOriginListingPage(): void
+    {
+        // Deleting from a tag listing should land back on that listing, not home.
+        $this->assertSame(
+            '/tag/lamb',
+            delete_return_path(ROOT_URL . '/tag/lamb', '/status/12')
+        );
+    }
+
+    public function testDeleteReturnPathPreservesQueryString(): void
+    {
+        $this->assertSame(
+            '/?page=2',
+            delete_return_path(ROOT_URL . '/?page=2', '/status/12')
+        );
+    }
+
+    public function testDeleteReturnPathFallsBackToHomeWithoutReferer(): void
+    {
+        $this->assertSame('/', delete_return_path(null, '/status/12'));
+        $this->assertSame('/', delete_return_path('', '/status/12'));
+    }
+
+    public function testDeleteReturnPathRejectsCrossOriginReferer(): void
+    {
+        $this->assertSame('/', delete_return_path('https://evil.example/phish', '/status/12'));
+    }
+
+    public function testDeleteReturnPathFallsBackToHomeWhenRefererIsOwnPage(): void
+    {
+        // The deleted post's own permalink now 404s, so don't send the user back to it.
+        $this->assertSame('/', delete_return_path(ROOT_URL . '/status/12', '/status/12'));
+        $this->assertSame('/', delete_return_path(ROOT_URL . '/my-page', '/my-page'));
     }
 
     // -------------------------------------------------------------------------

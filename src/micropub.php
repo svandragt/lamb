@@ -210,6 +210,35 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * Build the 403 response for a token that lacks the scope an action requires.
+     *
+     * Both RFC 6750 §3.1 and the W3C Micropub error-response section map
+     * `insufficient_scope` to HTTP 403 (a valid token was supplied, but it lacks
+     * the privilege) — 401 is reserved for a missing or invalid token. The
+     * taproot/micropub-adapter already returns 403, but without the RFC 6750 §3
+     * `WWW-Authenticate: Bearer` challenge, so the callbacks return this response
+     * directly to attach it. (micropub.rocks test 804 wants 401, contradicting the
+     * spec — see aaronpk/micropub.rocks#101 — so we follow the spec, not the test.)
+     *
+     * @param string $requiredScope The scope the rejected action needs (e.g. 'create', 'update').
+     * @return Response
+     */
+    private function insufficientScopeResponse(string $requiredScope): Response
+    {
+        return new Response(
+            403,
+            [
+                'content-type'     => 'application/json',
+                'www-authenticate' => bearer_challenge('insufficient_scope', $requiredScope),
+            ],
+            json_encode([
+                'error'             => 'insufficient_scope',
+                'error_description' => 'Your access token does not grant the scope required for this action.',
+            ]) ?: ''
+        );
+    }
+
+    /**
      * Handle a micropub create request.
      *
      * @param array<string, mixed> $data  Normalised microformats2 data.
@@ -218,17 +247,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
-        // W3C Micropub spec §error-response requires HTTP 401 for insufficient_scope.
-        // taproot/micropub-adapter maps it to 403 instead, so we bypass toResponse() by
-        // returning a ResponseInterface directly from this callback.
-        // TODO: report upstream to taproot/micropub-adapter that insufficient_scope should
-        //       map to HTTP 401 per the W3C Micropub spec.
         $scope = $this->user['scope'] ?? [];
         if ($this->user !== null && !in_array('create', $scope)) {
-            return new Response(401, ['content-type' => 'application/json'], json_encode([
-                'error' => 'insufficient_scope',
-                'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]) ?: '');
+            return $this->insufficientScopeResponse('create');
         }
 
         $props = $data['properties'] ?? [];
@@ -359,10 +380,7 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $scope = $this->user['scope'] ?? [];
         if ($this->user !== null && !in_array('update', $scope)) {
-            return new Response(401, ['content-type' => 'application/json'], json_encode([
-                'error'             => 'insufficient_scope',
-                'error_description' => 'Your access token does not grant the scope required for this action.',
-            ]) ?: '');
+            return $this->insufficientScopeResponse('update');
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
@@ -745,6 +763,34 @@ function mp_log(string $event, array $context = []): void
 }
 
 /**
+ * Build a `WWW-Authenticate: Bearer` challenge value per OAuth bearer-token RFC 6750 §3.
+ *
+ * With no error this returns a bare `Bearer` — RFC 6750 §3.1 says a request that
+ * supplied no credentials at all SHOULD NOT carry an error code. When an error is
+ * given, the optional `error_description` and `scope` attributes are appended in the
+ * spec's listed order (error, error_description, scope).
+ *
+ * @param string|null $error       Error code (e.g. 'invalid_token', 'insufficient_scope').
+ * @param string|null $scope       Scope the action requires (insufficient_scope only).
+ * @param string|null $description Human-readable error description.
+ */
+function bearer_challenge(?string $error = null, ?string $scope = null, ?string $description = null): string
+{
+    $params = [];
+    if ($error !== null) {
+        $params[] = 'error="' . $error . '"';
+    }
+    if ($description !== null) {
+        $params[] = 'error_description="' . $description . '"';
+    }
+    if ($scope !== null) {
+        $params[] = 'scope="' . $scope . '"';
+    }
+
+    return $params === [] ? 'Bearer' : 'Bearer ' . implode(', ', $params);
+}
+
+/**
  * Non-reversible fingerprint of a bearer token: enough to correlate the same token
  * across log lines without ever writing the secret itself.
  */
@@ -825,7 +871,14 @@ function respond_micropub(): void
     }
     $response = $adapter->handleRequest($request);
 
+    // The adapter returns a bare 401 when no access token is supplied; RFC 6750 §3
+    // requires a WWW-Authenticate: Bearer challenge on such responses. (Our own
+    // insufficient_scope path is a 403 that already sets the header, so it is untouched.)
     $status = $response->getStatusCode();
+    if ($status === 401 && !$response->hasHeader('WWW-Authenticate')) {
+        $response = $response->withHeader('WWW-Authenticate', bearer_challenge());
+    }
+
     mp_log('response', [
         'status' => $status,
         // Only echo the body into the log on failures — it carries the error reason.
@@ -848,16 +901,20 @@ function respond_micropub(): void
  * Centralises the status code + Content-Type header + {error, error_description}
  * body that every guard in the media endpoint would otherwise repeat.
  *
- * @param int    $status      HTTP status code.
- * @param string $error       Micropub error code (e.g. 'unauthorized', 'invalid_request').
- * @param string $description Human-readable error description.
+ * @param int         $status          HTTP status code.
+ * @param string      $error           Micropub error code (e.g. 'unauthorized', 'invalid_request').
+ * @param string      $description     Human-readable error description.
+ * @param string|null $wwwAuthenticate Optional RFC 6750 `WWW-Authenticate` challenge (see bearer_challenge()).
  * @return never
  */
-function micropub_error(int $status, string $error, string $description): never
+function micropub_error(int $status, string $error, string $description, ?string $wwwAuthenticate = null): never
 {
     mp_log('response', ['status' => $status, 'error' => $error, 'error_description' => $description]);
     http_response_code($status);
     header('Content-Type: application/json');
+    if ($wwwAuthenticate !== null) {
+        header('WWW-Authenticate: ' . $wwwAuthenticate);
+    }
     echo json_encode(['error' => $error, 'error_description' => $description]);
     exit;
 }
@@ -888,7 +945,8 @@ function respond_micropub_media(): void
     }
 
     if (!$token) {
-        micropub_error(401, 'unauthorized', 'Missing bearer token.');
+        // No credentials supplied: bare Bearer challenge, no error code (RFC 6750 §3.1).
+        micropub_error(401, 'unauthorized', 'Missing bearer token.', bearer_challenge());
     }
 
     $adapter = new LambMicropubAdapter();
@@ -897,7 +955,12 @@ function respond_micropub_media(): void
     }
     $user = $adapter->verifyAccessTokenCallback($token);
     if (!$user) {
-        micropub_error(401, 'unauthorized', 'Invalid or expired token.');
+        micropub_error(
+            401,
+            'unauthorized',
+            'Invalid or expired token.',
+            bearer_challenge('invalid_token', null, 'The access token is invalid or expired.')
+        );
     }
 
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
