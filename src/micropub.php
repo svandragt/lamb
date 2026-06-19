@@ -14,12 +14,13 @@ use Taproot\Micropub\MicropubAdapter;
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_scheduled;
+use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
-use function Lamb\Post\finalize_slug;
+use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\split_frontmatter;
@@ -292,16 +293,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $needs_preview = $bean->draft == 1 || is_scheduled($bean);
         \Lamb\ensure_preview_token($bean);
 
-        R::store($bean);
-        // Reserved-route and duplicate slugs get an id suffix; the final slug
-        // is pinned into the body's front matter and must be settled before
-        // the Location permalink is computed.
-        if (finalize_slug($bean)) {
-            R::store($bean);
-        }
+        // Stores and pins the final slug, which must be settled before the
+        // Location permalink is computed below.
+        finalize_and_store_post($bean);
 
-        \Lamb\Webmention\enqueue_for_post($bean);
-        \Lamb\Websub\ping_for_post($bean);
+        notify_post_subscribers($bean);
 
         $location = permalink($bean);
         if ($needs_preview) {
@@ -339,8 +335,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = 1;
-        R::store($bean);
+        // Share the web delete path so a Micropub delete also stamps deleted_at
+        // (for purging) and re-sends webmentions for the now-gone post (#331).
+        \Lamb\Response\soft_delete_post($bean);
 
         return true;
     }
@@ -358,8 +355,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = null;
-        R::store($bean);
+        // Share the web restore path so a Micropub undelete also reconciles any
+        // deletion webmention re-sends (#331).
+        \Lamb\Response\restore_post($bean);
 
         return true;
     }
@@ -408,8 +406,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $bean->updated = \Lamb\now();
         R::store($bean);
 
-        \Lamb\Webmention\enqueue_for_post($bean);
-        \Lamb\Websub\ping_for_post($bean);
+        notify_post_subscribers($bean);
 
         return true;
     }

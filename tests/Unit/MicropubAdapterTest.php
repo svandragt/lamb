@@ -18,6 +18,10 @@ class MicropubAdapterTest extends TestCase
 
         global $config;
         $config = $config ?? [];
+        // Config\load() always provides site_title in production; respond_home()
+        // reads it unguarded, so seed it here rather than relying on a sibling
+        // test having populated the global $config first.
+        $config['site_title'] = $config['site_title'] ?? 'Test Blog';
 
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
@@ -960,6 +964,33 @@ class MicropubAdapterTest extends TestCase
 
         $updated = R::load('post', $bean->id);
         $this->assertSame(1, (int) $updated->deleted);
+    }
+
+    public function testDeleteCallbackEnqueuesWebmentionResend(): void
+    {
+        // The Micropub delete path shares soft_delete_post(), so deleting a post
+        // that previously sent webmentions re-queues them for re-send (#331).
+        $bean = R::dispense('post');
+        $bean->body = 'Has a sent webmention';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        $postId = (int) R::store($bean);
+
+        $row = R::dispense('webmentionoutbox');
+        $row->post_id = $postId;
+        $row->source = ROOT_URL . '/status/' . $postId;
+        $row->target = 'https://other.example/a';
+        $row->status = 'sent';
+        $row->created = date('Y-m-d H:i:s');
+        $rowId = (int) R::store($row);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->deleteCallback(ROOT_URL . '/status/' . $postId);
+
+        $updated = R::load('webmentionoutbox', $rowId);
+        $this->assertSame('pending', $updated->status);
+        $this->assertEquals(1, $updated->resend);
     }
 
     public function testDeleteCallbackReturnsInvalidRequestForUnknownUrl(): void

@@ -43,6 +43,13 @@ Lamb reads the image's real dimensions and type for the `og:image:width`,
 `og:image:height`, and `og:image:type` tags when the file is readable, so you
 don't need to declare them anywhere.
 
+## The card description
+
+The card's description text (`og:description` / `twitter:description`) comes
+from the post's description. By default Lamb uses the post's first line; set a
+`summary:` in the post's front-matter to write that description yourself. See
+[Post Types]({{ site.baseurl }}{% link post-types.md %}).
+
 ## Related
 
 * [Media]({{ site.baseurl }}{% link media.md %}) — uploading images into posts (these become the card image automatically)

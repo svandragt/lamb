@@ -174,7 +174,13 @@ function parse_bean(OODBBean $bean): void
     $markdown = render_body($bean->body);
 
     $front_matter = parse_matter($bean->body);
-    $front_matter['description'] = extract_description($markdown);
+    // A hand-written `summary` (or `description`) in front matter wins over the
+    // auto-extracted first line; both feed the post's `description` column, which
+    // drives the feeds and the OpenGraph/meta tags.
+    $front_matter['description'] = front_matter_summary($front_matter) ?? extract_description($markdown);
+    // The summary is stored as the description, so drop the raw `summary` key
+    // before apply_frontmatter()'s blind copy persists it as a stray column.
+    unset($front_matter['summary']);
     $front_matter['transformed'] = highlight_and_link($markdown);
 
     // Capture the existing created date before apply_frontmatter() blind-copies the
@@ -221,6 +227,31 @@ function extract_description(string $markdown): string
     $description = html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
     return html_entity_decode($description, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+}
+
+/**
+ * Returns the author's hand-written summary from front matter, or null when none.
+ *
+ * Accepts `summary` (the canonical key) and `description` as an alias;
+ * parse_matter() has already lower-cased the keys and converted underscores to
+ * dashes. A whitespace-only value is treated as absent, so an empty line falls
+ * back to the auto-generated description.
+ *
+ * @param array<int|string, mixed> $front_matter The parsed front matter.
+ * @return string|null The trimmed manual summary, or null to fall back to auto.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function front_matter_summary(array $front_matter): ?string
+{
+    foreach (['summary', 'description'] as $key) {
+        $value = $front_matter[$key] ?? null;
+        if (is_string($value) && trim($value) !== '') {
+            return trim($value);
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -555,6 +586,23 @@ function ensure_preview_token(OODBBean $post): void
 }
 
 /**
+ * Fans out publish notifications for a freshly stored post.
+ *
+ * Both the web form and Micropub run the same two steps after saving: queue
+ * outbound webmentions for the post's external links and ping the WebSub hubs.
+ * Each callee already skips ineligible posts (drafts, feed items, future-dated
+ * scheduled posts), so this is safe to call unconditionally from every save path.
+ *
+ * @param OODBBean $bean A stored post bean.
+ * @return void
+ */
+function notify_post_subscribers(OODBBean $bean): void
+{
+    Webmention\enqueue_for_post($bean);
+    Websub\ping_for_post($bean);
+}
+
+/**
  * Checks if a post with the given slug exists in the database and may be
  * routed for the current request: published posts for everyone, drafts and
  * scheduled posts for the logged-in author (matching is_viewable()) or via a
@@ -644,4 +692,116 @@ function find_redirect(string $slug): ?string
     }
 
     return null;
+}
+
+/**
+ * Returns the bare slug a redirect target points at when it can chain to another
+ * redirect's `from_slug`, or null when the target is terminal.
+ *
+ * Only an internal, single-segment target (`/slug`) can chain. External URLs,
+ * multi-segment paths (`/a/b`), and the root (`/`) are terminal destinations.
+ *
+ * @param string $to_url The redirect's stored destination.
+ * @return string|null The chainable target slug, or null when terminal.
+ */
+function redirect_target_slug(string $to_url): ?string
+{
+    if (!str_starts_with($to_url, '/')) {
+        return null;
+    }
+    $slug = ltrim($to_url, '/');
+    if ($slug === '' || str_contains($slug, '/')) {
+        return null;
+    }
+
+    return $slug;
+}
+
+/**
+ * Flattens stored redirect chains so each hop points straight at its final
+ * destination, breaks loops, and drops redirects whose destination no longer
+ * resolves to a post. Intended to run as periodic maintenance from `/_cron`.
+ *
+ * - A chain `a → /b`, `b → /c` is rewritten so `a → /c` (one 301 instead of two).
+ * - A loop (`a → /b`, `b → /a`) cannot resolve, so its rows are deleted.
+ * - A redirect whose final single-segment destination has no post is deleted,
+ *   unless a soft-deleted (trashed) post still holds that slug — it may be
+ *   restored, so the redirect is kept.
+ *
+ * @return int The number of redirect rows rewritten or deleted.
+ */
+function flatten_redirects(): int
+{
+    $redirects = R::findAll('redirect');
+
+    /** @var array<string, \RedBeanPHP\OODBBean> $by_from */
+    $by_from = [];
+    foreach ($redirects as $redirect) {
+        if (is_string($redirect->from_slug) && $redirect->from_slug !== '') {
+            $by_from[$redirect->from_slug] = $redirect;
+        }
+    }
+
+    $delete  = [];
+    $changes = 0;
+
+    // 1. Resolve each redirect to its final destination, collecting loop members.
+    foreach ($by_from as $from => $redirect) {
+        $path  = [];
+        $index = [];
+        $node  = $from;
+        $final = $redirect->to_url;
+        $loop  = null;
+
+        while (true) {
+            $index[$node] = count($path);
+            $path[]       = $node;
+            $final        = $by_from[$node]->to_url;
+
+            $target = redirect_target_slug((string) $by_from[$node]->to_url);
+            if ($target === null || !isset($by_from[$target])) {
+                break;
+            }
+            if (isset($index[$target])) {
+                $loop = $target;
+                break;
+            }
+            $node = $target;
+        }
+
+        if ($loop !== null) {
+            for ($i = $index[$loop]; $i < count($path); $i++) {
+                $delete[$path[$i]] = $by_from[$path[$i]];
+            }
+            continue;
+        }
+
+        if ($final !== $redirect->to_url) {
+            $redirect->to_url = $final;
+            R::store($redirect);
+            $changes++;
+        }
+    }
+
+    // 2. Drop redirects whose final destination resolves to no post, keeping
+    //    those whose slug is still held by a trashed (restorable) post.
+    foreach ($by_from as $from => $redirect) {
+        if (isset($delete[$from])) {
+            continue;
+        }
+        $target = redirect_target_slug((string) $redirect->to_url);
+        if ($target === null) {
+            continue;
+        }
+        if (R::findOne('post', ' slug = ? ', [$target]) === null) {
+            $delete[$from] = $redirect;
+        }
+    }
+
+    foreach ($delete as $redirect) {
+        R::trash($redirect);
+        $changes++;
+    }
+
+    return $changes;
 }

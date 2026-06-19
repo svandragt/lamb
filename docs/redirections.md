@@ -47,6 +47,10 @@ When you edit a page post and change its `slug:` front-matter:
 
 Publishing a new post whose slug matches an existing redirect's source automatically removes the redirect — the new post takes over that URL.
 
+### Chain flattening
+
+Reslugging the same post more than once would otherwise leave a chain of redirects (`old → /newer`, `newer → /newest`), making a visitor follow several 301s. The [`/_cron`]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}) run flattens these so every hop points straight at the final destination, breaks any redirect loops it finds, and removes redirects whose destination no longer resolves to a post (a redirect to a [trashed]({{ site.baseurl }}{% link trash.md %}) post is kept, since the post may be restored). This is automatic maintenance — there is nothing to configure.
+
 ## Precedence rules
 
 A live post is always served directly, regardless of any redirect (manual or automatic) pointing to the same slug. A redirect only fires when no published post has that slug.
