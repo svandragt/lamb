@@ -13,7 +13,7 @@ The first-pass scope is intentionally small:
 - Published **Posts** and **Pages** are imported. Drafts, private posts, custom post types, comments, menus and theme settings are skipped.
 - HTML post bodies are sanitised (`<script>`, `<style>`, `<iframe>` and `on*` event attributes are stripped) and converted to Markdown.
 - Categories and tags become inline `#hashtags` at the end of the body — Lamb's tag index picks them up automatically.
-- Images referenced in the body that live on the source site are downloaded into `src/assets/YYYY/MM/` (using the post's own creation date), re-encoded to WebP where the [upload pipeline](media.md) does so, and the body links are rewritten to point at the local copies. Off-site images and failed downloads are left as remote `<img>` references.
+- Every image referenced in the body is downloaded into `src/assets/YYYY/MM/` (using the post's own creation date), re-encoded to WebP and scaled down to the upload pipeline's max edge ([details](media.md)), and the body links are rewritten to point at the local copies. Images on a different host than `<wp:base_blog_url>` are pulled in too — a typical WP migration ships images from a CDN or a previous domain, and the downloader's content-type and extension checks keep arbitrary URLs safe. Failed downloads, data: URIs and relative URLs are left as-is.
 - Imported posts are **silent**: the importer calls the low-level save pipeline directly, so no outbound webmentions or WebSub hub pings are emitted. The content already exists somewhere else.
 
 ## Exporting from WordPress

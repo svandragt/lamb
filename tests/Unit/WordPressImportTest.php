@@ -9,7 +9,6 @@ use SimpleXMLElement;
 use function Lamb\WordPress\asset_dir_for_date;
 use function Lamb\WordPress\build_post_body;
 use function Lamb\WordPress\extract_items;
-use function Lamb\WordPress\extract_site_host;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
 use function Lamb\WordPress\parse_wxr_file;
@@ -331,10 +330,8 @@ XML;
 
         $rss = parse_wxr_file($path);
         $items = extract_items($rss);
-        $siteHost = extract_site_host($rss) ?? '';
 
         $importable = array_values(array_filter($items, should_import(...)));
-        $this->assertNotSame('', $siteHost);
         $this->assertCount(175, $items);
         $this->assertCount(124, $importable);
         $this->assertCount(51, array_filter($items, static fn(array $item): bool => !should_import($item)));
@@ -342,19 +339,13 @@ XML;
         foreach ($importable as $item) {
             $this->assertNotSame('', trim((string) $item['guid']));
             $this->assertNotSame('', trim((string) $item['created']));
-            $bean = import_item($item, $siteHost, fn(): ?string => null, true);
+            $bean = import_item($item, fn(): ?string => null, true);
             $this->assertNotNull($bean);
             $this->assertEmpty($bean->id);
             $this->assertNotSame('', trim((string) $bean->body));
         }
 
         $this->assertCount(0, R::findAll('post'));
-    }
-
-    public function testExtractSiteHostReturnsBlogHost(): void
-    {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
-        $this->assertSame('oldsite.example', extract_site_host($rss));
     }
 
     public function testExtractItemsReturnsAllChannelItems(): void
@@ -459,7 +450,7 @@ XML;
             'slug' => 'about-us',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $bean = import_item($item, fn() => null, false);
 
         $this->assertNotNull($bean);
         $this->assertSame('about-us', (string) $bean->slug);
@@ -475,7 +466,7 @@ XML;
         $this->assertFalse(should_import($items[3])); // custom post type
     }
 
-    public function testRewriteImageLinksDownloadsOnSiteImagesAndReplacesUrl(): void
+    public function testRewriteImageLinksDownloadsImagesAndReplacesUrl(): void
     {
         $downloaded = [];
         $downloader = function (string $url, string $dest_dir) use (&$downloaded): ?string {
@@ -485,15 +476,19 @@ XML;
         };
 
         $html = '<p><img src="https://oldsite.example/wp-content/uploads/2024/03/photo.jpg" alt="x"/></p>';
-        $out = rewrite_image_links($html, 'oldsite.example', '2024-03-03 10:00:00', $downloader);
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertCount(1, $downloaded);
         $this->assertStringContainsString('assets/2024/03/abc123.jpg', $out);
         $this->assertStringNotContainsString('oldsite.example', $out);
     }
 
-    public function testRewriteImageLinksSkipsOffSiteImages(): void
+    public function testRewriteImageLinksDownloadsOffSiteImages(): void
     {
+        // WordPress exports often reference images on a different host than
+        // <wp:base_blog_url> (CDN, migrated domain, multisite uploads). The
+        // importer must pull those in too — the downloader's content-type /
+        // extension guards are what keep this safe, not a host allowlist.
         $downloaded = [];
         $downloader = function (string $url) use (&$downloaded): ?string {
             $downloaded[] = $url;
@@ -501,10 +496,11 @@ XML;
         };
 
         $html = '<p><img src="https://other.example/img.jpg"/></p>';
-        $out = rewrite_image_links($html, 'oldsite.example', '2024-03-03 10:00:00', $downloader);
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
 
-        $this->assertSame([], $downloaded);
-        $this->assertStringContainsString('other.example', $out);
+        $this->assertSame(['https://other.example/img.jpg'], $downloaded);
+        $this->assertStringContainsString('assets/2024/03/abc123.jpg', $out);
+        $this->assertStringNotContainsString('other.example', $out);
     }
 
     public function testRewriteImageLinksLeavesUrlWhenDownloadFails(): void
@@ -512,9 +508,46 @@ XML;
         $downloader = fn(): ?string => null;
 
         $html = '<p><img src="https://oldsite.example/wp-content/uploads/2024/03/photo.jpg"/></p>';
-        $out = rewrite_image_links($html, 'oldsite.example', '2024-03-03 10:00:00', $downloader);
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertStringContainsString('oldsite.example/wp-content/uploads/2024/03/photo.jpg', $out);
+    }
+
+    public function testRewriteImageLinksSkipsDataAndRelativeSrc(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'abc123.jpg';
+        };
+
+        $html = '<p>'
+            . '<img src="data:image/png;base64,iVBORw0KG"/>'
+            . '<img src="/relative/path.jpg"/>'
+            . '</p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame([], $downloaded);
+        $this->assertStringContainsString('data:image/png', $out);
+        $this->assertStringContainsString('/relative/path.jpg', $out);
+    }
+
+    public function testRewriteImageLinksStripsSrcsetAndSizesOnSuccess(): void
+    {
+        // WordPress responsive markup keeps absolute multi-resolution URLs in
+        // srcset. Once we have a single canonical local WebP, leaving srcset
+        // in place would silently re-leak the old host back into the post.
+        $downloader = fn(): ?string => 'abc123.jpg';
+
+        $html = '<p><img src="https://oldsite.example/photo.jpg"'
+            . ' srcset="https://oldsite.example/photo-300.jpg 300w, https://oldsite.example/photo-600.jpg 600w"'
+            . ' sizes="(max-width: 600px) 100vw, 600px"/></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertStringContainsString('assets/2024/03/abc123.jpg', $out);
+        $this->assertStringNotContainsString('srcset', $out);
+        $this->assertStringNotContainsString('sizes', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
     }
 
     public function testResponseIsImageAcceptsImageContentType(): void
@@ -558,7 +591,7 @@ XML;
             'post_type' => 'post',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $bean = import_item($item, fn() => null, false);
 
         $this->assertNotNull($bean);
         $this->assertNotEmpty($bean->id);
@@ -587,7 +620,7 @@ XML;
             'slug' => '59',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $bean = import_item($item, fn() => null, false);
 
         $this->assertNotNull($bean);
         $this->assertSame('', (string) $bean->slug);
@@ -612,7 +645,7 @@ XML;
             'slug' => '59',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $bean = import_item($item, fn() => null, false);
         $redirect = R::findOne('redirect', ' from_slug = ? ', ['status/59']);
 
         $this->assertNotNull($bean);
@@ -638,7 +671,7 @@ XML;
             'slug' => '26',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $bean = import_item($item, fn() => null, false);
         $redirect = R::findOne('redirect', ' from_slug = ? ', ['bugs/26']);
 
         $this->assertNotNull($bean);
@@ -663,8 +696,8 @@ XML;
             'post_type' => 'post',
         ];
 
-        $first = import_item($item, 'oldsite.example', fn() => null, false);
-        $second = import_item($item, 'oldsite.example', fn() => null, false);
+        $first = import_item($item, fn() => null, false);
+        $second = import_item($item, fn() => null, false);
 
         $this->assertNotNull($first);
         $this->assertNotNull($second);
@@ -688,7 +721,7 @@ XML;
             'post_type' => 'post',
         ];
 
-        $bean = import_item($item, 'oldsite.example', fn() => null, true);
+        $bean = import_item($item, fn() => null, true);
 
         $this->assertNotNull($bean);
         $this->assertEmpty($bean->id);

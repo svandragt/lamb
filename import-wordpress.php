@@ -50,10 +50,6 @@ $config = Config\load();
 Config\apply_timezone($config);
 
 $rss = WordPress\parse_wxr_file($path);
-$site_host = WordPress\extract_site_host($rss);
-if ($site_host === null) {
-    fwrite(STDERR, "Could not determine source site host from <wp:base_blog_url>; off-site images will be left untouched.\n");
-}
 $items = WordPress\extract_items($rss);
 
 $downloader = $dry_run
@@ -76,7 +72,7 @@ foreach ($items as $i => $item) {
         continue;
     }
 
-    $bean = WordPress\import_item($item, $site_host ?? '', $downloader, $dry_run);
+    $bean = WordPress\import_item($item, $downloader, $dry_run);
     if ($bean === null) {
         $skipped++;
         continue;

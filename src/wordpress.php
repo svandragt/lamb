@@ -57,30 +57,6 @@ function parse_wxr_file(string $path): SimpleXMLElement
 }
 
 /**
- * Returns the WP site's host (from <wp:base_blog_url> or <wp:base_site_url>),
- * used to restrict image downloads to the source site. Null when neither tag is
- * present or parseable.
- */
-function extract_site_host(SimpleXMLElement $rss): ?string
-{
-    $channel = $rss->channel ?? null;
-    if (!$channel) {
-        return null;
-    }
-    foreach (['base_blog_url', 'base_site_url'] as $tag) {
-        $node = $channel->children(WXR_NS)->$tag ?? null;
-        $url = $node ? trim((string) $node) : '';
-        if ($url !== '') {
-            $host = parse_url($url, PHP_URL_HOST);
-            if (is_string($host) && $host !== '') {
-                return $host;
-            }
-        }
-    }
-    return null;
-}
-
-/**
  * Extracts every <item> from the channel as a normalised assoc array.
  * Non-namespaced fields (title, link, guid, pubDate) sit alongside the WP
  * namespace fields (post_type, status, post_date, post_id) and the content
@@ -458,14 +434,20 @@ function asset_dir_for_date(string $created): string
 }
 
 /**
- * Walks an HTML fragment, finds `<img src>` URLs whose host matches $site_host,
- * hands each URL to $downloader, and rewrites the src to a root-relative
- * `assets/YYYY/MM/<filename>` URL on success. Off-site images and failed
- * downloads are left untouched.
+ * Walks an HTML fragment, hands every absolute `http(s)://` `<img src>` URL to
+ * $downloader regardless of host, and rewrites the src to a root-relative
+ * `assets/YYYY/MM/<filename>` URL on success. The downloader is trusted to
+ * reject non-image responses (see {@see default_image_downloader}); failed
+ * downloads, data: URIs and relative URLs are left untouched.
  *
- * @param callable(string,string):?string $downloader  ($url, $dest_dir) → saved filename or null.
+ * Multi-resolution attributes (`srcset`, `sizes`) are stripped once we have a
+ * local copy — the WebP we wrote via store_webp_copy is already the canonical
+ * single-resolution image, and stale absolute URLs pointing at the old WP
+ * domain would otherwise leak back in.
+ *
+ * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
  */
-function rewrite_image_links(string $html, string $site_host, string $created, callable $downloader): string
+function rewrite_image_links(string $html, string $created, callable $downloader): string
 {
     if (trim($html) === '') {
         return '';
@@ -480,8 +462,8 @@ function rewrite_image_links(string $html, string $site_host, string $created, c
             continue;
         }
         $src = $img->getAttribute('src');
-        $host = parse_url($src, PHP_URL_HOST);
-        if (!is_string($host) || strcasecmp($host, $site_host) !== 0) {
+        $scheme = parse_url($src, PHP_URL_SCHEME);
+        if (!is_string($scheme) || !in_array(strtolower($scheme), ['http', 'https'], true)) {
             continue;
         }
         $filename = $downloader($src, $sub_path);
@@ -489,6 +471,8 @@ function rewrite_image_links(string $html, string $site_host, string $created, c
             continue;
         }
         $img->setAttribute('src', "assets/$sub_path/$filename");
+        $img->removeAttribute('srcset');
+        $img->removeAttribute('sizes');
     }
 
     return dump_html_fragment($dom);
@@ -577,7 +561,7 @@ function response_is_image(array $headers): bool
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
  */
-function import_item(array $item, string $site_host, callable $downloader, bool $dry_run = false): ?OODBBean
+function import_item(array $item, callable $downloader, bool $dry_run = false): ?OODBBean
 {
     if (!should_import($item)) {
         return null;
@@ -590,7 +574,7 @@ function import_item(array $item, string $site_host, callable $downloader, bool 
     }
 
     $sanitized = sanitize_html((string) ($item['content'] ?? ''));
-    $rewritten = rewrite_image_links($sanitized, $site_host, (string) $item['created'], $downloader);
+    $rewritten = rewrite_image_links($sanitized, (string) $item['created'], $downloader);
     $markdown = html_to_markdown($rewritten);
     $tags = array_values(array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? [])));
     $slug = wordpress_status_path($item) !== null ? '' : (string) ($item['slug'] ?? '');
