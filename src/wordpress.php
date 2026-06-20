@@ -100,21 +100,33 @@ function extract_items(SimpleXMLElement $rss): array
         $wp = $item->children(WXR_NS);
         $content = $item->children(CONTENT_NS);
 
-        $post_date = trim((string) ($wp->post_date ?? ''));
-        if ($post_date === '') {
-            $pub = trim((string) ($item->pubDate ?? ''));
-            $ts = $pub ? strtotime($pub) : false;
-            $post_date = $ts ? date('Y-m-d H:i:s', $ts) : '';
+        $pub_date = trim((string) ($item->pubDate ?? ''));
+        $created = wxr_local_datetime(
+            trim((string) ($wp->post_date_gmt ?? '')),
+            trim((string) ($wp->post_date ?? '')),
+            $pub_date,
+        );
+        $updated = wxr_local_datetime(
+            trim((string) ($wp->post_modified_gmt ?? '')),
+            trim((string) ($wp->post_modified ?? '')),
+            '',
+        );
+        if ($updated === '') {
+            $updated = $created;
         }
 
         $tags = [];
         foreach ($item->category ?? [] as $cat) {
             $domain = (string) $cat['domain'];
-            if ($domain === 'category' || $domain === 'post_tag') {
-                $nicename = trim((string) $cat['nicename']);
-                if ($nicename !== '') {
-                    $tags[] = $nicename;
-                }
+            if ($domain !== 'category' && $domain !== 'post_tag') {
+                continue;
+            }
+            $nicename = trim((string) $cat['nicename']);
+            if ($nicename === '') {
+                $nicename = \Lamb\Post\slugify(trim((string) $cat));
+            }
+            if ($nicename !== '') {
+                $tags[] = $nicename;
             }
         }
 
@@ -127,12 +139,43 @@ function extract_items(SimpleXMLElement $rss): array
             'status'    => trim((string) ($wp->status ?? '')),
             'post_id'   => trim((string) ($wp->post_id ?? '')),
             'slug'      => trim((string) ($wp->post_name ?? '')),
-            'created'   => $post_date,
-            'updated'   => $post_date,
+            'created'   => $created,
+            'updated'   => $updated,
             'tags'      => array_values(array_unique($tags)),
         ];
     }
     return $items;
+}
+
+/**
+ * Resolves a WP date triple (`*_gmt`, `*`, RSS `pubDate`) to a local
+ * `Y-m-d H:i:s` string in the site's configured timezone.
+ *
+ * Prefers the GMT field because it carries an unambiguous UTC timestamp.
+ * Falls back to the timezone-less local field (best-effort: WP doesn't
+ * emit its own offset, so the string is treated as already-local) and
+ * finally the RFC822 `pubDate` (which does carry an offset). WP uses the
+ * zero sentinel `0000-00-00 00:00:00` for drafts; both date fields are
+ * skipped when they match it. Returns '' when nothing parses.
+ */
+function wxr_local_datetime(string $gmt, string $local, string $pub_date): string
+{
+    if ($gmt !== '' && $gmt !== '0000-00-00 00:00:00') {
+        $ts = strtotime($gmt . ' UTC');
+        if ($ts !== false) {
+            return date('Y-m-d H:i:s', $ts);
+        }
+    }
+    if ($local !== '' && $local !== '0000-00-00 00:00:00') {
+        return $local;
+    }
+    if ($pub_date !== '') {
+        $ts = strtotime($pub_date);
+        if ($ts !== false) {
+            return date('Y-m-d H:i:s', $ts);
+        }
+    }
+    return '';
 }
 
 /**
@@ -314,6 +357,12 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if ($response === null || $response['body'] === '') {
         return null;
     }
+    if ($response['status'] < 200 || $response['status'] >= 300) {
+        return null;
+    }
+    if (!response_is_image($response['headers'])) {
+        return null;
+    }
     $path = parse_url($url, PHP_URL_PATH) ?: '';
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
     if ($ext === '' || !in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
@@ -324,8 +373,12 @@ function default_image_downloader(string $url, string $sub_path): ?string
         return null;
     }
     $seed = sha1($url);
-    $tmp = tempnam(sys_get_temp_dir(), 'wpimport_') ?: null;
-    if ($tmp === null || file_put_contents($tmp, $response['body']) === false) {
+    $tmp = tempnam(sys_get_temp_dir(), 'wpimport_');
+    if ($tmp === false) {
+        return null;
+    }
+    if (file_put_contents($tmp, $response['body']) === false) {
+        @unlink($tmp);
         return null;
     }
     $filename = \Lamb\Response\store_webp_copy($tmp, $ext, $dest_dir, $seed);
@@ -339,6 +392,24 @@ function default_image_downloader(string $url, string $sub_path): ?string
         @unlink($tmp);
     }
     return $filename;
+}
+
+/**
+ * Scans raw HTTP response headers (as returned by Lamb\Http\fetch) for an
+ * image/* Content-Type. Lets the downloader reject 200-OK HTML error pages,
+ * CDN block pages, or login-required HTML returned for unauthenticated asset
+ * URLs — situations the URL extension and status code alone don't catch.
+ *
+ * @param string[] $headers Raw response header lines.
+ */
+function response_is_image(array $headers): bool
+{
+    foreach ($headers as $header) {
+        if (preg_match('/^content-type\s*:\s*image\//i', $header)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /**

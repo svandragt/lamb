@@ -13,6 +13,7 @@ use function Lamb\WordPress\extract_site_host;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
 use function Lamb\WordPress\parse_wxr_string;
+use function Lamb\WordPress\response_is_image;
 use function Lamb\WordPress\rewrite_image_links;
 use function Lamb\WordPress\sanitize_html;
 use function Lamb\WordPress\should_import;
@@ -44,7 +45,10 @@ class WordPressImportTest extends TestCase
         <pubDate>Mon, 03 Mar 2024 10:00:00 +0000</pubDate>
         <dc:creator><![CDATA[author]]></dc:creator>
         <content:encoded><![CDATA[<p>Hello <strong>world</strong>.</p><p><img src="https://oldsite.example/wp-content/uploads/2024/03/photo.jpg" alt="photo"/></p><script>alert(1)</script>]]></content:encoded>
-        <wp:post_date>2024-03-03 10:00:00</wp:post_date>
+        <wp:post_date>2024-03-03 11:00:00</wp:post_date>
+        <wp:post_date_gmt>2024-03-03 10:00:00</wp:post_date_gmt>
+        <wp:post_modified>2024-03-05 12:30:00</wp:post_modified>
+        <wp:post_modified_gmt>2024-03-05 11:30:00</wp:post_modified_gmt>
         <wp:post_id>42</wp:post_id>
         <wp:post_name>hello-world</wp:post_name>
         <wp:status>publish</wp:status>
@@ -96,6 +100,10 @@ XML;
 
         global $config;
         $config = $config ?? [];
+
+        // The WXR `_gmt` fields are UTC; pin the test process to UTC so the
+        // resulting local timestamps are deterministic regardless of host TZ.
+        date_default_timezone_set('UTC');
     }
 
     public function testWordpressUuidIsStableForSameGuid(): void
@@ -223,6 +231,60 @@ XML;
         $this->assertSame('2024-03-03 10:00:00', $items[0]['created']);
     }
 
+    public function testExtractItemsPrefersPostDateGmtOverLocalPostDate(): void
+    {
+        // The fixture has post_date=11:00:00 and post_date_gmt=10:00:00.
+        // Running under UTC, the GMT value should win — the local field
+        // is ambiguous (no offset emitted by WP) and would silently mis-stamp
+        // when the WP site's timezone differs from the importer's.
+        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $items = extract_items($rss);
+        $this->assertSame('2024-03-03 10:00:00', $items[0]['created']);
+    }
+
+    public function testExtractItemsUsesPostModifiedGmtForUpdated(): void
+    {
+        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $items = extract_items($rss);
+        $this->assertSame('2024-03-05 11:30:00', $items[0]['updated']);
+    }
+
+    public function testExtractItemsFallsBackUpdatedToCreatedWhenModifiedMissing(): void
+    {
+        // The About item has no post_modified*; updated should mirror created.
+        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $items = extract_items($rss);
+        $this->assertSame($items[1]['created'], $items[1]['updated']);
+    }
+
+    public function testExtractItemsSkipsZeroSentinelDate(): void
+    {
+        // Posts saved as drafts in WP emit `0000-00-00 00:00:00` for the GMT
+        // field; the importer must fall through to the local field or pubDate
+        // rather than treating the sentinel as a real timestamp.
+        $xml = <<<'XML'
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:wp="http://wordpress.org/export/1.2/">
+<channel>
+    <item>
+        <title>Zero sentinel</title>
+        <guid>https://x/?p=1</guid>
+        <pubDate>Mon, 03 Mar 2024 10:00:00 +0000</pubDate>
+        <content:encoded><![CDATA[<p>x</p>]]></content:encoded>
+        <wp:post_date>2024-03-03 11:00:00</wp:post_date>
+        <wp:post_date_gmt>0000-00-00 00:00:00</wp:post_date_gmt>
+        <wp:post_id>1</wp:post_id>
+        <wp:status>publish</wp:status>
+        <wp:post_type>post</wp:post_type>
+    </item>
+</channel>
+</rss>
+XML;
+        $items = extract_items(parse_wxr_string($xml));
+        // Falls through to the local field (treated as-is).
+        $this->assertSame('2024-03-03 11:00:00', $items[0]['created']);
+    }
+
     public function testExtractItemsReadsWordpressPostNameAsSlug(): void
     {
         $rss = parse_wxr_string(self::SAMPLE_WXR);
@@ -314,6 +376,31 @@ XML;
         $out = rewrite_image_links($html, 'oldsite.example', '2024-03-03 10:00:00', $downloader);
 
         $this->assertStringContainsString('oldsite.example/wp-content/uploads/2024/03/photo.jpg', $out);
+    }
+
+    public function testResponseIsImageAcceptsImageContentType(): void
+    {
+        $this->assertTrue(response_is_image([
+            'HTTP/1.1 200 OK',
+            'Content-Type: image/jpeg',
+        ]));
+        $this->assertTrue(response_is_image([
+            'HTTP/1.1 200 OK',
+            'content-type:image/webp; charset=binary',
+        ]));
+    }
+
+    public function testResponseIsImageRejectsHtmlAndMissingHeader(): void
+    {
+        // HTML error page returned with 200 — the URL extension said .jpg but
+        // the server actually handed us HTML. This is exactly the case the
+        // Content-Type sniff exists to catch.
+        $this->assertFalse(response_is_image([
+            'HTTP/1.1 200 OK',
+            'Content-Type: text/html; charset=utf-8',
+        ]));
+        // No Content-Type at all → unknown payload, reject defensively.
+        $this->assertFalse(response_is_image(['HTTP/1.1 200 OK']));
     }
 
     public function testImportItemCreatesPostWithWordpressUuid(): void
