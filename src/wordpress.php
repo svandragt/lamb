@@ -608,24 +608,27 @@ function import_item(array $item, string $site_host, callable $downloader, bool 
 }
 
 /**
- * Returns the original source path when a WordPress item used the legacy
- * `/status/<wp-id>/` shape and `<wp:post_name>` only repeats that numeric id.
+ * Returns the original WP path (slashes trimmed) when `<wp:post_name>` is
+ * purely numeric — e.g. `26`, `633`. WordPress hands these out when a post
+ * has no title (the post id leaks into the URL). Pinning such a slug locally
+ * produces a Lamb URL like `/26`, which visually collides with the canonical
+ * `/status/<id>` shape and can shadow it on lookup.
  *
- * Lamb's own `/status/<id>` URLs are tied to the local database id, so the old
- * WordPress path is preserved as a redirect rather than as a pinned slug.
+ * Instead we drop the slug, let the post fall through to its `/status/<id>`
+ * permalink, and capture the original WP path as a redirect.
  *
  * @param array<string, mixed> $item
  */
 function wordpress_status_path(array $item): ?string
 {
+    $slug = trim((string) ($item['slug'] ?? ''));
+    if ($slug === '' || !ctype_digit($slug)) {
+        return null;
+    }
     $path = parse_url((string) ($item['link'] ?? ''), PHP_URL_PATH);
-    if (!is_string($path) || !preg_match('#^/status/(\d+)/?$#', $path, $matches)) {
+    if (!is_string($path) || $path === '' || $path === '/') {
         return null;
     }
-    if ((string) ($item['slug'] ?? '') !== $matches[1]) {
-        return null;
-    }
-
     return trim($path, '/');
 }
 

@@ -620,6 +620,33 @@ XML;
         $this->assertSame('/status/' . $bean->id, (string) $redirect->to_url);
     }
 
+    public function testImportItemDropsNumericSlugAndRedirectsFromNonStatusPath(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => '',
+            'guid' => 'https://oldsite.example/?p=26',
+            'link' => 'https://oldsite.example/bugs/26/',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Bug body.</p>',
+            'tags' => [],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => '26',
+        ];
+
+        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $redirect = R::findOne('redirect', ' from_slug = ? ', ['bugs/26']);
+
+        $this->assertNotNull($bean);
+        $this->assertSame('', (string) $bean->slug);
+        $this->assertNotNull($redirect);
+        $this->assertSame('/status/' . $bean->id, (string) $redirect->to_url);
+    }
+
     public function testImportItemIsIdempotentByUuid(): void
     {
         if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
