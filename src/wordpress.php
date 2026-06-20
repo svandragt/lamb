@@ -343,7 +343,11 @@ function unwrap_element(DOMDocument $dom, DOMElement $element, bool $block): voi
 
 function markdown_table(DOMElement $table): string
 {
-    $xpath = new DOMXPath($table->ownerDocument);
+    $doc = $table->ownerDocument;
+    if ($doc === null) {
+        return '';
+    }
+    $xpath = new DOMXPath($doc);
     $rows = [];
     foreach ($xpath->query('.//tr', $table) ?: [] as $tr) {
         if (!$tr instanceof DOMElement) {
@@ -378,9 +382,13 @@ function markdown_table(DOMElement $table): string
 
 function markdown_table_cell(DOMElement $cell): string
 {
+    $doc = $cell->ownerDocument;
+    if ($doc === null) {
+        return '';
+    }
     $html = '';
     foreach ($cell->childNodes as $child) {
-        $html .= $cell->ownerDocument->saveHTML($child);
+        $html .= $doc->saveHTML($child);
     }
     $markdown = html_to_markdown($html);
     $markdown = preg_replace('/\s+/', ' ', $markdown) ?? $markdown;
