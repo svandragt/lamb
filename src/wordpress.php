@@ -241,6 +241,8 @@ function sanitize_html(string $html): string
  */
 function html_to_markdown(string $html): string
 {
+    $placeholders = [];
+    $html = normalize_wordpress_html($html, $placeholders);
     $converter = new HtmlConverter([
         'header_style'    => 'atx',
         'strip_tags'      => false,
@@ -249,7 +251,149 @@ function html_to_markdown(string $html): string
         'use_autolinks'   => true,
         'preserve_comments' => false,
     ]);
-    return trim($converter->convert($html));
+    $markdown = strtr(trim($converter->convert($html)), $placeholders);
+    $markdown = html_entity_decode($markdown, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    return separate_images_from_following_text($markdown);
+}
+
+function separate_images_from_following_text(string $markdown): string
+{
+    return preg_replace('/(!\[[^\]]*]\([^)]+\))(?=\S)/', "$1\n\n", $markdown) ?? $markdown;
+}
+
+/**
+ * Normalises WordPress editor HTML before Markdown conversion.
+ *
+ * The Markdown converter preserves unknown HTML by design. WordPress exports
+ * often contain presentational block wrappers, tables and video tags that would
+ * otherwise survive into Lamb's safe Markdown renderer as visible escaped tags.
+ */
+/**
+ * @param array<string, string> $placeholders
+ */
+function normalize_wordpress_html(string $html, array &$placeholders = []): string
+{
+    if (trim($html) === '') {
+        return '';
+    }
+
+    $dom = load_html_fragment($html);
+    $xpath = new DOMXPath($dom);
+
+    $tables = $xpath->query('//table') ?: [];
+    foreach ($tables as $table) {
+        if (!$table instanceof DOMElement || $table->parentNode === null) {
+            continue;
+        }
+        $key = 'LAMBTABLEPLACEHOLDER' . count($placeholders);
+        $placeholders[$key] = markdown_table($table);
+        $table->parentNode->replaceChild($dom->createTextNode("\n\n$key\n\n"), $table);
+    }
+
+    $videos = $xpath->query('//video[@src]') ?: [];
+    foreach ($videos as $video) {
+        if (!$video instanceof DOMElement || $video->parentNode === null) {
+            continue;
+        }
+        $src = $video->getAttribute('src');
+        $link = $dom->createElement('a');
+        $link->setAttribute('href', $src);
+        $link->appendChild($dom->createTextNode($src));
+        $p = $dom->createElement('p');
+        $p->appendChild($link);
+        $video->parentNode->replaceChild($p, $video);
+    }
+
+    do {
+        $changed = false;
+        $wrappers = $xpath->query(
+            '//*[self::figure or self::figcaption or self::cite or self::span'
+            . ' or ((self::div or self::section)'
+            . ' and contains(concat(" ", normalize-space(@class), " "), " wp-block-"))]'
+        ) ?: [];
+        foreach ($wrappers as $wrapper) {
+            if (!$wrapper instanceof DOMElement || $wrapper->parentNode === null) {
+                continue;
+            }
+            unwrap_element($dom, $wrapper, in_array($wrapper->tagName, ['div', 'section', 'figure', 'figcaption'], true));
+            $changed = true;
+        }
+    } while ($changed);
+
+    return dump_html_fragment($dom);
+}
+
+function unwrap_element(DOMDocument $dom, DOMElement $element, bool $block): void
+{
+    $parent = $element->parentNode;
+    if ($parent === null) {
+        return;
+    }
+    if ($block) {
+        $parent->insertBefore($dom->createTextNode("\n\n"), $element);
+    }
+    while ($element->firstChild !== null) {
+        $parent->insertBefore($element->firstChild, $element);
+    }
+    if ($block) {
+        $parent->insertBefore($dom->createTextNode("\n\n"), $element);
+    }
+    $parent->removeChild($element);
+}
+
+function markdown_table(DOMElement $table): string
+{
+    $xpath = new DOMXPath($table->ownerDocument);
+    $rows = [];
+    foreach ($xpath->query('.//tr', $table) ?: [] as $tr) {
+        if (!$tr instanceof DOMElement) {
+            continue;
+        }
+        $cells = [];
+        foreach ($xpath->query('./th|./td', $tr) ?: [] as $cell) {
+            if (!$cell instanceof DOMElement) {
+                continue;
+            }
+            $cells[] = markdown_table_cell($cell);
+        }
+        if ($cells !== []) {
+            $rows[] = ['cells' => $cells];
+        }
+    }
+    if ($rows === []) {
+        return '';
+    }
+
+    $columnCount = max(array_map(static fn(array $row): int => count($row['cells']), $rows));
+    $lines = [];
+    $first = array_shift($rows);
+    $lines[] = markdown_table_row($first['cells'], $columnCount);
+    $lines[] = markdown_table_row(array_fill(0, $columnCount, '---'), $columnCount);
+    foreach ($rows as $row) {
+        $lines[] = markdown_table_row($row['cells'], $columnCount);
+    }
+
+    return "\n\n" . implode("\n", $lines) . "\n\n";
+}
+
+function markdown_table_cell(DOMElement $cell): string
+{
+    $html = '';
+    foreach ($cell->childNodes as $child) {
+        $html .= $cell->ownerDocument->saveHTML($child);
+    }
+    $markdown = html_to_markdown($html);
+    $markdown = preg_replace('/\s+/', ' ', $markdown) ?? $markdown;
+    return str_replace('|', '\\|', trim($markdown));
+}
+
+/**
+ * @param list<string> $cells
+ */
+function markdown_table_row(array $cells, int $columnCount): string
+{
+    $cells = array_pad($cells, $columnCount, '');
+    return '| ' . implode(' | ', $cells) . ' |';
 }
 
 /**
@@ -441,7 +585,8 @@ function import_item(array $item, string $site_host, callable $downloader, bool 
     $rewritten = rewrite_image_links($sanitized, $site_host, (string) $item['created'], $downloader);
     $markdown = html_to_markdown($rewritten);
     $tags = array_values(array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? [])));
-    $body = build_post_body((string) $item['title'], $markdown, $tags, (string) ($item['slug'] ?? ''));
+    $slug = wordpress_status_path($item) !== null ? '' : (string) ($item['slug'] ?? '');
+    $body = build_post_body((string) $item['title'], $markdown, $tags, $slug);
 
     $bean = populate_bean($body);
     if (!empty($item['created'])) {
@@ -458,7 +603,55 @@ function import_item(array $item, string $site_host, callable $downloader, bool 
     }
 
     finalize_and_store_post($bean);
+    store_source_redirect($item, $bean);
     return $bean;
+}
+
+/**
+ * Returns the original source path when a WordPress item used the legacy
+ * `/status/<wp-id>/` shape and `<wp:post_name>` only repeats that numeric id.
+ *
+ * Lamb's own `/status/<id>` URLs are tied to the local database id, so the old
+ * WordPress path is preserved as a redirect rather than as a pinned slug.
+ *
+ * @param array<string, mixed> $item
+ */
+function wordpress_status_path(array $item): ?string
+{
+    $path = parse_url((string) ($item['link'] ?? ''), PHP_URL_PATH);
+    if (!is_string($path) || !preg_match('#^/status/(\d+)/?$#', $path, $matches)) {
+        return null;
+    }
+    if ((string) ($item['slug'] ?? '') !== $matches[1]) {
+        return null;
+    }
+
+    return trim($path, '/');
+}
+
+/**
+ * Stores an automatic redirect from an imported WordPress URL path to the
+ * local Lamb path. The importer only creates redirects for old paths that do
+ * not naturally match Lamb's freshly minted permalink.
+ *
+ * @param array<string, mixed> $item
+ */
+function store_source_redirect(array $item, OODBBean $bean): void
+{
+    $from = wordpress_status_path($item);
+    if ($from === null) {
+        return;
+    }
+
+    $to = $bean->slug ? '/' . $bean->slug : '/status/' . $bean->id;
+    if ($from === ltrim($to, '/')) {
+        return;
+    }
+
+    $redirect = R::findOneOrDispense('redirect', ' from_slug = ? ', [$from]);
+    $redirect->from_slug = $from;
+    $redirect->to_url = $to;
+    R::store($redirect);
 }
 
 /**

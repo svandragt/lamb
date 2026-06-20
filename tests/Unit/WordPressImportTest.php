@@ -12,6 +12,7 @@ use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\extract_site_host;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
+use function Lamb\WordPress\parse_wxr_file;
 use function Lamb\WordPress\parse_wxr_string;
 use function Lamb\WordPress\response_is_image;
 use function Lamb\WordPress\rewrite_image_links;
@@ -172,6 +173,110 @@ XML;
         $this->assertStringContainsString('Hello', $md);
     }
 
+    public function testHtmlToMarkdownDecodesTextEntities(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $md = html_to_markdown('<p><strong>Settings &gt; Music &gt; Library</strong></p>');
+
+        $this->assertSame('**Settings > Music > Library**', $md);
+    }
+
+    public function testHtmlToMarkdownUnwrapsWordpressBlockWrappers(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $html = '<div class="wp-block-buttons"><div class="wp-block-button">'
+            . '<a href="https://example.test/source">View Source</a>'
+            . '</div></div>';
+
+        $md = html_to_markdown($html);
+
+        $this->assertSame('[View Source](https://example.test/source)', $md);
+    }
+
+    public function testHtmlToMarkdownUnwrapsWordpressImageBlockFigure(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $html = '<figure class="wp-block-image size-large">'
+            . '<img src="https://example.test/image.jpg" alt="Example image">'
+            . '</figure>';
+
+        $md = html_to_markdown($html);
+
+        $this->assertSame('![Example image](https://example.test/image.jpg)', $md);
+    }
+
+    public function testHtmlToMarkdownKeepsFigureImageSeparateFromFollowingText(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $html = '<figure class="wp-block-image">'
+            . '<img src="https://example.test/image.jpg" alt="Example image">'
+            . '</figure>Following text.';
+
+        $md = html_to_markdown($html);
+
+        $this->assertSame("![Example image](https://example.test/image.jpg)\n\nFollowing text.", $md);
+    }
+
+    public function testHtmlToMarkdownUnwrapsFigureCaptionAndInlinePresentationTags(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $html = '<figure class="aligncenter size-large">'
+            . '<img src="https://example.test/image.jpg" alt="Example image">'
+            . '<figcaption><span class="has-inline-color">Example caption</span></figcaption>'
+            . '</figure>';
+
+        $md = html_to_markdown($html);
+
+        $this->assertStringContainsString('![Example image](https://example.test/image.jpg)', $md);
+        $this->assertStringContainsString('Example caption', $md);
+        $this->assertStringNotContainsString('<figure', $md);
+        $this->assertStringNotContainsString('<figcaption', $md);
+        $this->assertStringNotContainsString('<span', $md);
+    }
+
+    public function testHtmlToMarkdownConvertsSimpleTables(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $html = '<table><thead><tr><th>Project</th><th>Description</th></tr></thead>'
+            . '<tbody><tr><td><a href="https://example.test">Tool</a></td><td>Does work.</td></tr></tbody></table>';
+
+        $md = html_to_markdown($html);
+
+        $this->assertStringContainsString('| Project | Description |', $md);
+        $this->assertStringContainsString('| --- | --- |', $md);
+        $this->assertStringContainsString('| [Tool](https://example.test) | Does work. |', $md);
+        $this->assertStringNotContainsString('<table', $md);
+    }
+
+    public function testHtmlToMarkdownConvertsVideoToLink(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $md = html_to_markdown('<video controls src="https://example.test/demo.mp4"></video>');
+
+        $this->assertSame('<https://example.test/demo.mp4>', $md);
+    }
+
     public function testBuildPostBodyEmitsFrontMatterAndHashtags(): void
     {
         $body = build_post_body('My Title', "Body text.", ['news', 'welcome']);
@@ -210,6 +315,40 @@ XML;
         $rss = parse_wxr_string(self::SAMPLE_WXR);
         $this->assertInstanceOf(SimpleXMLElement::class, $rss);
         $this->assertSame('rss', $rss->getName());
+    }
+
+    public function testAuthenticLocalExportDryRunsWhenPresent(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $paths = glob(dirname(__DIR__, 2) . '/tmp/*.WordPress.*.xml') ?: [];
+        $path = $paths[0] ?? null;
+        if ($path === null || !is_readable($path)) {
+            $this->markTestSkipped('Local authentic WordPress export is not present.');
+        }
+
+        $rss = parse_wxr_file($path);
+        $items = extract_items($rss);
+        $siteHost = extract_site_host($rss) ?? '';
+
+        $importable = array_values(array_filter($items, should_import(...)));
+        $this->assertNotSame('', $siteHost);
+        $this->assertCount(175, $items);
+        $this->assertCount(124, $importable);
+        $this->assertCount(51, array_filter($items, static fn(array $item): bool => !should_import($item)));
+
+        foreach ($importable as $item) {
+            $this->assertNotSame('', trim((string) $item['guid']));
+            $this->assertNotSame('', trim((string) $item['created']));
+            $bean = import_item($item, $siteHost, fn(): ?string => null, true);
+            $this->assertNotNull($bean);
+            $this->assertEmpty($bean->id);
+            $this->assertNotSame('', trim((string) $bean->body));
+        }
+
+        $this->assertCount(0, R::findAll('post'));
     }
 
     public function testExtractSiteHostReturnsBlogHost(): void
@@ -428,6 +567,57 @@ XML;
         $this->assertSame('2024-03-03 10:00:00', $bean->created);
         $this->assertStringContainsString('**world**', (string) $bean->body);
         $this->assertStringContainsString('#news', (string) $bean->body);
+    }
+
+    public function testImportItemDoesNotPinNumericSlugForWordpressStatusUrl(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => '',
+            'guid' => 'https://oldsite.example/?p=59',
+            'link' => 'https://oldsite.example/status/59/',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Status body.</p>',
+            'tags' => ['status'],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => '59',
+        ];
+
+        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame('', (string) $bean->slug);
+        $this->assertStringNotContainsString('slug:', (string) $bean->body);
+    }
+
+    public function testImportItemStoresRedirectFromWordpressStatusUrlToLocalStatusUrl(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => '',
+            'guid' => 'https://oldsite.example/?p=59',
+            'link' => 'https://oldsite.example/status/59/',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Status body.</p>',
+            'tags' => ['status'],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => '59',
+        ];
+
+        $bean = import_item($item, 'oldsite.example', fn() => null, false);
+        $redirect = R::findOne('redirect', ' from_slug = ? ', ['status/59']);
+
+        $this->assertNotNull($bean);
+        $this->assertNotNull($redirect);
+        $this->assertSame('/status/' . $bean->id, (string) $redirect->to_url);
     }
 
     public function testImportItemIsIdempotentByUuid(): void

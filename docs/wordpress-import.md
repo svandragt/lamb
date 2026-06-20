@@ -40,7 +40,7 @@ The importer writes directly to the same database your site uses, so the posts a
 
 A few things worth checking manually:
 
-- **Slugs.** Each imported post keeps its original WordPress permalink leaf (`<wp:post_name>`), written into front matter as `slug:` so the URL is identical to the WP one (relative to your new domain). Where a WP slug collides with an existing Lamb post or a reserved route, Lamb appends the post id (matching the standard create flow), so that particular post's URL will differ — set up a 301 if it matters.
+- **Slugs and redirects.** Page-like posts keep their original WordPress permalink leaf (`<wp:post_name>`), written into front matter as `slug:` so the URL is identical to the WP one (relative to your new domain). Titleless WordPress status posts whose old URL was `/status/<id>/` are imported as Lamb status posts and get an automatic 301 redirect from the old WordPress path to the new local `/status/<local-id>` URL. Where a WP slug collides with an existing Lamb post or a reserved route, Lamb appends the post id (matching the standard create flow), so that particular post's URL will differ — set up a 301 if it matters.
 - **Embedded shortcodes.** WordPress shortcodes (`[caption …]`, gallery shortcodes, etc.) are not expanded — they appear verbatim in the Markdown. Edit any you care about after the import.
 - **Media.** Run a quick `git status` on `src/assets/` to see what was downloaded.
 

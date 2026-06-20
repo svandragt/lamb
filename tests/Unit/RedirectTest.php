@@ -76,6 +76,17 @@ class RedirectTest extends TestCase
         $this->assertSame('/db-new-slug', $result);
     }
 
+    public function testFindRedirectReturnsMultiSegmentUrlFromDatabase(): void
+    {
+        $redirect = R::dispense('redirect');
+        $redirect->from_slug = 'status/59';
+        $redirect->to_url = '/status/80';
+        R::store($redirect);
+
+        $result = find_redirect('status/59');
+        $this->assertSame('/status/80', $result);
+    }
+
     public function testFindRedirectReturnsNullWhenNotFound(): void
     {
         $result = find_redirect('no-such-slug-' . uniqid());
