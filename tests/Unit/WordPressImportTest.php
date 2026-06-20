@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimpleXMLElement;
 
+use function Lamb\Response\persist_image_bytes;
 use function Lamb\WordPress\asset_dir_for_date;
 use function Lamb\WordPress\build_post_body;
 use function Lamb\WordPress\extract_items;
@@ -532,6 +533,155 @@ XML;
         $this->assertStringContainsString('/relative/path.jpg', $out);
     }
 
+    public function testRewriteImageLinksPrefersDataFullUrlOverDownscaledSrc(): void
+    {
+        // WordPress gallery blocks put the full-resolution URL in data-full-url
+        // and a downscaled variant (e.g. -473x1024.jpg) in src. The importer
+        // must hand the *full* URL to the downloader so convert_to_webp's
+        // 1600px resize starts from a higher-quality source.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'abc.jpg';
+        };
+
+        $html = '<p><img'
+            . ' src="https://oldsite.example/photo-473x1024.jpg"'
+            . ' data-full-url="https://oldsite.example/photo.jpg"'
+            . ' data-id="346"'
+            . '/></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(['https://oldsite.example/photo.jpg'], $downloaded);
+        $this->assertStringContainsString('assets/2024/03/abc.jpg', $out);
+        $this->assertStringNotContainsString('data-full-url', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testRewriteImageLinksUsesDataSrcWhenSrcMissing(): void
+    {
+        // Lazy-loading plugins emit `<img data-src="…">` (often with a 1px
+        // placeholder src, or no src at all). Without this fallback the
+        // image would silently fail to import.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'abc.jpg';
+        };
+
+        $html = '<p><img data-src="https://oldsite.example/lazy.jpg" alt="x"/></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(['https://oldsite.example/lazy.jpg'], $downloaded);
+        $this->assertStringContainsString('assets/2024/03/abc.jpg', $out);
+        $this->assertStringNotContainsString('data-src', $out);
+    }
+
+    public function testRewriteImageLinksPromotesProtocolRelativeUrls(): void
+    {
+        // Some WP installs (and many old multisite networks) emit `//host/...`
+        // for images. parse_url() returns no scheme; treat these as https.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'abc.jpg';
+        };
+
+        $html = '<p><img src="//oldsite.example/img.jpg"/></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(['https://oldsite.example/img.jpg'], $downloaded);
+        $this->assertStringContainsString('assets/2024/03/abc.jpg', $out);
+    }
+
+    public function testRewriteImageLinksRewritesAnchorHrefsToImages(): void
+    {
+        // Thumbnail-linking-to-full-size is a common WP pattern. Leaving the
+        // anchor href pointed at the source domain breaks "view full size"
+        // once the original WP site is decommissioned.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'full.jpg';
+        };
+
+        $html = '<p><a href="https://oldsite.example/full.jpg">'
+            . '<img src="https://oldsite.example/thumb.jpg" alt="t"/></a></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(
+            ['https://oldsite.example/thumb.jpg', 'https://oldsite.example/full.jpg'],
+            $downloaded
+        );
+        $this->assertStringContainsString('href="assets/2024/03/full.jpg"', $out);
+        $this->assertStringContainsString('src="assets/2024/03/full.jpg"', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testRewriteImageLinksLeavesNonImageAnchorsAlone(): void
+    {
+        // Anchors that point at HTML pages or other non-image resources must
+        // not be touched — otherwise we'd 404 every external link.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'x.jpg';
+        };
+
+        $html = '<p><a href="https://oldsite.example/article">read more</a></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame([], $downloaded);
+        $this->assertStringContainsString('href="https://oldsite.example/article"', $out);
+    }
+
+    public function testRewriteImageLinksUnwrapsPictureToImgFallback(): void
+    {
+        // <picture> with WebP/AVIF sources + a JPEG <img> fallback. The
+        // converter doesn't know <picture>, so unwrapping to the <img> is the
+        // only way to keep the body free of raw HTML and still pull the image.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'pic.jpg';
+        };
+
+        $html = '<p><picture>'
+            . '<source srcset="https://oldsite.example/img.webp" type="image/webp">'
+            . '<source srcset="https://oldsite.example/img.avif" type="image/avif">'
+            . '<img src="https://oldsite.example/img.jpg" alt="x">'
+            . '</picture></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(['https://oldsite.example/img.jpg'], $downloaded);
+        $this->assertStringContainsString('src="assets/2024/03/pic.jpg"', $out);
+        $this->assertStringNotContainsString('<picture', $out);
+        $this->assertStringNotContainsString('<source', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testRewriteImageLinksSynthesisesImgFromSourceWhenFallbackMissing(): void
+    {
+        // Real-world <picture> always has an <img> fallback, but defensive:
+        // if a stripped/odd snippet only carries <source srcset>, pick the
+        // first srcset URL so the image still gets imported.
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'src.jpg';
+        };
+
+        $html = '<p><picture>'
+            . '<source srcset="https://oldsite.example/big.jpg 1024w, https://oldsite.example/big-2x.jpg 2048w">'
+            . '</picture></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(['https://oldsite.example/big.jpg'], $downloaded);
+        $this->assertStringContainsString('src="assets/2024/03/src.jpg"', $out);
+        $this->assertStringNotContainsString('<picture', $out);
+        $this->assertStringNotContainsString('<source', $out);
+    }
+
     public function testRewriteImageLinksStripsSrcsetAndSizesOnSuccess(): void
     {
         // WordPress responsive markup keeps absolute multi-resolution URLs in
@@ -726,5 +876,51 @@ XML;
         $this->assertNotNull($bean);
         $this->assertEmpty($bean->id);
         $this->assertCount(0, R::findAll('post'));
+    }
+
+    public function testPersistImageBytesWritesFallbackForNonConvertibleExtension(): void
+    {
+        // .gif is in the upload allowlist but should_convert_to_webp() rejects
+        // it (animation frames would be flattened by GD), so persist_image_bytes
+        // must fall back to writing the raw bytes under "$seed.gif".
+        $dir = sys_get_temp_dir() . '/lamb_persist_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        try {
+            $bytes = 'GIF89a' . str_repeat("\0", 32);
+            $seed = 'deadbeef';
+            $filename = persist_image_bytes($bytes, 'gif', $dir, $seed);
+
+            $this->assertSame("$seed.gif", $filename);
+            $this->assertFileExists("$dir/$filename");
+            $this->assertSame($bytes, file_get_contents("$dir/$filename"));
+            // The tempfile used internally lives under $dir (so the final
+            // rename never crosses filesystems); after a successful write the
+            // temp prefix should have been renamed away to "$seed.gif".
+            $this->assertCount(
+                0,
+                glob("$dir/lamb_img_*") ?: [],
+                'expected zero leftover temp files'
+            );
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
+    }
+
+    public function testPersistImageBytesReturnsNullWhenDirMissing(): void
+    {
+        $filename = persist_image_bytes('xx', 'gif', '/does/not/exist', 'seed');
+        $this->assertNull($filename);
+    }
+
+    public function testPersistImageBytesReturnsNullForEmptyBody(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_persist_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        try {
+            $this->assertNull(persist_image_bytes('', 'gif', $dir, 'seed'));
+        } finally {
+            rmdir($dir);
+        }
     }
 }

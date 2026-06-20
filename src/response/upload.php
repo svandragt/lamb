@@ -116,6 +116,50 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
 }
 
 /**
+ * Persists raw image bytes under $dest_dir, preferring a WebP re-encode and
+ * falling back to the original bytes when conversion isn't possible.
+ *
+ * Owns the full "land bytes in src/assets/" pipeline for callers that already
+ * have the image content in memory (WordPress import downloader, Micropub
+ * inline photos). The temp file lives under $dest_dir rather than
+ * sys_get_temp_dir() so the final rename never crosses filesystems — a real
+ * failure mode in containers where /tmp is tmpfs and the project root is a
+ * bind-mount. respond_upload() keeps its own path because it must use
+ * move_uploaded_file() for the PHP-managed safety check.
+ *
+ * @param string $bytes    Raw image bytes, fully buffered in memory.
+ * @param string $ext      The lower-case extension from safe_upload_extension().
+ * @param string $dest_dir Destination directory (no trailing slash, must exist).
+ * @param string $seed     The hashed base filename (without extension).
+ * @return string|null The saved filename relative to $dest_dir, or null on any failure.
+ */
+function persist_image_bytes(string $bytes, string $ext, string $dest_dir, string $seed): ?string
+{
+    if ($bytes === '' || !is_dir($dest_dir)) {
+        return null;
+    }
+    if (should_convert_to_webp($ext)) {
+        $webp_fn = $seed . '.webp';
+        if (convert_to_webp_from_bytes($bytes, "$dest_dir/$webp_fn")) {
+            return $webp_fn;
+        }
+    }
+    $filename = "$seed.$ext";
+    $tmp = tempnam($dest_dir, 'lamb_img_');
+    if ($tmp === false) {
+        return null;
+    }
+    // tempnam → rename gives us an atomic publish on the destination filesystem,
+    // so an interrupted write can't leave a half-finished file at the final path
+    // (which a re-run would otherwise mistake for a completed download).
+    if (file_put_contents($tmp, $bytes) === false || !rename($tmp, "$dest_dir/$filename")) {
+        @unlink($tmp);
+        return null;
+    }
+    return $filename;
+}
+
+/**
  * Re-encodes an upload to WebP under $dest_dir, or returns null to fall back.
  *
  * Owns the shared "convert to WebP or fall back to the original bytes" decision used
@@ -167,8 +211,30 @@ function convert_to_webp(string $src_path, string $dest_path, int $quality = 82,
     if ($data === false) {
         return false;
     }
+    return convert_to_webp_from_bytes($data, $dest_path, $quality, $max_dimension);
+}
 
-    $image = @imagecreatefromstring($data);
+/**
+ * Same as {@see convert_to_webp} but starts from raw bytes already in memory.
+ *
+ * Lets callers that have just fetched (WordPress importer) or just streamed
+ * (Micropub inline photo) image bytes skip the temp-file round-trip — the
+ * original disk-based path wrote bytes to tmp, then immediately read them
+ * back with file_get_contents inside this function.
+ *
+ * @param string $bytes         Raw image bytes.
+ * @param string $dest_path     Path the WebP should be written to.
+ * @param int    $quality       WebP quality (0-100).
+ * @param int    $max_dimension Longest edge to keep; larger images are scaled down.
+ * @return bool True when a WebP was written, false on failure.
+ */
+function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quality = 82, int $max_dimension = 1600): bool
+{
+    if ($bytes === '') {
+        return false;
+    }
+
+    $image = @imagecreatefromstring($bytes);
     if ($image === false) {
         return false;
     }

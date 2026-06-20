@@ -180,6 +180,18 @@ function sanitize_html(string $html): string
         return '';
     }
     $dom = load_html_fragment($html);
+    sanitize_html_in_dom($dom);
+    return dump_html_fragment($dom);
+}
+
+/**
+ * In-place sanitisation pass: removes script/style/iframe nodes and any
+ * `on*` event-handler attributes from every element. Extracted so {@see
+ * import_item} can chain it onto the same DOM as {@see rewrite_image_links_in_dom},
+ * avoiding a parse/serialise round-trip between the two stages.
+ */
+function sanitize_html_in_dom(DOMDocument $dom): void
+{
     $xpath = new DOMXPath($dom);
 
     $strip = $xpath->query('//script | //style | //iframe') ?: [];
@@ -204,8 +216,6 @@ function sanitize_html(string $html): string
             $el->removeAttribute($name);
         }
     }
-
-    return dump_html_fragment($dom);
 }
 
 /**
@@ -434,16 +444,22 @@ function asset_dir_for_date(string $created): string
 }
 
 /**
- * Walks an HTML fragment, hands every absolute `http(s)://` `<img src>` URL to
- * $downloader regardless of host, and rewrites the src to a root-relative
- * `assets/YYYY/MM/<filename>` URL on success. The downloader is trusted to
- * reject non-image responses (see {@see default_image_downloader}); failed
- * downloads, data: URIs and relative URLs are left untouched.
+ * Walks an HTML fragment and downloads every referenced image:
+ *  - `<img>` elements: prefers `data-full-url` (WordPress gallery blocks put
+ *    the original full-resolution URL there and a smaller `…-473x1024.jpg`
+ *    variant in `src`; pulling the full original lets convert_to_webp() do the
+ *    1600px resize from a higher-quality source). Falls back to `src`, then to
+ *    `data-src` for lazy-loaded markup.
+ *  - `<a>` elements whose `href` points at an image extension: thumbnails
+ *    wrapped in "view full size" links would otherwise leave dead off-site
+ *    links in the body once the WP site is decommissioned.
  *
- * Multi-resolution attributes (`srcset`, `sizes`) are stripped once we have a
- * local copy — the WebP we wrote via store_webp_copy is already the canonical
- * single-resolution image, and stale absolute URLs pointing at the old WP
- * domain would otherwise leak back in.
+ * Protocol-relative URLs (`//host/path.jpg`) are treated as `https://`.
+ * Multi-resolution `srcset`/`sizes` attributes are stripped once we have a
+ * local copy — the WebP we wrote is already the canonical single-resolution
+ * image. data-* URL hints are also dropped on success so stale absolute URLs
+ * pointing at the old host don't leak back in. Failed downloads, data: URIs
+ * and relative URLs are left untouched.
  *
  * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
  */
@@ -453,43 +469,240 @@ function rewrite_image_links(string $html, string $created, callable $downloader
         return '';
     }
     $dom = load_html_fragment($html);
-    $xpath = new DOMXPath($dom);
-    $sub_path = asset_dir_for_date($created);
-
-    $imgs = $xpath->query('//img[@src]') ?: [];
-    foreach ($imgs as $img) {
-        if (!$img instanceof DOMElement) {
-            continue;
-        }
-        $src = $img->getAttribute('src');
-        $scheme = parse_url($src, PHP_URL_SCHEME);
-        if (!is_string($scheme) || !in_array(strtolower($scheme), ['http', 'https'], true)) {
-            continue;
-        }
-        $filename = $downloader($src, $sub_path);
-        if (!is_string($filename) || $filename === '') {
-            continue;
-        }
-        $img->setAttribute('src', "assets/$sub_path/$filename");
-        $img->removeAttribute('srcset');
-        $img->removeAttribute('sizes');
-    }
-
+    rewrite_image_links_in_dom($dom, $created, $downloader);
     return dump_html_fragment($dom);
 }
 
 /**
+ * In-place version of {@see rewrite_image_links}, chained on the same DOM as
+ * {@see sanitize_html_in_dom} from {@see import_item} so the two passes don't
+ * each parse and serialise the body separately.
+ *
+ * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
+ */
+function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable $downloader): void
+{
+    $xpath = new DOMXPath($dom);
+    $sub_path = asset_dir_for_date($created);
+
+    unwrap_picture_elements($dom, $xpath);
+
+    $imgs = $xpath->query('//img[@src or @data-src or @data-full-url]') ?: [];
+    foreach ($imgs as $img) {
+        if (!$img instanceof DOMElement) {
+            continue;
+        }
+        $src = pick_image_url($img);
+        $url = normalize_image_url($src);
+        if ($url === null) {
+            continue;
+        }
+        $filename = $downloader($url, $sub_path);
+        if (!is_string($filename) || $filename === '') {
+            continue;
+        }
+        $img->setAttribute('src', "assets/$sub_path/$filename");
+        foreach (['srcset', 'sizes', 'data-src', 'data-full-url', 'data-link', 'data-orig-file'] as $stale) {
+            $img->removeAttribute($stale);
+        }
+    }
+
+    $anchors = $xpath->query('//a[@href]') ?: [];
+    foreach ($anchors as $a) {
+        if (!$a instanceof DOMElement) {
+            continue;
+        }
+        $href = $a->getAttribute('href');
+        if (!href_looks_like_image($href)) {
+            continue;
+        }
+        $url = normalize_image_url($href);
+        if ($url === null) {
+            continue;
+        }
+        $filename = $downloader($url, $sub_path);
+        if (!is_string($filename) || $filename === '') {
+            continue;
+        }
+        $a->setAttribute('href', "assets/$sub_path/$filename");
+    }
+}
+
+/**
+ * Replaces every `<picture>` in the document with its descendant `<img>`
+ * fallback (or a synthesised `<img>` derived from the first `<source srcset>`
+ * URL when there is no `<img>` child).
+ *
+ * `<picture>` doesn't survive the Markdown converter — unknown HTML is kept
+ * verbatim, so the post body would otherwise display raw `<source>` tags. The
+ * downstream image walk only knows about `<img>`, and `<source>` URLs in
+ * srcset would leak the old WP host into the body. Unwrapping here means the
+ * single canonical `<img>` flows through the normal rewrite path.
+ */
+function unwrap_picture_elements(DOMDocument $dom, DOMXPath $xpath): void
+{
+    $pictures = $xpath->query('//picture') ?: [];
+    foreach ($pictures as $picture) {
+        if (!$picture instanceof DOMElement || $picture->parentNode === null) {
+            continue;
+        }
+        $img = first_descendant_img($xpath, $picture)
+            ?? synthesise_img_from_source($xpath, $picture, $dom);
+        if ($img === null) {
+            $picture->parentNode->removeChild($picture);
+            continue;
+        }
+        // Detach the img from wherever it lives inside the picture before
+        // splicing the picture out — otherwise the `replaceChild` below
+        // disposes the still-attached node along with the rest of the tree.
+        $img->parentNode?->removeChild($img);
+        $picture->parentNode->replaceChild($img, $picture);
+    }
+}
+
+function first_descendant_img(DOMXPath $xpath, DOMElement $picture): ?DOMElement
+{
+    $found = $xpath->query('.//img', $picture);
+    if ($found === false) {
+        return null;
+    }
+    foreach ($found as $node) {
+        if ($node instanceof DOMElement) {
+            return $node;
+        }
+    }
+    return null;
+}
+
+function synthesise_img_from_source(DOMXPath $xpath, DOMElement $picture, DOMDocument $dom): ?DOMElement
+{
+    $sources = $xpath->query('.//source[@srcset]', $picture);
+    if ($sources === false) {
+        return null;
+    }
+    foreach ($sources as $source) {
+        if (!$source instanceof DOMElement) {
+            continue;
+        }
+        $first = first_srcset_url($source->getAttribute('srcset'));
+        if ($first === null) {
+            continue;
+        }
+        $img = $dom->createElement('img');
+        $img->setAttribute('src', $first);
+        return $img;
+    }
+    return null;
+}
+
+/**
+ * Pulls the first URL out of an HTML5 `srcset` attribute. The grammar is
+ * comma-separated entries of "URL [descriptor]"; we only need the URL of the
+ * first entry, with everything after the first whitespace dropped.
+ */
+function first_srcset_url(string $srcset): ?string
+{
+    $first = trim(explode(',', $srcset, 2)[0]);
+    if ($first === '') {
+        return null;
+    }
+    $parts = preg_split('/\s+/', $first, 2);
+    $url = $parts === false ? '' : $parts[0];
+    return $url === '' ? null : $url;
+}
+
+/**
+ * Picks the best source URL for an `<img>` element: full-res variant first,
+ * then the regular `src`, then lazy-load `data-src`.
+ */
+function pick_image_url(DOMElement $img): string
+{
+    foreach (['data-full-url', 'src', 'data-src'] as $attr) {
+        $value = trim($img->getAttribute($attr));
+        if ($value !== '') {
+            return $value;
+        }
+    }
+    return '';
+}
+
+/**
+ * Normalises a candidate image URL to an absolute http(s) form, or returns
+ * null when it isn't fetchable (data: URI, relative path, empty, etc.).
+ * Protocol-relative `//host/path` URLs are promoted to https.
+ */
+function normalize_image_url(string $url): ?string
+{
+    $url = trim($url);
+    if ($url === '') {
+        return null;
+    }
+    if (str_starts_with($url, '//')) {
+        return 'https:' . $url;
+    }
+    $scheme = parse_url($url, PHP_URL_SCHEME);
+    if (!is_string($scheme) || !in_array(strtolower($scheme), ['http', 'https'], true)) {
+        return null;
+    }
+    return $url;
+}
+
+/**
+ * Whether an anchor href appears to point at an image — used to decide if a
+ * "view full size" link should also be downloaded. Conservative: only known
+ * upload-pipeline extensions are accepted, query strings and fragments are
+ * tolerated.
+ */
+function href_looks_like_image(string $href): bool
+{
+    $path = parse_url($href, PHP_URL_PATH);
+    if (!is_string($path) || $path === '') {
+        return false;
+    }
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    return $ext !== '' && in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true);
+}
+
+/**
+ * Cap for how many bytes a single image download is allowed to consume.
+ * A misbehaving server returning a multi-GB body with image/* Content-Type
+ * would otherwise OOM the importer; truncated reads fail the WebP decode
+ * cleanly, which is the right outcome.
+ */
+const IMAGE_DOWNLOAD_MAX_BYTES = 20_000_000;
+
+/**
  * Default downloader used by the CLI script: fetches $url over HTTP and writes
  * it under ROOT_DIR/assets/$sub_path with a content-hash filename. JPEG/PNG
- * are re-encoded to WebP via the shared upload pipeline (store_webp_copy).
- * Returns the filename relative to the subdirectory, or null on any failure.
+ * are re-encoded to WebP via the shared persistence helper. Returns the
+ * filename relative to the subdirectory, or null on any failure.
+ *
+ * Idempotent: when the destination file already exists from an earlier post in
+ * the same month — or from a previous interrupted run — the existing filename
+ * is returned without re-fetching. The seed is sha1($url), so the same URL
+ * always maps to the same on-disk name.
  */
 function default_image_downloader(string $url, string $sub_path): ?string
 {
     if (!defined('ROOT_DIR')) {
         return null;
     }
-    $response = fetch($url);
+    $path = parse_url($url, PHP_URL_PATH) ?: '';
+    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
+    if ($ext === '' || !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true)) {
+        return null;
+    }
+    $dest_dir = ROOT_DIR . '/assets/' . $sub_path;
+    $seed = sha1($url);
+    foreach (["$seed.webp", "$seed.$ext"] as $existing) {
+        if (is_file("$dest_dir/$existing")) {
+            return $existing;
+        }
+    }
+    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0777, true) && !is_dir($dest_dir)) {
+        return null;
+    }
+    $response = fetch($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
     if ($response === null || $response['body'] === '') {
         return null;
     }
@@ -499,35 +712,7 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if (!response_is_image($response['headers'])) {
         return null;
     }
-    $path = parse_url($url, PHP_URL_PATH) ?: '';
-    $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if ($ext === '' || !in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif'], true)) {
-        return null;
-    }
-    $dest_dir = ROOT_DIR . '/assets/' . $sub_path;
-    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0777, true) && !is_dir($dest_dir)) {
-        return null;
-    }
-    $seed = sha1($url);
-    $tmp = tempnam(sys_get_temp_dir(), 'wpimport_');
-    if ($tmp === false) {
-        return null;
-    }
-    if (file_put_contents($tmp, $response['body']) === false) {
-        @unlink($tmp);
-        return null;
-    }
-    $filename = \Lamb\Response\store_webp_copy($tmp, $ext, $dest_dir, $seed);
-    if ($filename === null) {
-        $filename = "$seed.$ext";
-        if (!rename($tmp, "$dest_dir/$filename")) {
-            @unlink($tmp);
-            return null;
-        }
-    } else {
-        @unlink($tmp);
-    }
-    return $filename;
+    return \Lamb\Response\persist_image_bytes($response['body'], $ext, $dest_dir, $seed);
 }
 
 /**
@@ -546,6 +731,26 @@ function response_is_image(array $headers): bool
         }
     }
     return false;
+}
+
+/**
+ * Bundles the sanitise + image-rewrite passes onto a single DOM. Used by
+ * {@see import_item} to halve the parse/serialise work versus calling the two
+ * public string functions back to back, and to remove a layer of round-trip
+ * artifacts (entity normalisation, attribute reordering) between the two
+ * stages.
+ *
+ * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
+ */
+function prepare_imported_html(string $html, string $created, callable $downloader): string
+{
+    if (trim($html) === '') {
+        return '';
+    }
+    $dom = load_html_fragment($html);
+    sanitize_html_in_dom($dom);
+    rewrite_image_links_in_dom($dom, $created, $downloader);
+    return dump_html_fragment($dom);
 }
 
 /**
@@ -573,9 +778,15 @@ function import_item(array $item, callable $downloader, bool $dry_run = false): 
         return $existing;
     }
 
-    $sanitized = sanitize_html((string) ($item['content'] ?? ''));
-    $rewritten = rewrite_image_links($sanitized, (string) $item['created'], $downloader);
-    $markdown = html_to_markdown($rewritten);
+    // Sanitize and image-rewrite share one DOM so the body is parsed and
+    // serialised once for these two passes (a third parse happens inside
+    // html_to_markdown for normalize_wordpress_html, which has to stay on its
+    // own DOM because of its placeholder-string substitution dance).
+    $body_html = (string) ($item['content'] ?? '');
+    $prepared = $body_html === ''
+        ? ''
+        : prepare_imported_html($body_html, (string) $item['created'], $downloader);
+    $markdown = html_to_markdown($prepared);
     $tags = array_values(array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? [])));
     $slug = wordpress_status_path($item) !== null ? '' : (string) ($item['slug'] ?? '');
     $body = build_post_body((string) $item['title'], $markdown, $tags, $slug);
