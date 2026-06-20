@@ -79,3 +79,4 @@ If WebP support is missing and you want it, install or enable the WebP-capable G
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts and upload photos from external apps.
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A post's first image becomes its social preview card.
 * [Themes]({{ site.baseurl }}{% link themes.md %}): Uploaded files live in `src/assets/`, not in theme directories.
+* [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}): The importer downloads referenced images into `src/assets/` too.

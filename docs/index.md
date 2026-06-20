@@ -102,3 +102,4 @@ Devtools / local environments / sandbox:
 * [Themes]({{ site.baseurl }}{% link themes.md %})
 * [Trash]({{ site.baseurl }}{% link trash.md %})
 * [Upgrading]({{ site.baseurl }}{% link upgrading.md %})
+* [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %})

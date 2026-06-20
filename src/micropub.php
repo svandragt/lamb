@@ -527,20 +527,14 @@ class LambMicropubAdapter extends MicropubAdapter
             $uploadDir = \Lamb\Response\get_upload_dir();
             $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
 
-            // Re-encode JPEG/PNG to WebP via a temp copy of the stream; fall back to
-            // storing the original bytes when conversion isn't possible.
-            $filename = null;
-            if (\Lamb\Response\should_convert_to_webp($ext)) {
-                $tmp = tempnam(sys_get_temp_dir(), 'lamb_up_');
-                if ($tmp !== false) {
-                    file_put_contents($tmp, (string) $file->getStream());
-                    $filename = \Lamb\Response\store_webp_copy($tmp, $ext, $uploadDir, $seed);
-                    unlink($tmp);
-                }
-            }
+            $filename = \Lamb\Response\persist_image_bytes(
+                (string) $file->getStream(),
+                $ext,
+                $uploadDir,
+                $seed
+            );
             if ($filename === null) {
-                $filename = $seed . ".$ext";
-                $file->moveTo($uploadDir . '/' . $filename);
+                continue;
             }
 
             $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;

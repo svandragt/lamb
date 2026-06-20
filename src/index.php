@@ -66,6 +66,15 @@ $sublookup = strtok('/');
 
 $request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 
+$redirect_path = trim((string) $request_uri, '/');
+if (str_contains($redirect_path, '/')) {
+    $redirect_url = find_redirect($redirect_path);
+    if ($redirect_url !== null) {
+        header('Location: ' . Http\sanitize_location($redirect_url), true, 301);
+        exit;
+    }
+}
+
 Route\register_app_routes($action, $lookup, $sublookup);
 $template = $action;
 if (post_has_slug($action) === $action) {

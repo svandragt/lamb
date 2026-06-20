@@ -68,3 +68,4 @@ feeds you remove from configuration are cleaned up automatically on the next cro
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The Atom and JSON feeds Lamb publishes for your own posts.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[feeds]` section is configured here.
+* [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}): One-off migration from a WordPress WXR export.
