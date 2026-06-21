@@ -613,9 +613,28 @@ XML;
             ['https://oldsite.example/thumb.jpg', 'https://oldsite.example/full.jpg'],
             $downloaded
         );
-        $this->assertStringContainsString('href="assets/2024/03/full.jpg"', $out);
-        $this->assertStringContainsString('src="assets/2024/03/full.jpg"', $out);
+        $this->assertStringContainsString('href="/assets/2024/03/full.jpg"', $out);
+        $this->assertStringContainsString('src="/assets/2024/03/full.jpg"', $out);
         $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testRewriteImageLinksUsesRootRelativeUrls(): void
+    {
+        // The rewritten URL must be root-relative (leading slash) so it
+        // resolves to /assets/... on every route. A bare "assets/..." is
+        // resolved against the current path, so it 404s on nested routes
+        // like /page/2, /search/x and /tag/x while working on / and /slug —
+        // the import equivalent of the upload path's absolute ROOT_URL.
+        $downloader = fn(): ?string => 'abc123.jpg';
+
+        $html = '<p><a href="https://oldsite.example/full.jpg">'
+            . '<img src="https://oldsite.example/thumb.jpg" alt="t"/></a></p>';
+        $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertStringContainsString('src="/assets/2024/03/abc123.jpg"', $out);
+        $this->assertStringContainsString('href="/assets/2024/03/abc123.jpg"', $out);
+        $this->assertStringNotContainsString('src="assets/', $out);
+        $this->assertStringNotContainsString('href="assets/', $out);
     }
 
     public function testRewriteImageLinksLeavesNonImageAnchorsAlone(): void
@@ -654,7 +673,7 @@ XML;
         $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertSame(['https://oldsite.example/img.jpg'], $downloaded);
-        $this->assertStringContainsString('src="assets/2024/03/pic.jpg"', $out);
+        $this->assertStringContainsString('src="/assets/2024/03/pic.jpg"', $out);
         $this->assertStringNotContainsString('<picture', $out);
         $this->assertStringNotContainsString('<source', $out);
         $this->assertStringNotContainsString('oldsite.example', $out);
@@ -677,7 +696,7 @@ XML;
         $out = rewrite_image_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertSame(['https://oldsite.example/big.jpg'], $downloaded);
-        $this->assertStringContainsString('src="assets/2024/03/src.jpg"', $out);
+        $this->assertStringContainsString('src="/assets/2024/03/src.jpg"', $out);
         $this->assertStringNotContainsString('<picture', $out);
         $this->assertStringNotContainsString('<source', $out);
     }

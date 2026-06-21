@@ -524,7 +524,8 @@ class LambMicropubAdapter extends MicropubAdapter
             if ($ext === null) {
                 continue;
             }
-            $uploadDir = \Lamb\Response\get_upload_dir();
+            $sub_path  = \Lamb\Response\upload_subpath();
+            $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
             $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
 
             $filename = \Lamb\Response\persist_image_bytes(
@@ -537,7 +538,7 @@ class LambMicropubAdapter extends MicropubAdapter
                 continue;
             }
 
-            $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
+            $urls[] = \Lamb\Response\asset_url($sub_path, $filename);
         }
 
         return $urls;
@@ -968,7 +969,8 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
 
-    $uploadDir = \Lamb\Response\get_upload_dir();
+    $sub_path  = \Lamb\Response\upload_subpath();
+    $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
     $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
@@ -978,7 +980,9 @@ function respond_micropub_media(): void
         move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
     }
 
-    $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;
+    // The media endpoint hands this URL back to an external Micropub client, so
+    // it must be absolute (resolvable off-site); content URLs stay root-relative.
+    $url = ROOT_URL . \Lamb\Response\asset_url($sub_path, $filename);
 
     http_response_code(201);
     header('Location: ' . $url);

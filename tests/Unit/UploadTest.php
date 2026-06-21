@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\safe_upload_extension;
+use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
 use function Lamb\Response\should_convert_to_webp;
 use function Lamb\Response\store_webp_copy;
@@ -102,6 +104,43 @@ class UploadTest extends TestCase
         $result = get_upload_dir();
         $expectedSuffix = 'assets/' . date('Y/m');
         $this->assertStringContainsString($expectedSuffix, $result);
+    }
+
+    // asset_url — the single source of truth for an asset's public URL. Root-relative
+    // (leading slash) so it resolves on every route (/page/N, /search/x, /tag/x), not
+    // just / and /slug, and carries no host so it survives a domain change and works
+    // from the CLI importer (where ROOT_URL has no $_SERVER host to build from).
+
+    public function testAssetUrlIsRootRelative(): void
+    {
+        $this->assertSame('/assets/2024/03/pic.webp', asset_url('2024/03', 'pic.webp'));
+    }
+
+    public function testAssetUrlStartsWithLeadingSlash(): void
+    {
+        // The whole point of the fix: a bare "assets/..." resolves against the
+        // current path and 404s on nested routes. The leading slash prevents that.
+        $this->assertStringStartsWith('/assets/', asset_url('2026/06', 'x.webp'));
+    }
+
+    // upload_subpath / get_upload_dir — uploads land under assets/<Y/m>. Callers
+    // capture the subpath once and pass it to both get_upload_dir() and asset_url()
+    // so the stored file and its URL can never disagree across a month boundary.
+
+    public function testUploadSubpathFollowsYearMonthFormat(): void
+    {
+        $this->assertSame(date('Y/m'), upload_subpath());
+    }
+
+    public function testGetUploadDirHonoursExplicitSubpath(): void
+    {
+        $dir = get_upload_dir('2024/03');
+        $this->assertStringEndsWith('assets/2024/03', $dir);
+    }
+
+    public function testGetUploadDirDefaultsToCurrentSubpath(): void
+    {
+        $this->assertStringEndsWith('assets/' . upload_subpath(), get_upload_dir());
     }
 
     // safe_upload_extension — only image extensions may be written to the web root

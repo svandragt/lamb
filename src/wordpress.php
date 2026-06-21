@@ -15,6 +15,7 @@ use Symfony\Component\Yaml\Yaml;
 use function Lamb\Http\fetch;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\populate_bean;
+use function Lamb\Response\asset_url;
 
 const WXR_NS = 'http://wordpress.org/export/1.2/';
 const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
@@ -520,7 +521,7 @@ function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable 
         if (!is_string($filename) || $filename === '') {
             continue;
         }
-        $img->setAttribute('src', "assets/$sub_path/$filename");
+        $img->setAttribute('src', asset_url($sub_path, $filename));
         foreach (['srcset', 'sizes', 'data-src', 'data-full-url', 'data-link', 'data-orig-file'] as $stale) {
             $img->removeAttribute($stale);
         }
@@ -543,7 +544,7 @@ function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable 
         if (!is_string($filename) || $filename === '') {
             continue;
         }
-        $a->setAttribute('href', "assets/$sub_path/$filename");
+        $a->setAttribute('href', asset_url($sub_path, $filename));
     }
 }
 
