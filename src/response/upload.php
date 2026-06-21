@@ -10,7 +10,6 @@ use Lamb\Security;
 use RuntimeException;
 
 use const ROOT_DIR;
-use const ROOT_URL;
 
 /**
  * Responds to an upload request by processing the uploaded files.
@@ -50,22 +49,23 @@ function respond_upload(array $_args): void
             echo json_encode('Unsupported file type.', JSON_THROW_ON_ERROR);
             die();
         }
-        $temp_fp = $f['tmp_name'];
-        $seed    = sha1($f['name']);
+        $temp_fp  = $f['tmp_name'];
+        $seed     = sha1($f['name']);
+        $sub_path = upload_subpath();
+        $dir      = get_upload_dir($sub_path);
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        $new_fn = store_webp_copy($temp_fp, $ext, get_upload_dir(), $seed);
+        $new_fn = store_webp_copy($temp_fp, $ext, $dir, $seed);
         if ($new_fn === null) {
             $new_fn = "$seed.$ext";
-            $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
+            $new_fp = sprintf("%s/%s", $dir, $new_fn);
             if (!move_uploaded_file($temp_fp, $new_fp)) {
                 echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
                 die();
             }
         }
-        $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
-        $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$new_fn");
+        $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
     echo json_encode($out, JSON_THROW_ON_ERROR);
@@ -286,14 +286,27 @@ function scaled_dimensions(int $width, int $height, int $max): array
 }
 
 /**
+ * The YYYY/MM subpath new uploads are stored under (under src/assets/).
+ *
+ * Callers capture this once and pass it to both get_upload_dir() and asset_url()
+ * so the stored file and the URL written into the post can never disagree across
+ * a month boundary.
+ */
+function upload_subpath(): string
+{
+    return date("Y/m");
+}
+
+/**
  * Retrieves the upload directory for storing files, creating it if necessary.
  *
+ * @param string|null $sub_path The YYYY/MM subpath (defaults to the current month).
  * @return string The absolute path to the upload directory.
  * @throws RuntimeException If the directory cannot be created.
  */
-function get_upload_dir(): string
+function get_upload_dir(?string $sub_path = null): string
 {
-    $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, date("Y/m"));
+    $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, $sub_path ?? upload_subpath());
     if (!is_dir($upload_dir)) {
         if (!mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
             throw new RuntimeException(sprintf('Directory "%s" was not created', $upload_dir));
@@ -301,4 +314,20 @@ function get_upload_dir(): string
     }
 
     return $upload_dir;
+}
+
+/**
+ * The public URL for an asset stored at src/assets/<sub_path>/<filename>.
+ *
+ * Root-relative (leading slash) so it resolves on every route — / and /slug but
+ * also nested ones like /page/N, /search/x and /tag/x, where a bare "assets/..."
+ * is resolved against the current path and 404s. It also carries no host, so it
+ * survives a domain change and is produced identically by the CLI WXR importer,
+ * which has no $_SERVER host to build an absolute ROOT_URL from. Callers that
+ * must emit an absolute URL (e.g. the Micropub media endpoint's Location header)
+ * prefix ROOT_URL onto the result.
+ */
+function asset_url(string $sub_path, string $filename): string
+{
+    return "/assets/$sub_path/$filename";
 }
