@@ -35,3 +35,10 @@ node_modules/
 
 # pnpm store created when running inside the Workshop env
 /.pnpm-store/
+
+# Local agent/tooling state
+/.serena/
+/.claude/settings.local.json
+
+# Local runtime data (db is covered by *.db above)
+/data/sessions/
