@@ -162,8 +162,27 @@ function wxr_local_datetime(string $gmt, string $local, string $pub_date): strin
  */
 function should_import(array $item): bool
 {
-    return ($item['status'] ?? '') === 'publish'
-        && in_array($item['post_type'] ?? '', ['post', 'page'], true);
+    return skip_reason($item) === null;
+}
+
+/**
+ * Explains why an item falls outside import scope, or null when it should be
+ * imported. Single source of truth for should_import(); the importer uses the
+ * reason string to break down its skipped tally.
+ *
+ * @param array<string, mixed> $item
+ */
+function skip_reason(array $item): ?string
+{
+    $type   = (string) ($item['post_type'] ?? '');
+    $status = (string) ($item['status'] ?? '');
+    if (!in_array($type, ['post', 'page'], true)) {
+        return "unsupported post_type '" . ($type === '' ? '(none)' : $type) . "'";
+    }
+    if ($status !== 'publish') {
+        return "non-published status '" . ($status === '' ? '(none)' : $status) . "'";
+    }
+    return null;
 }
 
 /**
