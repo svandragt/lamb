@@ -59,11 +59,15 @@ $downloader = $dry_run
 $created = 0;
 $existed = 0;
 $skipped = 0;
+/** @var array<string, int> $skip_reasons */
+$skip_reasons = [];
 $total = count($items);
 
 foreach ($items as $i => $item) {
-    if (!WordPress\should_import($item)) {
+    $reason = WordPress\skip_reason($item);
+    if ($reason !== null) {
         $skipped++;
+        $skip_reasons[$reason] = ($skip_reasons[$reason] ?? 0) + 1;
         continue;
     }
     $uuid = WordPress\wordpress_uuid((string) $item['guid']);
@@ -75,6 +79,9 @@ foreach ($items as $i => $item) {
     $bean = WordPress\import_item($item, $downloader, $dry_run);
     if ($bean === null) {
         $skipped++;
+        $skip_reasons['conversion failed'] = ($skip_reasons['conversion failed'] ?? 0) + 1;
+        echo "[" . ($i + 1) . "/$total] skipped (conversion failed): "
+            . trim((string) $item['title']) . "\n";
         continue;
     }
     $created++;
@@ -84,6 +91,13 @@ foreach ($items as $i => $item) {
 
 $prefix = $dry_run ? '[dry-run] ' : '';
 echo "\n{$prefix}Done. created=$created existed=$existed skipped=$skipped total=$total\n";
+if ($skip_reasons) {
+    arsort($skip_reasons);
+    echo "Skipped breakdown:\n";
+    foreach ($skip_reasons as $reason => $count) {
+        echo "  $count\t$reason\n";
+    }
+}
 
 /**
  * Parses argv into [path, dry_run]. Returns [null, false] when the path is
