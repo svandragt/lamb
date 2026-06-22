@@ -657,6 +657,24 @@ function find_post_by_path(string $path): ?OODBBean
 }
 
 /**
+ * Returns all automatic DB redirects sorted by from_slug.
+ *
+ * @return array<int, array{from_slug:string, to_url:string}>
+ */
+function get_all_redirects(): array
+{
+    $beans = R::findAll('redirect', ' ORDER BY from_slug ASC ');
+    $out = [];
+    foreach ($beans as $bean) {
+        $out[] = [
+            'from_slug' => (string) $bean->from_slug,
+            'to_url'    => (string) $bean->to_url,
+        ];
+    }
+    return $out;
+}
+
+/**
  * Deletes any redirect stored in the DB for the given slug.
  *
  * @param string $slug The from_slug to remove.
