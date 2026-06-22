@@ -87,7 +87,10 @@ function og_image(\RedBeanPHP\OODBBean $bean): array
 {
     $embedded = first_embedded_image((string) ($bean->transformed ?? ''));
     if ($embedded !== null) {
-        return ['url' => $embedded, 'card' => 'summary_large_image'] + image_dimensions($embedded);
+        // Post images are stored root-relative ("/assets/..."); OG/Twitter scrapers
+        // require an absolute URL or the social card image is broken.
+        $url = \Lamb\absolute_url($embedded);
+        return ['url' => $url, 'card' => 'summary_large_image'] + image_dimensions($url);
     }
 
     if (defined('ROOT_DIR')) {

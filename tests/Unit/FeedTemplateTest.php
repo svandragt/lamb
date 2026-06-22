@@ -124,6 +124,27 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedContentAbsolutisesRootRelativeImageUrls(): void
+    {
+        // Pasted/uploaded images are stored as root-relative URLs. In a syndicated
+        // feed those must be absolute or the reader resolves them against its own
+        // host and shows a broken image (falling back to the alt text).
+        $transformed = '<p><img src="/assets/2026/06/abc.webp" alt="pasted-1-0.png"></p>';
+
+        $xml = $this->renderFeedWithPost([
+            'title'       => 'Pasted Image',
+            'transformed' => $transformed,
+        ]);
+
+        $content = (string) $xml->entry[0]->content;
+        $this->assertStringContainsString('src="' . ROOT_URL . '/assets/2026/06/abc.webp"', $content);
+        $this->assertStringNotContainsString('src="/assets', $content);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedAuthorHasNoEmailAndIncludesUri(): void
     {
         $xml = $this->renderFeedWithPost([

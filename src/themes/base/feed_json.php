@@ -34,7 +34,7 @@ foreach ($data['posts'] as $bean) {
     $item = [
         'id'             => $url,
         'url'            => $url,
-        'content_html'   => $bean->transformed,
+        'content_html'   => Lamb\absolute_urls($bean->transformed),
         'date_published' => date(DATE_RFC3339, strtotime($bean->created)),
         'date_modified'  => date(DATE_RFC3339, strtotime($bean->updated)),
     ];
