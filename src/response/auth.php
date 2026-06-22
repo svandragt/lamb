@@ -311,6 +311,7 @@ function respond_settings(): array
         'title' => 'Settings',
         'ini_text' => Config\get_ini_text(),
         'feed_statuses' => Network\get_feed_statuses(),
+        'redirects' => \Lamb\get_all_redirects(),
     ];
 
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
