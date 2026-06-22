@@ -2,6 +2,8 @@
 title: Redirections
 ---
 
+# Redirections
+
 ## How redirects work
 
 When a URL is requested, Lamb checks in this order:
