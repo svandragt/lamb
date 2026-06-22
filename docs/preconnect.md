@@ -2,6 +2,8 @@
 title: Preconnect
 ---
 
+# Preconnect
+
 Lamb supports preconnect hints through the web settings page, in a section called `preconnect`.
 
 Preconnect hints tell the browser to establish a TCP connection to an external origin before it is needed, reducing latency when those resources are first requested. A [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) fallback is also emitted for browsers that do not support preconnect.

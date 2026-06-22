@@ -54,7 +54,7 @@ foreach ($data['posts'] as $bean) {
     $Entry->addChild('title', escape($bean->title ?: ''));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
-    $Content = $Entry->addChild('content', $bean->transformed);
+    $Content = $Entry->addChild('content', Lamb\absolute_urls($bean->transformed));
     $Content->addAttribute('type', 'html');
     if (!empty($bean->in_reply_to)) {
         // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping

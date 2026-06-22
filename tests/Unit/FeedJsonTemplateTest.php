@@ -123,6 +123,24 @@ class FeedJsonTemplateTest extends TestCase
         $this->assertArrayNotHasKey('hubs', $json, 'No hubs field should be emitted without websub_hubs config');
     }
 
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonAbsolutisesRootRelativeImageUrls(): void
+    {
+        // Same syndication concern as the Atom feed: content_html must carry
+        // absolute image URLs so a re-hosting reader doesn't break the image.
+        $json = $this->renderJsonFeedWithPost([
+            'title'       => 'Pasted Image',
+            'transformed' => '<p><img src="/assets/2026/06/abc.webp" alt="pasted-1-0.png"></p>',
+        ]);
+
+        $html = $json['items'][0]['content_html'];
+        $this->assertStringContainsString('src="http://localhost/assets/2026/06/abc.webp"', $html);
+        $this->assertStringNotContainsString('src="/assets', $html);
+    }
+
     private function renderJsonFeedWithPost(array $fields, array $extraConfig = []): array
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
