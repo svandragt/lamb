@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 
 class ThemeMetaTest extends TestCase
@@ -84,7 +85,7 @@ class ThemeMetaTest extends TestCase
     // the_opengraph — output when template === 'status'
     // -------------------------------------------------------------------------
 
-    public function testOpenGraphOutputsMetaDescriptionTagWhenTemplateIsStatus(): void
+    public function testOpenGraphDoesNotOutputNameDescriptionTag(): void
     {
         global $template, $data;
         $template = 'status';
@@ -100,7 +101,7 @@ class ThemeMetaTest extends TestCase
         the_opengraph();
         $output = ob_get_clean();
 
-        $this->assertStringContainsString('<meta property="description"', $output);
+        $this->assertStringNotContainsString('<meta name="description"', $output);
     }
 
     public function testOpenGraphOutputsOgDescriptionWhenTemplateIsStatus(): void
@@ -196,6 +197,70 @@ class ThemeMetaTest extends TestCase
 
         ob_start();
         the_opengraph();
+        $output = ob_get_clean();
+
+        $this->assertStringNotContainsString('<script>', $output);
+    }
+
+    // -------------------------------------------------------------------------
+    // the_meta_description
+    // -------------------------------------------------------------------------
+
+    public function testMetaDescriptionOutputsNameDescriptionForStatusTemplate(): void
+    {
+        global $template, $data;
+        $template = 'status';
+
+        $bean              = R::dispense('post');
+        $bean->description = 'Hello world post';
+        $bean->created     = date('Y-m-d H:i:s');
+        $bean->updated     = date('Y-m-d H:i:s');
+        R::store($bean);
+        $data = ['posts' => [$bean]];
+
+        ob_start();
+        the_meta_description();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('<meta name="description"', $output);
+        $this->assertStringContainsString('Hello world post', $output);
+    }
+
+    public function testMetaDescriptionOutputsSiteDescriptionForHomeTemplate(): void
+    {
+        global $template, $config;
+        $template = 'home';
+        $config['site_description'] = 'A personal microblog';
+
+        ob_start();
+        the_meta_description();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString('<meta name="description"', $output);
+        $this->assertStringContainsString('A personal microblog', $output);
+    }
+
+    public function testMetaDescriptionOutputsNothingWhenNoDescriptionAvailable(): void
+    {
+        global $template, $config;
+        $template = 'home';
+        unset($config['site_description']);
+
+        ob_start();
+        the_meta_description();
+        $output = ob_get_clean();
+
+        $this->assertSame('', $output);
+    }
+
+    public function testMetaDescriptionEscapesContent(): void
+    {
+        global $template, $config;
+        $template = 'home';
+        $config['site_description'] = 'A blog with <script>bad</script>';
+
+        ob_start();
+        the_meta_description();
         $output = ob_get_clean();
 
         $this->assertStringNotContainsString('<script>', $output);

@@ -25,8 +25,6 @@ function the_opengraph(): void
     $bean = $data['posts'][0];
     $description = $bean->description;
 
-    printf('<meta property="description" content="%s"/>' . PHP_EOL, og_escape($description));
-
     $image = og_image($bean);
 
     $og_tags = [
@@ -167,6 +165,34 @@ function og_local_path(string $url): ?string
         return ROOT_DIR . $url;
     }
     return null;
+}
+
+/**
+ * Emits a <meta name="description"> tag for the current page.
+ *
+ * For single-post (status) pages: uses the post's description field.
+ * For all other pages: uses $config['site_description'] when configured.
+ * Outputs nothing when no description is available.
+ *
+ * @return void
+ */
+function the_meta_description(): void
+{
+    global $template;
+    global $config;
+    global $data;
+
+    if ($template === 'status' && !empty($data['posts'][0])) {
+        $description = (string) ($data['posts'][0]->description ?? '');
+    } else {
+        $description = (string) ($config['site_description'] ?? '');
+    }
+
+    if ($description === '') {
+        return;
+    }
+
+    printf('<meta name="description" content="%s"/>' . PHP_EOL, og_escape($description));
 }
 
 /**

@@ -28,6 +28,9 @@ theme = 2026
 ;; Title of the site, in html and feed views
 site_title = My Microblog
 
+;; Short description of the site, used as the meta description on listing pages.
+;site_description = A personal microblog
+
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
 ;; Use a name from https://www.php.net/manual/en/timezones.php.
 timezone = UTC
