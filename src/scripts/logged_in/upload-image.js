@@ -65,7 +65,10 @@ function handleFiles(files, textarea) {
     })
         .then(response => response.json())
         .then(data => {
-            textarea.value = text.slice(0, cursor) + data + text.slice(cursor)
+            const markdown = data.replace(/!\[[^\]]*\]/g, '![]')
+            textarea.value = text.slice(0, cursor) + markdown + text.slice(cursor)
+            const altStart = cursor + markdown.indexOf('![') + 2
+            textarea.setSelectionRange(altStart, altStart)
             textarea.dispatchEvent(new Event('input'))
         })
         .catch(error => console.error(error))
