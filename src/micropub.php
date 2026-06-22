@@ -489,29 +489,47 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function rebuildBody(OODBBean $bean, string $newContent): string
     {
-        $currentBody = $bean->body ?? '';
-        $matter      = parse_matter($currentBody);
-        $title       = $matter['title'] ?? null;
-        $replyTo     = $matter['in-reply-to'] ?? null;
+        $currentBody  = $bean->body ?? '';
+        $matter       = parse_matter($currentBody);
+        $title        = $matter['title'] ?? null;
+        $replyTo      = $matter['in-reply-to'] ?? null;
         $syndicatedTo = $matter['syndicated-to'] ?? null;
 
-        $tags      = get_tags($currentBody);
+        $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
+    }
+
+    /**
+     * Assemble the post front-matter array from individual fields.
+     *
+     * Central point for front-matter assembly so buildBody() and rebuildBody()
+     * stay in sync when new fields are added.
+     *
+     * @param string|null $title
+     * @param string|null $replyTo
+     * @param string|null $syndicatedTo
+     * @return array<string, string>
+     */
+    private function assembleFrontMatter(?string $title, ?string $replyTo, ?string $syndicatedTo): array
+    {
         $matter = [];
         if ($title !== null) {
-            $matter['title'] = (string) $title;
+            $matter['title'] = $title;
         }
-        if (is_string($replyTo) && $replyTo !== '') {
+        if ($replyTo !== null && $replyTo !== '') {
             $matter['in-reply-to'] = $replyTo;
         }
-        if (is_string($syndicatedTo) && $syndicatedTo !== '') {
+        if ($syndicatedTo !== null && $syndicatedTo !== '') {
             $matter['syndicated-to'] = $syndicatedTo;
         }
-
-        return build_matter($matter, $content);
+        return $matter;
     }
 
     /**
@@ -609,20 +627,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        $matter = [];
-        if ($title !== null) {
-            $matter['title'] = (string) $title;
-        }
-        if (is_string($replyTo) && $replyTo !== '') {
-            $matter['in-reply-to'] = $replyTo;
-        }
+        $syndicateTo  = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
-        $syndicateTo = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
-        if (!empty($syndicateTo)) {
-            $matter['syndicated-to'] = implode(' ', $syndicateTo);
-        }
-
-        return build_matter($matter, $content);
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
     }
 
     /**
