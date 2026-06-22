@@ -6,7 +6,7 @@ title: Docker
 
 > **Well-travelled path.** The release image is verified by the automated acceptance suite before every release (the `release-verify` workflow), so this is a supported, regularly-tested way to run Lamb.
 
-The only requirement in this case is a working Docker setup!
+The only requirement in this case is a working Docker setup! Need a server? [DigitalOcean](https://m.do.co/c/5e6e347c4e08) works well — a basic droplet is enough to run Lamb.
 
 ## Prebuilt image (recommended)
 
