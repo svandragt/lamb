@@ -285,6 +285,26 @@ class ThemeMetaTest extends TestCase
         $this->assertStringNotContainsString('og-image-lamb.webp', $output);
     }
 
+    public function testOpenGraphAbsolutisesRootRelativeEmbeddedImage(): void
+    {
+        // Uploaded/pasted images are stored root-relative ("/assets/..."). OG and
+        // Twitter scrapers require an absolute URL, so the embedded image must be
+        // absolutised or the social card image is broken.
+        $output = $this->renderStatus([
+            'transformed' => '<p>Hi</p><img src="/assets/2026/06/abc.webp" alt="pasted-1-0.png">',
+        ]);
+
+        $this->assertStringContainsString(
+            'property="og:image" content="' . ROOT_URL . '/assets/2026/06/abc.webp"',
+            $output
+        );
+        $this->assertStringContainsString(
+            'property="twitter:image" content="' . ROOT_URL . '/assets/2026/06/abc.webp"',
+            $output
+        );
+        $this->assertStringNotContainsString('content="/assets', $output);
+    }
+
     public function testOpenGraphUsesWebRootOgImageConventionWhenPostHasNoImage(): void
     {
         $webRoot = $this->resetWebRoot();

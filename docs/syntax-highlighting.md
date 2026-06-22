@@ -2,6 +2,8 @@
 title: Syntax Highlighting
 ---
 
+# Syntax Highlighting
+
 Fenced code blocks with a language hint are syntax-highlighted automatically:
 
 ````markdown

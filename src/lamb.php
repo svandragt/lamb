@@ -141,6 +141,53 @@ function permalink(OODBBean $bean): string
     return ROOT_URL . '/status/' . $bean->id;
 }
 
+/**
+ * Rewrites root-relative src/href attributes in an HTML fragment to absolute URLs.
+ *
+ * Posts store asset links as root-relative URLs ("/assets/Y/m/hash.webp" via
+ * asset_url()) so they survive a domain change and work from the CLI importer.
+ * That resolves correctly on-site, but a feed reader or syndication service that
+ * re-hosts the content (micro.blog, etc.) resolves "/assets/..." against its own
+ * host, leaving a broken image. Feed templates pass content through here so the
+ * syndicated copy keeps loading images and following links.
+ *
+ * Only root-relative values ("/path") are rewritten: already-absolute
+ * ("https://...") and protocol-relative ("//host/...") URLs are left untouched.
+ *
+ * @param string      $html The HTML fragment (e.g. a post's transformed body).
+ * @param string|null $base The base URL to prefix (defaults to ROOT_URL); a
+ *                          trailing slash is trimmed so paths don't double up.
+ * @return string The HTML with root-relative URLs made absolute.
+ */
+function absolute_urls(string $html, ?string $base = null): string
+{
+    return preg_replace_callback(
+        '#\b(src|href)="(/[^/][^"]*)"#i',
+        static fn(array $m): string => $m[1] . '="' . absolute_url($m[2], $base) . '"',
+        $html
+    ) ?? $html;
+}
+
+/**
+ * Makes a single root-relative URL absolute against $base (defaults to ROOT_URL).
+ *
+ * Already-absolute ("https://...") and protocol-relative ("//host/...") URLs are
+ * returned unchanged. Used for one-off URLs (e.g. an Open Graph image src pulled
+ * from a post body) where {@see absolute_urls} would be overkill.
+ *
+ * @param string      $url  A URL that may be root-relative.
+ * @param string|null $base The base URL to prefix (defaults to ROOT_URL).
+ * @return string The absolute URL.
+ */
+function absolute_url(string $url, ?string $base = null): string
+{
+    if ($url === '' || $url[0] !== '/' || str_starts_with($url, '//')) {
+        return $url;
+    }
+
+    return rtrim($base ?? ROOT_URL, '/') . $url;
+}
+
 
 /**
  * Parses the given bean to extract and transform its content.

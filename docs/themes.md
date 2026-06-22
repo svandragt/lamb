@@ -2,6 +2,8 @@
 title: Themes
 ---
 
+# Themes
+
 Lamb comes with three built-in themes: `base`, `2024`, and `2026`.
 
 I'm not a designer.
