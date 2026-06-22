@@ -1,0 +1,32 @@
+name: lamb
+services:
+  - name: web
+    image:
+      registry_type: GHCR
+      registry: svandragt
+      repository: lamb
+      tag: latest
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    instance_count: 1
+    http_port: 80
+    health_check:
+      http_path: /
+      initial_delay_seconds: 10
+      period_seconds: 30
+      timeout_seconds: 5
+    envs:
+      - key: LAMB_LOGIN_PASSWORD
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_WITH_YOUR_HASH
+    storage_mounts:
+      - name: data
+        mount_path: /app/data
+      - name: assets
+        mount_path: /app/src/assets
+
+storage:
+  - name: data
+    description: SQLite database
+  - name: assets
+    description: Uploaded media files
