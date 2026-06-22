@@ -37,12 +37,12 @@ else :
 
         <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
             <header>
-                <?php if ($template !== 'status') : ?>
-                    <?php $title = title_link($bean); ?>
-                    <?php if (!empty(trim(strip_tags($title)))) : ?>
+                <?php if ($template !== 'status') :
+                    $title = title_link($bean);
+                    if (!empty(trim(strip_tags($title)))) : ?>
                         <h2><?= $title ?></h2>
-                    <?php endif; ?>
-                <?php endif; ?>
+                    <?php endif;
+                endif; ?>
                 <div class="meta">
                     <span itemprop="author" class="screen-reader-text"><?= author_card() ?></span>
                     <?= date_created($bean) ?>
