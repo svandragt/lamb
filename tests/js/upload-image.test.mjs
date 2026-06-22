@@ -61,3 +61,33 @@ test('handleFiles inserts the upload response at the cursor and fires input', as
   assert.equal(ta.value, 'ab![](/img.webp)cd')
   assert.ok(inputFired, 'an input event should be dispatched')
 })
+
+test('handleFiles strips server alt text so the user sees empty [] to fill in', async () => {
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = ''
+  ta.setSelectionRange(0, 0)
+
+  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+
+  api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
+  await flush()
+
+  assert.equal(ta.value, '![](/img.webp)')
+})
+
+test('handleFiles positions cursor inside [] after insertion', async () => {
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = 'abcd'
+  ta.setSelectionRange(2, 2) // cursor between "ab" and "cd"
+
+  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+
+  api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
+  await flush()
+
+  assert.equal(ta.value, 'ab![](/img.webp)cd')
+  assert.equal(ta.selectionStart, 4) // inside the [], after ![
+  assert.equal(ta.selectionEnd, 4)
+})
