@@ -115,6 +115,8 @@ function crawl_feed(string $name, string $url): array
 function purge_deleted_posts(): int
 {
     $cutoff = date('Y-m-d H:i:s', strtotime('-30 days'));
+    // Backfill any rows trashed before deleted_at tracking existed.
+    R::exec('UPDATE post SET deleted_at = ? WHERE deleted = 1 AND deleted_at IS NULL', [date('Y-m-d H:i:s')]);
     $posts  = R::find('post', ' deleted = 1 AND deleted_at < ? ', [$cutoff]);
     foreach ($posts as $post) {
         R::trash($post);
