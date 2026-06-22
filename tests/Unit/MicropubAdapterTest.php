@@ -1169,4 +1169,90 @@ class MicropubAdapterTest extends TestCase
             \Lamb\Micropub\bearer_challenge('insufficient_scope', 'create')
         );
     }
+
+    // --- syndication config and create ---
+
+    public function testConfigurationQueryCallbackReturnsSyndicateToTargetsFromConfig(): void
+    {
+        global $config;
+        $config['syndicate_to'] = ['https://bsky.app/profile/me' => 'Bluesky'];
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->configurationQueryCallback([]);
+
+        $this->assertCount(1, $result['syndicate-to']);
+        $this->assertSame('https://bsky.app/profile/me', $result['syndicate-to'][0]['uid']);
+        $this->assertSame('Bluesky', $result['syndicate-to'][0]['name']);
+
+        unset($config['syndicate_to']);
+    }
+
+    public function testConfigurationQueryCallbackReturnsEmptySyndicateToWhenNoConfig(): void
+    {
+        global $config;
+        unset($config['syndicate_to']);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->configurationQueryCallback([]);
+
+        $this->assertSame([], $result['syndicate-to']);
+    }
+
+    public function testCreateCallbackSetsSyndicatedToWhenMpSyndicateToProvided(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'        => ['Post with syndication target'],
+                'mp-syndicate-to' => ['https://bsky.app/profile/me'],
+            ],
+        ];
+        $adapter->createCallback($data);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%syndicated-to%']);
+        $this->assertNotNull($post, 'Expected a post with syndicated-to in the body');
+        $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
+    }
+
+    public function testCreateCallbackMpSyndicateToNotStoredInJsonBlock(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'        => ['Post without json block please'],
+                'mp-syndicate-to' => ['https://bsky.app/profile/me'],
+            ],
+        ];
+        $adapter->createCallback($data);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Post without json block please%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('```json', $post->body);
+    }
+
+    public function testUpdateCallbackPreservesSyndicatedTo(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create', 'update']];
+
+        $createData = [
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'         => ['Original content'],
+                'mp-syndicate-to' => ['https://bsky.app/profile/me'],
+            ],
+        ];
+        $location = $adapter->createCallback($createData);
+        $this->assertIsString($location);
+
+        $adapter->updateCallback($location, [
+            'replace' => ['content' => ['Updated content']],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%syndicated-to%']);
+        $this->assertNotNull($post, 'syndicated-to must survive a content update');
+        $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
+    }
 }

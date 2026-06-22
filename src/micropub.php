@@ -89,6 +89,10 @@ class LambMicropubAdapter extends MicropubAdapter
             $props['category'] = $tags;
         }
 
+        if (!empty($bean->syndicated_to)) {
+            $props['syndication'] = preg_split('/\s+/', trim((string) $bean->syndicated_to));
+        }
+
         return $props;
     }
 
@@ -308,17 +312,22 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Return the configuration query response including an empty syndicate-to list.
+     * Return the configuration query response including configured syndicate-to targets.
      *
      * @param array<string, mixed> $params
      * @return array<string, mixed>
      */
     public function configurationQueryCallback(array $params): array
     {
+        global $config;
+        $targets = [];
+        foreach ($config['syndicate_to'] ?? [] as $uid => $name) {
+            $targets[] = ['uid' => (string) $uid, 'name' => (string) $name];
+        }
         return [
             'q'              => ['config', 'source', 'syndicate-to'],
             'media-endpoint' => ROOT_URL . '/micropub-media',
-            'syndicate-to'   => [],
+            'syndicate-to'   => $targets,
         ];
     }
 
@@ -480,25 +489,47 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function rebuildBody(OODBBean $bean, string $newContent): string
     {
-        $currentBody = $bean->body ?? '';
-        $matter      = parse_matter($currentBody);
-        $title       = $matter['title'] ?? null;
-        $replyTo     = $matter['in-reply-to'] ?? null;
+        $currentBody  = $bean->body ?? '';
+        $matter       = parse_matter($currentBody);
+        $title        = $matter['title'] ?? null;
+        $replyTo      = $matter['in-reply-to'] ?? null;
+        $syndicatedTo = $matter['syndicated-to'] ?? null;
 
-        $tags      = get_tags($currentBody);
+        $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
+    }
+
+    /**
+     * Assemble the post front-matter array from individual fields.
+     *
+     * Central point for front-matter assembly so buildBody() and rebuildBody()
+     * stay in sync when new fields are added.
+     *
+     * @param string|null $title
+     * @param string|null $replyTo
+     * @param string|null $syndicatedTo
+     * @return array<string, string>
+     */
+    private function assembleFrontMatter(?string $title, ?string $replyTo, ?string $syndicatedTo): array
+    {
         $matter = [];
         if ($title !== null) {
-            $matter['title'] = (string) $title;
+            $matter['title'] = $title;
         }
-        if (is_string($replyTo) && $replyTo !== '') {
+        if ($replyTo !== null && $replyTo !== '') {
             $matter['in-reply-to'] = $replyTo;
         }
-
-        return build_matter($matter, $content);
+        if ($syndicatedTo !== null && $syndicatedTo !== '') {
+            $matter['syndicated-to'] = $syndicatedTo;
+        }
+        return $matter;
     }
 
     /**
@@ -596,15 +627,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        $matter = [];
-        if ($title !== null) {
-            $matter['title'] = (string) $title;
-        }
-        if (is_string($replyTo) && $replyTo !== '') {
-            $matter['in-reply-to'] = $replyTo;
-        }
+        $syndicateTo  = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
-        return build_matter($matter, $content);
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
     }
 
     /**
@@ -616,7 +645,7 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildExtraProperties(array $props): string
     {
-        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status'];
+        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status', 'mp-syndicate-to'];
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {

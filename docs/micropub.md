@@ -67,6 +67,30 @@ Reproduce the problem with your client, then read `data/micropub.log` (next to y
 
 Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (`micropub_debug = false`) when you're done** so the log stops growing.
 
+## POSSE syndication
+
+Lamb supports advertising syndication targets to Micropub clients so you can publish once and syndicate elsewhere (POSSE).
+
+### Configure targets
+
+Add a `[syndicate_to]` section to your site configuration at `/settings`:
+
+```ini
+[syndicate_to]
+https://bsky.app/profile/yourusername = Bluesky
+https://mastodon.social/@yourusername = Mastodon
+```
+
+Each entry is a `uid = name` pair. The `uid` is the profile URL of the syndication target; the `name` is the human-readable label shown in Micropub clients (e.g. Quill). Clients discover the list from `GET /micropub?q=config`.
+
+### Syndicating a post
+
+When your Micropub client sends `mp-syndicate-to` on create, Lamb records the selected targets on the post as `syndicated-to`. The `syndicated-to` field is also visible in the `q=source` response as a `syndication` property.
+
+The status page then shows "Also on: …" links (with `u-syndication` microformat class) for any recorded targets.
+
+Actual delivery to silos is handled by [Bridgy](https://brid.gy/) via outbound webmentions — Lamb only configures, records, and surfaces the targets.
+
 ## How to test
 
 Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's implementation report is available at [micropub.rocks/implementation-reports/servers/962](https://micropub.rocks/implementation-reports/servers/962/GYKIHp3O03m9vNil9Qcq).

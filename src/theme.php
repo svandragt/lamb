@@ -341,6 +341,35 @@ function link_source(OODBBean $bean): string
 }
 
 /**
+ * Returns "Also on: <a u-syndication>" links for posts with syndicated-to targets, or '' when absent.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string HTML syndication links, or '' when none are recorded.
+ */
+function syndication_links(OODBBean $bean): string
+{
+    $raw = (string) ($bean->syndicated_to ?? '');
+    if ($raw === '') {
+        return '';
+    }
+    global $config;
+    $targets = $config['syndicate_to'] ?? [];
+    $links = [];
+    foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
+        if ($uid === '') {
+            continue;
+        }
+        $name = $targets[$uid] ?? (parse_url($uid, PHP_URL_HOST) ?: $uid);
+        $links[] = '<a class="u-syndication" href="' . escape($uid) . '" rel="syndication">'
+            . escape((string) $name) . '</a>';
+    }
+    if (empty($links)) {
+        return '';
+    }
+    return '<small>Also on: ' . implode(', ', $links) . '</small>';
+}
+
+/**
  * Includes a theme part file, falling back to the base theme when the active theme does not override it.
  *
  * @param string $name Part name without extension (e.g. 'home', '_items').

@@ -324,6 +324,11 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     // matter on edit clears the stored value.
     $bean->in_reply_to = normalize_in_reply_to($front_matter);
 
+    // Normalise syndication record. Hyphenated key can't map via the loop below.
+    $bean->syndicated_to = isset($front_matter['syndicated-to'])
+        ? (string) $front_matter['syndicated-to']
+        : '';
+
     // Reset the title to empty when it is absent from front matter, so removing
     // the `title:` line (or all front matter) on an edit clears a previously
     // stored title. The additive loop below only ever sets keys that are

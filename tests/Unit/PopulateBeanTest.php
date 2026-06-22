@@ -278,4 +278,26 @@ class PopulateBeanTest extends TestCase
         $bean = populate_bean("---\ntitle: Hello World\n---\nContent.");
         $this->assertSame('hello-world', $bean->slug);
     }
+
+    // syndicated-to front matter → bean->syndicated_to
+
+    public function testPopulateBeanExtractsSyndicatedTo(): void
+    {
+        $text = "---\nsyndicated-to: https://bsky.app/profile/me\n---\nContent.";
+        $bean = populate_bean($text);
+        $this->assertSame('https://bsky.app/profile/me', $bean->syndicated_to);
+    }
+
+    public function testPopulateBeanSyndicatedToEmptyWhenAbsent(): void
+    {
+        $bean = populate_bean('Just content.');
+        $this->assertSame('', $bean->syndicated_to);
+    }
+
+    public function testPopulateBeanExtractsMultipleSyndicatedToUrls(): void
+    {
+        $text = "---\nsyndicated-to: https://bsky.app/profile/me https://mastodon.social/@me\n---\nContent.";
+        $bean = populate_bean($text);
+        $this->assertSame('https://bsky.app/profile/me https://mastodon.social/@me', $bean->syndicated_to);
+    }
 }
