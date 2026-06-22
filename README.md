@@ -4,17 +4,12 @@ Lamb — Literally Another Micro Blog.
 
 Barrier free super simple blogging, self-hosted.
 
-- SQLite based portable single author blog.
-- Friction
-  free [Markdown](https://docs.github.com/en/get-started/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax)
-  entry with server-side syntax highlighting; drag and drop or paste images, automatically converted to WebP and downscaled.
-- Hashtags by just typing them `#ahyeah`, plus full text search and configurable menu items.
-- Drafts, scheduled posts, and one-click trash with restore.
-- Discoverable Atom and JSON feeds (`/feed` and `/feed.json`, plus feeds per tag), with WebSub for instant updates.
-- IndieWeb friendly: send and receive webmentions, write reply posts (`in-reply-to`), and publish from other apps through a Micropub endpoint.
-- Pull external content into the blog by subscribing to feeds; ingested posts land as drafts by default.
-- 404 fallback redirection to your old site, plus automatic 301s when a post's slug changes.
-- Friendly user theming, if you don't like my retro themes. ;)
+- Drag or paste an image and Lamb converts it to WebP automatically, no upload step or asset library to manage.
+- Tag posts by typing `#hashtag` inline; no taxonomy UI, the tags just appear.
+- Full-text search included, no plugin needed and nothing to rebuild.
+- Runs on SQLite, so your entire blog is one file – easy to back up, easy to move.
+- Drafts and scheduled posts built in, with one-click trash and restore.
+- A [Micropub](https://indieweb.org/Micropub) endpoint lets you post from iA Writer, Ulysses, or any IndieWeb-compatible app.
 
 # Getting started
 
