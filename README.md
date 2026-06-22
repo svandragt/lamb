@@ -13,6 +13,8 @@ Barrier free super simple blogging, self-hosted.
 
 # Getting started
 
+[![Deploy to DO](https://www.deploytodo.com/do-btn-blue.svg)](https://cloud.digitalocean.com/apps/new?repo=https://github.com/svandragt/lamb/tree/release)
+
 [Read the documentation](https://svandragt.github.io/lamb) to get started. It is published from the `release`
 branch, so it always matches the latest released version.
 
