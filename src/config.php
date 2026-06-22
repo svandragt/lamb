@@ -92,6 +92,12 @@ Feed = /feed
 ;; Format: <old-slug> = <destination>
 ;; Destination can be a root-relative URL, a bare slug, or a full external URL.
 ;old-post = /new-post
+
+[syndicate_to]
+;; Add POSSE syndication targets shown to Micropub clients (e.g. Quill).
+;; Format: <uid>=<name>  where uid is the profile URL of the target silo.
+;https://bsky.app/profile/yourusername = Bluesky
+;https://mastodon.social/@yourusername = Mastodon
 INI;
 }
 

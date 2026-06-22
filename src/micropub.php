@@ -89,6 +89,10 @@ class LambMicropubAdapter extends MicropubAdapter
             $props['category'] = $tags;
         }
 
+        if (!empty($bean->syndicated_to)) {
+            $props['syndication'] = preg_split('/\s+/', trim((string) $bean->syndicated_to));
+        }
+
         return $props;
     }
 
@@ -308,17 +312,22 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Return the configuration query response including an empty syndicate-to list.
+     * Return the configuration query response including configured syndicate-to targets.
      *
      * @param array<string, mixed> $params
      * @return array<string, mixed>
      */
     public function configurationQueryCallback(array $params): array
     {
+        global $config;
+        $targets = [];
+        foreach ($config['syndicate_to'] ?? [] as $uid => $name) {
+            $targets[] = ['uid' => (string) $uid, 'name' => (string) $name];
+        }
         return [
             'q'              => ['config', 'source', 'syndicate-to'],
             'media-endpoint' => ROOT_URL . '/micropub-media',
-            'syndicate-to'   => [],
+            'syndicate-to'   => $targets,
         ];
     }
 
@@ -484,6 +493,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $matter      = parse_matter($currentBody);
         $title       = $matter['title'] ?? null;
         $replyTo     = $matter['in-reply-to'] ?? null;
+        $syndicatedTo = $matter['syndicated-to'] ?? null;
 
         $tags      = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
@@ -496,6 +506,9 @@ class LambMicropubAdapter extends MicropubAdapter
         }
         if (is_string($replyTo) && $replyTo !== '') {
             $matter['in-reply-to'] = $replyTo;
+        }
+        if (is_string($syndicatedTo) && $syndicatedTo !== '') {
+            $matter['syndicated-to'] = $syndicatedTo;
         }
 
         return build_matter($matter, $content);
@@ -604,6 +617,11 @@ class LambMicropubAdapter extends MicropubAdapter
             $matter['in-reply-to'] = $replyTo;
         }
 
+        $syndicateTo = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        if (!empty($syndicateTo)) {
+            $matter['syndicated-to'] = implode(' ', $syndicateTo);
+        }
+
         return build_matter($matter, $content);
     }
 
@@ -616,7 +634,7 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildExtraProperties(array $props): string
     {
-        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status'];
+        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status', 'mp-syndicate-to'];
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {
