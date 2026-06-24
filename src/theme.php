@@ -396,19 +396,19 @@ function part(string $name, string $dir = 'parts'): void
 }
 
 /**
- * Returns <li><a> HTML for each item in $config['menu_items'], or '' when none are configured.
+ * Returns <li><a> HTML for each label=>url pair, or '' when the array is empty.
  *
+ * @param array<string, string> $nav_items
  * @return string Newline-separated HTML list item strings.
  */
-function li_menu_items(): string
+function li_items(array $nav_items): string
 {
-    global $config;
-    $items = [];
-    $format = '<li><a href="%s">%s</a></li>';
-    if (empty($config['menu_items'])) {
+    if (empty($nav_items)) {
         return '';
     }
-    foreach ($config['menu_items'] as $label => $url) {
+    $format = '<li><a href="%s">%s</a></li>';
+    $items = [];
+    foreach ($nav_items as $label => $url) {
         if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
             $items[] = sprintf($format, escape($url), escape($label));
         } else {
@@ -417,6 +417,30 @@ function li_menu_items(): string
     }
 
     return implode(PHP_EOL, $items);
+}
+
+/**
+ * Returns <li><a> HTML for each item in $config['menu_items'], or '' when none are configured.
+ *
+ * @return string Newline-separated HTML list item strings.
+ */
+function li_menu_items(): string
+{
+    global $config;
+
+    return li_items((array) ($config['menu_items'] ?? []));
+}
+
+/**
+ * Returns <li><a> HTML for each item in $config['footer_items'], or '' when none are configured.
+ *
+ * @return string Newline-separated HTML list item strings.
+ */
+function li_footer_items(): string
+{
+    global $config;
+
+    return li_items((array) ($config['footer_items'] ?? []));
 }
 
 /**

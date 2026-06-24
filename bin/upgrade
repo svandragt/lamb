@@ -2,14 +2,23 @@
 # Upgrade Lamb in place: reset to the upstream of the checked-out branch,
 # reinstall production dependencies, and verify the site still responds.
 # Safe to run from cron, e.g.: 15 3 * * * /path/to/lamb/bin/upgrade
+#
+# Optional: pass a branch name to switch before upgrading.
+# Useful for testing a feature branch:
+#   bin/upgrade claude/remove-digitalocean-refs
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+git fetch origin
+
+if [ -n "${1:-}" ]; then
+    git checkout "$1"
+fi
+
 prev=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 
-git fetch origin
 git reset --hard '@{u}'
 composer install --no-dev --no-interaction --prefer-dist --no-scripts
 
