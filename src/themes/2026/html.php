@@ -1,6 +1,7 @@
 <?php
 
 use function Lamb\Theme\escape;
+use function Lamb\Theme\li_footer_items;
 use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\part;
 use function Lamb\Theme\site_or_page_title;
@@ -84,6 +85,14 @@ global $template;
 </div>
 <?php part("_pagination"); ?>
 <footer>
+    <?php $footer_items = li_footer_items(); ?>
+    <?php if ($footer_items) : ?>
+    <nav class="footer-nav">
+        <ul>
+            <?php echo $footer_items; ?>
+        </ul>
+    </nav>
+    <?php endif; ?>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
 <?php the_scripts(); ?>

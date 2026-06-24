@@ -57,6 +57,11 @@ token_endpoint = https://tokens.indieauth.com/token
 Home = /
 Feed = /feed
 
+[footer_items]
+;; Add <label>=<url> entries for the site footer. Same format as [menu_items].
+;; Useful for secondary navigation: privacy policy, colophon, social links, etc.
+;Privacy = /privacy
+
 [redirections]
 ;; Add 301 redirects for old URL path segments.
 ;; Format: <old-slug> = <destination>

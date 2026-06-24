@@ -72,6 +72,11 @@ token_endpoint = https://tokens.indieauth.com/token
 Home = /
 Feed = /feed
 
+[footer_items]
+;; Add <label>=<url> entries here for the site footer. Same format as [menu_items].
+;; Useful for secondary navigation: privacy policy, colophon, social links, etc.
+;Privacy = /privacy
+
 [feeds]
 ;; Add feeds whose content gets published into the blog.
 ;; Each item is in the format of <name>=<url>  where URL is a link to an RSS or Atom feed.
