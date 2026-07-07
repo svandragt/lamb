@@ -62,6 +62,28 @@ test('handleFiles inserts the upload response at the cursor and fires input', as
   assert.ok(inputFired, 'an input event should be dispatched')
 })
 
+test('handleFiles posts a dropped video file the same way as an image', async () => {
+  // The drop handler forwards any dropped file with no client-side type
+  // filtering; a video is uploaded/inserted through the same path as an image.
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = ''
+  ta.setSelectionRange(0, 0)
+
+  let posted
+  window.fetch = (url, opts) => {
+    posted = { url, opts }
+    return Promise.resolve({ json: () => Promise.resolve('![](/clip.mp4)') })
+  }
+
+  api.handleFiles([new window.File(['x'], 'clip.mp4', { type: 'video/mp4' })], ta)
+  await flush()
+
+  assert.equal(posted.url, '/upload')
+  assert.equal(posted.opts.body.get('imageFiles[]').name, 'clip.mp4')
+  assert.equal(ta.value, '![](/clip.mp4)')
+})
+
 test('handleFiles strips server alt text so the user sees empty [] to fill in', async () => {
   const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
   const ta = document.querySelector('textarea')

@@ -18,9 +18,10 @@ RUN install-php-extensions gettext pdo_mysql gd
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
-# Uploads are converted to WebP and resized server-side, so accept large
-# originals (phone photos easily exceed PHP's 2M default).
-RUN printf 'upload_max_filesize = 20M\npost_max_size = 25M\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
+# Images are converted to WebP and resized server-side, so large photo
+# originals are fine (phone photos easily exceed PHP's 2M default); video is
+# stored as-is and can be much larger still.
+RUN printf 'upload_max_filesize = 100M\npost_max_size = 100M\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
 COPY .docker/Caddyfile.release /etc/frankenphp/Caddyfile
 

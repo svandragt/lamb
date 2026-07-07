@@ -17,7 +17,9 @@ specific first:
 1. **The first image in the post.** If the post body embeds an image, that image
    becomes the card image and the Twitter card is upgraded to
    `summary_large_image` (a large, image-led preview). So sharing a photo or
-   screenshot post previews *that* image.
+   screenshot post previews *that* image. Video is not considered here — Lamb
+   does not extract a poster frame — so a post whose only media is a video
+   falls through to the next rule below.
 2. **A site-wide default you provide.** If the post has no image, Lamb looks for
    an `og-image.*` file in the web root (next to `index.php`) and uses it.
 3. **The built-in Lamb card.** If you haven't provided one, the shipped

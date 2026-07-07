@@ -116,4 +116,58 @@ class LambDownTest extends TestCase
         $html = $this->parser->text("- [ ] read **the** docs");
         $this->assertStringContainsString('<strong>the</strong>', $html);
     }
+
+    public function testVideoExtensionRendersVideoTag(): void
+    {
+        $html = $this->parser->text('![clip](video.mp4)');
+        $this->assertStringContainsString('<video', $html);
+        $this->assertStringContainsString('controls="controls"', $html);
+        $this->assertStringContainsString('src="video.mp4"', $html);
+        $this->assertStringNotContainsString('<img', $html);
+    }
+
+    public function testVideoTagIsProperlyClosed(): void
+    {
+        // <video> is not an HTML5 void element; a self-closed "<video ... />"
+        // would leave the tag open in a browser and swallow following markup.
+        $html = $this->parser->text('![clip](video.mp4)');
+        $this->assertStringContainsString('</video>', $html);
+        $this->assertStringNotContainsString('/>', $html);
+    }
+
+    public function testWebmAndMovExtensionsRenderVideoTag(): void
+    {
+        $this->assertStringContainsString('<video', $this->parser->text('![clip](video.webm)'));
+        $this->assertStringContainsString('<video', $this->parser->text('![clip](video.mov)'));
+    }
+
+    public function testNonVideoExtensionStillRendersLazyImage(): void
+    {
+        $html = $this->parser->text('![photo](photo.png)');
+        $this->assertStringContainsString('<img', $html);
+        $this->assertStringContainsString('loading="lazy"', $html);
+        $this->assertStringNotContainsString('<video', $html);
+    }
+
+    public function testVideoSrcFiltersUnsafeUrlScheme(): void
+    {
+        // Parsedown's safe mode only auto-filters the src scheme for elements
+        // named "img"; renaming to "video" must not bypass that protection.
+        $html = $this->parser->text('![clip](javascript:evil.mp4)');
+        $this->assertStringContainsString('javascript%3Aevil.mp4', $html);
+    }
+
+    public function testVideoSrcWithQueryStringStillRendersVideoTag(): void
+    {
+        $html = $this->parser->text('![clip](https://cdn.example.com/clip.mp4?sig=abc123)');
+        $this->assertStringContainsString('<video', $html);
+        $this->assertStringContainsString('src="https://cdn.example.com/clip.mp4?sig=abc123"', $html);
+    }
+
+    public function testReferenceStyleVideoLinkRendersVideoTag(): void
+    {
+        $html = $this->parser->text("![clip][1]\n\n[1]: video.mp4");
+        $this->assertStringContainsString('<video', $html);
+        $this->assertStringContainsString('src="video.mp4"', $html);
+    }
 }

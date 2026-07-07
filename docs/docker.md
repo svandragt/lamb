@@ -46,9 +46,9 @@ $ echo "LAMB_LOGIN_PASSWORD=$(docker exec -it lamb-app bash -c 'php make-passwor
 
 Your site is now ready at http://localhost
 
-Uploaded images are stored under `src/assets/` inside the app container.
+Uploaded images and video are stored under `src/assets/` inside the app container.
 
-Both images accept uploads up to 20&nbsp;MB (`upload_max_filesize = 20M`, `post_max_size = 25M`) — see [Media]({{ site.baseurl }}{% link media.md %}).
+Both images accept uploads up to 100&nbsp;MB (`upload_max_filesize = 100M`, `post_max_size = 100M`) — see [Media]({{ site.baseurl }}{% link media.md %}).
 
 Errors can be inspected with `docker compose logs -f app`.
 

@@ -14,9 +14,10 @@ RUN touch /usr/local/etc/php/conf.d/app.ini && \
     echo "display_errors = off" >> /usr/local/etc/php/conf.d/app.ini && \
     echo "log_errors = On" >> /usr/local/etc/php/conf.d/app.ini && \
     echo "error_log = /dev/stderr" >> /usr/local/etc/php/conf.d/app.ini && \
-    # Uploads are converted to WebP and resized server-side, so accept large originals.
-    echo "upload_max_filesize = 20M" >> /usr/local/etc/php/conf.d/app.ini && \
-    echo "post_max_size = 25M" >> /usr/local/etc/php/conf.d/app.ini
+    # Images are converted to WebP and resized server-side, so large photo
+    # originals are fine; video is stored as-is and can be much larger still.
+    echo "upload_max_filesize = 100M" >> /usr/local/etc/php/conf.d/app.ini && \
+    echo "post_max_size = 100M" >> /usr/local/etc/php/conf.d/app.ini
 
 # Allow FrankenPHP to bind :80 when running as the (remapped) www-data user.
 RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp
