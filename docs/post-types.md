@@ -12,7 +12,7 @@ Any tags are automatically linked to tag archives.
 
 Select some text and paste a link over it to turn the selection into a markdown link, e.g. selecting `Lamb` and pasting `https://example.com` produces `[Lamb](https://example.com)`.
 
-Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor. JPEG and PNG uploads are automatically converted to WebP to keep files small; GIF, WebP, and AVIF are stored as-is.
+Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor. JPEG and PNG uploads are automatically converted to WebP to keep files small; GIF, WebP, and AVIF are stored as-is. Video files (`mp4`, `webm`, `mov`) can be dragged onto the editor the same way and are embedded as a playable video.
 
 Permalinks for statuses are in the form of `/status/<integer>`.
 
@@ -89,7 +89,7 @@ The following sections of the site are special:
 
 ## Related
 
-* [Media]({{ site.baseurl }}{% link media.md %}): Add images by drag-and-drop or paste; JPEG/PNG are converted to WebP.
+* [Media]({{ site.baseurl }}{% link media.md %}): Add images and video by drag-and-drop or paste; JPEG/PNG are converted to WebP, video is stored as-is.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Add `draft: true` to front-matter to save a post as a draft.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Add a future `created:` date to publish a post later.
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A `summary:` in front-matter sets the description used in social preview cards.

@@ -74,11 +74,12 @@ function respond_upload(array $_args): void
 
 /**
  * Returns a safe, lower-cased file extension for an uploaded file, or null if the
- * extension is not an allowed image type.
+ * extension is not an allowed image or video type.
  *
  * Uploads land under the web root (src/assets/), so the extension is the line of
  * defence against writing executable files (e.g. .php). Only the allowlisted image
- * extensions are accepted; anything else (including extensionless names) is rejected.
+ * and video extensions are accepted; anything else (including extensionless names)
+ * is rejected.
  *
  * @param string $filename The client-supplied filename.
  * @return string|null The allowed lower-case extension, or null when not permitted.
@@ -86,7 +87,8 @@ function respond_upload(array $_args): void
 function safe_upload_extension(string $filename): ?string
 {
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    if ($ext === '' || !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true)) {
+    $allowed = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
+    if ($ext === '' || !in_array($ext, $allowed, true)) {
         return null;
     }
 

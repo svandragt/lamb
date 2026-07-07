@@ -16,6 +16,8 @@ define('LOGIN_CSRF_COOKIE', 'lamb_login_csrf');
 define('IMAGE_FILES', 'imageFiles');
 // Image extensions accepted for upload. SVG is excluded: it can carry scripts.
 define('IMAGE_UPLOAD_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
+// Video extensions accepted for upload; browsers decode these containers natively.
+define('VIDEO_UPLOAD_EXTENSIONS', ['mp4', 'webm', 'mov']);
 // Seconds before a single feed fetch is abandoned during /_cron ingestion.
 define('FEED_FETCH_TIMEOUT', 15);
 define('MINUTE_IN_SECONDS', 60);

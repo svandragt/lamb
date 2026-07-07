@@ -181,6 +181,21 @@ class UploadTest extends TestCase
         $this->assertSame('png', safe_upload_extension('evil.php.png'));
     }
 
+    public function testSafeUploadExtensionAllowsMp4(): void
+    {
+        $this->assertSame('mp4', safe_upload_extension('clip.mp4'));
+    }
+
+    public function testSafeUploadExtensionAllowsWebm(): void
+    {
+        $this->assertSame('webm', safe_upload_extension('clip.webm'));
+    }
+
+    public function testSafeUploadExtensionAllowsMov(): void
+    {
+        $this->assertSame('mov', safe_upload_extension('clip.mov'));
+    }
+
     // should_convert_to_webp — only re-encode raster formats that benefit and that
     // GD can losslessly round-trip (jpeg/png). webp/avif are already efficient; gif
     // may be animated (GD flattens to one frame), so it is passed through untouched.
@@ -225,6 +240,12 @@ class UploadTest extends TestCase
         // Installs without the gd extension must store the original bytes
         // instead of fataling on undefined GD functions.
         $this->assertFalse(should_convert_to_webp('jpg', gd_available: false));
+    }
+
+    public function testShouldNotConvertMp4(): void
+    {
+        // Video is never re-encoded; it is always stored as the original bytes.
+        $this->assertFalse(should_convert_to_webp('mp4'));
     }
 
     // convert_to_webp — GD-backed re-encode of an uploaded image into WebP
