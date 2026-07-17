@@ -1,4 +1,5 @@
 *.db
+*.db.bak*
 /tests/Support/Data/sessions/
 /.docker/*.env
 /data/cache/
