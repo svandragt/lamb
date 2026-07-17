@@ -7,6 +7,11 @@
     "@types/node": "^26.0.1",
     "jsdom": "^29.1.1"
   },
+  "pnpm": {
+    "overrides": {
+      "undici": "^7.28.0"
+    }
+  },
   "scripts": {
     "screenshot": "pnpm exec node scripts/screenshot.mjs",
     "test": "node --test \"tests/js/**/*.test.mjs\""
