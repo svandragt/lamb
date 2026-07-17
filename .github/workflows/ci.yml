@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
       - name: Cache pnpm store
@@ -132,7 +132,7 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-dev --no-interaction --no-scripts
       - uses: pnpm/action-setup@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: lts/*
       - name: Cache pnpm store
