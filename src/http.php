@@ -114,6 +114,8 @@ const DEFAULT_USER_AGENT = 'Lamb-Webmention';
  *  - `follow_location` int|null follow_location flag; pass null to omit it
  *                      (so PHP's stream default applies).
  *  - `max_redirects`   int|null redirect cap; pass null to omit it.
+ *  - `max_bytes`       int     Cap the response body length, passed through
+ *                      to {@see fetch}; not part of the stream context itself.
  *
  * @param array<string, mixed> $opts
  * @return array<string, mixed>
@@ -239,9 +241,18 @@ function fetch(string $url, array $opts = []): ?array
 {
     $context = stream_context_create(['http' => build_http_context_options($opts)]);
 
+    $max_bytes = isset($opts['max_bytes']) ? max(0, (int) $opts['max_bytes']) : null;
     $http_response_header = [];
-    $body = @file_get_contents($url, false, $context);
+    // When max_bytes is set, request cap+1 so the caller can detect truncation
+    // (a body that comes back > max_bytes means the source was at least one
+    // byte larger than we're willing to keep). Without a cap, read to EOF.
+    $body = $max_bytes === null
+        ? @file_get_contents($url, false, $context)
+        : @file_get_contents($url, false, $context, 0, $max_bytes + 1);
     if ($body === false) {
+        return null;
+    }
+    if ($max_bytes !== null && strlen($body) > $max_bytes) {
         return null;
     }
 

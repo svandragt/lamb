@@ -61,3 +61,55 @@ test('handleFiles inserts the upload response at the cursor and fires input', as
   assert.equal(ta.value, 'ab![](/img.webp)cd')
   assert.ok(inputFired, 'an input event should be dispatched')
 })
+
+test('handleFiles posts a dropped video file the same way as an image', async () => {
+  // The drop handler forwards any dropped file with no client-side type
+  // filtering; a video is uploaded/inserted through the same path as an image.
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = ''
+  ta.setSelectionRange(0, 0)
+
+  let posted
+  window.fetch = (url, opts) => {
+    posted = { url, opts }
+    return Promise.resolve({ json: () => Promise.resolve('![](/clip.mp4)') })
+  }
+
+  api.handleFiles([new window.File(['x'], 'clip.mp4', { type: 'video/mp4' })], ta)
+  await flush()
+
+  assert.equal(posted.url, '/upload')
+  assert.equal(posted.opts.body.get('imageFiles[]').name, 'clip.mp4')
+  assert.equal(ta.value, '![](/clip.mp4)')
+})
+
+test('handleFiles strips server alt text so the user sees empty [] to fill in', async () => {
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = ''
+  ta.setSelectionRange(0, 0)
+
+  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+
+  api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
+  await flush()
+
+  assert.equal(ta.value, '![](/img.webp)')
+})
+
+test('handleFiles positions cursor inside [] after insertion', async () => {
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = 'abcd'
+  ta.setSelectionRange(2, 2) // cursor between "ab" and "cd"
+
+  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+
+  api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
+  await flush()
+
+  assert.equal(ta.value, 'ab![](/img.webp)cd')
+  assert.equal(ta.selectionStart, 4) // inside the [], after ![
+  assert.equal(ta.selectionEnd, 4)
+})

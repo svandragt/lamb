@@ -196,20 +196,72 @@ class LambDown extends Parsedown
      * Inject lazy-loading attributes on every inline image so post bodies
      * with embedded screenshots do not block first paint on the homepage.
      *
+     * Uploaded video files reuse the same `![alt](url)` Markdown syntax as
+     * images (dropped/uploaded via the same endpoint), so a src ending in a
+     * known video extension is rendered as an embedded `<video>` player
+     * instead of a broken `<img>`.
+     *
      * @param array<string, mixed> $Excerpt The inline excerpt to be parsed.
      *
-     * @return array<string, mixed>|null The parsed image element, or null when not an image.
+     * @return array<string, mixed>|null The parsed image or video element, or null when not an image.
      */
     protected function inlineImage($Excerpt)
     {
         $image = parent::inlineImage($Excerpt);
-        if (!is_array($image) || !isset($image['element']['attributes'])) {
+        if (!is_array($image) || !isset($image['element']['attributes']['src'])) {
             return $image;
         }
+
+        $src = $image['element']['attributes']['src'];
+        $ext = strtolower(pathinfo(parse_url($src, PHP_URL_PATH) ?? $src, PATHINFO_EXTENSION));
+
+        if (in_array($ext, VIDEO_UPLOAD_EXTENSIONS, true)) {
+            $image['element'] = $this->videoElement($image['element']);
+            return $image;
+        }
+
         $image['element']['attributes'] += [
             'loading'  => 'lazy',
             'decoding' => 'async',
         ];
         return $image;
+    }
+
+    /**
+     * Builds a `<video>` element from a parsed `<img>` element, reusing its
+     * attributes (dropping `alt`, which is meaningless on `<video>`).
+     *
+     * Parsedown's safe mode only auto-applies its src scheme allowlist to
+     * elements named `a`/`img` (see Parsedown::sanitiseElement()); renaming
+     * the element to `video` bypasses that check, so it is re-applied here
+     * explicitly via the inherited (protected) filterUnsafeUrlInAttribute().
+     * An explicit empty `text` forces a proper closing tag: `video` is not an
+     * HTML5 void element, so the self-closing markup Parsedown would
+     * otherwise emit for a childless element would leave the tag unclosed.
+     *
+     * @param array<string, mixed> $imgElement The `<img>` element from parent::inlineImage().
+     * @return array<string, mixed> The `<video>` element.
+     */
+    private function videoElement(array $imgElement): array
+    {
+        $attributes = $imgElement['attributes'];
+        unset($attributes['alt']);
+        $attributes += [
+            'controls'    => 'controls',
+            'preload'     => 'metadata',
+            'playsinline' => 'playsinline',
+        ];
+
+        $element = [
+            'name'       => 'video',
+            'attributes' => $attributes,
+            'text'       => '',
+        ];
+
+        if ($this->safeMode) {
+            $element = $this->filterUnsafeUrlInAttribute($element, 'src');
+        }
+
+        return $element;
     }
 }

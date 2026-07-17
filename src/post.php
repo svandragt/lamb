@@ -2,6 +2,7 @@
 
 namespace Lamb\Post;
 
+use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use SimplePie\Item;
@@ -15,13 +16,13 @@ use function Lamb\Route\is_reserved_route;
  * Populates and returns an OODBBean instance with the given text and optional feed information.
  *
  * @param string $text The text content to be set in the bean.
- * @param Item|null $feed_item An optional feed item to extract creation date and ID from.
+ * @param Item|JsonFeedItem|null $feed_item An optional feed item to extract creation date and ID from.
  * @param string|null $feed_name An optional feed name to prefix the slug and associate with the bean.
  * @param OODBBean|null $bean An optional existing bean to populate. If null, a new 'post' bean is dispensed.
  * @return OODBBean The populated bean instance.
  * @noinspection CallableParameterUseCaseInTypeContextInspection
  */
-function populate_bean(string $text, ?Item $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): OODBBean
+function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?string $feed_name = null, ?OODBBean $bean = null): OODBBean
 {
     global $config;
 
@@ -384,6 +385,26 @@ function finalize_slug(OODBBean $bean): bool
     $bean->body = $body;
 
     return $changed;
+}
+
+/**
+ * Stores a freshly populated post and pins its finalized slug.
+ *
+ * Every create path follows the same idiom: store once to mint an id (the id is
+ * part of any dedup suffix), then finalize_slug() — which reserves/suffixes the
+ * slug and pins it into the body's front matter — and re-store only when that
+ * changed something. Centralising it keeps the create paths (web form, Micropub,
+ * feed ingestion) from drifting apart.
+ *
+ * @param OODBBean $bean An unsaved or partially-saved post bean.
+ * @return void
+ */
+function finalize_and_store_post(OODBBean $bean): void
+{
+    R::store($bean);
+    if (finalize_slug($bean)) {
+        R::store($bean);
+    }
 }
 
 /**

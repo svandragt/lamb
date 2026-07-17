@@ -38,6 +38,10 @@ Each source/target pair is sent once — re-editing a post does not re-notify ta
 
 [Scheduled posts]({{ site.baseurl }}{% link scheduling.md %}) are queued when you save them, but nothing is sent until the publication time has passed — the first `/_cron` run after the post goes live delivers its webmentions, once the post is publicly reachable for receivers to verify. Editing a scheduled post before it publishes updates the queue (removed links are dropped), and deleting it cancels the queued mentions entirely.
 
+### Deleting a post that sent webmentions
+
+When you delete a post that already sent webmentions, Lamb re-sends them on the next `/_cron` run. The receiver re-fetches your post URL, finds it gone, and removes the mention it was displaying — so a deleted reply or like stops showing on the other site, as the [Webmention spec recommends](https://www.w3.org/TR/webmention/#sending-webmentions-for-deleted-posts). If you [restore]({{ site.baseurl }}{% link trash.md %}) the post from Trash before that cron run, the re-sends are abandoned and nothing is notified.
+
 ## Related
 
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Mark a post as `in-reply-to` another URL — the most common webmention type.
@@ -45,3 +49,4 @@ Each source/target pair is sent once — re-editing a post does not re-notify ta
 * [Cron / scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How `/_cron` drives feed ingestion and outbound webmentions.
 * [Scheduling posts]({{ site.baseurl }}{% link scheduling.md %}): Scheduled posts send their webmentions when they go live.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Pull posts in from other feeds.
+* [Theme functions]({{ site.baseurl }}{% link theme-functions.md %}): The microformats2 (h-entry / h-card) markup the themes emit, which Webmention receivers parse.

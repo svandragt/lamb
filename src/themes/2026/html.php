@@ -1,9 +1,11 @@
 <?php
 
 use function Lamb\Theme\escape;
+use function Lamb\Theme\li_footer_items;
 use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\part;
 use function Lamb\Theme\site_or_page_title;
+use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 use function Lamb\Theme\the_preconnect;
 use function Lamb\Theme\the_scripts;
@@ -42,9 +44,12 @@ global $template;
     <link rel="preload" href="<?= ROOT_URL ?>/<?= THEME_URL ?>styles/fonts/public-sans-400-latin.woff2" as="font" type="font/woff2" crossorigin>
     <link rel="preload" href="<?= ROOT_URL ?>/<?= THEME_URL ?>styles/fonts/geist-mono-500-latin.woff2" as="font" type="font/woff2" crossorigin>
 
-    <?php the_preconnect(); ?>
-    <?php the_styles(); ?>
-    <?php the_opengraph(); ?>
+    <?php
+    the_meta_description();
+    the_preconnect();
+    the_styles();
+    the_opengraph();
+    ?>
 </head>
 <body class="<?= escape($template) ?>">
 <nav>
@@ -80,6 +85,14 @@ global $template;
 </div>
 <?php part("_pagination"); ?>
 <footer>
+    <?php $footer_items = li_footer_items(); ?>
+    <?php if ($footer_items) : ?>
+    <nav class="footer-nav">
+        <ul>
+            <?php echo $footer_items; ?>
+        </ul>
+    </nav>
+    <?php endif; ?>
     <small>Powered by <a href="https://github.com/svandragt/lamb">Lamb</a>.</small>
 </footer>
 <?php the_scripts(); ?>

@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\find_redirect;
+use function Lamb\get_all_redirects;
 
 class RedirectTest extends TestCase
 {
@@ -76,6 +77,17 @@ class RedirectTest extends TestCase
         $this->assertSame('/db-new-slug', $result);
     }
 
+    public function testFindRedirectReturnsMultiSegmentUrlFromDatabase(): void
+    {
+        $redirect = R::dispense('redirect');
+        $redirect->from_slug = 'status/59';
+        $redirect->to_url = '/status/80';
+        R::store($redirect);
+
+        $result = find_redirect('status/59');
+        $this->assertSame('/status/80', $result);
+    }
+
     public function testFindRedirectReturnsNullWhenNotFound(): void
     {
         $result = find_redirect('no-such-slug-' . uniqid());
@@ -130,6 +142,44 @@ class RedirectTest extends TestCase
         // Should not throw; no redirect to delete
         delete_redirect_for_slug('non-existent-slug-' . uniqid());
         $this->assertTrue(true);
+    }
+
+    // get_all_redirects
+
+    public function testGetAllRedirectsReturnsEmptyArrayWhenNoneExist(): void
+    {
+        $this->assertSame([], get_all_redirects());
+    }
+
+    public function testGetAllRedirectsReturnsSingleRedirect(): void
+    {
+        $r = R::dispense('redirect');
+        $r->from_slug = 'old-page';
+        $r->to_url = '/new-page';
+        R::store($r);
+
+        $results = get_all_redirects();
+        $this->assertCount(1, $results);
+        $this->assertSame('old-page', $results[0]['from_slug']);
+        $this->assertSame('/new-page', $results[0]['to_url']);
+    }
+
+    public function testGetAllRedirectsReturnsMultipleRedirectsSortedByFromSlug(): void
+    {
+        $a = R::dispense('redirect');
+        $a->from_slug = 'zebra';
+        $a->to_url = '/z';
+        R::store($a);
+
+        $b = R::dispense('redirect');
+        $b->from_slug = 'apple';
+        $b->to_url = '/a';
+        R::store($b);
+
+        $results = get_all_redirects();
+        $this->assertCount(2, $results);
+        $this->assertSame('apple', $results[0]['from_slug']);
+        $this->assertSame('zebra', $results[1]['from_slug']);
     }
 
     public function testDeleteRedirectForSlugMakesFindRedirectReturnNull(): void

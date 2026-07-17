@@ -3,7 +3,16 @@ base: ubuntu@24.04
 sdks:
     - name: node          # Node.js 24 (store SDK) — mirrors devbox nodejs@24
     - name: claude-code    # agent tooling
+      plugs:
+        git-mcp:
+          interface: tunnel
+          endpoint: 127.0.0.1:3015
     - name: project-lamb   # in-project SDK: PHP toolchain + project bootstrap
+    - name: system
+      slots:
+        git-mcp-host:
+          interface: tunnel
+          endpoint: 127.0.0.1:3015
 
 actions:
   # Print the URL to reach the dev server from the host.

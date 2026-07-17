@@ -10,7 +10,6 @@ use Lamb\Security;
 use RuntimeException;
 
 use const ROOT_DIR;
-use const ROOT_URL;
 
 /**
  * Responds to an upload request by processing the uploaded files.
@@ -50,22 +49,23 @@ function respond_upload(array $_args): void
             echo json_encode('Unsupported file type.', JSON_THROW_ON_ERROR);
             die();
         }
-        $temp_fp = $f['tmp_name'];
-        $seed    = sha1($f['name']);
+        $temp_fp  = $f['tmp_name'];
+        $seed     = sha1($f['name']);
+        $sub_path = upload_subpath();
+        $dir      = get_upload_dir($sub_path);
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        $new_fn = store_webp_copy($temp_fp, $ext, get_upload_dir(), $seed);
+        $new_fn = store_webp_copy($temp_fp, $ext, $dir, $seed);
         if ($new_fn === null) {
             $new_fn = "$seed.$ext";
-            $new_fp = sprintf("%s/%s", get_upload_dir(), $new_fn);
+            $new_fp = sprintf("%s/%s", $dir, $new_fn);
             if (!move_uploaded_file($temp_fp, $new_fp)) {
                 echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
                 die();
             }
         }
-        $upload_url = str_replace(ROOT_DIR, ROOT_URL, get_upload_dir());
-        $out .= sprintf("![%s](%s)", $f['name'], "$upload_url/$new_fn");
+        $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
     echo json_encode($out, JSON_THROW_ON_ERROR);
@@ -74,11 +74,12 @@ function respond_upload(array $_args): void
 
 /**
  * Returns a safe, lower-cased file extension for an uploaded file, or null if the
- * extension is not an allowed image type.
+ * extension is not an allowed image or video type.
  *
  * Uploads land under the web root (src/assets/), so the extension is the line of
  * defence against writing executable files (e.g. .php). Only the allowlisted image
- * extensions are accepted; anything else (including extensionless names) is rejected.
+ * and video extensions are accepted; anything else (including extensionless names)
+ * is rejected.
  *
  * @param string $filename The client-supplied filename.
  * @return string|null The allowed lower-case extension, or null when not permitted.
@@ -86,7 +87,8 @@ function respond_upload(array $_args): void
 function safe_upload_extension(string $filename): ?string
 {
     $ext = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
-    if ($ext === '' || !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true)) {
+    $allowed = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
+    if ($ext === '' || !in_array($ext, $allowed, true)) {
         return null;
     }
 
@@ -113,6 +115,50 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
     $gd_available ??= extension_loaded('gd');
 
     return $gd_available && in_array($ext, ['jpg', 'jpeg', 'png'], true);
+}
+
+/**
+ * Persists raw image bytes under $dest_dir, preferring a WebP re-encode and
+ * falling back to the original bytes when conversion isn't possible.
+ *
+ * Owns the full "land bytes in src/assets/" pipeline for callers that already
+ * have the image content in memory (WordPress import downloader, Micropub
+ * inline photos). The temp file lives under $dest_dir rather than
+ * sys_get_temp_dir() so the final rename never crosses filesystems — a real
+ * failure mode in containers where /tmp is tmpfs and the project root is a
+ * bind-mount. respond_upload() keeps its own path because it must use
+ * move_uploaded_file() for the PHP-managed safety check.
+ *
+ * @param string $bytes    Raw image bytes, fully buffered in memory.
+ * @param string $ext      The lower-case extension from safe_upload_extension().
+ * @param string $dest_dir Destination directory (no trailing slash, must exist).
+ * @param string $seed     The hashed base filename (without extension).
+ * @return string|null The saved filename relative to $dest_dir, or null on any failure.
+ */
+function persist_image_bytes(string $bytes, string $ext, string $dest_dir, string $seed): ?string
+{
+    if ($bytes === '' || !is_dir($dest_dir)) {
+        return null;
+    }
+    if (should_convert_to_webp($ext)) {
+        $webp_fn = $seed . '.webp';
+        if (convert_to_webp_from_bytes($bytes, "$dest_dir/$webp_fn")) {
+            return $webp_fn;
+        }
+    }
+    $filename = "$seed.$ext";
+    $tmp = tempnam($dest_dir, 'lamb_img_');
+    if ($tmp === false) {
+        return null;
+    }
+    // tempnam → rename gives us an atomic publish on the destination filesystem,
+    // so an interrupted write can't leave a half-finished file at the final path
+    // (which a re-run would otherwise mistake for a completed download).
+    if (file_put_contents($tmp, $bytes) === false || !rename($tmp, "$dest_dir/$filename")) {
+        @unlink($tmp);
+        return null;
+    }
+    return $filename;
 }
 
 /**
@@ -167,8 +213,30 @@ function convert_to_webp(string $src_path, string $dest_path, int $quality = 82,
     if ($data === false) {
         return false;
     }
+    return convert_to_webp_from_bytes($data, $dest_path, $quality, $max_dimension);
+}
 
-    $image = @imagecreatefromstring($data);
+/**
+ * Same as {@see convert_to_webp} but starts from raw bytes already in memory.
+ *
+ * Lets callers that have just fetched (WordPress importer) or just streamed
+ * (Micropub inline photo) image bytes skip the temp-file round-trip — the
+ * original disk-based path wrote bytes to tmp, then immediately read them
+ * back with file_get_contents inside this function.
+ *
+ * @param string $bytes         Raw image bytes.
+ * @param string $dest_path     Path the WebP should be written to.
+ * @param int    $quality       WebP quality (0-100).
+ * @param int    $max_dimension Longest edge to keep; larger images are scaled down.
+ * @return bool True when a WebP was written, false on failure.
+ */
+function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quality = 82, int $max_dimension = 1600): bool
+{
+    if ($bytes === '') {
+        return false;
+    }
+
+    $image = @imagecreatefromstring($bytes);
     if ($image === false) {
         return false;
     }
@@ -220,14 +288,27 @@ function scaled_dimensions(int $width, int $height, int $max): array
 }
 
 /**
+ * The YYYY/MM subpath new uploads are stored under (under src/assets/).
+ *
+ * Callers capture this once and pass it to both get_upload_dir() and asset_url()
+ * so the stored file and the URL written into the post can never disagree across
+ * a month boundary.
+ */
+function upload_subpath(): string
+{
+    return date("Y/m");
+}
+
+/**
  * Retrieves the upload directory for storing files, creating it if necessary.
  *
+ * @param string|null $sub_path The YYYY/MM subpath (defaults to the current month).
  * @return string The absolute path to the upload directory.
  * @throws RuntimeException If the directory cannot be created.
  */
-function get_upload_dir(): string
+function get_upload_dir(?string $sub_path = null): string
 {
-    $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, date("Y/m"));
+    $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, $sub_path ?? upload_subpath());
     if (!is_dir($upload_dir)) {
         if (!mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
             throw new RuntimeException(sprintf('Directory "%s" was not created', $upload_dir));
@@ -235,4 +316,20 @@ function get_upload_dir(): string
     }
 
     return $upload_dir;
+}
+
+/**
+ * The public URL for an asset stored at src/assets/<sub_path>/<filename>.
+ *
+ * Root-relative (leading slash) so it resolves on every route — / and /slug but
+ * also nested ones like /page/N, /search/x and /tag/x, where a bare "assets/..."
+ * is resolved against the current path and 404s. It also carries no host, so it
+ * survives a domain change and is produced identically by the CLI WXR importer,
+ * which has no $_SERVER host to build an absolute ROOT_URL from. Callers that
+ * must emit an absolute URL (e.g. the Micropub media endpoint's Location header)
+ * prefix ROOT_URL onto the result.
+ */
+function asset_url(string $sub_path, string $filename): string
+{
+    return "/assets/$sub_path/$filename";
 }

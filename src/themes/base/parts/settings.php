@@ -7,6 +7,7 @@ use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 
 $feed_statuses = $data['feed_statuses'] ?? [];
+$redirects     = $data['redirects'] ?? [];
 
 ?>
 <h1>Settings</h1>
@@ -49,6 +50,7 @@ $feed_statuses = $data['feed_statuses'] ?? [];
         display: none;
     }
     #settings-tab-config:checked ~ .settings-tabs__nav label[for="settings-tab-config"],
+    #settings-tab-redirects:checked ~ .settings-tabs__nav label[for="settings-tab-redirects"],
     #settings-tab-logs:checked ~ .settings-tabs__nav label[for="settings-tab-logs"] {
         opacity: 1;
         border-color: currentColor;
@@ -56,6 +58,7 @@ $feed_statuses = $data['feed_statuses'] ?? [];
         font-weight: bold;
     }
     #settings-tab-config:checked ~ #settings-panel-config,
+    #settings-tab-redirects:checked ~ #settings-panel-redirects,
     #settings-tab-logs:checked ~ #settings-panel-logs {
         display: block;
     }
@@ -77,10 +80,12 @@ $feed_statuses = $data['feed_statuses'] ?? [];
 
 <div class="settings-tabs">
     <input type="radio" name="settings-tab" id="settings-tab-config" checked>
+    <input type="radio" name="settings-tab" id="settings-tab-redirects">
     <input type="radio" name="settings-tab" id="settings-tab-logs">
 
     <nav class="settings-tabs__nav">
         <label for="settings-tab-config">Configuration</label>
+        <label for="settings-tab-redirects">Redirections</label>
         <label for="settings-tab-logs">Logs</label>
     </nav>
 
@@ -100,6 +105,34 @@ $feed_statuses = $data['feed_statuses'] ?? [];
                 <button type="submit" name="action" value="reset" onclick="return confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')">Reset to defaults</button>
             </div>
         </form>
+    </section>
+
+    <section class="settings-tabs__panel" id="settings-panel-redirects">
+        <p>
+            Automatic 301 redirects created when a post slug changes. These are stored in the
+            database and resolve before any page is served.
+        </p>
+
+        <?php if (empty($redirects)) : ?>
+            <p>No automatic redirects stored yet.</p>
+        <?php else : ?>
+            <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr>
+                        <th style="text-align:left;padding:.4rem .5rem;border-bottom:1px solid currentColor;">From</th>
+                        <th style="text-align:left;padding:.4rem .5rem;border-bottom:1px solid currentColor;">To</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($redirects as $redirect) : ?>
+                        <tr>
+                            <td style="padding:.4rem .5rem;border-bottom:1px solid currentColor;font-family:monospace;">/<?= escape($redirect['from_slug']) ?></td>
+                            <td style="padding:.4rem .5rem;border-bottom:1px solid currentColor;font-family:monospace;"><?= escape($redirect['to_url']) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        <?php endif; ?>
     </section>
 
     <section class="settings-tabs__panel settings-logs" id="settings-panel-logs">

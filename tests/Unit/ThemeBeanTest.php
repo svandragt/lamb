@@ -295,7 +295,7 @@ class ThemeBeanTest extends TestCase
         R::store($bean);
 
         $result = title_link($bean);
-        $this->assertStringContainsString('class="title-link"', $result);
+        $this->assertStringContainsString('title-link', $result);
         $this->assertStringContainsString('<a ', $result);
     }
 

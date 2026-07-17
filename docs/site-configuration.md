@@ -57,6 +57,11 @@ token_endpoint = https://tokens.indieauth.com/token
 Home = /
 Feed = /feed
 
+[footer_items]
+;; Add <label>=<url> entries for the site footer. Same format as [menu_items].
+;; Useful for secondary navigation: privacy policy, colophon, social links, etc.
+;Privacy = /privacy
+
 [redirections]
 ;; Add 301 redirects for old URL path segments.
 ;; Format: <old-slug> = <destination>
@@ -81,6 +86,12 @@ Feed = /feed
 ;; Each entry is <label>=<url>. Links appear as <link rel="me"> in the HTML head.
 ;Github = https://github.com/yourusername
 ;Email = mailto:you@example.com
+
+[syndicate_to]
+;; Add POSSE syndication targets shown to Micropub clients (e.g. Quill).
+;; Format: <uid>=<name>  where uid is the profile URL of the target silo.
+;https://bsky.app/profile/yourusername = Bluesky
+;https://mastodon.social/@yourusername = Mastodon
 ```
 
 ## Related
@@ -89,7 +100,7 @@ Feed = /feed
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
-* [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings enable Micropub publishing.
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
 * [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.

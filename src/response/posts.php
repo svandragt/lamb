@@ -12,7 +12,9 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
+use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
+use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\toggle_checkbox;
@@ -43,12 +45,7 @@ function redirect_created(): void
     \Lamb\ensure_preview_token($bean);
 
     try {
-        R::store($bean);
-        // Reserved-route and duplicate slugs get an id suffix; the final slug
-        // is pinned into the body's front matter so it survives later edits.
-        if (finalize_slug($bean)) {
-            R::store($bean);
-        }
+        finalize_and_store_post($bean);
         // Remove any existing redirect for this slug — the new post takes priority
         if (!empty($bean->slug)) {
             delete_redirect_for_slug($bean->slug);
@@ -61,8 +58,7 @@ function redirect_created(): void
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
-    \Lamb\Webmention\enqueue_for_post($bean);
-    \Lamb\Websub\ping_for_post($bean);
+    notify_post_subscribers($bean);
     redirect_uri('/');
 }
 
@@ -179,6 +175,10 @@ function soft_delete_post(OODBBean $post): void
     $post->deleted    = 1;
     $post->deleted_at = \Lamb\now();
     R::store($post);
+
+    // Re-send any webmentions this post previously sent so receivers re-fetch
+    // the now-gone source and drop the displayed mention (#331).
+    \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
 }
 
 /**
@@ -192,6 +192,11 @@ function restore_post(OODBBean $post): void
     $post->deleted    = null;
     $post->deleted_at = null;
     R::store($post);
+
+    // The post is back: abandon deletion re-sends /_cron has not yet drained,
+    // and re-queue any it already delivered so receivers re-display the mention
+    // (#331).
+    \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
 }
 
 /**
@@ -268,8 +273,7 @@ function redirect_edited(): void
         }
     }
 
-    \Lamb\Webmention\enqueue_for_post($bean);
-    \Lamb\Websub\ping_for_post($bean);
+    notify_post_subscribers($bean);
 
     $redirect = safe_referer_path($_SESSION['edit-referrer'] ?? null);
     unset($_SESSION['edit-referrer']);

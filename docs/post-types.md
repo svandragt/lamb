@@ -12,7 +12,7 @@ Any tags are automatically linked to tag archives.
 
 Select some text and paste a link over it to turn the selection into a markdown link, e.g. selecting `Lamb` and pasting `https://example.com` produces `[Lamb](https://example.com)`.
 
-Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor. JPEG and PNG uploads are automatically converted to WebP to keep files small; GIF, WebP, and AVIF are stored as-is.
+Add images by dragging files onto the editor, or by pasting an image straight from the clipboard (for example a screenshot). Either way the image is uploaded and a markdown image link is inserted at the cursor. JPEG and PNG uploads are automatically converted to WebP to keep files small; GIF, WebP, and AVIF are stored as-is. Video files (`mp4`, `webm`, `mov`) can be dragged onto the editor the same way and are embedded as a playable video.
 
 Permalinks for statuses are in the form of `/status/<integer>`.
 
@@ -63,6 +63,17 @@ Slugs are unique. If a slug is already taken by another post (or matches a built
 
 You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 
+By default Lamb derives a post's description from its first line. Set a `summary:` in the front-matter to write that description yourself — it is used for the post's [social-embed]({{ site.baseurl }}{% link social-embeds.md %}) description (the OpenGraph/Twitter `description` tag) and its feed summary. `description:` works as an alias.
+
+```markdown
+---
+title: My weekend project
+summary: A short, hand-written description for search engines and social cards.
+---
+
+The full post body goes here.
+```
+
 Front-matter keys are forgiving: they are matched case-insensitively, and underscores and dashes are interchangeable. So `Title`, `title`, `in_reply_to` and `in-reply-to` all work — handy on mobile keyboards that auto-capitalise the first letter of a line.
 
 > **iOS note:** iOS "Smart Punctuation" rewrites a typed `---` into em/en dashes (for example `—-`). Lamb recognises a mangled opening and closing fence and restores it to `---` automatically — whether you add the front-matter when first writing the post or by editing it later — so front-matter still works from an iPhone or iPad. If you'd rather type plain dashes everywhere, turn the feature off under _Settings → General → Keyboard → Smart Punctuation_.
@@ -78,9 +89,10 @@ The following sections of the site are special:
 
 ## Related
 
-* [Media]({{ site.baseurl }}{% link media.md %}): Add images by drag-and-drop or paste; JPEG/PNG are converted to WebP.
+* [Media]({{ site.baseurl }}{% link media.md %}): Add images and video by drag-and-drop or paste; JPEG/PNG are converted to WebP, video is stored as-is.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Add `draft: true` to front-matter to save a post as a draft.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Add a future `created:` date to publish a post later.
+* [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A `summary:` in front-matter sets the description used in social preview cards.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %}): Page posts with slugs can be pinned as menu items.
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Add `in-reply-to:` to front-matter to mark a post as a reply to another URL.
 * [Syntax Highlighting]({{ site.baseurl }}{% link syntax-highlighting.md %}): Fenced code blocks with a language hint are highlighted server-side.

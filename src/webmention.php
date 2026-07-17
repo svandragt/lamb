@@ -448,6 +448,78 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
 }
 
 /**
+ * Re-queue webmentions for a soft-deleted post so receivers learn it is gone.
+ *
+ * Per the Webmention spec (sending webmentions for deleted posts), when a post
+ * that previously sent webmentions is deleted the sender SHOULD re-send each
+ * one; the receiver re-fetches the source, sees the 410/404, and drops the
+ * displayed mention. Only already-`sent` rows are re-queued, and they are
+ * marked `resend` so process_outbound_row() sends them despite the deleted
+ * source instead of cancelling them the way it cancels the never-sent rows of a
+ * deleted post (#329).
+ *
+ * @param int $post_id The soft-deleted post's id.
+ * @return int Number of re-sends queued.
+ */
+function enqueue_deletion_resends(int $post_id): int
+{
+    $rows = R::find('webmentionoutbox', ' post_id = ? AND status = ? ', [$post_id, 'sent']);
+    foreach ($rows as $row) {
+        $row->status = 'pending';
+        $row->resend = 1;
+        $row->processed_at = null;
+        R::store($row);
+    }
+
+    return count($rows);
+}
+
+/**
+ * Reconcile a post's deletion re-sends when it is restored, depending on whether
+ * /_cron had already drained them. Counterpart to enqueue_deletion_resends().
+ *
+ * A re-send row carries the `resend` marker. Its status tells us what the
+ * receiver currently shows:
+ *  - still `pending`: the deletion notification never went out, so the receiver
+ *    still displays the mention — revert the row to `sent` and drop the marker
+ *    (cancel, no network).
+ *  - already `sent`: the deletion notification was delivered and the receiver
+ *    removed the mention — re-queue the row (back to `pending`, marker cleared)
+ *    so the next /_cron re-sends a normal webmention and the receiver re-fetches
+ *    the now-live source and re-displays it.
+ *
+ * The `resend` marker is filtered in PHP so this works before any row has
+ * caused the column to be created.
+ *
+ * @param int $post_id The restored post's id.
+ * @return int Number of re-send rows reconciled (cancelled or re-queued).
+ */
+function reconcile_resends_on_restore(int $post_id): int
+{
+    $rows = R::find('webmentionoutbox', ' post_id = ? ', [$post_id]);
+    $reconciled = 0;
+    foreach ($rows as $row) {
+        if (empty($row->resend)) {
+            continue;
+        }
+        if ($row->status === 'sent') {
+            // Deletion was delivered; re-publish so the mention reappears.
+            $row->status = 'pending';
+            $row->resend = 0;
+            $row->processed_at = null;
+        } else {
+            // Deletion never went out; just abandon it.
+            $row->status = 'sent';
+            $row->resend = 0;
+        }
+        R::store($row);
+        $reconciled++;
+    }
+
+    return $reconciled;
+}
+
+/**
  * Process queued outbound webmentions: discover each target's endpoint and
  * POST the mention. Intended to be driven by the `/_cron` route.
  *
@@ -503,14 +575,29 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
 function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
 {
     $post = R::load('post', (int) $row->post_id);
-    if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
-        $row->status = 'cancelled';
-        $row->processed_at = \Lamb\now();
-        R::store($row);
-        return 'cancelled';
-    }
-    if (is_scheduled($post)) {
-        return null;
+
+    if (!empty($row->resend)) {
+        // Deletion re-send (#331): notify the target so it re-fetches the now
+        // 410/404 source and drops the mention. If the post is alive again
+        // (restored before this ran), abandon the re-send rather than falsely
+        // report it as deleted.
+        if ($post->id && $post->deleted != 1) {
+            $row->status = 'sent';
+            $row->resend = 0;
+            $row->processed_at = \Lamb\now();
+            R::store($row);
+            return 'cancelled';
+        }
+    } else {
+        if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+            $row->status = 'cancelled';
+            $row->processed_at = \Lamb\now();
+            R::store($row);
+            return 'cancelled';
+        }
+        if (is_scheduled($post)) {
+            return null;
+        }
     }
 
     $row->attempts = (int) $row->attempts + 1;

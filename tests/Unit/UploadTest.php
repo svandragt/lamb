@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\safe_upload_extension;
+use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
 use function Lamb\Response\should_convert_to_webp;
 use function Lamb\Response\store_webp_copy;
@@ -104,6 +106,43 @@ class UploadTest extends TestCase
         $this->assertStringContainsString($expectedSuffix, $result);
     }
 
+    // asset_url — the single source of truth for an asset's public URL. Root-relative
+    // (leading slash) so it resolves on every route (/page/N, /search/x, /tag/x), not
+    // just / and /slug, and carries no host so it survives a domain change and works
+    // from the CLI importer (where ROOT_URL has no $_SERVER host to build from).
+
+    public function testAssetUrlIsRootRelative(): void
+    {
+        $this->assertSame('/assets/2024/03/pic.webp', asset_url('2024/03', 'pic.webp'));
+    }
+
+    public function testAssetUrlStartsWithLeadingSlash(): void
+    {
+        // The whole point of the fix: a bare "assets/..." resolves against the
+        // current path and 404s on nested routes. The leading slash prevents that.
+        $this->assertStringStartsWith('/assets/', asset_url('2026/06', 'x.webp'));
+    }
+
+    // upload_subpath / get_upload_dir — uploads land under assets/<Y/m>. Callers
+    // capture the subpath once and pass it to both get_upload_dir() and asset_url()
+    // so the stored file and its URL can never disagree across a month boundary.
+
+    public function testUploadSubpathFollowsYearMonthFormat(): void
+    {
+        $this->assertSame(date('Y/m'), upload_subpath());
+    }
+
+    public function testGetUploadDirHonoursExplicitSubpath(): void
+    {
+        $dir = get_upload_dir('2024/03');
+        $this->assertStringEndsWith('assets/2024/03', $dir);
+    }
+
+    public function testGetUploadDirDefaultsToCurrentSubpath(): void
+    {
+        $this->assertStringEndsWith('assets/' . upload_subpath(), get_upload_dir());
+    }
+
     // safe_upload_extension — only image extensions may be written to the web root
 
     public function testSafeUploadExtensionAllowsPng(): void
@@ -140,6 +179,21 @@ class UploadTest extends TestCase
     {
         // "evil.php.png" should be treated as a png (the stored name is hashed anyway)
         $this->assertSame('png', safe_upload_extension('evil.php.png'));
+    }
+
+    public function testSafeUploadExtensionAllowsMp4(): void
+    {
+        $this->assertSame('mp4', safe_upload_extension('clip.mp4'));
+    }
+
+    public function testSafeUploadExtensionAllowsWebm(): void
+    {
+        $this->assertSame('webm', safe_upload_extension('clip.webm'));
+    }
+
+    public function testSafeUploadExtensionAllowsMov(): void
+    {
+        $this->assertSame('mov', safe_upload_extension('clip.mov'));
     }
 
     // should_convert_to_webp — only re-encode raster formats that benefit and that
@@ -186,6 +240,12 @@ class UploadTest extends TestCase
         // Installs without the gd extension must store the original bytes
         // instead of fataling on undefined GD functions.
         $this->assertFalse(should_convert_to_webp('jpg', gd_available: false));
+    }
+
+    public function testShouldNotConvertMp4(): void
+    {
+        // Video is never re-encoded; it is always stored as the original bytes.
+        $this->assertFalse(should_convert_to_webp('mp4'));
     }
 
     // convert_to_webp — GD-backed re-encode of an uploaded image into WebP

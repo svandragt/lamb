@@ -15,18 +15,18 @@ Update the `lamb.test` file to point to your preferred server_name, logs and doc
 
 The `data` and `src/assets` directory must be writable by the user php-fpm runs under, this is usually `www-data`.
 
-`src/assets` is the runtime upload directory used for images dropped into posts. Theme CSS and application JavaScript live elsewhere and do not need to be writable at runtime.
+`src/assets` is the runtime upload directory used for images and video dropped into posts. Theme CSS and application JavaScript live elsewhere and do not need to be writable at runtime.
 
 ### Upload size limits
 
-PHP's defaults (`upload_max_filesize = 2M`, `post_max_size = 8M`) reject photos larger than 2&nbsp;MB. Raise them in your php.ini or FPM pool, for example:
+PHP's defaults (`upload_max_filesize = 2M`, `post_max_size = 8M`) reject photos larger than 2&nbsp;MB, and will reject essentially all video. Raise them in your php.ini or FPM pool, for example:
 
 ```text
-upload_max_filesize = 20M
-post_max_size = 25M
+upload_max_filesize = 100M
+post_max_size = 100M
 ```
 
-The shipped `snippets/lamb.conf` sets the matching NGINX limit (`client_max_body_size 25m;` — its default is only 1m). See [Media]({{ site.baseurl }}{% link media.md %}) for details.
+The shipped `snippets/lamb.conf` sets the matching NGINX limit (`client_max_body_size 100m;` — its default is only 1m). See [Media]({{ site.baseurl }}{% link media.md %}) for details.
 
 ```shell
 sudo chown $USER:www-data data -R
@@ -64,6 +64,103 @@ location ~ ^/(themes|scripts|assets)/ {
 Without it, NGINX serves static files with no `Cache-Control`, which Lighthouse
 flags as *"Use efficient cache lifetimes"* and which forces repeat visitors to
 re-download fonts, CSS and images on every visit.
+
+## Caching PHP responses (optional)
+
+The static-asset block above only helps repeat visits to the same browser. If
+you expect traffic spikes (a link from Hacker News, Reddit, etc.) you can also
+let NGINX cache the **HTML responses** themselves with `fastcgi_cache`, serving
+them straight from disk without invoking PHP-FPM or SQLite at all.
+
+This is **opt-in and not enabled by default.** Lamb already emits correct cache
+headers for anonymous visitors (`Cache-Control: max-age=300`, `Vary: Cookie`)
+and `private, no-store` for logged-in ones, so a CDN such as Cloudflare in front
+of Lamb gives you the same edge-caching for free. Only reach for `fastcgi_cache`
+if you are running NGINX directly *and* expect load that the browser cache can't
+absorb (many distinct first-time visitors).
+
+> **Footgun warning.** `fastcgi_cache` ignores `Vary`, so it will *not*
+> automatically key anonymous and logged-in responses apart the way the browser
+> cache does. You **must** bypass the cache for logged-in requests explicitly
+> (below), or NGINX may store and re-serve a logged-in page — complete with the
+> admin toolbar and a stale CSRF token — to anonymous visitors.
+
+### 1. Define the cache zone and bypass rules (http context)
+
+Create `/etc/nginx/conf.d/lamb-cache.conf` (the `http {}` context — these
+directives cannot live inside a `server {}` snippet):
+
+```nginx
+# Where cached responses live, plus a 100 MB in-memory key zone.
+fastcgi_cache_path /var/cache/nginx/lamb levels=1:2 keys_zone=lamb:100m
+                   inactive=60m max_size=1g;
+
+# Skip the cache for logged-in visitors: Lamb sets the signed `lamb_logged_in`
+# cookie on login, so its presence means "do not cache / do not serve cached".
+map $cookie_lamb_logged_in $lamb_skip_cache_cookie {
+    default 1;   # cookie present → skip
+    ""      0;   # anonymous      → cacheable
+}
+
+# Only ever cache safe, idempotent methods.
+map $request_method $lamb_skip_cache_method {
+    default 1;
+    GET     0;
+    HEAD    0;
+}
+```
+
+`/var/cache/nginx/` must be writable by the NGINX worker user (usually
+`www-data`); create it with `sudo install -d -o www-data -g www-data
+/var/cache/nginx/lamb`.
+
+### 2. Enable the cache on the PHP location (server context)
+
+Add the cache directives to the `location ~ \.php$` block in
+`snippets/php-82.conf` (or your own copy):
+
+```nginx
+location ~ \.php$  {
+    include snippets/fastcgi-php.conf;
+    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+
+    # --- fastcgi_cache (optional) ---
+    fastcgi_cache       lamb;
+    fastcgi_cache_key   "$scheme$request_method$host$request_uri";
+
+    # Honour the app's own Cache-Control (max-age=300 for anonymous pages);
+    # this fallback only applies to responses without a cache lifetime.
+    fastcgi_cache_valid 200 5m;
+    fastcgi_cache_valid 404 1m;
+
+    # Never store, and never serve from cache, when either rule says skip.
+    # `_bypass` = don't read from cache; `no_cache` = don't write to it.
+    fastcgi_cache_bypass $lamb_skip_cache_cookie $lamb_skip_cache_method;
+    fastcgi_no_cache     $lamb_skip_cache_cookie $lamb_skip_cache_method;
+
+    # Optional: expose hits/misses for debugging (HIT / MISS / BYPASS).
+    add_header X-Cache-Status $upstream_cache_status always;
+}
+```
+
+Lamb's `private, no-store` header on logged-in responses already prevents NGINX
+from caching them, so the cookie bypass is defence-in-depth — but keep it: it
+also stops a cached *anonymous* page from being served back to a logged-in user
+within the TTL.
+
+### 3. Verify
+
+```shell
+sudo systemctl reload nginx
+curl -sI https://your-site/ | grep -i x-cache-status   # MISS, then HIT
+curl -sI https://your-site/ -b lamb_logged_in=anything | grep -i x-cache-status  # BYPASS
+```
+
+Because the TTL matches the app's `max-age` (5 minutes), a freshly published
+post can take up to that long to appear for anonymous visitors — the same
+staleness window the browser cache already has. If that's not acceptable, drop
+the TTL or purge the zone on publish (a paid `ngx_cache_purge` / NGINX Plus
+feature).
 
 ## Restart services
 

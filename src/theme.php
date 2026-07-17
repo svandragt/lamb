@@ -142,10 +142,36 @@ function date_created(OODBBean $bean): string
     }
 
     return sprintf(
-        '<a href="/%1$s" title="Timestamp: %2$s"><time datetime="%2$s">%3$s</time></a>',
+        '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
         ltrim($slug, '/'),
         $bean->created,
         $human_created
+    );
+}
+
+/**
+ * Returns a representative author h-card for the configured author, or '' when
+ * no author name is set.
+ *
+ * Emitted inside each h-entry as its `p-author` so Webmention receivers and
+ * other microformats2 parsers can attribute the post to its author. For a
+ * single-author blog the author's URL is the site root (ROOT_URL).
+ *
+ * @return string HTML anchor carrying the `p-author h-card` classes, or ''.
+ */
+function author_card(): string
+{
+    global $config;
+
+    $name = trim((string) ($config['author_name'] ?? ''));
+    if ($name === '') {
+        return '';
+    }
+
+    return sprintf(
+        '<a class="p-author h-card" href="%s">%s</a>',
+        escape(ROOT_URL),
+        escape($name)
     );
 }
 
@@ -292,7 +318,7 @@ function title_link(OODBBean $bean): string
     if (empty($bean->title)) {
         return '';
     }
-    return sprintf('<a class="title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
+    return sprintf('<a class="p-name title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
 }
 
 /**
@@ -312,6 +338,35 @@ function link_source(OODBBean $bean): string
     $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
 
     return sprintf('Via <a href="%s" title="View %s">%s</a>', escape($url), escape($bean->feed_name), escape($bean->feed_name));
+}
+
+/**
+ * Returns "Also on: <a u-syndication>" links for posts with syndicated-to targets, or '' when absent.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string HTML syndication links, or '' when none are recorded.
+ */
+function syndication_links(OODBBean $bean): string
+{
+    $raw = (string) ($bean->syndicated_to ?? '');
+    if ($raw === '') {
+        return '';
+    }
+    global $config;
+    $targets = $config['syndicate_to'] ?? [];
+    $links = [];
+    foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
+        if ($uid === '') {
+            continue;
+        }
+        $name = $targets[$uid] ?? (parse_url($uid, PHP_URL_HOST) ?: $uid);
+        $links[] = '<a class="u-syndication" href="' . escape($uid) . '" rel="syndication">'
+            . escape((string) $name) . '</a>';
+    }
+    if (empty($links)) {
+        return '';
+    }
+    return '<small>Also on: ' . implode(', ', $links) . '</small>';
 }
 
 /**
@@ -341,19 +396,19 @@ function part(string $name, string $dir = 'parts'): void
 }
 
 /**
- * Returns <li><a> HTML for each item in $config['menu_items'], or '' when none are configured.
+ * Returns <li><a> HTML for each label=>url pair, or '' when the array is empty.
  *
+ * @param array<string, string> $nav_items
  * @return string Newline-separated HTML list item strings.
  */
-function li_menu_items(): string
+function li_items(array $nav_items): string
 {
-    global $config;
-    $items = [];
-    $format = '<li><a href="%s">%s</a></li>';
-    if (empty($config['menu_items'])) {
+    if (empty($nav_items)) {
         return '';
     }
-    foreach ($config['menu_items'] as $label => $url) {
+    $format = '<li><a href="%s">%s</a></li>';
+    $items = [];
+    foreach ($nav_items as $label => $url) {
         if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
             $items[] = sprintf($format, escape($url), escape($label));
         } else {
@@ -362,6 +417,30 @@ function li_menu_items(): string
     }
 
     return implode(PHP_EOL, $items);
+}
+
+/**
+ * Returns <li><a> HTML for each item in $config['menu_items'], or '' when none are configured.
+ *
+ * @return string Newline-separated HTML list item strings.
+ */
+function li_menu_items(): string
+{
+    global $config;
+
+    return li_items((array) ($config['menu_items'] ?? []));
+}
+
+/**
+ * Returns <li><a> HTML for each item in $config['footer_items'], or '' when none are configured.
+ *
+ * @return string Newline-separated HTML list item strings.
+ */
+function li_footer_items(): string
+{
+    global $config;
+
+    return li_items((array) ($config['footer_items'] ?? []));
 }
 
 /**

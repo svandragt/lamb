@@ -28,6 +28,9 @@ theme = 2026
 ;; Title of the site, in html and feed views
 site_title = My Microblog
 
+;; Short description of the site, used as the meta description on listing pages.
+;site_description = A personal microblog
+
 ;; Your timezone, used for post dates and scheduling (the server is often UTC).
 ;; Use a name from https://www.php.net/manual/en/timezones.php.
 timezone = UTC
@@ -69,6 +72,11 @@ token_endpoint = https://tokens.indieauth.com/token
 Home = /
 Feed = /feed
 
+[footer_items]
+;; Add <label>=<url> entries here for the site footer. Same format as [menu_items].
+;; Useful for secondary navigation: privacy policy, colophon, social links, etc.
+;Privacy = /privacy
+
 [feeds]
 ;; Add feeds whose content gets published into the blog.
 ;; Each item is in the format of <name>=<url>  where URL is a link to an RSS or Atom feed.
@@ -92,6 +100,12 @@ Feed = /feed
 ;; Format: <old-slug> = <destination>
 ;; Destination can be a root-relative URL, a bare slug, or a full external URL.
 ;old-post = /new-post
+
+[syndicate_to]
+;; Add POSSE syndication targets shown to Micropub clients (e.g. Quill).
+;; Format: <uid>=<name>  where uid is the profile URL of the target silo.
+;https://bsky.app/profile/yourusername = Bluesky
+;https://mastodon.social/@yourusername = Mastodon
 INI;
 }
 
@@ -111,46 +125,41 @@ function parse_ini_safe(string $ini_text): array
 }
 
 /**
- * Resolves a configured theme name to the directory that should be rendered.
+ * Ensures the stored INI records an explicit, renderable top-level `theme` key.
  *
- * Falls back to the bundled `base` theme (the part-fallback library) when no
- * theme is configured, and aliases the legacy name `default` to `base` so
- * installs that explicitly set `theme = default` keep working after the rename.
+ * This is the single place that normalises the legacy theme shapes, so the
+ * render path (`index.php`) can read `$config['theme']` directly without a
+ * runtime fallback or alias (see #291):
+ *  - no `theme` key at all (older installs relied on a PHP fallback): an
+ *    explicit line is prepended;
+ *  - an empty value, or the pre-rename name `default`: the line is rewritten to
+ *    the bundled `base` theme (the part-fallback library).
  *
- * @param string|null $configured The theme name from config, or null when unset.
- * @param string $fallback The theme to use when none is configured.
- * @return string The theme directory name to render.
- */
-function resolve_theme(?string $configured, string $fallback = 'base'): string
-{
-    if (empty($configured)) {
-        return $fallback;
-    }
-    if ($configured === 'default') {
-        return 'base';
-    }
-    return $configured;
-}
-
-/**
- * Ensures the INI text records an explicit top-level `theme` key.
- *
- * Older installs never stored a theme and relied on a PHP fallback. Stamping an
- * explicit value lets that fallback be removed later. Idempotent: returns the
- * text unchanged when a top-level `theme` key is already present.
+ * Idempotent: text that already names a real theme is returned unchanged.
  *
  * @param string $ini_text The raw INI configuration text.
- * @param string $default_theme The theme to record when none is set.
- * @return string The INI text, with a `theme` line prepended when it was absent.
+ * @param string $default_theme The theme to record when none is usable.
+ * @return string The INI text with an explicit, renderable `theme` value.
  */
 function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
 {
     $parsed = parse_ini_safe($ini_text);
-    if (array_key_exists('theme', $parsed)) {
-        return $ini_text;
+
+    if (!array_key_exists('theme', $parsed)) {
+        return "theme = {$default_theme}\n\n" . $ini_text;
     }
 
-    return "theme = {$default_theme}\n\n" . $ini_text;
+    $current = trim((string) $parsed['theme']);
+    if ($current === '' || $current === 'default') {
+        return (string) preg_replace(
+            '/^(\h*theme\h*=).*$/mi',
+            '${1} ' . $default_theme,
+            $ini_text,
+            1
+        );
+    }
+
+    return $ini_text;
 }
 
 /**
@@ -181,8 +190,9 @@ function compose_config(string $stored_ini, string $default_ini): array
     $defaults = parse_ini_safe($default_ini);
 
     // Theme is intentionally not defaulted here. An install without an explicit
-    // theme is resolved/migrated per-install (see resolve_theme / get_ini_text),
-    // so inheriting the seeded theme would silently re-theme existing sites.
+    // theme is migrated per-install on read (see ensure_explicit_theme /
+    // get_ini_text), so inheriting the seeded theme would silently re-theme
+    // existing sites.
     unset($defaults['theme']);
 
     // Personal-identity values are kept commented in the seeded INI, so supply

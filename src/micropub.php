@@ -14,12 +14,13 @@ use Taproot\Micropub\MicropubAdapter;
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_scheduled;
+use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
-use function Lamb\Post\finalize_slug;
+use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\split_frontmatter;
@@ -86,6 +87,10 @@ class LambMicropubAdapter extends MicropubAdapter
         $tags = get_tags($body);
         if (!empty($tags)) {
             $props['category'] = $tags;
+        }
+
+        if (!empty($bean->syndicated_to)) {
+            $props['syndication'] = preg_split('/\s+/', trim((string) $bean->syndicated_to));
         }
 
         return $props;
@@ -292,16 +297,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $needs_preview = $bean->draft == 1 || is_scheduled($bean);
         \Lamb\ensure_preview_token($bean);
 
-        R::store($bean);
-        // Reserved-route and duplicate slugs get an id suffix; the final slug
-        // is pinned into the body's front matter and must be settled before
-        // the Location permalink is computed.
-        if (finalize_slug($bean)) {
-            R::store($bean);
-        }
+        // Stores and pins the final slug, which must be settled before the
+        // Location permalink is computed below.
+        finalize_and_store_post($bean);
 
-        \Lamb\Webmention\enqueue_for_post($bean);
-        \Lamb\Websub\ping_for_post($bean);
+        notify_post_subscribers($bean);
 
         $location = permalink($bean);
         if ($needs_preview) {
@@ -312,17 +312,22 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Return the configuration query response including an empty syndicate-to list.
+     * Return the configuration query response including configured syndicate-to targets.
      *
      * @param array<string, mixed> $params
      * @return array<string, mixed>
      */
     public function configurationQueryCallback(array $params): array
     {
+        global $config;
+        $targets = [];
+        foreach ($config['syndicate_to'] ?? [] as $uid => $name) {
+            $targets[] = ['uid' => (string) $uid, 'name' => (string) $name];
+        }
         return [
             'q'              => ['config', 'source', 'syndicate-to'],
             'media-endpoint' => ROOT_URL . '/micropub-media',
-            'syndicate-to'   => [],
+            'syndicate-to'   => $targets,
         ];
     }
 
@@ -339,8 +344,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = 1;
-        R::store($bean);
+        // Share the web delete path so a Micropub delete also stamps deleted_at
+        // (for purging) and re-sends webmentions for the now-gone post (#331).
+        \Lamb\Response\soft_delete_post($bean);
 
         return true;
     }
@@ -358,8 +364,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $bean->deleted = null;
-        R::store($bean);
+        // Share the web restore path so a Micropub undelete also reconciles any
+        // deletion webmention re-sends (#331).
+        \Lamb\Response\restore_post($bean);
 
         return true;
     }
@@ -408,8 +415,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $bean->updated = \Lamb\now();
         R::store($bean);
 
-        \Lamb\Webmention\enqueue_for_post($bean);
-        \Lamb\Websub\ping_for_post($bean);
+        notify_post_subscribers($bean);
 
         return true;
     }
@@ -483,25 +489,47 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function rebuildBody(OODBBean $bean, string $newContent): string
     {
-        $currentBody = $bean->body ?? '';
-        $matter      = parse_matter($currentBody);
-        $title       = $matter['title'] ?? null;
-        $replyTo     = $matter['in-reply-to'] ?? null;
+        $currentBody  = $bean->body ?? '';
+        $matter       = parse_matter($currentBody);
+        $title        = $matter['title'] ?? null;
+        $replyTo      = $matter['in-reply-to'] ?? null;
+        $syndicatedTo = $matter['syndicated-to'] ?? null;
 
-        $tags      = get_tags($currentBody);
+        $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
+    }
+
+    /**
+     * Assemble the post front-matter array from individual fields.
+     *
+     * Central point for front-matter assembly so buildBody() and rebuildBody()
+     * stay in sync when new fields are added.
+     *
+     * @param string|null $title
+     * @param string|null $replyTo
+     * @param string|null $syndicatedTo
+     * @return array<string, string>
+     */
+    private function assembleFrontMatter(?string $title, ?string $replyTo, ?string $syndicatedTo): array
+    {
         $matter = [];
         if ($title !== null) {
-            $matter['title'] = (string) $title;
+            $matter['title'] = $title;
         }
-        if (is_string($replyTo) && $replyTo !== '') {
+        if ($replyTo !== null && $replyTo !== '') {
             $matter['in-reply-to'] = $replyTo;
         }
-
-        return build_matter($matter, $content);
+        if ($syndicatedTo !== null && $syndicatedTo !== '') {
+            $matter['syndicated-to'] = $syndicatedTo;
+        }
+        return $matter;
     }
 
     /**
@@ -527,26 +555,21 @@ class LambMicropubAdapter extends MicropubAdapter
             if ($ext === null) {
                 continue;
             }
-            $uploadDir = \Lamb\Response\get_upload_dir();
+            $sub_path  = \Lamb\Response\upload_subpath();
+            $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
             $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
 
-            // Re-encode JPEG/PNG to WebP via a temp copy of the stream; fall back to
-            // storing the original bytes when conversion isn't possible.
-            $filename = null;
-            if (\Lamb\Response\should_convert_to_webp($ext)) {
-                $tmp = tempnam(sys_get_temp_dir(), 'lamb_up_');
-                if ($tmp !== false) {
-                    file_put_contents($tmp, (string) $file->getStream());
-                    $filename = \Lamb\Response\store_webp_copy($tmp, $ext, $uploadDir, $seed);
-                    unlink($tmp);
-                }
-            }
+            $filename = \Lamb\Response\persist_image_bytes(
+                (string) $file->getStream(),
+                $ext,
+                $uploadDir,
+                $seed
+            );
             if ($filename === null) {
-                $filename = $seed . ".$ext";
-                $file->moveTo($uploadDir . '/' . $filename);
+                continue;
             }
 
-            $urls[] = str_replace(ROOT_DIR, ROOT_URL, $uploadDir) . '/' . $filename;
+            $urls[] = \Lamb\Response\asset_url($sub_path, $filename);
         }
 
         return $urls;
@@ -604,15 +627,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        $matter = [];
-        if ($title !== null) {
-            $matter['title'] = (string) $title;
-        }
-        if (is_string($replyTo) && $replyTo !== '') {
-            $matter['in-reply-to'] = $replyTo;
-        }
+        $syndicateTo  = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
-        return build_matter($matter, $content);
+        return build_matter(
+            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $content
+        );
     }
 
     /**
@@ -624,7 +645,7 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildExtraProperties(array $props): string
     {
-        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status'];
+        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status', 'mp-syndicate-to'];
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {
@@ -977,7 +998,8 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
 
-    $uploadDir = \Lamb\Response\get_upload_dir();
+    $sub_path  = \Lamb\Response\upload_subpath();
+    $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
     $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
@@ -987,7 +1009,9 @@ function respond_micropub_media(): void
         move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
     }
 
-    $url = str_replace(ROOT_DIR, ROOT_URL . '/', $uploadDir) . '/' . $filename;
+    // The media endpoint hands this URL back to an external Micropub client, so
+    // it must be absolute (resolvable off-site); content URLs stay root-relative.
+    $url = ROOT_URL . \Lamb\Response\asset_url($sub_path, $filename);
 
     http_response_code(201);
     header('Location: ' . $url);
