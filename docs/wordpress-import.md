@@ -46,6 +46,7 @@ A few things worth checking manually:
 
 ## Related
 
+- [Known import](known-import.md) — the sibling importer this one shares its image-download and Markdown-conversion pipeline with.
 - [Cross-posting](cross-posting.md) — outbound syndication, the opposite direction.
 - [Feeds](feeds.md) — how Lamb publishes content for other readers to ingest.
 - [Media](media.md) — how uploaded images are stored and converted.

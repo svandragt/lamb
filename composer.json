@@ -43,6 +43,8 @@
       "src/config.php",
       "src/highlight.php",
       "src/http.php",
+      "src/import.php",
+      "src/known.php",
       "src/lamb.php",
       "src/routes.php",
       "src/network.php",
