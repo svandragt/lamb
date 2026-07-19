@@ -6,17 +6,17 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimpleXMLElement;
 
+use function Lamb\Import\asset_dir_for_date;
+use function Lamb\Import\build_post_body;
+use function Lamb\Import\response_is_image;
+use function Lamb\Import\rewrite_image_links;
+use function Lamb\Import\sanitize_html;
 use function Lamb\Response\persist_image_bytes;
-use function Lamb\WordPress\asset_dir_for_date;
-use function Lamb\WordPress\build_post_body;
 use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
 use function Lamb\WordPress\parse_wxr_file;
 use function Lamb\WordPress\parse_wxr_string;
-use function Lamb\WordPress\response_is_image;
-use function Lamb\WordPress\rewrite_image_links;
-use function Lamb\WordPress\sanitize_html;
 use function Lamb\WordPress\should_import;
 use function Lamb\WordPress\wordpress_uuid;
 
