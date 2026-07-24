@@ -9,6 +9,7 @@ use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\posts_by_tag;
+use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\slugify;
 use function Lamb\render_body;
 
@@ -194,6 +195,48 @@ class PostTest extends TestCase
         $body = "---\ntitle: My Post Title\nslug: custom-slug\n---\nContent.";
         $result = parse_matter($body);
         $this->assertSame('custom-slug', $result['slug']);
+    }
+
+    // parse_matter / sanitize_explicit_slug — an explicit slug must never be
+    // able to turn a later automatic redirect's `to_url` (built as
+    // '/' . $slug in redirect_edited()) into a protocol-relative
+    // "//host/..." (or "/\host/...") open redirect.
+
+    public function testParseMatterStripsLeadingSlashFromExplicitSlug()
+    {
+        $body = "---\nslug: /evil.example.com\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('evil.example.com', $result['slug']);
+    }
+
+    public function testParseMatterStripsLeadingSlashesFromExplicitSlug()
+    {
+        $body = "---\nslug: //evil.example.com\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('evil.example.com', $result['slug']);
+    }
+
+    public function testParseMatterStripsLeadingBackslashFromExplicitSlug()
+    {
+        $body = "---\nslug: \\evil.example.com\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('evil.example.com', $result['slug']);
+    }
+
+    public function testParseMatterLeavesOrdinarySlugUnchanged()
+    {
+        $body = "---\nslug: my-normal-slug\n---\nContent.";
+        $result = parse_matter($body);
+        $this->assertSame('my-normal-slug', $result['slug']);
+    }
+
+    public function testSanitizeExplicitSlugStripsLeadingSlashesAndBackslashes()
+    {
+        $this->assertSame('evil.com', sanitize_explicit_slug('/evil.com'));
+        $this->assertSame('evil.com', sanitize_explicit_slug('//evil.com'));
+        $this->assertSame('evil.com', sanitize_explicit_slug('/\\evil.com'));
+        $this->assertSame('evil.com', sanitize_explicit_slug('\\evil.com'));
+        $this->assertSame('normal-slug', sanitize_explicit_slug('normal-slug'));
     }
 
     // parse_matter — front matter is a *leading* fence only

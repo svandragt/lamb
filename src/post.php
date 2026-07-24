@@ -146,11 +146,36 @@ function parse_matter(string $body): array
 
     $matter = normalize_matter_keys($matter);
 
+    if (isset($matter['slug'])) {
+        $matter['slug'] = sanitize_explicit_slug((string) $matter['slug']);
+    }
+
     if (isset($matter['title']) && !isset($matter['slug'])) {
         $matter['slug'] = slugify($matter['title']);
     }
 
     return $matter;
+}
+
+/**
+ * Strips leading slashes/backslashes from an explicit front-matter `slug:`
+ * value.
+ *
+ * An explicit slug (unlike a title-derived one, which goes through
+ * slugify()) is stored verbatim and later feeds an automatic redirect's
+ * `to_url` on a subsequent slug change (`'/' . $slug`, in redirect_edited()).
+ * A slug beginning with `/` (or `\`, which some browsers normalise to `/` in
+ * a URL) would make that concatenation a protocol-relative `//host/...` (or
+ * `/\host/...`) URL — an open redirect off the site. Stripped rather than
+ * rejected outright so a legitimate custom slug that merely has redundant
+ * leading slashes still saves.
+ *
+ * @param string $slug
+ * @return string
+ */
+function sanitize_explicit_slug(string $slug): string
+{
+    return ltrim($slug, "/\\");
 }
 
 /**
