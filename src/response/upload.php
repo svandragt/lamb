@@ -236,6 +236,16 @@ function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quali
         return false;
     }
 
+    // Reject an oversized declared width*height before decoding: a cheap
+    // header-only read via getimagesizefromstring(), ahead of the actual
+    // (memory-hungry) decode in imagecreatefromstring() below. A source that
+    // getimagesizefromstring() can't parse is left to imagecreatefromstring()
+    // itself, unchanged from prior behaviour.
+    $size = @getimagesizefromstring($bytes);
+    if (is_array($size) && $size[0] > 0 && $size[1] > 0 && $size[0] * $size[1] > MAX_UPLOAD_PIXELS) {
+        return false;
+    }
+
     $image = @imagecreatefromstring($bytes);
     if ($image === false) {
         return false;

@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
+use function Lamb\Response\convert_to_webp_from_bytes;
 use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
@@ -294,6 +295,50 @@ class UploadTest extends TestCase
 
         $this->assertFalse(convert_to_webp($src, $dest));
         $this->assertFileDoesNotExist($dest);
+    }
+
+    public function testConvertRejectsDeclaredDimensionsOverPixelCap(): void
+    {
+        // Decompression-bomb guard: a PNG whose IHDR declares an enormous
+        // width/height forces GD to allocate the full pixel buffer as soon as
+        // imagecreatefromstring() decodes it — before this app's own
+        // downscaling ever runs. A tiny file with a huge *declared* size (no
+        // real pixel data needed) must be rejected via the header-only
+        // getimagesizefromstring() check, without ever reaching that decode.
+        $bytes = $this->makeFakePngHeader(20000, 20000);
+        $dest = $this->tempRootDir . '/bomb.webp';
+
+        $this->assertFalse(convert_to_webp_from_bytes($bytes, $dest));
+        $this->assertFileDoesNotExist($dest);
+    }
+
+    public function testConvertAllowsDeclaredDimensionsWithinPixelCap(): void
+    {
+        // A real, fully-formed image at a below-cap size still converts —
+        // the guard only rejects the declared size, not real uploads.
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/ok.webp';
+
+        $this->assertTrue(convert_to_webp_from_bytes((string) file_get_contents($src), $dest));
+        $this->assertFileExists($dest);
+    }
+
+    /**
+     * Builds a minimal well-formed PNG (correct signature, IHDR with valid
+     * CRC, IEND) declaring the given width/height — enough for
+     * getimagesizefromstring() to report those dimensions — with no real
+     * pixel data, so it never risks actually allocating a huge buffer even if
+     * the pixel-count guard under test were absent.
+     */
+    private function makeFakePngHeader(int $width, int $height): string
+    {
+        $signature = "\x89PNG\r\n\x1a\n";
+        // bit depth 8, color type 2 (truecolor), compression/filter/interlace 0.
+        $ihdrData = pack('NN', $width, $height) . pack('C5', 8, 2, 0, 0, 0);
+        $ihdrChunk = pack('N', strlen($ihdrData)) . 'IHDR' . $ihdrData . pack('N', crc32('IHDR' . $ihdrData));
+        $iendChunk = pack('N', 0) . 'IEND' . pack('N', crc32('IEND'));
+
+        return $signature . $ihdrChunk . $iendChunk;
     }
 
     // scaled_dimensions — downscale large uploads to a sane maximum edge
