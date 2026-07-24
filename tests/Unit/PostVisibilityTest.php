@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\is_publicly_visible;
 use function Lamb\is_viewable;
 use function Lamb\Response\respond_post;
 use function Lamb\Response\respond_status;
@@ -96,6 +97,43 @@ class PostVisibilityTest extends TestCase
     {
         $bean = R::load('post', 999999);
         $this->assertFalse(is_viewable($bean));
+    }
+
+    // ---- is_publicly_visible() predicate -----------------------------------
+    // Unlike is_viewable(), has no logged-in exception: used by request paths
+    // (webmention receiving) where a session cookie isn't the caller's own.
+
+    public function testPubliclyVisiblePostIsVisible(): void
+    {
+        $bean = $this->makePost([]);
+        $this->assertTrue(is_publicly_visible($bean));
+    }
+
+    public function testDeletedPostIsNeverPubliclyVisibleEvenWhenLoggedIn(): void
+    {
+        $bean = $this->makePost(['deleted' => 1]);
+        $_SESSION[SESSION_LOGIN] = true;
+        $this->assertFalse(is_publicly_visible($bean));
+    }
+
+    public function testDraftIsNeverPubliclyVisibleEvenWhenLoggedIn(): void
+    {
+        $bean = $this->makePost(['draft' => 1]);
+        $_SESSION[SESSION_LOGIN] = true;
+        $this->assertFalse(is_publicly_visible($bean), 'a logged-in session must not affect this predicate');
+    }
+
+    public function testScheduledIsNeverPubliclyVisibleEvenWhenLoggedIn(): void
+    {
+        $bean = $this->makePost(['created' => date('Y-m-d H:i:s', time() + 86400)]);
+        $_SESSION[SESSION_LOGIN] = true;
+        $this->assertFalse(is_publicly_visible($bean));
+    }
+
+    public function testMissingPostIsNotPubliclyVisible(): void
+    {
+        $bean = R::load('post', 999999);
+        $this->assertFalse(is_publicly_visible($bean));
     }
 
     // ---- respond_status (/status/<id>) ------------------------------------
