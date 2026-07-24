@@ -4,7 +4,7 @@ namespace Lamb\Network;
 
 use RedBeanPHP\R;
 
-use function Lamb\Http\fetch;
+use function Lamb\Http\fetch_guarded;
 
 // FEED_FETCH_TIMEOUT is defined in constants.php
 
@@ -66,7 +66,10 @@ function record_json_feed_crawl(string $name, string $url): array
     $now    = (int) date('U');
     $status->last_attempt = $now;
 
-    $response = fetch($url, ['timeout' => FEED_FETCH_TIMEOUT]);
+    // A configured feed URL is admin-trusted, but nothing pins where it (or a
+    // redirect from it) actually points — fetch_guarded() re-checks the
+    // destination is a public, non-internal address on every hop.
+    $response = fetch_guarded($url, ['timeout' => FEED_FETCH_TIMEOUT]);
     $feed     = $response === null ? null : parse_json_feed($response['body']);
 
     if ($feed === null) {
