@@ -339,6 +339,11 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function deleteCallback(string $url)
     {
+        $scope = $this->user['scope'] ?? [];
+        if ($this->user !== null && !in_array('delete', $scope)) {
+            return $this->insufficientScopeResponse('delete');
+        }
+
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
             return 'invalid_request';
@@ -359,6 +364,14 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function undeleteCallback(string $url)
     {
+        // Gated on 'delete' scope, not a separate 'undelete' one: undelete is
+        // the reversal of the same destructive action, and this codebase
+        // doesn't otherwise define a distinct scope for it.
+        $scope = $this->user['scope'] ?? [];
+        if ($this->user !== null && !in_array('delete', $scope)) {
+            return $this->insufficientScopeResponse('delete');
+        }
+
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
             return 'invalid_request';

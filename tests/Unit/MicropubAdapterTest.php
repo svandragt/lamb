@@ -1000,6 +1000,32 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    public function testDeleteCallbackReturnsInsufficientScopeWhenTokenLacksDeleteScope(): void
+    {
+        // Regression: deleteCallback() previously had no scope check at all,
+        // so any valid token — regardless of granted scope — could delete
+        // arbitrary posts.
+        $bean = R::dispense('post');
+        $bean->body = 'Should survive an unscoped delete attempt';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
+
+        $updated = R::load('post', $bean->id);
+        $this->assertEmpty($updated->deleted, 'the post must not have been deleted');
+    }
+
     // --- undeleteCallback ---
 
     public function testUndeleteCallbackClearsDeletedFlag(): void
@@ -1025,6 +1051,28 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->undeleteCallback(ROOT_URL . '/status/999999');
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUndeleteCallbackReturnsInsufficientScopeWhenTokenLacksDeleteScope(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Should stay deleted against an unscoped undelete attempt';
+        $bean->slug = '';
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->undeleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+
+        $updated = R::load('post', $bean->id);
+        $this->assertEquals(1, $updated->deleted, 'the post must still be deleted');
     }
 
     // --- beanToMf2Properties (via sourceQueryCallback) ---
