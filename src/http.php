@@ -213,7 +213,7 @@ function resolve_host_ips(string $host): array
     // dns_get_record() can be disabled/restricted in some environments;
     // gethostbyname() is IPv4-only but covers that gap.
     $ipv4 = @gethostbyname($host);
-    return $ipv4 !== false && $ipv4 !== $host ? [$ipv4] : [];
+    return $ipv4 !== $host ? [$ipv4] : [];
 }
 
 /**
