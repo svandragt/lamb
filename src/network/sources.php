@@ -3,9 +3,11 @@
 namespace Lamb\Network;
 
 use RedBeanPHP\R;
+use SimplePie\File as SimplePieFile;
 use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
+use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 
 // FEED_FETCH_TIMEOUT is defined in constants.php
@@ -20,6 +22,43 @@ function get_feeds(): array
     // A setting accidentally placed under [feeds] (e.g. `feeds_draft = false`)
     // would otherwise be fetched as a feed URL. Only keep http(s) URLs.
     return array_filter($config['feeds'] ?? [], fn($url) => is_valid_http_url((string) $url));
+}
+
+/**
+ * SimplePie's remote-fetch class, hardened against SSRF: refuses to make a
+ * request when the destination doesn't resolve to a public address.
+ *
+ * A feed URL is admin-configured (trusted at add-time), but nothing pins its
+ * *eventual* destination — if the feed host is later compromised, or simply
+ * issues a redirect, the cron job would otherwise fetch wherever it points,
+ * including internal/loopback addresses. SimplePie\File follows redirects by
+ * recursively calling `$this->__construct()` on each hop (see its
+ * constructor), which — since PHP dispatches `$this->__construct()`
+ * virtually — re-enters *this* subclass's override on every hop, so each
+ * redirect target is checked, not just the initial URL.
+ */
+class SafeFile extends SimplePieFile
+{
+    /**
+     * @param array<int, mixed> $curl_options
+     */
+    public function __construct(
+        string $url,
+        int $timeout = 10,
+        int $redirects = 5,
+        ?array $headers = null,
+        ?string $useragent = null,
+        bool $force_fsockopen = false,
+        array $curl_options = []
+    ) {
+        if (!is_public_http_url($url)) {
+            $this->success = false;
+            $this->error = 'Blocked: URL does not resolve to a public, routable address';
+            return;
+        }
+
+        parent::__construct($url, $timeout, $redirects, $headers, $useragent, $force_fsockopen, $curl_options);
+    }
 }
 
 /**
@@ -51,6 +90,7 @@ function ensure_feed_cache(string $dir): string|false
 function init_simplepie_feed(string $url): SimplePie
 {
     $feed = new SimplePie();
+    $feed->get_registry()->register(SimplePieFile::class, SafeFile::class, true);
     $cache_dir = ensure_feed_cache('../data/cache/simplepie');
     if ($cache_dir === false) {
         $feed->enable_cache(false);
