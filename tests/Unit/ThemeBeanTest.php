@@ -401,4 +401,20 @@ class ThemeBeanTest extends TestCase
 
         $this->assertStringContainsString('https://example.com/feed.rss', $result);
     }
+
+    public function testLinkSourceRejectsJavascriptSchemeSourceUrl(): void
+    {
+        // Defense-in-depth: even if a non-http(s) source_url reaches this
+        // point (e.g. an old row from before populate_bean() validated it),
+        // link_source() must not emit it as an href.
+        $bean = R::dispense('post');
+        $bean->feed_name = 'TestFeed';
+        $bean->source_url = 'javascript:alert(document.cookie)';
+
+        $result = link_source($bean);
+
+        $this->assertStringNotContainsString('javascript:', $result);
+        $this->assertStringNotContainsString('<a ', $result);
+        $this->assertStringContainsString('TestFeed', $result);
+    }
 }
