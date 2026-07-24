@@ -616,6 +616,36 @@ class MicropubAdapterTest extends TestCase
         $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.jpg\)/', $post->body);
     }
 
+    public function testUploadedPhotosWithSameClientFilenameDoNotCollide(): void
+    {
+        // Regression: the on-disk filename was sha1(client filename) with no
+        // salt, so two uploads sharing a client filename in the same month
+        // silently overwrote each other.
+        $adapter = new LambMicropubAdapter();
+
+        $makeUpload = function (): \Nyholm\Psr7\UploadedFile {
+            $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
+            file_put_contents($tmpFile, 'fake image data ' . uniqid());
+            return new \Nyholm\Psr7\UploadedFile($tmpFile, 15, UPLOAD_ERR_OK, 'photo.jpg', 'image/jpeg');
+        };
+
+        $first = $adapter->createCallback(
+            ['type' => ['h-entry'], 'properties' => ['content' => ['First post']]],
+            ['photo' => $makeUpload()]
+        );
+        $second = $adapter->createCallback(
+            ['type' => ['h-entry'], 'properties' => ['content' => ['Second post']]],
+            ['photo' => $makeUpload()]
+        );
+
+        preg_match('/!\[.*\]\((.+\.jpg)\)/', R::findOne('post', ' body LIKE ? ', ['%First post%'])->body, $m1);
+        preg_match('/!\[.*\]\((.+\.jpg)\)/', R::findOne('post', ' body LIKE ? ', ['%Second post%'])->body, $m2);
+
+        $this->assertNotEmpty($m1[1] ?? null);
+        $this->assertNotEmpty($m2[1] ?? null);
+        $this->assertNotSame($m1[1], $m2[1], 'uploads with the same client filename must not collide on disk');
+    }
+
     public function testCreateCallbackWithDraftPostStatusSavesAsDraft(): void
     {
         $adapter = new LambMicropubAdapter();

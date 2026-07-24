@@ -557,7 +557,11 @@ class LambMicropubAdapter extends MicropubAdapter
             }
             $sub_path  = \Lamb\Response\upload_subpath();
             $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-            $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
+            // Always salt with uniqid(), not only when the client filename is
+            // absent — otherwise two uploads sharing a client filename in the
+            // same month collide and the later one silently overwrites the
+            // earlier, already-published one on disk.
+            $seed      = sha1(($file->getClientFilename() ?? '') . uniqid('', true));
 
             $filename = \Lamb\Response\persist_image_bytes(
                 (string) $file->getStream(),

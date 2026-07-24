@@ -50,7 +50,11 @@ function respond_upload(array $_args): void
             die();
         }
         $temp_fp  = $f['tmp_name'];
-        $seed     = sha1($f['name']);
+        // Salt with uniqid() so two uploads with the same client-supplied
+        // filename in the same month don't collide on disk — without this,
+        // an attacker-controlled filename can silently overwrite an earlier,
+        // already-published upload at the same path.
+        $seed     = sha1($f['name'] . uniqid('', true));
         $sub_path = upload_subpath();
         $dir      = get_upload_dir($sub_path);
 
