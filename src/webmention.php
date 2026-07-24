@@ -8,6 +8,8 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
+use function Lamb\Http\fetch_guarded;
+use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
@@ -206,7 +208,10 @@ function extract_meta(string $html): array
  */
 function fetch_source(string $url): ?string
 {
-    $result = \Lamb\Http\fetch($url, [
+    // $url is attacker-controlled (the `source` of an unauthenticated
+    // webmention POST): use the SSRF-safe fetcher, which rejects loopback/
+    // private/link-local destinations and re-checks every redirect hop.
+    $result = fetch_guarded($url, [
         'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
         'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
@@ -538,9 +543,10 @@ function reconcile_resends_on_restore(int $post_id): int
  * @param callable|null $fetcher
  * @param callable|null $sender
  * @param int           $limit Maximum rows to process per run.
+ * @param callable|null $resolver Passed through to {@see is_public_http_url} for the discovered-endpoint SSRF check; injectable for testing.
  * @return array{sent:int, failed:int, skipped:int, cancelled:int}
  */
-function process_outbound(?callable $fetcher = null, ?callable $sender = null, int $limit = 20): array
+function process_outbound(?callable $fetcher = null, ?callable $sender = null, int $limit = 20, ?callable $resolver = null): array
 {
     $fetcher ??= __NAMESPACE__ . '\\fetch_target';
     $sender ??= __NAMESPACE__ . '\\send_webmention';
@@ -549,7 +555,7 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
     $rows = R::find('webmentionoutbox', ' status = ? ORDER BY created ASC LIMIT ? ', ['pending', $limit]);
 
     foreach ($rows as $row) {
-        $outcome = process_outbound_row($row, $fetcher, $sender);
+        $outcome = process_outbound_row($row, $fetcher, $sender, $resolver);
         if ($outcome !== null) {
             $stats[$outcome]++;
         }
@@ -567,12 +573,13 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
  * scheduled, so it is left pending and untouched (no attempt counted, no store)
  * until publication.
  *
- * @param OODBBean $row
- * @param callable $fetcher fn(string $url): ?array{headers: string[], body: string}
- * @param callable $sender  fn(string $endpoint, string $source, string $target): int
+ * @param OODBBean      $row
+ * @param callable      $fetcher  fn(string $url): ?array{headers: string[], body: string}
+ * @param callable      $sender   fn(string $endpoint, string $source, string $target): int
+ * @param callable|null $resolver Passed through to {@see is_public_http_url}; injectable for testing.
  * @return 'sent'|'failed'|'skipped'|'cancelled'|null Stat bucket name, or null when the row is deferred.
  */
-function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender): ?string
+function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender, ?callable $resolver = null): ?string
 {
     $post = R::load('post', (int) $row->post_id);
 
@@ -608,8 +615,11 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
         ? discover_endpoint($fetched['body'] ?? '', $fetched['headers'] ?? [], $row->target)
         : null;
 
-    // A target may advertise any URL as its endpoint — only POST to http(s).
-    if ($endpoint !== null && !is_valid_http_url($endpoint)) {
+    // A target may advertise any URL as its endpoint, so this is just as
+    // attacker-influenced as the source in verify_and_store(): reject
+    // anything that isn't a public, non-internal http(s) destination before
+    // POSTing to it (SSRF via a malicious/compromised linked-to page).
+    if ($endpoint !== null && !is_public_http_url($endpoint, $resolver)) {
         $endpoint = null;
     }
 
@@ -640,7 +650,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
  */
 function fetch_target(string $url): ?array
 {
-    $result = \Lamb\Http\fetch($url, [
+    $result = fetch_guarded($url, [
         'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
         'timeout' => WEBMENTION_FETCH_TIMEOUT,
     ]);
@@ -669,10 +679,18 @@ function fetch_target(string $url): ?array
  */
 function send_webmention(string $endpoint, string $source, string $target): int
 {
-    return \Lamb\Http\post_form(
-        $endpoint,
-        ['source' => $source, 'target' => $target],
-        WEBMENTION_FETCH_TIMEOUT,
-        'Lamb-Webmention'
-    );
+    // Unlike Http\post_form(), fetch_guarded() re-validates the destination
+    // on every redirect hop — needed here because $endpoint came from the
+    // target page's own (attacker-influenced) endpoint discovery.
+    $result = fetch_guarded($endpoint, [
+        'method' => 'POST',
+        'headers' => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'User-Agent: Lamb-Webmention',
+        ],
+        'content' => http_build_query(['source' => $source, 'target' => $target]),
+        'timeout' => WEBMENTION_FETCH_TIMEOUT,
+    ]);
+
+    return $result === null ? 0 : $result['status'];
 }
