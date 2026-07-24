@@ -13,6 +13,7 @@ use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
+use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
@@ -39,6 +40,21 @@ class LambMicropubAdapter extends MicropubAdapter
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
             return false;
+        }
+
+        // Unlike create/update/delete, a source query has no scope of its own —
+        // any token that merely verifies for this site would otherwise get
+        // full read access to every draft/scheduled/trashed post's content
+        // (sequential /status/<id> ids make this trivial to enumerate). A
+        // publicly-visible post's content is already public, so any valid
+        // token may read it; a hidden one requires 'update' scope (the same
+        // trust level needed to edit it) and otherwise looks exactly like a
+        // nonexistent post, so this can't be used as an existence oracle either.
+        if (!is_publicly_visible($bean)) {
+            $scope = $this->user['scope'] ?? [];
+            if ($this->user !== null && !in_array('update', $scope)) {
+                return false;
+            }
         }
 
         $props = $this->beanToMf2Properties($bean);
@@ -394,7 +410,11 @@ class LambMicropubAdapter extends MicropubAdapter
     public function updateCallback(string $url, array $actions)
     {
         $bean = $this->findPostByUrl($url);
-        if ($bean === null) {
+        // A soft-deleted post is meant to stay immutable until explicitly
+        // restored via the delete-scoped undeleteCallback(); treating it the
+        // same as "no such post" here also means this can't be used to tell
+        // a trashed post's id apart from a nonexistent one.
+        if ($bean === null || (int) $bean->deleted === 1) {
             return 'invalid_request';
         }
 
