@@ -113,7 +113,15 @@ function verify_and_store(string $source, string $target, ?callable $fetcher = n
  * Resolve a target URL to the id of the Lamb post it points at.
  *
  * Returns null when the host is not ours, the path is not a recognised post
- * URL, or no matching post exists.
+ * URL, no matching post exists, or the matching post isn't publicly visible
+ * (a draft, a scheduled post, or a trashed one). The visibility check uses
+ * is_publicly_visible(), not is_viewable(): POST /webmention is unauthenticated
+ * and driven by whichever remote party sends the request, not by the site's
+ * own logged-in session, so a hidden post must 404 here exactly as it does
+ * for an anonymous permalink visit — otherwise an attacker could use the
+ * differing responses to enumerate draft/scheduled/trashed post ids that
+ * don't otherwise exist as far as an anonymous visitor can tell, and attach
+ * an unmoderated mention to a post before it's ever published.
  *
  * @param string $target
  * @return int|null
@@ -128,8 +136,11 @@ function target_post_id(string $target): ?int
 
     $path = parse_url($target, PHP_URL_PATH) ?: '';
     $bean = \Lamb\find_post_by_path($path);
+    if ($bean === null || !\Lamb\is_publicly_visible($bean)) {
+        return null;
+    }
 
-    return $bean !== null ? (int) $bean->id : null;
+    return (int) $bean->id;
 }
 
 /**
