@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Lamb\Micropub\LambMicropubAdapter;
 use Tests\Support\StubMicropubAdapter;
@@ -550,6 +551,98 @@ class MicropubAdapterTest extends TestCase
         $this->assertArrayNotHasKey('category', $result['properties']);
     }
 
+    // --- sourceQueryCallback visibility (regression: content disclosure) ---
+    // A source query has no scope of its own, unlike create/update/delete —
+    // without a visibility check, ANY valid token could read the full
+    // content of any draft/scheduled/trashed post, not merely learn it
+    // exists (sequential /status/<id> ids make this trivial to enumerate).
+
+    private function makeHiddenPost(array $fields): OODBBean
+    {
+        $bean = R::dispense('post');
+        $bean->body = $fields['body'] ?? 'Hidden content';
+        $bean->slug = '';
+        $bean->created = $fields['created'] ?? date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        $bean->draft = $fields['draft'] ?? 0;
+        $bean->deleted = $fields['deleted'] ?? 0;
+        R::store($bean);
+        return $bean;
+    }
+
+    public function testSourceQueryReturnsFalseForDraftWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['draft' => 1]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result, 'a create-only token must not read a draft\'s content via source query');
+    }
+
+    public function testSourceQueryReturnsContentForDraftWithUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['draft' => 1, 'body' => 'Draft-only content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Draft-only content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsFalseForScheduledWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['created' => date('Y-m-d H:i:s', strtotime('+1 day'))]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result);
+    }
+
+    public function testSourceQueryReturnsFalseForTrashedWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['deleted' => 1]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result);
+    }
+
+    public function testSourceQueryReturnsContentForTrashedWithUpdateScope(): void
+    {
+        // update scope may still see a trashed post's source (e.g. to decide
+        // whether to restore it via the separately delete-scoped undelete).
+        $bean = $this->makeHiddenPost(['deleted' => 1, 'body' => 'Trashed content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Trashed content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsContentForPublishedPostRegardlessOfScope(): void
+    {
+        // A published post's content is already public — any valid token
+        // may read it, matching pre-fix behaviour for the common case.
+        $bean = $this->makeHiddenPost(['body' => 'Published content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => []];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Published content', $result['properties']['content'][0]);
+    }
+
     public function testCreateCallbackPublishedSetsCreatedDate(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -747,6 +840,34 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(ROOT_URL . '/status/999999', ['replace' => ['content' => ['new']]]);
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForTrashedPost(): void
+    {
+        // Regression: a soft-deleted post is meant to stay immutable until
+        // restored via the (delete-scoped) undeleteCallback() — an
+        // update-scoped token must not be able to silently rewrite trashed
+        // content while it stays hidden, and the response must be
+        // indistinguishable from "no such post".
+        $bean = R::dispense('post');
+        $bean->body = 'Trashed content must not change';
+        $bean->slug = '';
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Attempted overwrite']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Trashed content must not change', $updated->body);
     }
 
     public function testUpdateCallbackReplaceContentUpdatesBody(): void
