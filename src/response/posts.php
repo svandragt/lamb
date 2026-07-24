@@ -17,6 +17,7 @@ use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\toggle_checkbox;
 use function Lamb\Route\is_reserved_route;
 
@@ -258,10 +259,13 @@ function redirect_edited(): void
     if (!empty($old_slug) && $old_slug !== $new_slug) {
         // Remove any redirect pointing to the new slug to avoid redirect loops
         delete_redirect_for_slug($new_slug);
-        // Store a redirect from the old slug to the new one
+        // Store a redirect from the old slug to the new one. sanitize_explicit_slug()
+        // is also applied when a slug is first read from front matter, but a
+        // slug reaching this point some other way must not be able to turn
+        // this into a protocol-relative "//host/..." open redirect either.
         $auto_redirect = R::dispense('redirect');
         $auto_redirect->from_slug = $old_slug;
-        $auto_redirect->to_url = '/' . $new_slug;
+        $auto_redirect->to_url = '/' . sanitize_explicit_slug($new_slug);
         R::store($auto_redirect);
     }
 
