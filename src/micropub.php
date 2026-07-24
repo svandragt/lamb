@@ -160,11 +160,30 @@ class LambMicropubAdapter extends MicropubAdapter
             return false;
         }
 
-        if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+        // Compare against the *configured* canonical URL, never ROOT_URL: ROOT_URL
+        // falls back to the client-supplied Host header, so an attacker holding a
+        // token the endpoint issued for their own identity could send
+        // `Host: their-site.example` and have this check compare their `me` against
+        // their own host — accepting the token as ours. Fail closed when no
+        // canonical URL is configured: with nothing trustworthy to compare, the
+        // identity of the token cannot be established.
+        $expected = \Lamb\Config\canonical_site_url($config);
+        if ($expected === null) {
+            mp_log('token_verify', [
+                'reason' => 'no_site_url',
+                'token'  => token_fingerprint($token),
+            ]);
+            // Surfaced unconditionally: mp_log() is silent unless micropub_debug is
+            // on, and an author whose client suddenly gets 403 needs to be told why.
+            error_log('micropub: rejecting token, no site_url configured (set site_url in /settings)');
+            return false;
+        }
+
+        if (rtrim($data['me'], '/') !== rtrim($expected, '/')) {
             mp_log('token_verify', [
                 'reason'   => 'me_mismatch',
                 'me'       => $data['me'],
-                'expected' => ROOT_URL,
+                'expected' => $expected,
                 'token'    => token_fingerprint($token),
             ]);
             return false;

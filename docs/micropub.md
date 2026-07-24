@@ -12,7 +12,24 @@ Lamb exposes a `/micropub` endpoint. Clients discover it via a `<link rel="micro
 
 ## Setup
 
-### 1. Add `rel="me"` identity links
+### 1. Set your site URL
+
+Add your canonical site URL to your site configuration at `/settings`:
+
+```ini
+site_url = https://example.com
+```
+
+Lamb compares the identity in an IndieAuth token against this value to confirm the
+token was issued for *your* site and not someone else's. Until it is set, the
+Micropub endpoint refuses every token and logs
+`micropub: rejecting token, no site_url configured` to the PHP error log.
+
+Do not derive it from the request — that is exactly what this setting exists to
+avoid. You can also supply it as the `LAMB_SITE_URL` environment variable, which
+takes precedence over the setting.
+
+### 2. Add `rel="me"` identity links
 
 IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add a `[me]` section to your site configuration at `/settings`:
 
@@ -26,7 +43,7 @@ Each entry is rendered as a `<link rel="me">` tag in the HTML `<head>` — invis
 
 Make sure each linked profile (e.g. GitHub) has your site URL in its profile page so IndieAuth can verify the two-way link.
 
-### 2. Configure your Micropub client
+### 3. Configure your Micropub client
 
 Point your client at your site URL. It will auto-discover the endpoints from your home page `<head>`:
 
@@ -56,6 +73,8 @@ Posts created with `post-status: draft` or a future `published` date are not pub
 ## Troubleshooting
 
 If a client can't connect — for example it reports "something went wrong setting up your Micropub endpoint" — you can turn on diagnostic logging to see exactly what the client sent and why Lamb responded as it did.
+
+The first thing to check is that `site_url` is set (see [Set your site URL](#1-set-your-site-url)); without it every token is refused, with a `no_site_url` reason in the log below.
 
 Add this to your site configuration at `/settings`:
 

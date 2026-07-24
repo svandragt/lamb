@@ -28,6 +28,14 @@ theme = 2026
 ;; Title of the site, in html and feed views
 site_title = My Microblog
 
+;; The canonical URL of your site, e.g. https://example.com (no trailing slash).
+;; Set this if you use Micropub: it is how Lamb tells that an IndieAuth token was
+;; issued for your identity rather than someone else's, so the endpoint refuses
+;; every token while it is unset. It also pins the absolute URLs in feeds and
+;; social embeds to your real domain instead of whatever host the request claimed.
+;; The LAMB_SITE_URL environment variable overrides this value.
+;site_url = https://example.com
+
 ;; Short description of the site, used as the meta description on listing pages.
 ;site_description = A personal microblog
 
@@ -204,6 +212,46 @@ function compose_config(string $stored_ini, string $default_ini): array
     ];
 
     return array_merge($fallback, $defaults, $config);
+}
+
+/**
+ * Returns the site's explicitly configured canonical URL, or null when unset.
+ *
+ * Everything else the app knows about its own address is derived from the
+ * client-supplied Host header, which an attacker can set at will (see
+ * Lamb\Http\request_root_url()). This is the one value the author states
+ * deliberately, so it is the only one safe to make a security decision against —
+ * notably the IndieAuth `me` comparison that decides whether a Micropub bearer
+ * token was issued for *this* site.
+ *
+ * Read from LAMB_SITE_URL in the environment first (so a deployment can pin it
+ * without touching the database), then the `site_url` key in the settings INI.
+ * The value is normalised to `scheme://host[:port]` with no trailing slash, and
+ * rejected unless it is an absolute http(s) URL with a host.
+ *
+ * @param array<string, mixed> $config The loaded configuration.
+ * @return string|null The canonical site URL, or null when not configured or unusable.
+ */
+function canonical_site_url(array $config): ?string
+{
+    $candidate = (string) (getenv('LAMB_SITE_URL') ?: ($config['site_url'] ?? ''));
+    $candidate = trim($candidate);
+    if ($candidate === '') {
+        return null;
+    }
+
+    $parts = parse_url($candidate);
+    if ($parts === false || empty($parts['host'])) {
+        return null;
+    }
+    $scheme = strtolower($parts['scheme'] ?? '');
+    if (!in_array($scheme, ['http', 'https'], true)) {
+        return null;
+    }
+
+    $port = isset($parts['port']) ? ':' . $parts['port'] : '';
+
+    return $scheme . '://' . strtolower($parts['host']) . $port;
 }
 
 /**

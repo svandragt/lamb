@@ -25,6 +25,10 @@ class MicropubAdapterTest extends TestCase
         // reads it unguarded, so seed it here rather than relying on a sibling
         // test having populated the global $config first.
         $config['site_title'] = $config['site_title'] ?? 'Test Blog';
+        // Token verification compares the token's `me` against the configured
+        // canonical URL, never the request host, so a Micropub install must set
+        // site_url. Seed it to match ROOT_URL for the happy-path tests.
+        $config['site_url'] = 'http://localhost';
 
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
@@ -45,7 +49,7 @@ class MicropubAdapterTest extends TestCase
     protected function tearDown(): void
     {
         global $config;
-        unset($config['micropub_debug']);
+        unset($config['micropub_debug'], $config['site_url']);
         if (isset($GLOBALS['lamb_mp_log_path'])) {
             @unlink($GLOBALS['lamb_mp_log_path']);
             unset($GLOBALS['lamb_mp_log_path']);
@@ -182,6 +186,37 @@ class MicropubAdapterTest extends TestCase
         $this->assertIsArray($result['scope']);
         $this->assertContains('create', $result['scope']);
         $this->assertContains('update', $result['scope']);
+    }
+
+    public function testVerifyTokenRejectsIdentityMatchingOnlyTheRequestHost(): void
+    {
+        // The request host is attacker-chosen (a spoofed Host header reaches PHP
+        // through any catch-all vhost), so a token whose `me` matches it must still
+        // be refused when it does not match the configured canonical URL.
+        global $config;
+        $config['site_url'] = 'https://real-site.example';
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $this->assertFalse($adapter->verifyAccessTokenCallback('token-for-request-host'));
+    }
+
+    public function testVerifyTokenFailsClosedWhenNoSiteUrlIsConfigured(): void
+    {
+        global $config;
+        unset($config['site_url']);
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $this->assertFalse($adapter->verifyAccessTokenCallback('any-token'));
     }
 
     public function testVerifyTokenHandlesMissingTrailingSlash(): void

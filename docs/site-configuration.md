@@ -13,6 +13,11 @@ one value rather than write it from scratch; personal details stay commented:
 ;; Title of the site, shown in the HTML and feed views
 site_title = My Microblog
 
+;; The canonical URL of your site, e.g. https://example.com (no trailing slash).
+;; Required for Micropub, and pins absolute URLs to your real domain.
+;; Overridden by the LAMB_SITE_URL environment variable.
+;site_url = https://example.com
+
 ;; Author email in feed
 ;author_email = joe.sheeple@example.com
 
@@ -93,6 +98,24 @@ Feed = /feed
 ;https://bsky.app/profile/yourusername = Bluesky
 ;https://mastodon.social/@yourusername = Mastodon
 ```
+
+## Site URL
+
+`site_url` is the canonical address of your site, e.g. `https://example.com`. It is
+optional for a plain blog, but worth setting:
+
+* **Micropub needs it.** IndieAuth tokens are issued for an identity, and Lamb has
+  to know its own identity to tell whether a token belongs to you. Without
+  `site_url` the Micropub endpoint refuses every token, and logs
+  `micropub: rejecting token, no site_url configured` via PHP's error log.
+* **It pins absolute URLs.** Feeds, social embed tags, and the endpoint discovery
+  links otherwise use whatever host the incoming request asked for. Setting
+  `site_url` keeps them on your real domain even if a request arrives with a
+  different `Host` header.
+
+You can also set it outside the settings page with the `LAMB_SITE_URL` environment
+variable, which takes precedence over the INI value — handy when the same
+configuration is deployed to more than one hostname.
 
 ## Related
 
