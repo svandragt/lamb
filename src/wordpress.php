@@ -12,7 +12,7 @@ use RuntimeException;
 use SimpleXMLElement;
 use Symfony\Component\Yaml\Yaml;
 
-use function Lamb\Http\fetch;
+use function Lamb\Http\fetch_guarded;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\populate_bean;
 use function Lamb\Response\asset_url;
@@ -722,7 +722,12 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if (!is_dir($dest_dir) && !mkdir($dest_dir, 0777, true) && !is_dir($dest_dir)) {
         return null;
     }
-    $response = fetch($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
+    // $url is embedded in the WXR file being imported — an untrusted export
+    // an admin may have received from elsewhere — so it's just as
+    // attacker-influenced as a webmention source; use the same SSRF-safe
+    // fetcher (rejects loopback/private/link-local destinations and
+    // re-checks every redirect hop) rather than the unguarded fetch().
+    $response = fetch_guarded($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
     if ($response === null || $response['body'] === '') {
         return null;
     }
