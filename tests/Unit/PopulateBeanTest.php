@@ -232,6 +232,22 @@ class PopulateBeanTest extends TestCase
         $this->assertSame('https://example.com/article', $bean->source_url);
     }
 
+    public function testPopulateBeanRejectsNonHttpPermalinkScheme(): void
+    {
+        // A malicious/compromised feed's permalink is rendered into an <a
+        // href> by Theme\link_source() — a javascript: URI must never reach
+        // source_url (issue: stored XSS via feed attribution link).
+        $item = $this->createMock(SimplePieItem::class);
+        $item->method('get_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_updated_date')->willReturn('2024-01-01 00:00:00');
+        $item->method('get_id')->willReturn('test-id-xss');
+        $item->method('get_permalink')->willReturn('javascript:alert(document.cookie)');
+
+        $bean = populate_bean("Feed content", $item, 'test-feed');
+
+        $this->assertNull($bean->source_url);
+    }
+
     private function makeFeedItem(string $id): SimplePieItem
     {
         $item = $this->createMock(SimplePieItem::class);

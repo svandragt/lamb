@@ -9,6 +9,7 @@ use SimplePie\Item;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -43,7 +44,13 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
             $bean->feed_name = $feed_name;
         }
-        $bean->source_url = $feed_item->get_permalink();
+        // A feed item's permalink is attacker-influenced (any feed the site
+        // subscribes to can supply it) and is later rendered into an <a href>
+        // by Theme\link_source() — reject anything that isn't a well-formed
+        // http(s) URL so a `javascript:`/other-scheme permalink can't reach
+        // that attribute unescaped for scheme.
+        $permalink = (string) $feed_item->get_permalink();
+        $bean->source_url = is_valid_http_url($permalink) ? $permalink : null;
     }
 
     parse_bean($bean);
