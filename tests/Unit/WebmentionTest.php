@@ -69,6 +69,42 @@ class WebmentionTest extends TestCase
         $this->assertNull(target_post_id(ROOT_URL . '/status/999999'));
     }
 
+    public function testTargetPostIdRejectsDraftPost(): void
+    {
+        // Regression: an unauthenticated webmention POST must not be able to
+        // tell a draft apart from a nonexistent post — both must resolve to
+        // null, matching how an anonymous permalink visit 404s on a draft.
+        $id = $this->makePost();
+        $bean = R::load('post', $id);
+        $bean->draft = 1;
+        R::store($bean);
+
+        $this->assertNull(target_post_id(ROOT_URL . '/status/' . $id));
+    }
+
+    public function testTargetPostIdRejectsScheduledPost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Hello world';
+        $bean->transformed = '<p>Hello world</p>';
+        $bean->created = date('Y-m-d H:i:s', strtotime('+1 day'));
+        $bean->updated = '2026-01-01 00:00:00';
+        $bean->version = 1;
+        $id = (int) R::store($bean);
+
+        $this->assertNull(target_post_id(ROOT_URL . '/status/' . $id));
+    }
+
+    public function testTargetPostIdRejectsTrashedPost(): void
+    {
+        $id = $this->makePost();
+        $bean = R::load('post', $id);
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $this->assertNull(target_post_id(ROOT_URL . '/status/' . $id));
+    }
+
     // source_mentions_target ------------------------------------------------
 
     public function testSourceMentionsTargetMatchesHref(): void
@@ -129,6 +165,24 @@ class WebmentionTest extends TestCase
         $this->assertSame($target, $wm->target);
         $this->assertSame($id, (int) $wm->post_id);
         $this->assertNotEmpty($wm->verified_at);
+    }
+
+    public function testVerifyRejectsMentionOnDraftPostEvenWhenSourceLinksIt(): void
+    {
+        // Regression: a webmention must not be attachable to a draft before
+        // it's ever published, and the response must be indistinguishable
+        // from "no such post" (both 400 "target is not a valid post").
+        $id = $this->makePost();
+        $bean = R::load('post', $id);
+        $bean->draft = 1;
+        R::store($bean);
+
+        $target = ROOT_URL . '/status/' . $id;
+        $html = '<a href="' . $target . '">re</a>';
+
+        $res = verify_and_store('https://other.example/reply', $target, fn () => $html);
+        $this->assertSame(400, $res['status']);
+        $this->assertSame(0, R::count('webmention'));
     }
 
     public function testVerifyDeduplicatesOnRepeat(): void

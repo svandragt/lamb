@@ -586,6 +586,29 @@ function is_viewable(OODBBean $post): bool
 }
 
 /**
+ * Returns true for a post an anonymous visitor may see: not draft, not
+ * deleted, and not scheduled for the future. The in-memory counterpart to
+ * visible_clause() (the SQL allow-list for listings), for callers that
+ * already have a loaded bean.
+ *
+ * Deliberately has no logged-in exception, unlike is_viewable(): it's for
+ * request paths where the caller's identity isn't the site's own logged-in
+ * session (an inbound webmention POST, /_cron) — a session cookie that
+ * happens to be present must not leak a hidden post's existence to whichever
+ * party is actually making the request.
+ *
+ * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
+ * @return bool
+ */
+function is_publicly_visible(OODBBean $post): bool
+{
+    if (empty($post->id) || $post->deleted == 1 || $post->draft == 1) {
+        return false;
+    }
+    return !is_scheduled($post);
+}
+
+/**
  * Returns true when the supplied preview token grants access to an
  * unpublished post's permalink.
  *
