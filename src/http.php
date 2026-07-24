@@ -179,6 +179,88 @@ function is_valid_http_url(string $url): bool
 }
 
 /**
+ * Whether an IP address is loopback, link-local, or a private/reserved range
+ * (RFC 1918, RFC 4193, the IPv4 link-local block that also covers the common
+ * cloud metadata address 169.254.169.254, etc.).
+ *
+ * @param string $ip
+ * @return bool
+ */
+function is_private_ip(string $ip): bool
+{
+    return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+}
+
+/**
+ * Resolve a hostname to its IP addresses (A + AAAA records).
+ *
+ * Split out so {@see is_public_http_url} can be unit-tested with a fake
+ * resolver instead of depending on live DNS.
+ *
+ * @param string $host
+ * @return string[] Resolved IPs, or an empty array when resolution fails.
+ */
+function resolve_host_ips(string $host): array
+{
+    $records = @dns_get_record($host, DNS_A + DNS_AAAA);
+    if (is_array($records) && $records !== []) {
+        return array_values(array_filter(array_map(
+            fn($record) => $record['ip'] ?? $record['ipv6'] ?? null,
+            $records
+        )));
+    }
+
+    // dns_get_record() can be disabled/restricted in some environments;
+    // gethostbyname() is IPv4-only but covers that gap.
+    $ipv4 = @gethostbyname($host);
+    return $ipv4 !== false && $ipv4 !== $host ? [$ipv4] : [];
+}
+
+/**
+ * Whether a URL is safe to fetch: an absolute http(s) URL whose host resolves
+ * only to public, routable addresses.
+ *
+ * This closes an SSRF hole in {@see is_valid_http_url}, which only checks
+ * that a URL is well-formed http(s) — it accepts `http://127.0.0.1/`,
+ * `http://169.254.169.254/`, `http://10.0.0.1/`, etc. Anywhere a URL is
+ * attacker-influenced and this server will make a request to it on the
+ * attacker's behalf (webmention source verification, discovered webmention
+ * endpoints, feed fetches), the resolved destination — not just the URL's
+ * syntax — must be checked, since it's the destination that reaches internal
+ * services. Must be re-checked after every redirect hop for the same reason.
+ *
+ * @param string        $url
+ * @param callable|null $resolver fn(string $host): string[] — defaults to {@see resolve_host_ips}.
+ * @return bool
+ */
+function is_public_http_url(string $url, ?callable $resolver = null): bool
+{
+    if (!is_valid_http_url($url)) {
+        return false;
+    }
+
+    $host = (string) parse_url($url, PHP_URL_HOST);
+
+    if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
+        return !is_private_ip($host);
+    }
+
+    $resolver ??= __NAMESPACE__ . '\\resolve_host_ips';
+    $ips = $resolver($host);
+    if ($ips === []) {
+        return false;
+    }
+
+    foreach ($ips as $ip) {
+        if (is_private_ip($ip)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
  * Extract the status code from an HTTP status line.
  *
  * Accepts status lines with or without a reason phrase ("HTTP/1.1 200 OK"
@@ -259,4 +341,101 @@ function fetch(string $url, array $opts = []): ?array
     $headers = $http_response_header;
 
     return ['status' => parse_status_line($headers[0] ?? ''), 'headers' => $headers, 'body' => $body];
+}
+
+/**
+ * Read the `Location` header from a response's raw header lines.
+ *
+ * @param string[] $headers
+ * @return string|null
+ */
+function response_location(array $headers): ?string
+{
+    foreach ($headers as $header) {
+        if (preg_match('/^location:\s*(.*)$/i', $header, $m)) {
+            return trim($m[1]);
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Resolve a possibly-relative redirect `Location` against the URL it came from.
+ *
+ * @param string $base
+ * @param string $location
+ * @return string
+ */
+function resolve_redirect_location(string $base, string $location): string
+{
+    if ($location === '' || parse_url($location, PHP_URL_SCHEME) !== null) {
+        return $location;
+    }
+
+    $scheme = parse_url($base, PHP_URL_SCHEME) ?: 'https';
+    $host = parse_url($base, PHP_URL_HOST) ?: '';
+    $port = parse_url($base, PHP_URL_PORT);
+    $authority = $scheme . '://' . $host . ($port ? ':' . $port : '');
+
+    if (str_starts_with($location, '//')) {
+        return $scheme . ':' . $location;
+    }
+    if (str_starts_with($location, '/')) {
+        return $authority . $location;
+    }
+
+    $path = parse_url($base, PHP_URL_PATH) ?: '/';
+    $dir = rtrim(substr($path, 0, strrpos($path, '/') + 1), '/');
+
+    return $authority . $dir . '/' . $location;
+}
+
+/**
+ * Fetch a URL like {@see fetch}, but only from public, non-internal addresses
+ * (see {@see is_public_http_url}), re-validating the destination on every
+ * redirect hop instead of trusting PHP's automatic `follow_location`.
+ *
+ * A remote server that responds fine on the first request but redirects to
+ * a loopback/private address is exactly the SSRF bypass this closes: without
+ * per-hop validation, `follow_location` would transparently fetch the
+ * internal address and only the (already-validated) first URL would ever be
+ * checked. Used for every URL that is attacker-influenced and fetched on the
+ * attacker's behalf (webmention source verification, discovered webmention
+ * endpoints, feed sources).
+ *
+ * @param string               $url
+ * @param array<string, mixed> $opts         Same as {@see fetch}; `follow_location`/`max_redirects` are ignored.
+ * @param int                  $max_redirects
+ * @param callable|null        $resolver     Passed through to {@see is_public_http_url}.
+ * @return array{status:int, headers:string[], body:string}|null Null when the URL (or any redirect hop) is unsafe or unreachable.
+ */
+function fetch_guarded(string $url, array $opts = [], int $max_redirects = 5, ?callable $resolver = null): ?array
+{
+    $opts['follow_location'] = 0;
+    $opts['max_redirects'] = null;
+
+    for ($hop = 0; $hop <= $max_redirects; $hop++) {
+        if (!is_public_http_url($url, $resolver)) {
+            return null;
+        }
+
+        $result = fetch($url, $opts);
+        if ($result === null) {
+            return null;
+        }
+
+        if ($result['status'] < 300 || $result['status'] >= 400) {
+            return $result;
+        }
+
+        $location = response_location($result['headers']);
+        if ($location === null) {
+            return $result;
+        }
+
+        $url = resolve_redirect_location($url, $location);
+    }
+
+    return null;
 }

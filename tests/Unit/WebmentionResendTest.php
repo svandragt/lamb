@@ -55,6 +55,18 @@ class WebmentionResendTest extends TestCase
         R::store($post);
     }
 
+    /**
+     * A fake DNS resolver so tests using the example.com/example.org RFC 2606
+     * hostnames (not actually resolvable) pass the SSRF public-host check
+     * without a real network lookup.
+     *
+     * @return callable(string): string[]
+     */
+    private function publicResolver(): callable
+    {
+        return fn (string $host): array => ['93.184.216.34'];
+    }
+
     /** @return array{0: callable, 1: callable} */
     private function unreachableNetwork(): array
     {
@@ -101,7 +113,7 @@ class WebmentionResendTest extends TestCase
         $fetcher = fn (string $url) => ['headers' => ['<https://other.example/wm>; rel="webmention"'], 'body' => ''];
         $sender = fn (string $e, string $s, string $t): int => 202;
 
-        $result = process_outbound($fetcher, $sender);
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
 
         $this->assertSame(1, $result['sent'], 'a deletion re-send must be sent, not cancelled by the deleted-source guard');
         $this->assertSame('sent', R::findOne('webmentionoutbox')->status);
