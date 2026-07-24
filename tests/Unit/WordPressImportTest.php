@@ -9,6 +9,7 @@ use SimpleXMLElement;
 use function Lamb\Response\persist_image_bytes;
 use function Lamb\WordPress\asset_dir_for_date;
 use function Lamb\WordPress\build_post_body;
+use function Lamb\WordPress\default_image_downloader;
 use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
@@ -941,5 +942,19 @@ XML;
         } finally {
             rmdir($dir);
         }
+    }
+
+    public function testDefaultImageDownloaderBlocksLoopbackDestination(): void
+    {
+        // Regression (SSRF): an image URL embedded in the WXR file being
+        // imported is just as attacker-influenced as a webmention source —
+        // a loopback/private/link-local destination must be rejected before
+        // any request is made, not just fetched and stored.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_wp_import_' . uniqid('', true));
+        }
+
+        $this->assertNull(default_image_downloader('http://127.0.0.1/evil.jpg', '2024/03'));
+        $this->assertNull(default_image_downloader('http://169.254.169.254/evil.png', '2024/03'));
     }
 }
