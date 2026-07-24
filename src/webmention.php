@@ -22,6 +22,17 @@ use const ROOT_URL;
 const WEBMENTION_FETCH_TIMEOUT = 10;
 
 /**
+ * Largest response body kept when fetching a webmention source, target or endpoint.
+ *
+ * POST /webmention is unauthenticated and makes the server fetch a URL the caller
+ * chose, so an uncapped read lets a caller point `source` at an endless body and
+ * grow the PHP worker's memory until it fatals — a handful of concurrent requests
+ * is then enough to exhaust host RAM. 2 MB is far more HTML than any real page
+ * that links to a post; anything larger is dropped rather than buffered.
+ */
+const WEBMENTION_FETCH_MAX_BYTES = 2_000_000;
+
+/**
  * Route handler for POST /webmention.
  *
  * Accepts `source` and `target` form parameters per the Webmention spec,
@@ -225,6 +236,7 @@ function fetch_source(string $url): ?string
     $result = fetch_guarded($url, [
         'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
         'timeout' => WEBMENTION_FETCH_TIMEOUT,
+        'max_bytes' => WEBMENTION_FETCH_MAX_BYTES,
     ]);
 
     return $result === null ? null : $result['body'];
@@ -664,6 +676,7 @@ function fetch_target(string $url): ?array
     $result = fetch_guarded($url, [
         'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
         'timeout' => WEBMENTION_FETCH_TIMEOUT,
+        'max_bytes' => WEBMENTION_FETCH_MAX_BYTES,
     ]);
 
     if ($result === null) {
@@ -701,6 +714,7 @@ function send_webmention(string $endpoint, string $source, string $target): int
         ],
         'content' => http_build_query(['source' => $source, 'target' => $target]),
         'timeout' => WEBMENTION_FETCH_TIMEOUT,
+        'max_bytes' => WEBMENTION_FETCH_MAX_BYTES,
     ]);
 
     return $result === null ? 0 : $result['status'];

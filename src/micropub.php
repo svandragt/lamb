@@ -220,10 +220,18 @@ class LambMicropubAdapter extends MicropubAdapter
                 'Accept: application/json',
             ],
             'timeout' => 5,
-            // introspectToken historically did not follow redirects explicitly,
-            // relying on PHP's stream defaults; preserve that by omitting them.
-            'follow_location' => null,
-            'max_redirects' => null,
+            // Never follow a redirect on this request. PHP's stream wrapper
+            // re-sends the context's `header` option verbatim to the redirect
+            // target, including across a change of authority — so following one
+            // would hand the author's bearer token to whatever host the token
+            // endpoint points at (an open redirect there, or a takeover of it, is
+            // enough). A token endpoint that answers with a redirect is treated
+            // as a failed introspection instead.
+            'follow_location' => 0,
+            'max_redirects' => 0,
+            // An introspection response is a small JSON document; cap the read so
+            // a misbehaving endpoint cannot stream an unbounded body into memory.
+            'max_bytes' => 65536,
         ]);
 
         if ($result === null) {

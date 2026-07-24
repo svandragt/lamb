@@ -27,6 +27,10 @@ define('VIDEO_UPLOAD_EXTENSIONS', ['mp4', 'webm', 'mov']);
 define('MAX_UPLOAD_PIXELS', 40_000_000);
 // Seconds before a single feed fetch is abandoned during /_cron ingestion.
 define('FEED_FETCH_TIMEOUT', 15);
+// Largest feed body kept during /_cron ingestion. /_cron is unauthenticated, so an
+// uncapped read lets a configured feed's host (or anything it redirects to) stream
+// an endless body into the worker's memory until it fatals.
+define('FEED_FETCH_MAX_BYTES', 5_000_000);
 define('MINUTE_IN_SECONDS', 60);
 // Current post render-format version. Bump when `transformed` output changes
 // (e.g. new syntax highlighting); older posts are re-parsed on read by upgrade_posts().
