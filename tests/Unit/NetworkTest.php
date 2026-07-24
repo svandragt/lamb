@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use SimplePie\Item as SimplePieItem;
 use RedBeanPHP\R;
 
+use function Lamb\Network\acquire_cron_lock;
 use function Lamb\Network\attributed_content;
 use function Lamb\Network\get_structured_content;
 use function Lamb\Network\purge_deleted_posts;
@@ -207,5 +208,66 @@ class NetworkTest extends TestCase
 
         $loaded = R::load('post', $liveId);
         $this->assertSame($liveId, $loaded->id);
+    }
+
+    // acquire_cron_lock — regression: /_cron's rate-limit watermark is only
+    // written after a full run completes, so without a mutual-exclusion lock,
+    // a burst of concurrent (unauthenticated) requests would all read the
+    // same stale watermark and run in parallel.
+
+    private function lockPath(): string
+    {
+        return sys_get_temp_dir() . '/lamb_cron_lock_test_' . uniqid('', true) . '.lock';
+    }
+
+    public function testAcquireCronLockSucceedsWhenUnlocked(): void
+    {
+        $path = $this->lockPath();
+        $handle = acquire_cron_lock($path);
+
+        $this->assertNotNull($handle);
+        $this->assertFileExists($path);
+
+        fclose($handle);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockFailsWhileAlreadyHeld(): void
+    {
+        $path = $this->lockPath();
+        $first = acquire_cron_lock($path);
+        $this->assertNotNull($first, 'precondition: first acquisition must succeed');
+
+        $second = acquire_cron_lock($path);
+        $this->assertNull($second, 'a concurrent run must not acquire the lock while another holds it');
+
+        fclose($first);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockSucceedsAfterPriorHolderReleases(): void
+    {
+        $path = $this->lockPath();
+        $first = acquire_cron_lock($path);
+        $this->assertNotNull($first);
+        fclose($first);
+
+        $second = acquire_cron_lock($path);
+        $this->assertNotNull($second, 'the lock must be acquirable again once released');
+
+        fclose($second);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockCreatesLockFileWhenAbsent(): void
+    {
+        $path = $this->lockPath();
+        $this->assertFileDoesNotExist($path);
+
+        $handle = acquire_cron_lock($path);
+        $this->assertFileExists($path);
+
+        fclose($handle);
+        unlink($path);
     }
 }

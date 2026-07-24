@@ -21,6 +21,22 @@ use function Lamb\set_option;
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
+
+    // /_cron is unauthenticated and meant to be hit by an external cron job
+    // (see docs/cron-scheduled-tasks.md), but nothing stops anyone from
+    // flooding it with concurrent requests. The rate-limit watermark below is
+    // only written after all work below completes, so without a lock, every
+    // request in such a burst reads the same stale watermark, passes the
+    // "too often" check, and proceeds in parallel — multiplying outbound
+    // feed/webmention HTTP calls and risking duplicate feed-item ingestion
+    // (no unique constraint on `feeditem_uuid`) and duplicate outbound
+    // webmention sends (no atomic claim on a queued row). Acquiring a
+    // non-blocking exclusive lock first serializes overlapping runs instead.
+    $lock = acquire_cron_lock();
+    if ($lock === null) {
+        die('Already running, try again later.');
+    }
+
     $feeds = get_feeds();
 
     $cron_last_updated = get_option('last_processed_date', 0);
@@ -81,6 +97,34 @@ use function Lamb\set_option;
 
     set_option($cron_last_updated, (int)date('U'));
     exit('Done');
+}
+
+/**
+ * Acquires an exclusive, non-blocking lock serializing /_cron runs.
+ *
+ * The returned handle must be kept referenced for the remainder of the
+ * request: the lock releases automatically once it (and the underlying file
+ * descriptor) is closed or the request ends, so an explicit unlock isn't
+ * needed as long as the caller never returns normally before then (every
+ * process_feeds() exit path terminates the request via die()/exit()).
+ *
+ * @param string $path Lock file path; created if absent.
+ * @return resource|null The open lock-file handle, or null when the lock is
+ *                        already held (another run is in progress) or the
+ *                        lock file itself couldn't be opened.
+ */
+function acquire_cron_lock(string $path = '../data/cron.lock')
+{
+    $handle = @fopen($path, 'c');
+    if ($handle === false) {
+        return null;
+    }
+    if (!flock($handle, LOCK_EX | LOCK_NB)) {
+        fclose($handle);
+        return null;
+    }
+
+    return $handle;
 }
 
 /**
