@@ -18,6 +18,13 @@ define('IMAGE_FILES', 'imageFiles');
 define('IMAGE_UPLOAD_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
 // Video extensions accepted for upload; browsers decode these containers natively.
 define('VIDEO_UPLOAD_EXTENSIONS', ['mp4', 'webm', 'mov']);
+// Upper bound on a source image's declared width*height before WebP conversion
+// decodes it. GD allocates the full pixel buffer as soon as it decodes an
+// image's header, before any of this app's own downscaling runs — a small
+// file can declare an enormous width/height ("decompression bomb") and force
+// a multi-gigabyte allocation. 40 megapixels comfortably covers any real
+// photo or screenshot while capping the worst case.
+define('MAX_UPLOAD_PIXELS', 40_000_000);
 // Seconds before a single feed fetch is abandoned during /_cron ingestion.
 define('FEED_FETCH_TIMEOUT', 15);
 define('MINUTE_IN_SECONDS', 60);
