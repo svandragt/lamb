@@ -795,6 +795,22 @@ function mp_log(string $event, array $context = []): void
  * @param string|null $scope       Scope the action requires (insufficient_scope only).
  * @param string|null $description Human-readable error description.
  */
+/**
+ * Whether a verified access-token user carries a given Micropub scope.
+ *
+ * Shared by every scope-gated Micropub action (post creation/update, and the
+ * media endpoint) so a token issued without the scope an action needs is
+ * rejected consistently.
+ *
+ * @param array{me?: mixed, scope?: list<string>}|false $user The result of verifyAccessTokenCallback().
+ * @param string                                         $scope Required scope (e.g. 'create').
+ * @return bool
+ */
+function has_micropub_scope(array|false $user, string $scope): bool
+{
+    return is_array($user) && in_array($scope, $user['scope'] ?? [], true);
+}
+
 function bearer_challenge(?string $error = null, ?string $scope = null, ?string $description = null): string
 {
     $params = [];
@@ -981,6 +997,20 @@ function respond_micropub_media(): void
             'unauthorized',
             'Invalid or expired token.',
             bearer_challenge('invalid_token', null, 'The access token is invalid or expired.')
+        );
+    }
+
+    // The base MicropubAdapter never enforces scope itself — it's left to the
+    // implementing callbacks, and createCallback()/updateCallback() both do
+    // (requiring 'create'/'update'). This endpoint is reached independently
+    // of those callbacks, so without its own check here a token issued with
+    // any scope at all (e.g. 'update'-only) could still upload files.
+    if (!has_micropub_scope($user, 'create')) {
+        micropub_error(
+            403,
+            'insufficient_scope',
+            'Your access token does not grant the scope required for this action.',
+            bearer_challenge('insufficient_scope', 'create')
         );
     }
 

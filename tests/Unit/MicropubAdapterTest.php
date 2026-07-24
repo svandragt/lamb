@@ -7,6 +7,8 @@ use RedBeanPHP\R;
 use Lamb\Micropub\LambMicropubAdapter;
 use Tests\Support\StubMicropubAdapter;
 
+use function Lamb\Micropub\has_micropub_scope;
+
 class MicropubAdapterTest extends TestCase
 {
     protected function setUp(): void
@@ -1254,5 +1256,32 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body LIKE ? ', ['%syndicated-to%']);
         $this->assertNotNull($post, 'syndicated-to must survive a content update');
         $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
+    }
+
+    // --- has_micropub_scope ---
+
+    public function testHasMicropubScopeTrueWhenScopePresent(): void
+    {
+        $user = ['me' => ROOT_URL . '/', 'scope' => ['create', 'update']];
+        $this->assertTrue(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseWhenScopeAbsent(): void
+    {
+        // Regression: the Micropub media endpoint accepted any valid token
+        // regardless of scope, unlike createCallback()/updateCallback().
+        $user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+        $this->assertFalse(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseWhenNoScopeKey(): void
+    {
+        $user = ['me' => ROOT_URL . '/'];
+        $this->assertFalse(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseForFailedToken(): void
+    {
+        $this->assertFalse(has_micropub_scope(false, 'create'));
     }
 }
