@@ -18,8 +18,15 @@ Config\apply_timezone($config);
 
 define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
 // Config\ensure_explicit_theme() guarantees a renderable theme value on read,
-// so no runtime fallback/alias is needed here (see #291).
-define("THEME", (string) $config['theme']);
+// so no runtime fallback/alias is needed here (see #291). The value still
+// comes verbatim from the admin-editable config INI, though, and is used
+// both to build a require() path (THEME_DIR) and echoed raw into HTML on
+// every page view (THEME_URL, e.g. themes/2026/html.php's font preload
+// links) — sanitize_filename() (already used by Theme\part() for the same
+// reason) keeps it to a safe filename charset, closing both a path-traversal
+// primitive and a site-wide stored-XSS surface a stray HTML-breaking
+// character in `theme = ...` would otherwise open up.
+define("THEME", Theme\sanitize_filename((string) $config['theme']));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 
