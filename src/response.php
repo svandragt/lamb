@@ -105,6 +105,33 @@ function build_exclude_slugs_clause(array $slugs): ?array
 }
 
 /**
+ * The WHERE clause selecting posts that belong in a public listing: publicly
+ * visible (published, not trashed, not future-dated) and not pinned as a menu
+ * item — menu posts are pages reachable from the nav, so they are kept out of
+ * the chronological stream and the feeds.
+ *
+ * Owned in one place so the homepage and the feeds can't drift apart on what
+ * "public" means; both used to assemble the two clauses inline, in opposite
+ * orders.
+ *
+ * @return array{sql: string, params: array<int, mixed>}
+ */
+function public_posts_clause(): array
+{
+    $visible = \Lamb\visible_clause();
+    $sql     = $visible['sql'];
+    $params  = $visible['params'];
+
+    $exclude = build_exclude_slugs_clause(\Lamb\Config\get_menu_slugs());
+    if ($exclude !== null) {
+        $sql   .= ' AND ' . $exclude['sql'];
+        $params = array_merge($params, $exclude['params']);
+    }
+
+    return ['sql' => $sql, 'params' => $params];
+}
+
+/**
  * Builds the pagination metadata array from pre-computed values.
  *
  * @param int $page         Current page number (1-based).

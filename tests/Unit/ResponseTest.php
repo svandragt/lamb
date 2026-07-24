@@ -9,6 +9,7 @@ use function Lamb\Response\build_pagination_meta;
 use function Lamb\Response\get_cookie_options;
 use function Lamb\Response\get_feed_updated_date;
 use function Lamb\Response\paginate_posts;
+use function Lamb\Response\public_posts_clause;
 use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
@@ -80,6 +81,35 @@ class ResponseTest extends TestCase
         $slugs = ['about', 'contact'];
         $result = build_exclude_slugs_clause($slugs);
         $this->assertSame($slugs, $result['params']);
+    }
+
+    // public_posts_clause
+
+    public function testPublicPostsClauseFiltersDraftsDeletedAndScheduled()
+    {
+        global $config;
+        $config = ['menu_items' => []];
+
+        $clause = public_posts_clause();
+
+        $this->assertStringContainsString('draft', $clause['sql']);
+        $this->assertStringContainsString('deleted', $clause['sql']);
+        $this->assertStringContainsString('created', $clause['sql']);
+        $this->assertStringNotContainsString('slug NOT IN', $clause['sql']);
+    }
+
+    public function testPublicPostsClauseExcludesMenuItemSlugs()
+    {
+        global $config;
+        $config = ['menu_items' => ['About' => 'about', 'Contact' => '/contact']];
+
+        $clause = public_posts_clause();
+
+        $this->assertStringContainsString('slug NOT IN', $clause['sql']);
+        // Params must line up with the placeholders: the visibility clause's
+        // "created > ?" comes first, then the excluded slugs in order.
+        $this->assertSame(substr_count($clause['sql'], '?'), count($clause['params']));
+        $this->assertSame(['about', 'contact'], array_slice($clause['params'], 1));
     }
 
     // build_pagination_meta
