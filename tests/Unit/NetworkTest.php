@@ -8,8 +8,13 @@ use RedBeanPHP\R;
 
 use function Lamb\Network\acquire_cron_lock;
 use function Lamb\Network\attributed_content;
+use function Lamb\Network\count_line;
+use function Lamb\Network\crawl_line;
+use function Lamb\Network\cron_run_due;
+use function Lamb\Network\feed_fetch_due;
 use function Lamb\Network\get_structured_content;
 use function Lamb\Network\purge_deleted_posts;
+use function Lamb\Network\webmention_line;
 
 class NetworkTest extends TestCase
 {
@@ -269,5 +274,87 @@ class NetworkTest extends TestCase
 
         fclose($handle);
         unlink($path);
+    }
+
+    // cron_run_due — the whole-run rate limit (1 minute)
+
+    public function testCronRunIsNotDueWithinAMinuteOfTheLastRun(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertFalse(cron_run_due($now - 59, $now));
+    }
+
+    public function testCronRunIsDueAfterAFullMinute(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertTrue(cron_run_due($now - MINUTE_IN_SECONDS, $now));
+    }
+
+    public function testCronRunIsDueWhenItHasNeverRun(): void
+    {
+        $this->assertTrue(cron_run_due(0, 1_700_000_000));
+    }
+
+    // feed_fetch_due — the per-feed rate limit (30 minutes)
+
+    public function testFeedFetchIsNotDueWithinThirtyMinutesOfTheLastAttempt(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertFalse(feed_fetch_due($now - (29 * MINUTE_IN_SECONDS), $now));
+    }
+
+    public function testFeedFetchIsDueAfterThirtyMinutes(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertTrue(feed_fetch_due($now - (30 * MINUTE_IN_SECONDS), $now));
+    }
+
+    public function testFeedFetchIsDueForAFeedNeverAttempted(): void
+    {
+        $this->assertTrue(feed_fetch_due(0, 1_700_000_000));
+    }
+
+    // count_line — maintenance summary lines are omitted when nothing happened
+
+    public function testCountLineIsEmptyForZero(): void
+    {
+        $this->assertSame('', count_line(0, 'Purged %d deleted post(s).'));
+    }
+
+    public function testCountLineFormatsAndTerminatesTheLine(): void
+    {
+        $this->assertSame('Purged 3 deleted post(s).' . PHP_EOL, count_line(3, 'Purged %d deleted post(s).'));
+    }
+
+    // crawl_line
+
+    public function testCrawlLineReportsIngestedCountOnSuccess(): void
+    {
+        $line = crawl_line('MyBlog', ['ok' => true, 'items' => 2, 'error' => null]);
+        $this->assertStringContainsString('OK: MyBlog', $line);
+        $this->assertStringContainsString('2 item(s)', $line);
+    }
+
+    public function testCrawlLineReportsTheErrorOnFailure(): void
+    {
+        $line = crawl_line('MyBlog', ['ok' => false, 'items' => 0, 'error' => 'could not resolve host']);
+        $this->assertStringContainsString('FAILED: MyBlog', $line);
+        $this->assertStringContainsString('could not resolve host', $line);
+    }
+
+    // webmention_line
+
+    public function testWebmentionLineIsEmptyWhenNothingHappened(): void
+    {
+        $this->assertSame('', webmention_line(['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0]));
+    }
+
+    public function testWebmentionLineReportsEveryCounter(): void
+    {
+        $line = webmention_line(['sent' => 1, 'failed' => 2, 'skipped' => 3, 'cancelled' => 4]);
+        $this->assertStringContainsString('sent: 1', $line);
+        $this->assertStringContainsString('failed: 2', $line);
+        $this->assertStringContainsString('skipped: 3', $line);
+        $this->assertStringContainsString('cancelled: 4', $line);
     }
 }
