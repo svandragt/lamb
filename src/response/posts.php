@@ -31,7 +31,6 @@ use function Lamb\Route\is_reserved_route;
  */
 function redirect_created(): void
 {
-    global $config;
     Security\require_login();
     Security\require_csrf();
     if ($_POST['submit'] !== SUBMIT_CREATE) {
@@ -50,17 +49,65 @@ function redirect_created(): void
         // Remove any existing redirect for this slug — the new post takes priority
         if (!empty($bean->slug)) {
             delete_redirect_for_slug($bean->slug);
-            $redirections = $config['redirections'] ?? [];
-            if (isset($redirections[$bean->slug])) {
-                $_SESSION['flash'][] = 'A manual redirect for <code>' . $bean->slug
-                    . '</code> still exists in Settings → [redirections]. You may want to remove it.';
-            }
+            warn_if_manual_redirect((string) $bean->slug);
         }
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
     notify_post_subscribers($bean);
     redirect_uri('/');
+}
+
+/**
+ * Flashes a warning when a slug a post just claimed is also listed under
+ * `[redirections]` in the INI config.
+ *
+ * The manual redirect wins over the post (it is checked first), so the post would
+ * be unreachable at its own URL without the author being told why. Both save paths
+ * (create and edit) check this, so the message lives in one place.
+ *
+ * @param string $slug The slug the post was saved with.
+ * @return void
+ */
+function warn_if_manual_redirect(string $slug): void
+{
+    global $config;
+
+    if ($slug === '') {
+        return;
+    }
+    if (!isset($config['redirections'][$slug])) {
+        return;
+    }
+
+    $_SESSION['flash'][] = 'A manual redirect for <code>' . $slug
+        . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+}
+
+/**
+ * Records the 301 that keeps a renamed post's old URL working.
+ *
+ * Points $old_slug at $new_slug, first dropping any redirect that leads *away*
+ * from the new slug — a leftover from an earlier rename would otherwise bounce
+ * visitors of the new URL straight back out, or loop.
+ *
+ * The target is passed through sanitize_explicit_slug(): the same sanitiser runs
+ * when a slug is first read from front matter, but a slug that reached this point
+ * some other way must not be able to turn the stored redirect into a
+ * protocol-relative "//host/..." open redirect either.
+ *
+ * @param string $old_slug The slug the post used to live at.
+ * @param string $new_slug The slug it now lives at.
+ * @return void
+ */
+function store_slug_change_redirect(string $old_slug, string $new_slug): void
+{
+    delete_redirect_for_slug($new_slug);
+
+    $auto_redirect = R::dispense('redirect');
+    $auto_redirect->from_slug = $old_slug;
+    $auto_redirect->to_url    = '/' . sanitize_explicit_slug($new_slug);
+    R::store($auto_redirect);
 }
 
 /**
@@ -210,8 +257,6 @@ function restore_post(OODBBean $post): void
  */
 function redirect_edited(): void
 {
-    global $config;
-
     Security\require_login();
     Security\require_csrf();
     $validSubmits = [SUBMIT_EDIT];
@@ -257,25 +302,10 @@ function redirect_edited(): void
 
     $new_slug = $bean->slug;
     if (!empty($old_slug) && $old_slug !== $new_slug) {
-        // Remove any redirect pointing to the new slug to avoid redirect loops
-        delete_redirect_for_slug($new_slug);
-        // Store a redirect from the old slug to the new one. sanitize_explicit_slug()
-        // is also applied when a slug is first read from front matter, but a
-        // slug reaching this point some other way must not be able to turn
-        // this into a protocol-relative "//host/..." open redirect either.
-        $auto_redirect = R::dispense('redirect');
-        $auto_redirect->from_slug = $old_slug;
-        $auto_redirect->to_url = '/' . sanitize_explicit_slug($new_slug);
-        R::store($auto_redirect);
+        store_slug_change_redirect((string) $old_slug, (string) $new_slug);
     }
 
-    if (!empty($new_slug)) {
-        $redirections = $config['redirections'] ?? [];
-        if (isset($redirections[$new_slug])) {
-            $_SESSION['flash'][] = 'A manual redirect for <code>' . $new_slug
-                . '</code> still exists in Settings → [redirections]. You may want to remove it.';
-        }
-    }
+    warn_if_manual_redirect((string) $new_slug);
 
     notify_post_subscribers($bean);
 
