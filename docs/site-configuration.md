@@ -99,6 +99,39 @@ Feed = /feed
 ;https://mastodon.social/@yourusername = Mastodon
 ```
 
+## Values and sections
+
+Every setting is one of two shapes, and the difference is a pair of brackets:
+
+* A **single value**, written `key = value` — `site_title`, `theme`,
+  `posts_per_page`, `timezone` and the rest of the keys above the first
+  `[section]` header.
+* A **section** of `label = value` entries under a `[name]` header —
+  `[menu_items]`, `[footer_items]`, `[feeds]`, `[preconnect]`, `[me]`,
+  `[redirections]` and `[syndicate_to]`.
+
+Getting the shape wrong is easy to do and easy to miss, because the file is
+still valid INI either way:
+
+```
+[site_title]          ;; wrong: a section where a single value belongs
+feeds = https://…     ;; wrong: a single value where the [feeds] section belongs
+
+[menu_items]
+Home = /
+Home = /start         ;; wrong: a repeated label makes the entry a list
+```
+
+Lamb ignores a setting written in the wrong shape and uses the default instead,
+so a slip cannot take the site down — and it tells you which ones it ignored
+when you save, alongside the "Settings saved successfully" message. If a
+setting you changed appears to have no effect, that message is the first place
+to look.
+
+Note that everything after a `[section]` header belongs to that section until
+the next one. A single-value setting written below a section header becomes an
+entry in it, so keep them all at the top of the file.
+
 ## Site URL
 
 `site_url` is the canonical address of your site, e.g. `https://example.com`. It is

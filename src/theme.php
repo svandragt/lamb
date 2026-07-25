@@ -373,7 +373,12 @@ function syndication_links(OODBBean $bean): string
     $targets = $config['syndicate_to'] ?? [];
     $links = [];
     foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
-        if ($uid === '') {
+        // Same reasoning as link_source() above: escape() encodes HTML
+        // metacharacters, not URL schemes, so a `javascript:` target passed
+        // straight into the href. syndicated_to is not author-only — a Micropub
+        // client holding just `create` scope sets it via mp-syndicate-to — so
+        // require a real http(s) URL before linking it.
+        if ($uid === '' || !is_valid_http_url($uid)) {
             continue;
         }
         $name = $targets[$uid] ?? (parse_url($uid, PHP_URL_HOST) ?: $uid);

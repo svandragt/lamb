@@ -16,6 +16,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\consume_leading_heading;
+use function Lamb\Post\matter_string;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
@@ -363,10 +364,10 @@ function highlight_and_link(string $markdown): string
  * Normalises the reply target from front matter into a single string.
  *
  * Reads the `in-reply-to` key (parse_matter() has already canonicalised the
- * `in_reply_to` spelling onto it), collapsing a YAML list to its first entry.
- * The key is removed from the passed-by-reference front matter so the
- * hyphenated key is never written as an invalid column by the blind copy in
- * apply_frontmatter().
+ * `in_reply_to` spelling onto it and collapsed a YAML list to its first entry
+ * via matter_string()). The key is removed from the passed-by-reference front
+ * matter so the hyphenated key is never written as an invalid column by the
+ * blind copy in apply_frontmatter().
  *
  * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
  * @return string The normalised reply target, or '' when absent.
@@ -375,13 +376,10 @@ function highlight_and_link(string $markdown): string
  */
 function normalize_in_reply_to(array &$front_matter): string
 {
-    $in_reply_to = $front_matter['in-reply-to'] ?? null;
+    $in_reply_to = matter_string($front_matter['in-reply-to'] ?? null);
     unset($front_matter['in-reply-to']);
-    if (is_array($in_reply_to)) {
-        $in_reply_to = $in_reply_to[0] ?? null;
-    }
 
-    return is_string($in_reply_to) ? trim($in_reply_to) : '';
+    return $in_reply_to !== null ? trim($in_reply_to) : '';
 }
 
 /**
@@ -408,15 +406,16 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     $bean->in_reply_to = normalize_in_reply_to($front_matter);
 
     // Normalise syndication record. Hyphenated key can't map via the loop below.
-    $bean->syndicated_to = isset($front_matter['syndicated-to'])
-        ? (string) $front_matter['syndicated-to']
-        : '';
+    $bean->syndicated_to = matter_string($front_matter['syndicated-to'] ?? null) ?? '';
 
     // Reset the title to empty when it is absent from front matter, so removing
     // the `title:` line (or all front matter) on an edit clears a previously
     // stored title. The additive loop below only ever sets keys that are
-    // present, so without this an old title would survive every save.
-    $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
+    // present, so without this an old title would survive every save. The key
+    // is consumed here (as in_reply_to is) so the loop cannot put the raw,
+    // uncoerced value back on the bean two lines later.
+    $bean->title = matter_string($front_matter['title'] ?? null) ?? '';
+    unset($front_matter['title']);
 
     foreach ($front_matter as $key => $value) {
         // Only the fields front matter is meant to drive. This used to copy any
@@ -429,6 +428,15 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
         // checks that correctly refuse update and delete. Unknown keys are also
         // no longer turned into new columns by RedBean's fluid mode.
         if (!is_string($key) || !in_array($key, FRONT_MATTER_FIELDS, true)) {
+            continue;
+        }
+        // RedBean refuses an array or object as a property value ("Invalid Bean
+        // value"), and the refusal surfaces at R::store() — past every catch
+        // block, which only handles SQL errors — as a 500 with the post lost.
+        // A YAML list or map here has nothing to say about a scalar column, so
+        // leave the existing value in place and let the per-field normalisation
+        // that follows (apply_scheduling, the draft flag) settle it.
+        if (!is_scalar($value)) {
             continue;
         }
         $bean->$key = $value;
@@ -462,7 +470,12 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
  */
 function apply_scheduling(OODBBean $bean, array $front_matter, mixed $previous_created): void
 {
-    if (!isset($front_matter['created'])) {
+    // array_key_exists(), not isset(): a bare `created:` line parses to null,
+    // which isset() reports as absent. The copy loop in apply_frontmatter()
+    // sees the key either way, so an isset() check here skipped the repair and
+    // left the column NULL — a post with no date at all, listed publicly and
+    // dated "now" by the feeds.
+    if (!array_key_exists('created', $front_matter)) {
         return;
     }
 

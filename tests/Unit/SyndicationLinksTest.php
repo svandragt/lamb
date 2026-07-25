@@ -86,4 +86,38 @@ class SyndicationLinksTest extends TestCase
         $html = syndication_links($bean);
         $this->assertStringContainsString('Also on', $html);
     }
+
+    /**
+     * @dataProvider nonHttpTargetProvider
+     */
+    public function testSyndicationLinksDropsNonHttpTargets(string $uid): void
+    {
+        // escape() encodes HTML metacharacters, not URL schemes, so a
+        // `javascript:` target reached the href intact. The value is reachable
+        // from a Micropub client holding only `create` scope, via
+        // mp-syndicate-to, so it is not author-trusted.
+        $html = syndication_links($this->makeBean($uid));
+
+        $this->assertStringNotContainsString($uid, $html);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function nonHttpTargetProvider(): array
+    {
+        return [
+            'javascript' => ['javascript:alert(1)'],
+            'data'       => ['data:text/html,<script>alert(1)</script>'],
+            'relative'   => ['/not-a-silo'],
+        ];
+    }
+
+    public function testSyndicationLinksKeepsHttpTargetsAlongsideADroppedOne(): void
+    {
+        $html = syndication_links($this->makeBean('javascript:alert(1) https://bsky.app/profile/me'));
+
+        $this->assertStringNotContainsString('javascript:', $html);
+        $this->assertStringContainsString('https://bsky.app/profile/me', $html);
+    }
 }
