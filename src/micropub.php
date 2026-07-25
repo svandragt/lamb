@@ -50,11 +50,8 @@ class LambMicropubAdapter extends MicropubAdapter
         // token may read it; a hidden one requires 'update' scope (the same
         // trust level needed to edit it) and otherwise looks exactly like a
         // nonexistent post, so this can't be used as an existence oracle either.
-        if (!is_publicly_visible($bean)) {
-            $scope = $this->user['scope'] ?? [];
-            if ($this->user !== null && !in_array('update', $scope)) {
-                return false;
-            }
+        if (!is_publicly_visible($bean) && $this->lacksScope('update')) {
+            return false;
         }
 
         $props = $this->beanToMf2Properties($bean);
@@ -260,6 +257,40 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * The insufficient_scope response for an action the token may not perform,
+     * or null when it may proceed.
+     *
+     * The gate every scope-checked callback shares, so all four ask the same
+     * question and name their own scope in the challenge. A request with no token
+     * at all ($this->user === null) is not gated here: the callbacks are also
+     * reached from the logged-in web paths, whose authorisation happened earlier.
+     *
+     * @param string $scope The scope this action requires (e.g. 'create', 'delete').
+     * @return Response|null
+     */
+    private function scopeRejection(string $scope): ?Response
+    {
+        return $this->lacksScope($scope) ? $this->insufficientScopeResponse($scope) : null;
+    }
+
+    /**
+     * Whether the request carries a token that does *not* grant $scope.
+     *
+     * False for an untokened request, so the callbacks stay usable from the
+     * logged-in web paths (see scopeRejection()). Kept separate from
+     * scopeRejection() for the one gate that answers with something other than
+     * an insufficient_scope response: a source query for a hidden post hides it
+     * instead (returns false), rather than confirming it exists.
+     *
+     * @param string $scope The scope being demanded.
+     * @return bool
+     */
+    private function lacksScope(string $scope): bool
+    {
+        return $this->user !== null && !in_array($scope, $this->user['scope'] ?? [], true);
+    }
+
+    /**
      * Handle a micropub create request.
      *
      * @param array<string, mixed> $data  Normalised microformats2 data.
@@ -268,9 +299,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('create', $scope)) {
-            return $this->insufficientScopeResponse('create');
+        $rejection = $this->scopeRejection('create');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         $props = $data['properties'] ?? [];
@@ -355,9 +386,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function deleteCallback(string $url)
     {
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('delete', $scope)) {
-            return $this->insufficientScopeResponse('delete');
+        $rejection = $this->scopeRejection('delete');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         $bean = $this->findPostByUrl($url);
@@ -383,9 +414,9 @@ class LambMicropubAdapter extends MicropubAdapter
         // Gated on 'delete' scope, not a separate 'undelete' one: undelete is
         // the reversal of the same destructive action, and this codebase
         // doesn't otherwise define a distinct scope for it.
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('delete', $scope)) {
-            return $this->insufficientScopeResponse('delete');
+        $rejection = $this->scopeRejection('delete');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         $bean = $this->findPostByUrl($url);
@@ -418,9 +449,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('update', $scope)) {
-            return $this->insufficientScopeResponse('update');
+        $rejection = $this->scopeRejection('update');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {

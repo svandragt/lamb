@@ -9,6 +9,7 @@ use function Lamb\Response\build_pagination_meta;
 use function Lamb\Response\get_cookie_options;
 use function Lamb\Response\get_feed_updated_date;
 use function Lamb\Response\paginate_posts;
+use function Lamb\Response\pagination_window;
 use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
@@ -80,6 +81,40 @@ class ResponseTest extends TestCase
         $slugs = ['about', 'contact'];
         $result = build_exclude_slugs_clause($slugs);
         $this->assertSame($slugs, $result['params']);
+    }
+
+    // pagination_window
+
+    public function testPaginationWindowComputesOffsetForRequestedPage()
+    {
+        $window = pagination_window(25, 3, 10);
+        $this->assertSame(3, $window['page']);
+        $this->assertSame(20, $window['offset']);
+        $this->assertSame(3, $window['total_pages']);
+    }
+
+    public function testPaginationWindowClampsPageBeyondTheLastOne()
+    {
+        $window = pagination_window(25, 99, 10);
+        $this->assertSame(3, $window['page']);
+        $this->assertSame(20, $window['offset']);
+    }
+
+    public function testPaginationWindowIsSinglePageWhenThereAreNoPosts()
+    {
+        $window = pagination_window(0, 4, 10);
+        $this->assertSame(1, $window['page']);
+        $this->assertSame(0, $window['offset']);
+        $this->assertSame(1, $window['total_pages']);
+    }
+
+    public function testPaginationWindowTreatsNonPositivePerPageAsOne()
+    {
+        // posts_per_page = 0 in the INI config would otherwise divide by zero.
+        $window = pagination_window(3, 2, 0);
+        $this->assertSame(2, $window['page']);
+        $this->assertSame(1, $window['offset']);
+        $this->assertSame(3, $window['total_pages']);
     }
 
     // build_pagination_meta
