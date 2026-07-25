@@ -9,9 +9,12 @@ use function Lamb\Webmention\discover_endpoint;
 use function Lamb\Webmention\extract_meta;
 use function Lamb\Webmention\is_external_http_url;
 use function Lamb\Webmention\source_mentions_target;
+use function Lamb\Webmention\request_options;
 use function Lamb\Webmention\target_post_id;
 use function Lamb\Webmention\verify_and_store;
 use function Lamb\Webmention\webmentions_for_post;
+
+use const Lamb\Webmention\WEBMENTION_FETCH_TIMEOUT;
 
 class WebmentionTest extends TestCase
 {
@@ -339,5 +342,32 @@ class WebmentionTest extends TestCase
             'https://example.com/post'
         );
         $this->assertNull($endpoint);
+    }
+
+    // request_options — every webmention HTTP call identifies itself the same way
+
+    public function testRequestOptionsCarriesTheWebmentionUserAgentAndTimeout(): void
+    {
+        $options = request_options();
+
+        $this->assertContains('User-Agent: Lamb-Webmention', $options['headers']);
+        $this->assertContains('Accept: text/html, */*', $options['headers']);
+        $this->assertSame(WEBMENTION_FETCH_TIMEOUT, $options['timeout']);
+    }
+
+    public function testRequestOptionsMergesExtraOptionsForASendingRequest(): void
+    {
+        $options = request_options([
+            'method'  => 'POST',
+            'headers' => ['Content-Type: application/x-www-form-urlencoded'],
+            'content' => 'source=a&target=b',
+        ]);
+
+        $this->assertSame('POST', $options['method']);
+        $this->assertSame('source=a&target=b', $options['content']);
+        // Caller headers are added, not swapped in: the User-Agent survives.
+        $this->assertContains('User-Agent: Lamb-Webmention', $options['headers']);
+        $this->assertContains('Content-Type: application/x-www-form-urlencoded', $options['headers']);
+        $this->assertSame(WEBMENTION_FETCH_TIMEOUT, $options['timeout']);
     }
 }

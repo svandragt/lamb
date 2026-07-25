@@ -212,6 +212,31 @@ function extract_meta(string $html): array
 }
 
 /**
+ * The fetch_guarded() options every webmention HTTP call shares.
+ *
+ * Receiving (fetching a source), sending discovery (fetching a target) and the
+ * send itself all identify themselves as Lamb-Webmention and use the same
+ * timeout, so a remote site sees one consistent client and one place changes it.
+ *
+ * @param array<string, mixed> $extra Per-call options; `headers` are appended to
+ *                                    the shared ones, anything else overrides.
+ * @return array<string, mixed>
+ */
+function request_options(array $extra = []): array
+{
+    $headers = array_merge(
+        ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
+        $extra['headers'] ?? []
+    );
+    unset($extra['headers']);
+
+    return array_merge(
+        ['headers' => $headers, 'timeout' => WEBMENTION_FETCH_TIMEOUT],
+        $extra
+    );
+}
+
+/**
  * Fetch the raw HTML of a webmention source page.
  *
  * @param string $url
@@ -222,10 +247,7 @@ function fetch_source(string $url): ?string
     // $url is attacker-controlled (the `source` of an unauthenticated
     // webmention POST): use the SSRF-safe fetcher, which rejects loopback/
     // private/link-local destinations and re-checks every redirect hop.
-    $result = fetch_guarded($url, [
-        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
-        'timeout' => WEBMENTION_FETCH_TIMEOUT,
-    ]);
+    $result = fetch_guarded($url, request_options());
 
     return $result === null ? null : $result['body'];
 }
@@ -661,10 +683,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
  */
 function fetch_target(string $url): ?array
 {
-    $result = fetch_guarded($url, [
-        'headers' => ['Accept: text/html, */*', 'User-Agent: Lamb-Webmention'],
-        'timeout' => WEBMENTION_FETCH_TIMEOUT,
-    ]);
+    $result = fetch_guarded($url, request_options());
 
     if ($result === null) {
         return null;
@@ -693,15 +712,11 @@ function send_webmention(string $endpoint, string $source, string $target): int
     // Unlike Http\post_form(), fetch_guarded() re-validates the destination
     // on every redirect hop — needed here because $endpoint came from the
     // target page's own (attacker-influenced) endpoint discovery.
-    $result = fetch_guarded($endpoint, [
-        'method' => 'POST',
-        'headers' => [
-            'Content-Type: application/x-www-form-urlencoded',
-            'User-Agent: Lamb-Webmention',
-        ],
+    $result = fetch_guarded($endpoint, request_options([
+        'method'  => 'POST',
+        'headers' => ['Content-Type: application/x-www-form-urlencoded'],
         'content' => http_build_query(['source' => $source, 'target' => $target]),
-        'timeout' => WEBMENTION_FETCH_TIMEOUT,
-    ]);
+    ]));
 
     return $result === null ? 0 : $result['status'];
 }
