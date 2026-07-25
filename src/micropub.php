@@ -1092,6 +1092,12 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
 
+    // The extension comes from the client's filename; check the bytes agree with it.
+    $sniffed = \Lamb\Response\sniff_file_content_type((string) ($file['tmp_name'] ?? ''));
+    if (!\Lamb\Response\upload_content_allowed($sniffed, $ext)) {
+        micropub_error(400, 'invalid_request', 'File contents do not match its type.');
+    }
+
     $sub_path  = \Lamb\Response\upload_subpath();
     $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
     $seed      = sha1(($file['name'] ?? '') . uniqid('', true));

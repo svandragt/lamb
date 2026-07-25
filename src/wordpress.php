@@ -719,7 +719,8 @@ function default_image_downloader(string $url, string $sub_path): ?string
             return $existing;
         }
     }
-    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0777, true) && !is_dir($dest_dir)) {
+    // 0755, not 0777: only the user running the import needs to write here.
+    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
         return null;
     }
     // $url is embedded in the WXR file being imported — an untrusted export

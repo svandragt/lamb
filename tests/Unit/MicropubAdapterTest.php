@@ -719,16 +719,19 @@ class MicropubAdapterTest extends TestCase
     {
         $adapter = new LambMicropubAdapter();
 
-        // Create a real temp file to simulate an upload
+        // A real GIF: uploads whose bytes don't match their extension are
+        // rejected, and GIF is stored as-is rather than re-encoded to WebP, so
+        // the stored name keeps the extension this test asserts on.
+        $bytes = self::gifBytes();
         $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
-        file_put_contents($tmpFile, 'fake image data');
+        file_put_contents($tmpFile, $bytes);
 
         $uploadedFile = new \Nyholm\Psr7\UploadedFile(
             $tmpFile,
-            15,
+            strlen($bytes),
             UPLOAD_ERR_OK,
-            'test-photo.jpg',
-            'image/jpeg'
+            'test-photo.gif',
+            'image/gif'
         );
 
         $data = [
@@ -743,7 +746,16 @@ class MicropubAdapterTest extends TestCase
         $this->assertIsString($result);
         $post = R::findOne('post', ' body LIKE ? ', ['%A post with an uploaded photo%']);
         $this->assertNotNull($post);
-        $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.jpg\)/', $post->body);
+        $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.gif\)/', $post->body);
+    }
+
+    /**
+     * A minimal valid 1x1 GIF, so upload fixtures carry bytes that really are
+     * the image type their filename claims.
+     */
+    private static function gifBytes(): string
+    {
+        return (string) base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
     }
 
     public function testUploadedPhotosWithSameClientFilenameDoNotCollide(): void
@@ -754,9 +766,16 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
 
         $makeUpload = function (): \Nyholm\Psr7\UploadedFile {
+            $bytes = self::gifBytes();
             $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
-            file_put_contents($tmpFile, 'fake image data ' . uniqid());
-            return new \Nyholm\Psr7\UploadedFile($tmpFile, 15, UPLOAD_ERR_OK, 'photo.jpg', 'image/jpeg');
+            file_put_contents($tmpFile, $bytes);
+            return new \Nyholm\Psr7\UploadedFile(
+                $tmpFile,
+                strlen($bytes),
+                UPLOAD_ERR_OK,
+                'photo.gif',
+                'image/gif'
+            );
         };
 
         $first = $adapter->createCallback(
@@ -768,8 +787,8 @@ class MicropubAdapterTest extends TestCase
             ['photo' => $makeUpload()]
         );
 
-        preg_match('/!\[.*\]\((.+\.jpg)\)/', R::findOne('post', ' body LIKE ? ', ['%First post%'])->body, $m1);
-        preg_match('/!\[.*\]\((.+\.jpg)\)/', R::findOne('post', ' body LIKE ? ', ['%Second post%'])->body, $m2);
+        preg_match('/!\[.*\]\((.+\.gif)\)/', R::findOne('post', ' body LIKE ? ', ['%First post%'])->body, $m1);
+        preg_match('/!\[.*\]\((.+\.gif)\)/', R::findOne('post', ' body LIKE ? ', ['%Second post%'])->body, $m2);
 
         $this->assertNotEmpty($m1[1] ?? null);
         $this->assertNotEmpty($m2[1] ?? null);
