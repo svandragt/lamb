@@ -65,7 +65,10 @@ function record_json_feed_crawl(string $name, string $url): array
     // A configured feed URL is admin-trusted, but nothing pins where it (or a
     // redirect from it) actually points — fetch_guarded() re-checks the
     // destination is a public, non-internal address on every hop.
-    $response = fetch_guarded($url, ['timeout' => FEED_FETCH_TIMEOUT]);
+    $response = fetch_guarded($url, [
+        'timeout' => FEED_FETCH_TIMEOUT,
+        'max_bytes' => FEED_FETCH_MAX_BYTES,
+    ]);
     $feed     = $response === null ? null : parse_json_feed($response['body']);
 
     if ($feed === null) {

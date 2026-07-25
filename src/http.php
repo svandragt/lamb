@@ -70,6 +70,40 @@ function page_path(string $path, int $page): string
 }
 
 /**
+ * Builds the request's own root URL (`scheme://host[:port]`) from the Host header.
+ *
+ * The Host header is client-supplied and a front-end catch-all vhost (the bundled
+ * Caddy config binds `:80` with no host matcher) forwards whatever it is given, so
+ * the value is validated to a strict host charset here: letters, digits, dots,
+ * hyphens, a single port, and the brackets of an IPv6 literal. Anything else — a
+ * quote, an angle bracket, whitespace, CR/LF — yields null so the caller can
+ * refuse the request rather than reflect it into HTML or a response header.
+ *
+ * This is only the *request's* root URL. It says nothing about the site's real
+ * identity, so it must not be used for a security decision; see
+ * Lamb\Config\canonical_site_url() for the configured, trustworthy value.
+ *
+ * @param array<string, mixed> $server Typically $_SERVER.
+ * @return string|null The request root URL, or null when the Host is missing or malformed.
+ */
+function request_root_url(array $server): ?string
+{
+    $host = $server['HTTP_HOST'] ?? '';
+    if (!is_string($host) || $host === '' || strlen($host) > 253) {
+        return null;
+    }
+    $is_ipv6_literal = preg_match('/^\[[0-9A-Fa-f:.]+](:\d{1,5})?$/', $host) === 1;
+    $is_named_host = preg_match('/^[A-Za-z0-9.-]+(:\d{1,5})?$/', $host) === 1;
+    if (!$is_ipv6_literal && !$is_named_host) {
+        return null;
+    }
+
+    $scheme = (isset($server['HTTPS']) && $server['HTTPS'] === 'on') ? 'https' : 'http';
+
+    return $scheme . '://' . $host;
+}
+
+/**
  * Sanitises a value bound for a `Location:` header.
  *
  * Any request-derived value interpolated into a redirect target (the request

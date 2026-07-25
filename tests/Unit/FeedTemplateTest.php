@@ -343,4 +343,53 @@ class FeedTemplateTest extends TestCase
 
         return new \SimpleXMLElement($output);
     }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedEntryIdSurvivesAnAmpersandInTheSlug(): void
+    {
+        require_once __DIR__ . '/../../vendor/autoload.php';
+
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+
+        // addChild() does not escape, so an unescaped `&` in the permalink used
+        // to emit an empty <id/> and make the whole feed malformed.
+        $bean = R::dispense('post');
+        $bean->title = 'Tea & Cake';
+        $bean->slug = 'tea-&-cake';
+        $bean->description = 'Post';
+        $bean->transformed = '<p>Post</p>';
+        $bean->created = '2024-01-01 12:00:00';
+        $bean->updated = '2024-01-01 12:00:00';
+        R::store($bean);
+
+        global $config, $data;
+        $config = [
+            'site_title'   => 'Test Blog',
+            'author_name'  => 'Test Author',
+            'author_email' => 'test@test.com',
+        ];
+        $data = [
+            'posts'    => [$bean],
+            'title'    => 'Test Blog',
+            'feed_url' => 'http://localhost/feed',
+            'updated'  => '2024-01-01 12:00:00',
+        ];
+
+        ob_start();
+        require __DIR__ . '/../../src/themes/base/feed.php';
+        $output = ob_get_clean();
+
+        $xml = new \SimpleXMLElement($output);
+        $this->assertSame('http://localhost/tea-&-cake', (string) $xml->entry[0]->id);
+    }
 }

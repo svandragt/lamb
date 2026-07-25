@@ -6,6 +6,21 @@
 	root * /app/src
 	encode zstd gzip
 
+	header {
+		# Uploads are served from this origin, so a browser must never
+		# second-guess their Content-Type and treat one as HTML or a script.
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+
+	# /assets is the upload directory: the only web-root path the app writes to
+	# at runtime. The upload allowlist already refuses anything but images and
+	# video, but nothing should execute PHP from there even if a file slips
+	# through — php_server would otherwise happily run it.
+	@assets_php path_regexp ^/assets/.*\.(?i:php|phar|phtml)$
+	respond @assets_php 404
+
 	# Static assets are content-hash cache-busted (?ver=) or stored under
 	# hashed names, so they are safe to cache for a year and immutable.
 	@static path /themes/* /scripts/* /assets/*

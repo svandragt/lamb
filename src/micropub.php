@@ -157,11 +157,30 @@ class LambMicropubAdapter extends MicropubAdapter
             return false;
         }
 
-        if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+        // Compare against the *configured* canonical URL, never ROOT_URL: ROOT_URL
+        // falls back to the client-supplied Host header, so an attacker holding a
+        // token the endpoint issued for their own identity could send
+        // `Host: their-site.example` and have this check compare their `me` against
+        // their own host — accepting the token as ours. Fail closed when no
+        // canonical URL is configured: with nothing trustworthy to compare, the
+        // identity of the token cannot be established.
+        $expected = \Lamb\Config\canonical_site_url($config);
+        if ($expected === null) {
+            mp_log('token_verify', [
+                'reason' => 'no_site_url',
+                'token'  => token_fingerprint($token),
+            ]);
+            // Surfaced unconditionally: mp_log() is silent unless micropub_debug is
+            // on, and an author whose client suddenly gets 403 needs to be told why.
+            error_log('micropub: rejecting token, no site_url configured (set site_url in /settings)');
+            return false;
+        }
+
+        if (rtrim($data['me'], '/') !== rtrim($expected, '/')) {
             mp_log('token_verify', [
                 'reason'   => 'me_mismatch',
                 'me'       => $data['me'],
-                'expected' => ROOT_URL,
+                'expected' => $expected,
                 'token'    => token_fingerprint($token),
             ]);
             return false;
@@ -198,10 +217,18 @@ class LambMicropubAdapter extends MicropubAdapter
                 'Accept: application/json',
             ],
             'timeout' => 5,
-            // introspectToken historically did not follow redirects explicitly,
-            // relying on PHP's stream defaults; preserve that by omitting them.
-            'follow_location' => null,
-            'max_redirects' => null,
+            // Never follow a redirect on this request. PHP's stream wrapper
+            // re-sends the context's `header` option verbatim to the redirect
+            // target, including across a change of authority — so following one
+            // would hand the author's bearer token to whatever host the token
+            // endpoint points at (an open redirect there, or a takeover of it, is
+            // enough). A token endpoint that answers with a redirect is treated
+            // as a failed introspection instead.
+            'follow_location' => 0,
+            'max_redirects' => 0,
+            // An introspection response is a small JSON document; cap the read so
+            // a misbehaving endpoint cannot stream an unbounded body into memory.
+            'max_bytes' => 65536,
         ]);
 
         if ($result === null) {
@@ -1094,6 +1121,12 @@ function respond_micropub_media(): void
     $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
     if ($ext === null) {
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
+    }
+
+    // The extension comes from the client's filename; check the bytes agree with it.
+    $sniffed = \Lamb\Response\sniff_file_content_type((string) ($file['tmp_name'] ?? ''));
+    if (!\Lamb\Response\upload_content_allowed($sniffed, $ext)) {
+        micropub_error(400, 'invalid_request', 'File contents do not match its type.');
     }
 
     $sub_path  = \Lamb\Response\upload_subpath();

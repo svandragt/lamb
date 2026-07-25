@@ -34,7 +34,17 @@ function now(): string
 
 // Matches a #hashtag preceded by start-of-string, whitespace, or a closing tag
 // bracket. Capture 1 is the preceding character, capture 2 the tag name.
-const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u';
+//
+// The excluded set covers the characters that let a tag escape the markup
+// parse_tags() builds around it — quotes, angle brackets, a backtick, `=`, and
+// the slashes — on top of the punctuation that merely ends a tag. Emoji and other
+// non-Latin scripts stay valid in a tag name.
+const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\]+)/u';
+
+// Bean fields front matter is allowed to set. Anything else in a front-matter
+// block is metadata for the author's own use, not a column to write; see the
+// allowlist check in apply_frontmatter() for why this is not open-ended.
+const FRONT_MATTER_FIELDS = ['title', 'slug', 'created', 'draft', 'description', 'transformed'];
 
 /**
  * Retrieves the tags from the given HTML.
@@ -63,9 +73,35 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback(TAG_PATTERN, function ($matches) {
-        return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
-    }, $html) ?? $html;
+    // This runs over already-rendered HTML, so it must only substitute in text
+    // position. A hashtag can also sit inside an attribute Parsedown built from
+    // user text — an image `alt`, a link `title` — and injecting `<a href="…">`
+    // there closed the attribute and turned the rest into attributes of the
+    // enclosing element, giving an `onerror=` handler that fires on its own.
+    // Feed ingestion reaches here with remote content, which is then stored and
+    // served to every visitor, so that was remotely triggerable stored XSS.
+    // Splitting on tags keeps the substitution out of every attribute value;
+    // escaping the tag name covers the text position it still runs in.
+    $parts = preg_split('/(<[^<>]*>)/', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+    if ($parts === false) {
+        return $html;
+    }
+
+    foreach ($parts as $i => $part) {
+        // Odd indices are the captured tags themselves — never rewritten.
+        if ($i % 2 === 1 || !str_contains($part, '#')) {
+            continue;
+        }
+        $parts[$i] = preg_replace_callback(TAG_PATTERN, function ($matches) {
+            $escape = fn(string $value): string
+                => htmlspecialchars($value, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE);
+
+            return $matches[1] . '<a href="/tag/' . $escape(strtolower($matches[2])) . '">#'
+                . $escape($matches[2]) . '</a>';
+        }, $part) ?? $part;
+    }
+
+    return implode('', $parts);
 }
 
 /**
@@ -383,9 +419,16 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
 
     foreach ($front_matter as $key => $value) {
-        // RedBean only accepts word-character property names. Skip anything
-        // else (e.g. a normalised `reading-time`) so it never reaches a store.
-        if (!is_string($key) || !preg_match('/\A\w+\z/', $key)) {
+        // Only the fields front matter is meant to drive. This used to copy any
+        // word-character key onto the bean, which made front matter a way to set
+        // *any* column — including `id`, turning the store that follows into an
+        // UPDATE of whatever row the author named. A Micropub client holding only
+        // `create` scope could reach it, since a create whose content is itself a
+        // front-matter block is parsed as front matter: `id:` overwrote an
+        // arbitrary post and `deleted:` trashed one, both bypassing the scope
+        // checks that correctly refuse update and delete. Unknown keys are also
+        // no longer turned into new columns by RedBean's fluid mode.
+        if (!is_string($key) || !in_array($key, FRONT_MATTER_FIELDS, true)) {
             continue;
         }
         $bean->$key = $value;

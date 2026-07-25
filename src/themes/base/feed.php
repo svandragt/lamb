@@ -35,13 +35,15 @@ if (defined('ROOT_DIR')) {
 
 $Link = $Xml->addChild('atom:link');
 $Link->addAttribute('rel', 'self');
-$Link->addAttribute('href', escape($channel_link));
+// Raw URL: addAttribute() escapes for us, so pre-escaping would turn a
+// query-string `&` into `&amp;amp;` (see the in-reply-to attributes below).
+$Link->addAttribute('href', $channel_link);
 
 // WebSub: advertise the configured hubs so subscribers can get real-time pushes.
 foreach (Lamb\Websub\hub_urls($config) as $websub_hub) {
     $Hub = $Xml->addChild('link');
     $Hub->addAttribute('rel', 'hub');
-    $Hub->addAttribute('href', escape($websub_hub));
+    $Hub->addAttribute('href', $websub_hub);
 }
 
 $Author = $Xml->addChild('author');
@@ -50,7 +52,10 @@ $Author->addChild('uri', ROOT_URL);
 
 foreach ($data['posts'] as $bean) {
     $Entry = $Xml->addChild('entry');
-    $Entry->addChild('id', Lamb\permalink($bean));
+    // addChild(), unlike addAttribute(), does not escape: a permalink carrying a
+    // `&` (a slug is stored close to verbatim) raised "unterminated entity
+    // reference" and emitted an empty <id/>, making the whole feed malformed.
+    $Entry->addChild('id', escape(Lamb\permalink($bean)));
     $Entry->addChild('title', escape($bean->title ?: ''));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));

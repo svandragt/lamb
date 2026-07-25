@@ -296,12 +296,13 @@ function build_matter(array $matter, string $content): string
         return $content;
     }
 
-    $lines = [];
-    foreach ($matter as $key => $value) {
-        $lines[] = "$key: $value";
-    }
-
-    return "---\n" . implode("\n", $lines) . "\n---\n$content";
+    // Yaml::dump() rather than "$key: $value": the values come from Micropub
+    // request properties, and an unescaped newline in one (a `name` of
+    // "Title\nid: 1") injected extra front-matter keys, which apply_frontmatter()
+    // then applied to the bean. It also fixes the mirror-image bug — a title
+    // containing a colon produced invalid YAML, so parse_matter() returned
+    // nothing and the title was silently dropped.
+    return "---\n" . Yaml::dump($matter) . "---\n$content";
 }
 
 /**

@@ -16,7 +16,17 @@ Bootstrap\bootstrap_session($data_dir);
 $config = Config\load();
 Config\apply_timezone($config);
 
-define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
+// Prefer the author's configured canonical URL; fall back to the requested host
+// for installs that have not set one. The fallback is validated to a strict host
+// charset, so a malformed Host can no longer be reflected into HTML or headers —
+// but it is still attacker-chosen, which is why security decisions (the Micropub
+// IndieAuth `me` check) use Config\canonical_site_url() directly instead of this.
+$root_url = Config\canonical_site_url($config) ?? Http\request_root_url($_SERVER);
+if ($root_url === null) {
+    header(($_SERVER['SERVER_PROTOCOL'] ?? 'HTTP/1.1') . ' 400 Bad Request');
+    die('Bad Request');
+}
+define('ROOT_URL', $root_url);
 // Config\ensure_explicit_theme() guarantees a renderable theme value on read,
 // so no runtime fallback/alias is needed here (see #291). The value still
 // comes verbatim from the admin-editable config INI, though, and is used
