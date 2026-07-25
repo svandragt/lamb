@@ -13,6 +13,11 @@ one value rather than write it from scratch; personal details stay commented:
 ;; Title of the site, shown in the HTML and feed views
 site_title = My Microblog
 
+;; The canonical URL of your site, e.g. https://example.com (no trailing slash).
+;; Required for Micropub, and pins absolute URLs to your real domain.
+;; Overridden by the LAMB_SITE_URL environment variable.
+;site_url = https://example.com
+
 ;; Author email in feed
 ;author_email = joe.sheeple@example.com
 
@@ -93,6 +98,57 @@ Feed = /feed
 ;https://bsky.app/profile/yourusername = Bluesky
 ;https://mastodon.social/@yourusername = Mastodon
 ```
+
+## Values and sections
+
+Every setting is one of two shapes, and the difference is a pair of brackets:
+
+* A **single value**, written `key = value` — `site_title`, `theme`,
+  `posts_per_page`, `timezone` and the rest of the keys above the first
+  `[section]` header.
+* A **section** of `label = value` entries under a `[name]` header —
+  `[menu_items]`, `[footer_items]`, `[feeds]`, `[preconnect]`, `[me]`,
+  `[redirections]` and `[syndicate_to]`.
+
+Getting the shape wrong is easy to do and easy to miss, because the file is
+still valid INI either way:
+
+```
+[site_title]          ;; wrong: a section where a single value belongs
+feeds = https://…     ;; wrong: a single value where the [feeds] section belongs
+
+[menu_items]
+Home = /
+Home = /start         ;; wrong: a repeated label makes the entry a list
+```
+
+Lamb ignores a setting written in the wrong shape and uses the default instead,
+so a slip cannot take the site down — and it tells you which ones it ignored
+when you save, alongside the "Settings saved successfully" message. If a
+setting you changed appears to have no effect, that message is the first place
+to look.
+
+Note that everything after a `[section]` header belongs to that section until
+the next one. A single-value setting written below a section header becomes an
+entry in it, so keep them all at the top of the file.
+
+## Site URL
+
+`site_url` is the canonical address of your site, e.g. `https://example.com`. It is
+optional for a plain blog, but worth setting:
+
+* **Micropub needs it.** IndieAuth tokens are issued for an identity, and Lamb has
+  to know its own identity to tell whether a token belongs to you. Without
+  `site_url` the Micropub endpoint refuses every token, and logs
+  `micropub: rejecting token, no site_url configured` via PHP's error log.
+* **It pins absolute URLs.** Feeds, social embed tags, and the endpoint discovery
+  links otherwise use whatever host the incoming request asked for. Setting
+  `site_url` keeps them on your real domain even if a request arrives with a
+  different `Host` header.
+
+You can also set it outside the settings page with the `LAMB_SITE_URL` environment
+variable, which takes precedence over the INI value — handy when the same
+configuration is deployed to more than one hostname.
 
 ## Related
 

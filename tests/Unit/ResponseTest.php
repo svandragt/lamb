@@ -9,6 +9,8 @@ use function Lamb\Response\build_pagination_meta;
 use function Lamb\Response\get_cookie_options;
 use function Lamb\Response\get_feed_updated_date;
 use function Lamb\Response\paginate_posts;
+use function Lamb\Response\pagination_window;
+use function Lamb\Response\public_posts_clause;
 use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
@@ -80,6 +82,69 @@ class ResponseTest extends TestCase
         $slugs = ['about', 'contact'];
         $result = build_exclude_slugs_clause($slugs);
         $this->assertSame($slugs, $result['params']);
+    }
+
+    // public_posts_clause
+
+    public function testPublicPostsClauseFiltersDraftsDeletedAndScheduled()
+    {
+        global $config;
+        $config = ['menu_items' => []];
+
+        $clause = public_posts_clause();
+
+        $this->assertStringContainsString('draft', $clause['sql']);
+        $this->assertStringContainsString('deleted', $clause['sql']);
+        $this->assertStringContainsString('created', $clause['sql']);
+        $this->assertStringNotContainsString('slug NOT IN', $clause['sql']);
+    }
+
+    public function testPublicPostsClauseExcludesMenuItemSlugs()
+    {
+        global $config;
+        $config = ['menu_items' => ['About' => 'about', 'Contact' => '/contact']];
+
+        $clause = public_posts_clause();
+
+        $this->assertStringContainsString('slug NOT IN', $clause['sql']);
+        // Params must line up with the placeholders: the visibility clause's
+        // "created > ?" comes first, then the excluded slugs in order.
+        $this->assertSame(substr_count($clause['sql'], '?'), count($clause['params']));
+        $this->assertSame(['about', 'contact'], array_slice($clause['params'], 1));
+    }
+
+    // pagination_window
+
+    public function testPaginationWindowComputesOffsetForRequestedPage()
+    {
+        $window = pagination_window(25, 3, 10);
+        $this->assertSame(3, $window['page']);
+        $this->assertSame(20, $window['offset']);
+        $this->assertSame(3, $window['total_pages']);
+    }
+
+    public function testPaginationWindowClampsPageBeyondTheLastOne()
+    {
+        $window = pagination_window(25, 99, 10);
+        $this->assertSame(3, $window['page']);
+        $this->assertSame(20, $window['offset']);
+    }
+
+    public function testPaginationWindowIsSinglePageWhenThereAreNoPosts()
+    {
+        $window = pagination_window(0, 4, 10);
+        $this->assertSame(1, $window['page']);
+        $this->assertSame(0, $window['offset']);
+        $this->assertSame(1, $window['total_pages']);
+    }
+
+    public function testPaginationWindowTreatsNonPositivePerPageAsOne()
+    {
+        // posts_per_page = 0 in the INI config would otherwise divide by zero.
+        $window = pagination_window(3, 2, 0);
+        $this->assertSame(2, $window['page']);
+        $this->assertSame(1, $window['offset']);
+        $this->assertSame(3, $window['total_pages']);
     }
 
     // build_pagination_meta

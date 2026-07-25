@@ -165,6 +165,30 @@ class ThemeTest extends TestCase
         $this->assertSame('', sanitize_filename(''));
     }
 
+    // Regression: index.php defines THEME from the admin-editable config INI's
+    // `theme` value and uses it both to build a require() path (THEME_DIR) and
+    // echoes it raw into HTML on every page view (THEME_URL, e.g. font preload
+    // links in themes/2026/html.php) — sanitize_filename() is applied to that
+    // value specifically to close both a path-traversal primitive and a
+    // site-wide stored-XSS surface.
+
+    public function testSanitizeFilenameStripsPathTraversalSequences()
+    {
+        $sanitized = sanitize_filename('../../../../etc/passwd');
+        $this->assertStringNotContainsString('.', $sanitized);
+        $this->assertStringNotContainsString('/', $sanitized);
+        $this->assertStringContainsString('etc', $sanitized);
+        $this->assertStringContainsString('passwd', $sanitized);
+    }
+
+    public function testSanitizeFilenameNeutralizesHtmlBreakoutCharacters()
+    {
+        $sanitized = sanitize_filename('x"><script>alert(1)</script>');
+        $this->assertStringNotContainsString('"', $sanitized);
+        $this->assertStringNotContainsString('<', $sanitized);
+        $this->assertStringNotContainsString('>', $sanitized);
+    }
+
     // format_past_date
 
     public function testFormatPastDateYesterdayWhenJIs3AndDiffIs1()

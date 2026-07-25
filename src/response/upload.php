@@ -21,19 +21,22 @@ use const ROOT_DIR;
 #[NoReturn]
 function respond_upload(array $_args): void
 {
+    // Authenticate before inspecting the request, so an anonymous caller cannot
+    // tell a malformed upload apart from a rejected one.
+    Security\require_login();
+
+    // Without this the response defaults to text/html, and the client-supplied
+    // filename is echoed back inside it — json_encode() leaves `<` and `>`
+    // alone, so the filename would be parsed as markup.
+    header('Content-Type: application/json');
+
     if (empty($_FILES[IMAGE_FILES])) {
         // invalid request http status code
         header('HTTP/1.1 400 Bad Request');
         die('No files uploaded!');
     }
-    Security\require_login();
 
-    $files = [];
-    foreach ($_FILES[IMAGE_FILES] as $name => $items) {
-        foreach ($items as $k => $value) {
-            $files[$k][$name] = $_FILES[IMAGE_FILES][$name][$k];
-        }
-    }
+    $files = normalize_uploaded_files($_FILES[IMAGE_FILES]);
 
     $out = '';
     foreach ($files as $f) {
@@ -50,7 +53,16 @@ function respond_upload(array $_args): void
             die();
         }
         $temp_fp  = $f['tmp_name'];
-        $seed     = sha1($f['name']);
+        if (!upload_content_allowed(sniff_file_content_type($temp_fp), $ext)) {
+            header('HTTP/1.1 400 Bad Request');
+            echo json_encode('File contents do not match its type.', JSON_THROW_ON_ERROR);
+            die();
+        }
+        // Salt with uniqid() so two uploads with the same client-supplied
+        // filename in the same month don't collide on disk — without this,
+        // an attacker-controlled filename can silently overwrite an earlier,
+        // already-published upload at the same path.
+        $seed     = sha1($f['name'] . uniqid('', true));
         $sub_path = upload_subpath();
         $dir      = get_upload_dir($sub_path);
 
@@ -70,6 +82,33 @@ function respond_upload(array $_args): void
 
     echo json_encode($out, JSON_THROW_ON_ERROR);
     die();
+}
+
+/**
+ * Turns PHP's attribute-major $_FILES entry into one array per uploaded file.
+ *
+ * PHP groups a multi-file field by attribute (`['name' => [...], 'tmp_name' => [...]]`);
+ * every caller wants it the other way round, one `['name' => …, 'tmp_name' => …, …]`
+ * per file. Extracted from respond_upload() so this reshaping — the part with all
+ * the index bookkeeping — is unit-testable, unlike the responder around it, which
+ * needs real $_FILES entries and dies on every exit path.
+ *
+ * A field posted without `[]` (attributes are scalars rather than arrays) yields
+ * the single file it describes.
+ *
+ * @param array<string, mixed> $field One $_FILES entry, e.g. $_FILES['imageFiles'].
+ * @return array<int, array<string, mixed>> One entry per uploaded file.
+ */
+function normalize_uploaded_files(array $field): array
+{
+    $files = [];
+    foreach ($field as $attribute => $values) {
+        foreach ((array) $values as $index => $value) {
+            $files[$index][$attribute] = $value;
+        }
+    }
+
+    return $files;
 }
 
 /**
@@ -93,6 +132,84 @@ function safe_upload_extension(string $filename): ?string
     }
 
     return $ext;
+}
+
+/**
+ * The content types accepted for each allowed upload extension.
+ *
+ * `safe_upload_extension()` only inspects the client-supplied filename, so on its
+ * own it lets any bytes at all be stored under an image extension and served from
+ * this origin. That is how an HTML or SVG payload ends up at a URL on the site's
+ * own domain — the extension keeps it from being executed as PHP, but a browser
+ * that sniffs (or any future change that serves by content) would still render it.
+ *
+ * The container formats also accept `application/octet-stream`: libmagic cannot
+ * always name an ISOBMFF/Matroska stream, and a real video must not be rejected
+ * because of that. Scripted payloads never sniff as octet-stream — they come back
+ * as `text/html`, `text/x-php`, `image/svg+xml` and the like — so the check still
+ * does its job for the case it exists to cover.
+ *
+ * @return array<string, list<string>> Extension => acceptable sniffed MIME types.
+ */
+function upload_content_types(): array
+{
+    return [
+        'jpg'  => ['image/jpeg'],
+        'jpeg' => ['image/jpeg'],
+        'png'  => ['image/png'],
+        'gif'  => ['image/gif'],
+        'webp' => ['image/webp'],
+        'avif' => ['image/avif', 'image/heif', 'image/heic', 'application/octet-stream'],
+        'mp4'  => ['video/mp4', 'application/mp4', 'application/octet-stream'],
+        'webm' => ['video/webm', 'video/x-matroska', 'application/octet-stream'],
+        'mov'  => ['video/quicktime', 'video/mp4', 'application/octet-stream'],
+    ];
+}
+
+/**
+ * Whether a sniffed content type is acceptable for the given upload extension.
+ *
+ * Returns true when fileinfo is unavailable: the check is a second line of
+ * defence behind the extension allowlist, and a host without the extension
+ * should keep uploading rather than fail every attempt.
+ *
+ * @param string|false $mime The sniffed MIME type, or false when sniffing failed.
+ * @param string       $ext  The lower-case extension from safe_upload_extension().
+ * @return bool
+ */
+function upload_content_allowed(string|false $mime, string $ext): bool
+{
+    if ($mime === false || $mime === '') {
+        return true;
+    }
+    $allowed = upload_content_types()[$ext] ?? null;
+
+    return $allowed === null || in_array(strtolower($mime), $allowed, true);
+}
+
+/**
+ * Sniffs the content type of an uploaded file on disk, or false when unavailable.
+ */
+function sniff_file_content_type(string $path): string|false
+{
+    if (!function_exists('mime_content_type') || !is_readable($path)) {
+        return false;
+    }
+
+    return @mime_content_type($path);
+}
+
+/**
+ * Sniffs the content type of raw bytes in memory, or false when unavailable.
+ */
+function sniff_bytes_content_type(string $bytes): string|false
+{
+    if (!class_exists(\finfo::class)) {
+        return false;
+    }
+    $finfo = @new \finfo(FILEINFO_MIME_TYPE);
+
+    return @$finfo->buffer($bytes);
 }
 
 /**
@@ -138,6 +255,9 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
 function persist_image_bytes(string $bytes, string $ext, string $dest_dir, string $seed): ?string
 {
     if ($bytes === '' || !is_dir($dest_dir)) {
+        return null;
+    }
+    if (!upload_content_allowed(sniff_bytes_content_type($bytes), $ext)) {
         return null;
     }
     if (should_convert_to_webp($ext)) {
@@ -236,6 +356,16 @@ function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quali
         return false;
     }
 
+    // Reject an oversized declared width*height before decoding: a cheap
+    // header-only read via getimagesizefromstring(), ahead of the actual
+    // (memory-hungry) decode in imagecreatefromstring() below. A source that
+    // getimagesizefromstring() can't parse is left to imagecreatefromstring()
+    // itself, unchanged from prior behaviour.
+    $size = @getimagesizefromstring($bytes);
+    if (is_array($size) && $size[0] > 0 && $size[1] > 0 && $size[0] * $size[1] > MAX_UPLOAD_PIXELS) {
+        return false;
+    }
+
     $image = @imagecreatefromstring($bytes);
     if ($image === false) {
         return false;
@@ -310,7 +440,10 @@ function get_upload_dir(?string $sub_path = null): string
 {
     $upload_dir = sprintf("%s/assets/%s", ROOT_DIR, $sub_path ?? upload_subpath());
     if (!is_dir($upload_dir)) {
-        if (!mkdir($upload_dir, 0777, true) && !is_dir($upload_dir)) {
+        // 0755, not 0777: the web-server user is the only one that needs to write
+        // here. Under a permissive umask (0002/0000, not unusual in containers)
+        // 0777 leaves the upload tree writable by every local user.
+        if (!mkdir($upload_dir, 0755, true) && !is_dir($upload_dir)) {
             throw new RuntimeException(sprintf('Directory "%s" was not created', $upload_dir));
         }
     }

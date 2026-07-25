@@ -16,6 +16,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\consume_leading_heading;
+use function Lamb\Post\matter_string;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
@@ -34,7 +35,17 @@ function now(): string
 
 // Matches a #hashtag preceded by start-of-string, whitespace, or a closing tag
 // bracket. Capture 1 is the preceding character, capture 2 the tag name.
-const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<]+)/u';
+//
+// The excluded set covers the characters that let a tag escape the markup
+// parse_tags() builds around it — quotes, angle brackets, a backtick, `=`, and
+// the slashes — on top of the punctuation that merely ends a tag. Emoji and other
+// non-Latin scripts stay valid in a tag name.
+const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\]+)/u';
+
+// Bean fields front matter is allowed to set. Anything else in a front-matter
+// block is metadata for the author's own use, not a column to write; see the
+// allowlist check in apply_frontmatter() for why this is not open-ended.
+const FRONT_MATTER_FIELDS = ['title', 'slug', 'created', 'draft', 'description', 'transformed'];
 
 /**
  * Retrieves the tags from the given HTML.
@@ -63,9 +74,35 @@ function get_tags(string $html): array
  */
 function parse_tags(string $html): string
 {
-    return preg_replace_callback(TAG_PATTERN, function ($matches) {
-        return $matches[1] . '<a href="/tag/' . strtolower($matches[2]) . '">#' . $matches[2] . '</a>';
-    }, $html) ?? $html;
+    // This runs over already-rendered HTML, so it must only substitute in text
+    // position. A hashtag can also sit inside an attribute Parsedown built from
+    // user text — an image `alt`, a link `title` — and injecting `<a href="…">`
+    // there closed the attribute and turned the rest into attributes of the
+    // enclosing element, giving an `onerror=` handler that fires on its own.
+    // Feed ingestion reaches here with remote content, which is then stored and
+    // served to every visitor, so that was remotely triggerable stored XSS.
+    // Splitting on tags keeps the substitution out of every attribute value;
+    // escaping the tag name covers the text position it still runs in.
+    $parts = preg_split('/(<[^<>]*>)/', $html, -1, PREG_SPLIT_DELIM_CAPTURE);
+    if ($parts === false) {
+        return $html;
+    }
+
+    foreach ($parts as $i => $part) {
+        // Odd indices are the captured tags themselves — never rewritten.
+        if ($i % 2 === 1 || !str_contains($part, '#')) {
+            continue;
+        }
+        $parts[$i] = preg_replace_callback(TAG_PATTERN, function ($matches) {
+            $escape = fn(string $value): string
+                => htmlspecialchars($value, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE);
+
+            return $matches[1] . '<a href="/tag/' . $escape(strtolower($matches[2])) . '">#'
+                . $escape($matches[2]) . '</a>';
+        }, $part) ?? $part;
+    }
+
+    return implode('', $parts);
 }
 
 /**
@@ -327,10 +364,10 @@ function highlight_and_link(string $markdown): string
  * Normalises the reply target from front matter into a single string.
  *
  * Reads the `in-reply-to` key (parse_matter() has already canonicalised the
- * `in_reply_to` spelling onto it), collapsing a YAML list to its first entry.
- * The key is removed from the passed-by-reference front matter so the
- * hyphenated key is never written as an invalid column by the blind copy in
- * apply_frontmatter().
+ * `in_reply_to` spelling onto it and collapsed a YAML list to its first entry
+ * via matter_string()). The key is removed from the passed-by-reference front
+ * matter so the hyphenated key is never written as an invalid column by the
+ * blind copy in apply_frontmatter().
  *
  * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
  * @return string The normalised reply target, or '' when absent.
@@ -339,13 +376,10 @@ function highlight_and_link(string $markdown): string
  */
 function normalize_in_reply_to(array &$front_matter): string
 {
-    $in_reply_to = $front_matter['in-reply-to'] ?? null;
+    $in_reply_to = matter_string($front_matter['in-reply-to'] ?? null);
     unset($front_matter['in-reply-to']);
-    if (is_array($in_reply_to)) {
-        $in_reply_to = $in_reply_to[0] ?? null;
-    }
 
-    return is_string($in_reply_to) ? trim($in_reply_to) : '';
+    return $in_reply_to !== null ? trim($in_reply_to) : '';
 }
 
 /**
@@ -372,20 +406,37 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     $bean->in_reply_to = normalize_in_reply_to($front_matter);
 
     // Normalise syndication record. Hyphenated key can't map via the loop below.
-    $bean->syndicated_to = isset($front_matter['syndicated-to'])
-        ? (string) $front_matter['syndicated-to']
-        : '';
+    $bean->syndicated_to = matter_string($front_matter['syndicated-to'] ?? null) ?? '';
 
     // Reset the title to empty when it is absent from front matter, so removing
     // the `title:` line (or all front matter) on an edit clears a previously
     // stored title. The additive loop below only ever sets keys that are
-    // present, so without this an old title would survive every save.
-    $bean->title = isset($front_matter['title']) ? (string) $front_matter['title'] : '';
+    // present, so without this an old title would survive every save. The key
+    // is consumed here (as in_reply_to is) so the loop cannot put the raw,
+    // uncoerced value back on the bean two lines later.
+    $bean->title = matter_string($front_matter['title'] ?? null) ?? '';
+    unset($front_matter['title']);
 
     foreach ($front_matter as $key => $value) {
-        // RedBean only accepts word-character property names. Skip anything
-        // else (e.g. a normalised `reading-time`) so it never reaches a store.
-        if (!is_string($key) || !preg_match('/\A\w+\z/', $key)) {
+        // Only the fields front matter is meant to drive. This used to copy any
+        // word-character key onto the bean, which made front matter a way to set
+        // *any* column — including `id`, turning the store that follows into an
+        // UPDATE of whatever row the author named. A Micropub client holding only
+        // `create` scope could reach it, since a create whose content is itself a
+        // front-matter block is parsed as front matter: `id:` overwrote an
+        // arbitrary post and `deleted:` trashed one, both bypassing the scope
+        // checks that correctly refuse update and delete. Unknown keys are also
+        // no longer turned into new columns by RedBean's fluid mode.
+        if (!is_string($key) || !in_array($key, FRONT_MATTER_FIELDS, true)) {
+            continue;
+        }
+        // RedBean refuses an array or object as a property value ("Invalid Bean
+        // value"), and the refusal surfaces at R::store() — past every catch
+        // block, which only handles SQL errors — as a 500 with the post lost.
+        // A YAML list or map here has nothing to say about a scalar column, so
+        // leave the existing value in place and let the per-field normalisation
+        // that follows (apply_scheduling, the draft flag) settle it.
+        if (!is_scalar($value)) {
             continue;
         }
         $bean->$key = $value;
@@ -419,7 +470,12 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
  */
 function apply_scheduling(OODBBean $bean, array $front_matter, mixed $previous_created): void
 {
-    if (!isset($front_matter['created'])) {
+    // array_key_exists(), not isset(): a bare `created:` line parses to null,
+    // which isset() reports as absent. The copy loop in apply_frontmatter()
+    // sees the key either way, so an isset() check here skipped the repair and
+    // left the column NULL — a post with no date at all, listed publicly and
+    // dated "now" by the feeds.
+    if (!array_key_exists('created', $front_matter)) {
         return;
     }
 
@@ -583,6 +639,29 @@ function is_viewable(OODBBean $post): bool
         return true;
     }
     return $post->draft != 1 && !is_scheduled($post);
+}
+
+/**
+ * Returns true for a post an anonymous visitor may see: not draft, not
+ * deleted, and not scheduled for the future. The in-memory counterpart to
+ * visible_clause() (the SQL allow-list for listings), for callers that
+ * already have a loaded bean.
+ *
+ * Deliberately has no logged-in exception, unlike is_viewable(): it's for
+ * request paths where the caller's identity isn't the site's own logged-in
+ * session (an inbound webmention POST, /_cron) — a session cookie that
+ * happens to be present must not leak a hidden post's existence to whichever
+ * party is actually making the request.
+ *
+ * @param OODBBean $post The post to inspect (an unsaved/missing bean has id 0).
+ * @return bool
+ */
+function is_publicly_visible(OODBBean $post): bool
+{
+    if (empty($post->id) || $post->deleted == 1 || $post->draft == 1) {
+        return false;
+    }
+    return !is_scheduled($post);
 }
 
 /**

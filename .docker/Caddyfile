@@ -5,6 +5,16 @@
 :80 {
 	root * /srv/app/src
 
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		X-Frame-Options SAMEORIGIN
+	}
+
+	# Never execute PHP from the runtime upload directory. See Caddyfile.release.
+	@assets_php path_regexp ^/assets/.*\.(?i:php|phar|phtml)$
+	respond @assets_php 404
+
 	# Static assets are content-hash cache-busted (?ver=) or stored under
 	# hashed names, so they are safe to cache for a year and immutable.
 	@static path /themes/* /scripts/* /assets/*

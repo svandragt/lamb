@@ -26,7 +26,11 @@ const WEBSUB_PING_TIMEOUT = 2;
 /**
  * The configured WebSub hub URLs.
  *
- * `websub_hubs` is a comma-separated list; most sites need just one.
+ * `websub_hubs` is a comma-separated list; most sites need just one. Entries that
+ * are not absolute http(s) URLs are dropped, matching the filtering get_feeds()
+ * applies to feed sources: without it a stray value goes straight to the fetcher,
+ * which would happily open any scheme PHP has a stream wrapper for (`file://`,
+ * `php://…`) on the author's behalf.
  *
  * @param array<string, mixed>|null $config Config array; defaults to the global config.
  * @return list<string>
@@ -39,7 +43,7 @@ function hub_urls(?array $config = null): array
     $value = (string) (($config ?? [])['websub_hubs'] ?? '');
 
     $hubs = array_map('trim', explode(',', $value));
-    return array_values(array_filter($hubs, fn($hub) => $hub !== ''));
+    return array_values(array_filter($hubs, fn($hub) => \Lamb\Http\is_valid_http_url($hub)));
 }
 
 /**
@@ -97,12 +101,20 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
  */
 function send_ping(string $hub, string $topic): void
 {
-    \Lamb\Http\post_form(
-        $hub,
-        ['hub.mode' => 'publish', 'hub.url' => $topic],
-        WEBSUB_PING_TIMEOUT,
-        'Lamb-WebSub'
-    );
+    // fetch_guarded() rather than post_form(): it refuses loopback/private/
+    // link-local destinations and re-validates every redirect hop, so a hub URL
+    // cannot aim the publish request at an internal service. Every other outbound
+    // sink already goes through it; this was the last one that did not.
+    \Lamb\Http\fetch_guarded($hub, [
+        'method' => 'POST',
+        'headers' => [
+            'Content-Type: application/x-www-form-urlencoded',
+            'User-Agent: Lamb-WebSub',
+        ],
+        'content' => http_build_query(['hub.mode' => 'publish', 'hub.url' => $topic]),
+        'timeout' => WEBSUB_PING_TIMEOUT,
+        'max_bytes' => 65536,
+    ], 1);
 }
 
 /**

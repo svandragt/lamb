@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 use SimplePie\Item as SimplePieItem;
 
+use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
@@ -100,13 +101,13 @@ function get_structured_content(SimplePieItem|JsonFeedItem $item, string $name):
     $contents = attributed_content($item, $name);
     $title = sanitize_feed_title($item->get_title() ?? '');
     if (!empty($title)) {
-        $contents = <<<MATTER
----
-title: {$title}
----
-
-{$contents}
-MATTER;
+        // build_matter() (i.e. Yaml::dump) rather than interpolating the title
+        // into a heredoc. Interpolation let the remote feed choose the YAML
+        // *type* of its own title: `[a, b]` arrived as a list and `2024-01-02`
+        // as a date object, neither of which is a string, and the ingest run
+        // died on the first such item. Dumping quotes the scalar so a title is
+        // always read back as the text the feed sent.
+        $contents = build_matter(['title' => $title], "\n" . $contents);
     }
     return $contents;
 }
@@ -117,11 +118,15 @@ MATTER;
  * Front matter is delimited by `---` and parsed as YAML, so an untrusted title
  * containing newlines could inject extra keys (e.g. `slug`, `created`) and a `---`
  * sequence could close the block early. Whitespace is collapsed to single spaces,
- * any run of three or more hyphens is shortened, the result is length-capped, and
- * slashes/quotes are escaped (preserving the existing front-matter format).
+ * any run of three or more hyphens is shortened, and the result is length-capped.
+ *
+ * Quoting and escaping are no longer done here: get_structured_content() now
+ * renders the block with Yaml::dump(), which quotes the scalar correctly for
+ * whatever it contains. The previous addslashes() left a literal backslash in
+ * front of every apostrophe in the stored title.
  *
  * @param string $title The raw feed item title.
- * @return string A single-line, length-capped, escaped title safe for front matter.
+ * @return string A single-line, length-capped title safe for front matter.
  */
 function sanitize_feed_title(string $title): string
 {
@@ -132,7 +137,7 @@ function sanitize_feed_title(string $title): string
         $title = rtrim(mb_substr($title, 0, 200));
     }
 
-    return addslashes($title);
+    return $title;
 }
 
 /**

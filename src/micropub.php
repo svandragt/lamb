@@ -13,7 +13,9 @@ use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
+use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
+use function Lamb\normalize_datetime;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
@@ -21,6 +23,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
+use function Lamb\Post\matter_string;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\split_frontmatter;
@@ -38,6 +41,18 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
+            return false;
+        }
+
+        // Unlike create/update/delete, a source query has no scope of its own —
+        // any token that merely verifies for this site would otherwise get
+        // full read access to every draft/scheduled/trashed post's content
+        // (sequential /status/<id> ids make this trivial to enumerate). A
+        // publicly-visible post's content is already public, so any valid
+        // token may read it; a hidden one requires 'update' scope (the same
+        // trust level needed to edit it) and otherwise looks exactly like a
+        // nonexistent post, so this can't be used as an existence oracle either.
+        if (!is_publicly_visible($bean) && $this->lacksScope('update')) {
             return false;
         }
 
@@ -144,11 +159,30 @@ class LambMicropubAdapter extends MicropubAdapter
             return false;
         }
 
-        if (rtrim($data['me'], '/') !== rtrim(ROOT_URL, '/')) {
+        // Compare against the *configured* canonical URL, never ROOT_URL: ROOT_URL
+        // falls back to the client-supplied Host header, so an attacker holding a
+        // token the endpoint issued for their own identity could send
+        // `Host: their-site.example` and have this check compare their `me` against
+        // their own host — accepting the token as ours. Fail closed when no
+        // canonical URL is configured: with nothing trustworthy to compare, the
+        // identity of the token cannot be established.
+        $expected = \Lamb\Config\canonical_site_url($config);
+        if ($expected === null) {
+            mp_log('token_verify', [
+                'reason' => 'no_site_url',
+                'token'  => token_fingerprint($token),
+            ]);
+            // Surfaced unconditionally: mp_log() is silent unless micropub_debug is
+            // on, and an author whose client suddenly gets 403 needs to be told why.
+            error_log('micropub: rejecting token, no site_url configured (set site_url in /settings)');
+            return false;
+        }
+
+        if (rtrim($data['me'], '/') !== rtrim($expected, '/')) {
             mp_log('token_verify', [
                 'reason'   => 'me_mismatch',
                 'me'       => $data['me'],
-                'expected' => ROOT_URL,
+                'expected' => $expected,
                 'token'    => token_fingerprint($token),
             ]);
             return false;
@@ -185,10 +219,18 @@ class LambMicropubAdapter extends MicropubAdapter
                 'Accept: application/json',
             ],
             'timeout' => 5,
-            // introspectToken historically did not follow redirects explicitly,
-            // relying on PHP's stream defaults; preserve that by omitting them.
-            'follow_location' => null,
-            'max_redirects' => null,
+            // Never follow a redirect on this request. PHP's stream wrapper
+            // re-sends the context's `header` option verbatim to the redirect
+            // target, including across a change of authority — so following one
+            // would hand the author's bearer token to whatever host the token
+            // endpoint points at (an open redirect there, or a takeover of it, is
+            // enough). A token endpoint that answers with a redirect is treated
+            // as a failed introspection instead.
+            'follow_location' => 0,
+            'max_redirects' => 0,
+            // An introspection response is a small JSON document; cap the read so
+            // a misbehaving endpoint cannot stream an unbounded body into memory.
+            'max_bytes' => 65536,
         ]);
 
         if ($result === null) {
@@ -244,6 +286,40 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * The insufficient_scope response for an action the token may not perform,
+     * or null when it may proceed.
+     *
+     * The gate every scope-checked callback shares, so all four ask the same
+     * question and name their own scope in the challenge. A request with no token
+     * at all ($this->user === null) is not gated here: the callbacks are also
+     * reached from the logged-in web paths, whose authorisation happened earlier.
+     *
+     * @param string $scope The scope this action requires (e.g. 'create', 'delete').
+     * @return Response|null
+     */
+    private function scopeRejection(string $scope): ?Response
+    {
+        return $this->lacksScope($scope) ? $this->insufficientScopeResponse($scope) : null;
+    }
+
+    /**
+     * Whether the request carries a token that does *not* grant $scope.
+     *
+     * False for an untokened request, so the callbacks stay usable from the
+     * logged-in web paths (see scopeRejection()). Kept separate from
+     * scopeRejection() for the one gate that answers with something other than
+     * an insufficient_scope response: a source query for a hidden post hides it
+     * instead (returns false), rather than confirming it exists.
+     *
+     * @param string $scope The scope being demanded.
+     * @return bool
+     */
+    private function lacksScope(string $scope): bool
+    {
+        return $this->user !== null && !in_array($scope, $this->user['scope'] ?? [], true);
+    }
+
+    /**
      * Handle a micropub create request.
      *
      * @param array<string, mixed> $data  Normalised microformats2 data.
@@ -252,9 +328,9 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function createCallback(array $data, array $uploadedFiles = [])
     {
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('create', $scope)) {
-            return $this->insufficientScopeResponse('create');
+        $rejection = $this->scopeRejection('create');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         $props = $data['properties'] ?? [];
@@ -278,9 +354,14 @@ class LambMicropubAdapter extends MicropubAdapter
             $bean->transformed = $this->sanitizeHtml($content);
         }
 
-        $published = $props['published'][0] ?? null;
-        if ($published) {
-            $bean->created = date('Y-m-d H:i:s', strtotime($published));
+        // normalize_datetime() rather than strtotime(): it accepts the same
+        // shapes front matter does and returns null instead of false, so a
+        // non-string `published` no longer TypeErrors and an unparseable one no
+        // longer silently backdates the post to 1970 (strtotime() returns false,
+        // which date() reads as the epoch).
+        $published = normalize_datetime($props['published'][0] ?? null);
+        if ($published !== null) {
+            $bean->created = $published;
         }
 
         $postStatus = $props['post-status'][0] ?? null;
@@ -339,6 +420,11 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function deleteCallback(string $url)
     {
+        $rejection = $this->scopeRejection('delete');
+        if ($rejection !== null) {
+            return $rejection;
+        }
+
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
             return 'invalid_request';
@@ -359,6 +445,14 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function undeleteCallback(string $url)
     {
+        // Gated on 'delete' scope, not a separate 'undelete' one: undelete is
+        // the reversal of the same destructive action, and this codebase
+        // doesn't otherwise define a distinct scope for it.
+        $rejection = $this->scopeRejection('delete');
+        if ($rejection !== null) {
+            return $rejection;
+        }
+
         $bean = $this->findPostByUrl($url);
         if ($bean === null) {
             return 'invalid_request';
@@ -381,13 +475,17 @@ class LambMicropubAdapter extends MicropubAdapter
     public function updateCallback(string $url, array $actions)
     {
         $bean = $this->findPostByUrl($url);
-        if ($bean === null) {
+        // A soft-deleted post is meant to stay immutable until explicitly
+        // restored via the delete-scoped undeleteCallback(); treating it the
+        // same as "no such post" here also means this can't be used to tell
+        // a trashed post's id apart from a nonexistent one.
+        if ($bean === null || (int) $bean->deleted === 1) {
             return 'invalid_request';
         }
 
-        $scope = $this->user['scope'] ?? [];
-        if ($this->user !== null && !in_array('update', $scope)) {
-            return $this->insufficientScopeResponse('update');
+        $rejection = $this->scopeRejection('update');
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
@@ -491,9 +589,13 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $currentBody  = $bean->body ?? '';
         $matter       = parse_matter($currentBody);
-        $title        = $matter['title'] ?? null;
-        $replyTo      = $matter['in-reply-to'] ?? null;
-        $syndicatedTo = $matter['syndicated-to'] ?? null;
+        // matter_string(), not a bare read: parse_matter() normalises these
+        // keys, but the ?string parameters below turn any survivor into a fatal
+        // TypeError, and an update is the one Micropub call that re-reads front
+        // matter the author wrote by hand.
+        $title        = matter_string($matter['title'] ?? null);
+        $replyTo      = matter_string($matter['in-reply-to'] ?? null);
+        $syndicatedTo = matter_string($matter['syndicated-to'] ?? null);
 
         $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
@@ -557,7 +659,11 @@ class LambMicropubAdapter extends MicropubAdapter
             }
             $sub_path  = \Lamb\Response\upload_subpath();
             $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-            $seed      = sha1($file->getClientFilename() ?? uniqid('', true));
+            // Always salt with uniqid(), not only when the client filename is
+            // absent — otherwise two uploads sharing a client filename in the
+            // same month collide and the later one silently overwrites the
+            // earlier, already-published one on disk.
+            $seed      = sha1(($file->getClientFilename() ?? '') . uniqid('', true));
 
             $filename = \Lamb\Response\persist_image_bytes(
                 (string) $file->getStream(),
@@ -609,8 +715,13 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildBody(array $props, string $content): string
     {
-        $title = $props['name'][0] ?? null;
-        $replyTo = $props['in-reply-to'][0] ?? null;
+        // Microformats properties are arrays of values, and a value is not
+        // necessarily a string: `in-reply-to` is legitimately an embedded
+        // h-cite object, and a client is free to send a nested array for
+        // `name`. Both reached the ?string parameters of assembleFrontMatter()
+        // as arrays and 500ed the create.
+        $title = matter_string($props['name'][0] ?? null);
+        $replyTo = matter_string($props['in-reply-to'][0] ?? null);
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -627,7 +738,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        $syndicateTo  = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        // Filter to scalars before imploding: a nested array here produced an
+        // "Array to string conversion" warning and stored the literal "Array"
+        // as the syndication target.
+        $syndicateTo  = array_filter(
+            array_map(matter_string(...), array_values((array) ($props['mp-syndicate-to'] ?? []))),
+            fn(?string $uid) => $uid !== null && $uid !== ''
+        );
         $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
         return build_matter(
@@ -795,6 +912,22 @@ function mp_log(string $event, array $context = []): void
  * @param string|null $scope       Scope the action requires (insufficient_scope only).
  * @param string|null $description Human-readable error description.
  */
+/**
+ * Whether a verified access-token user carries a given Micropub scope.
+ *
+ * Shared by every scope-gated Micropub action (post creation/update, and the
+ * media endpoint) so a token issued without the scope an action needs is
+ * rejected consistently.
+ *
+ * @param array{me?: mixed, scope?: list<string>}|false $user The result of verifyAccessTokenCallback().
+ * @param string                                         $scope Required scope (e.g. 'create').
+ * @return bool
+ */
+function has_micropub_scope(array|false $user, string $scope): bool
+{
+    return is_array($user) && in_array($scope, $user['scope'] ?? [], true);
+}
+
 function bearer_challenge(?string $error = null, ?string $scope = null, ?string $description = null): string
 {
     $params = [];
@@ -984,6 +1117,20 @@ function respond_micropub_media(): void
         );
     }
 
+    // The base MicropubAdapter never enforces scope itself — it's left to the
+    // implementing callbacks, and createCallback()/updateCallback() both do
+    // (requiring 'create'/'update'). This endpoint is reached independently
+    // of those callbacks, so without its own check here a token issued with
+    // any scope at all (e.g. 'update'-only) could still upload files.
+    if (!has_micropub_scope($user, 'create')) {
+        micropub_error(
+            403,
+            'insufficient_scope',
+            'Your access token does not grant the scope required for this action.',
+            bearer_challenge('insufficient_scope', 'create')
+        );
+    }
+
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
         micropub_error(400, 'invalid_request', 'Expected a multipart/form-data POST with a file field.');
     }
@@ -996,6 +1143,12 @@ function respond_micropub_media(): void
     $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
     if ($ext === null) {
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
+    }
+
+    // The extension comes from the client's filename; check the bytes agree with it.
+    $sniffed = \Lamb\Response\sniff_file_content_type((string) ($file['tmp_name'] ?? ''));
+    if (!\Lamb\Response\upload_content_allowed($sniffed, $ext)) {
+        micropub_error(400, 'invalid_request', 'File contents do not match its type.');
     }
 
     $sub_path  = \Lamb\Response\upload_subpath();

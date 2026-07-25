@@ -29,21 +29,33 @@ function respond_home(): array
         redirect_created();
     }
 
-    $data['title'] = $config['site_title'] ?? '';
+    $public = public_posts_clause();
 
-    $visible = \Lamb\visible_clause();
-    $where_sql = $visible['sql'];
-    $where_params = $visible['params'];
-    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
-    if ($clause !== null) {
-        $where_sql .= ' AND ' . $clause['sql'];
-        $where_params = array_merge($where_params, $clause['params']);
-    }
-    $paginated = paginate_posts('post', 'created DESC', $where_sql, $where_params);
-    $data['posts'] = $paginated['items'];
-    $data['pagination'] = $paginated['pagination'];
+    return listing_data($config['site_title'] ?? '', 'created DESC', $public['sql'], $public['params']);
+}
 
-    return $data;
+/**
+ * Assembles the view data for a paginated post listing.
+ *
+ * The shared tail of every listing route (home, drafts, trash, scheduled): run the
+ * query through paginate_posts() and hand the template its three keys. Callers own
+ * the query and any authentication they need — this only assembles the result.
+ *
+ * @param string $title           Page title for the template.
+ * @param string $order_by_clause SQL ORDER BY expression (without the keyword).
+ * @param string $where_sql       WHERE clause selecting the posts to list.
+ * @param array<int, mixed> $params Bound parameters for the WHERE clause.
+ * @return array{title: string, posts: array<int, mixed>, pagination: array<string, mixed>}
+ */
+function listing_data(string $title, string $order_by_clause, string $where_sql, array $params = []): array
+{
+    $paginated = paginate_posts('post', $order_by_clause, $where_sql, $params);
+
+    return [
+        'title'      => $title,
+        'posts'      => $paginated['items'],
+        'pagination' => $paginated['pagination'],
+    ];
 }
 
 /**
@@ -55,12 +67,7 @@ function respond_drafts(): array
 {
     Security\require_login();
 
-    $data['title'] = 'Drafts';
-    $paginated = paginate_posts('post', 'created DESC', SQL_IS_DRAFT);
-    $data['posts'] = $paginated['items'];
-    $data['pagination'] = $paginated['pagination'];
-
-    return $data;
+    return listing_data('Drafts', 'created DESC', SQL_IS_DRAFT);
 }
 
 /**
@@ -72,12 +79,7 @@ function respond_trash(): array
 {
     Security\require_login();
 
-    $data['title'] = 'Trash';
-    $paginated = paginate_posts('post', 'deleted_at DESC', SQL_IS_DELETED);
-    $data['posts'] = $paginated['items'];
-    $data['pagination'] = $paginated['pagination'];
-
-    return $data;
+    return listing_data('Trash', 'deleted_at DESC', SQL_IS_DELETED);
 }
 
 /**
@@ -109,12 +111,7 @@ function respond_scheduled(): array
 {
     Security\require_login();
 
-    $data['title'] = 'Scheduled';
-    $paginated = paginate_posts('post', 'created ASC', SQL_IS_SCHEDULED, [\Lamb\now()]);
-    $data['posts'] = $paginated['items'];
-    $data['pagination'] = $paginated['pagination'];
-
-    return $data;
+    return listing_data('Scheduled', 'created ASC', SQL_IS_SCHEDULED, [\Lamb\now()]);
 }
 
 /**
@@ -162,21 +159,8 @@ function get_feed_data(): array
 {
     global $config;
 
-    $visible = \Lamb\visible_clause();
-    $clause = build_exclude_slugs_clause(Config\get_menu_slugs());
-    if ($clause !== null) {
-        $posts = R::find(
-            'post',
-            $clause['sql'] . ' AND' . $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
-            array_merge($clause['params'], $visible['params'])
-        );
-    } else {
-        $posts = R::find(
-            'post',
-            $visible['sql'] . 'ORDER BY updated DESC LIMIT 20',
-            $visible['params']
-        );
-    }
+    $public = public_posts_clause();
+    $posts  = R::find('post', $public['sql'] . ' ORDER BY updated DESC LIMIT 20', $public['params']);
 
     $first_post = reset($posts);
     return [

@@ -93,13 +93,33 @@ class FrontMatterTest extends TestCase
 
     public function testBuildMatterRendersMultipleKeysInOrder(): void
     {
+        // Values are emitted as YAML, so a value carrying a `:` is quoted.
         $this->assertSame(
-            "---\ntitle: Hello\nin-reply-to: https://example.com\n---\nBody",
+            "---\ntitle: Hello\nin-reply-to: 'https://example.com'\n---\nBody",
             build_matter(
                 ['title' => 'Hello', 'in-reply-to' => 'https://example.com'],
                 'Body'
             )
         );
+    }
+
+    public function testBuildMatterCannotInjectExtraKeysThroughAValue(): void
+    {
+        // A newline in a value used to open new front-matter lines, which
+        // apply_frontmatter() then applied to the bean.
+        $body = build_matter(['title' => "Harmless\nid: 1\ndeleted: 1"], 'Body');
+        $matter = parse_matter($body);
+
+        $this->assertSame("Harmless\nid: 1\ndeleted: 1", $matter['title']);
+        $this->assertArrayNotHasKey('id', $matter);
+        $this->assertArrayNotHasKey('deleted', $matter);
+    }
+
+    public function testBuildMatterKeepsATitleContainingAColon(): void
+    {
+        $body = build_matter(['title' => 'Rust: a first look'], 'Body');
+
+        $this->assertSame('Rust: a first look', parse_matter($body)['title']);
     }
 
     // set_matter — insert into existing fence
