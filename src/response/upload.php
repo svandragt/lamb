@@ -28,12 +28,7 @@ function respond_upload(array $_args): void
     }
     Security\require_login();
 
-    $files = [];
-    foreach ($_FILES[IMAGE_FILES] as $name => $items) {
-        foreach ($items as $k => $value) {
-            $files[$k][$name] = $_FILES[IMAGE_FILES][$name][$k];
-        }
-    }
+    $files = normalize_uploaded_files($_FILES[IMAGE_FILES]);
 
     $out = '';
     foreach ($files as $f) {
@@ -74,6 +69,33 @@ function respond_upload(array $_args): void
 
     echo json_encode($out, JSON_THROW_ON_ERROR);
     die();
+}
+
+/**
+ * Turns PHP's attribute-major $_FILES entry into one array per uploaded file.
+ *
+ * PHP groups a multi-file field by attribute (`['name' => [...], 'tmp_name' => [...]]`);
+ * every caller wants it the other way round, one `['name' => …, 'tmp_name' => …, …]`
+ * per file. Extracted from respond_upload() so this reshaping — the part with all
+ * the index bookkeeping — is unit-testable, unlike the responder around it, which
+ * needs real $_FILES entries and dies on every exit path.
+ *
+ * A field posted without `[]` (attributes are scalars rather than arrays) yields
+ * the single file it describes.
+ *
+ * @param array<string, mixed> $field One $_FILES entry, e.g. $_FILES['imageFiles'].
+ * @return array<int, array<string, mixed>> One entry per uploaded file.
+ */
+function normalize_uploaded_files(array $field): array
+{
+    $files = [];
+    foreach ($field as $attribute => $values) {
+        foreach ((array) $values as $index => $value) {
+            $files[$index][$attribute] = $value;
+        }
+    }
+
+    return $files;
 }
 
 /**

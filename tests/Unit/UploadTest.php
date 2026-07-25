@@ -8,6 +8,7 @@ use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\convert_to_webp_from_bytes;
 use function Lamb\Response\get_upload_dir;
+use function Lamb\Response\normalize_uploaded_files;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
@@ -53,6 +54,50 @@ class UploadTest extends TestCase
             }
         }
         rmdir($path);
+    }
+
+    // normalize_uploaded_files
+
+    public function testNormalizeUploadedFilesGroupsPerFieldArraysIntoOneEntryPerFile(): void
+    {
+        // The shape PHP builds for name="imageFiles[]": one array per attribute.
+        $field = [
+            'name'     => ['a.png', 'b.jpg'],
+            'type'     => ['image/png', 'image/jpeg'],
+            'tmp_name' => ['/tmp/php111', '/tmp/php222'],
+            'error'    => [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE],
+            'size'     => [123, 456],
+        ];
+
+        $files = normalize_uploaded_files($field);
+
+        $this->assertCount(2, $files);
+        $this->assertSame('a.png', $files[0]['name']);
+        $this->assertSame('/tmp/php111', $files[0]['tmp_name']);
+        $this->assertSame(UPLOAD_ERR_OK, $files[0]['error']);
+        $this->assertSame('b.jpg', $files[1]['name']);
+        $this->assertSame(UPLOAD_ERR_NO_FILE, $files[1]['error']);
+    }
+
+    public function testNormalizeUploadedFilesReturnsEmptyForAnEmptyField(): void
+    {
+        $this->assertSame([], normalize_uploaded_files([]));
+    }
+
+    public function testNormalizeUploadedFilesHandlesASingleNonArrayUpload(): void
+    {
+        // The shape PHP builds for a plain name="imageFiles" (no brackets).
+        $field = [
+            'name'     => 'only.png',
+            'tmp_name' => '/tmp/php333',
+            'error'    => UPLOAD_ERR_OK,
+        ];
+
+        $files = normalize_uploaded_files($field);
+
+        $this->assertCount(1, $files);
+        $this->assertSame('only.png', $files[0]['name']);
+        $this->assertSame('/tmp/php333', $files[0]['tmp_name']);
     }
 
     // get_upload_dir
