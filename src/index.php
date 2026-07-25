@@ -36,7 +36,11 @@ define('ROOT_URL', $root_url);
 // reason) keeps it to a safe filename charset, closing both a path-traversal
 // primitive and a site-wide stored-XSS surface a stray HTML-breaking
 // character in `theme = ...` would otherwise open up.
-define("THEME", Theme\sanitize_filename((string) $config['theme']));
+// `?? 'base'` is not the old runtime fallback returning: ensure_explicit_theme()
+// still guarantees a `theme` line exists. It covers the one case that line
+// cannot be trusted — a `[theme]` section header, which normalize_config()
+// drops because an array cannot name a theme directory.
+define("THEME", Theme\sanitize_filename((string) ($config['theme'] ?? 'base')));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 

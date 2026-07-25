@@ -330,6 +330,13 @@ function respond_settings(): array
         if ($validation['valid']) {
             Config\save_ini_text($submitted_ini);
             $_SESSION['flash'][] = "Settings saved successfully.";
+            // Syntactically valid INI can still hold a setting in the wrong
+            // shape — a `[site_title]` section, a `feeds = <url>` line. Those
+            // are ignored on read so they cannot break the site; say so here,
+            // or the author is left with a setting that saved and did nothing.
+            foreach (Config\shape_warnings($submitted_ini) as $warning) {
+                $_SESSION['flash'][] = $warning;
+            }
             redirect_uri('/settings');
         } else {
             $_SESSION['flash'][] = "Invalid INI syntax. Your changes were not saved.";

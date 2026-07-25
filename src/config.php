@@ -157,7 +157,13 @@ function ensure_explicit_theme(string $ini_text, string $default_theme = 'base')
         return "theme = {$default_theme}\n\n" . $ini_text;
     }
 
-    $current = trim((string) $parsed['theme']);
+    // A `[theme]` header rather than a `theme = ...` line parses to an array;
+    // casting that to a string warns and yields the literal "Array", which
+    // looked like a real theme name and stopped the migration here. Treat any
+    // non-scalar as unusable — there is no `theme =` line for the rewrite below
+    // to find, so the text is returned unchanged and normalize_config() drops
+    // the key, leaving index.php to fall back to the base theme.
+    $current = is_scalar($parsed['theme']) ? trim((string) $parsed['theme']) : '';
     if ($current === '' || $current === 'default') {
         return (string) preg_replace(
             '/^(\h*theme\h*=).*$/mi',
@@ -194,8 +200,8 @@ function load(): array
  */
 function compose_config(string $stored_ini, string $default_ini): array
 {
-    $config = parse_ini_safe($stored_ini);
     $defaults = parse_ini_safe($default_ini);
+    $config = normalize_config(parse_ini_safe($stored_ini), $defaults);
 
     // Theme is intentionally not defaulted here. An install without an explicit
     // theme is migrated per-install on read (see ensure_explicit_theme /
@@ -212,6 +218,126 @@ function compose_config(string $stored_ini, string $default_ini): array
     ];
 
     return array_merge($fallback, $defaults, $config);
+}
+
+/**
+ * The config keys written as `[section]` blocks of `label = value` entries.
+ *
+ * Everything else is a single-value setting. This is the shape schema
+ * normalize_config() and shape_warnings() work from. It is spelled out rather
+ * than inferred from the seeded defaults because the defaults keep the
+ * personal-identity and opt-in settings (`author_name`, `site_description`,
+ * `404_fallback`, …) commented out, so they are absent from the parsed
+ * defaults and inference could not tell they are scalars.
+ */
+const CONFIG_SECTIONS = [
+    'menu_items',
+    'footer_items',
+    'feeds',
+    'preconnect',
+    'me',
+    'redirections',
+    'syndicate_to',
+];
+
+/**
+ * Returns true when the named config key holds a section rather than a value.
+ *
+ * The seeded defaults are consulted as well as CONFIG_SECTIONS, so a section
+ * added to get_default_ini_text() is classified correctly even if this list is
+ * not updated with it.
+ *
+ * @param string $key The config key.
+ * @param array<string, mixed> $defaults The parsed seeded defaults.
+ * @return bool
+ */
+function is_config_section(string $key, array $defaults): bool
+{
+    return in_array($key, CONFIG_SECTIONS, true) || is_array($defaults[$key] ?? null);
+}
+
+/**
+ * Coerces the parsed INI into the shapes its readers assume.
+ *
+ * `parse_ini_string()` is called with sections enabled, so the author picks
+ * each key's PHP type by how they write it, and the two spellings are only one
+ * bracket apart:
+ *
+ *   [site_title]        a scalar setting arrives as an array
+ *   feeds = <url>       a section arrives as a string
+ *   Home[] = /          a section entry arrives as a nested array
+ *
+ * None of the ~50 consumers expect the other shape. Most of them fatal on it —
+ * `escape()`, `wrap_title()` and `str_starts_with()` all take a `string`, so a
+ * `[site_title]` header 500s every HTML page, including `/settings`, which is
+ * the page the author would use to undo it. The quieter cases are worse: a
+ * wrongly-shaped `feeds_draft` made `filter_var()` return false and silently
+ * published third-party feed items that should have been held for review, and a
+ * wrongly-shaped `posts_per_page` cast to 1.
+ *
+ * Rather than guard 50 call sites, normalise once here, on the way out of the
+ * parser. The seeded defaults declare each documented key's shape, so they are
+ * also the schema: a key the defaults hold as an array is a section, anything
+ * else is a scalar setting. A value of the wrong shape is dropped, which in
+ * compose_config() means the seeded default applies — the same
+ * fall-back-to-something-renderable stance parse_ini_safe() takes for INI that
+ * does not parse at all. Keys the defaults do not mention (the author's own)
+ * keep their value when scalar and are filtered to scalars when not.
+ *
+ * @param array<string, mixed> $config   The parsed stored config.
+ * @param array<string, mixed> $defaults The parsed seeded defaults, used as the shape schema.
+ * @return array<string, mixed> The config with every value in its expected shape.
+ */
+function normalize_config(array $config, array $defaults): array
+{
+    $normalized = [];
+
+    foreach ($config as $key => $value) {
+        if (is_config_section((string) $key, $defaults)) {
+            $normalized[$key] = normalize_config_section($value);
+            continue;
+        }
+
+        if (is_array($value)) {
+            // A single-value setting written as a section, or a section the
+            // author invented that nothing reads. Neither has a meaning to any
+            // consumer, so drop it and let the default stand.
+            continue;
+        }
+
+        $normalized[$key] = (string) $value;
+    }
+
+    return $normalized;
+}
+
+/**
+ * Reduces a config section to the `label => string` map its readers iterate.
+ *
+ * A section is only ever consumed as flat label/value pairs — menu links, feed
+ * URLs, redirect targets, rel="me" links. A repeated key (`Home[] = /`) nests
+ * an array under the label, which then reaches `str_starts_with()` or
+ * `escape()` as an array and throws; there is no sensible single value to
+ * recover from it, so the entry is dropped and its siblings still render.
+ *
+ * @param mixed $section The raw parsed section value.
+ * @return array<string, string> The section as flat label/value pairs.
+ */
+function normalize_config_section(mixed $section): array
+{
+    if (!is_array($section)) {
+        return [];
+    }
+
+    $normalized = [];
+    foreach ($section as $label => $value) {
+        if (!is_scalar($value)) {
+            continue;
+        }
+        $normalized[(string) $label] = (string) $value;
+    }
+
+    return $normalized;
 }
 
 /**
@@ -372,6 +498,57 @@ function validate_ini(string $ini_text): array
     } finally {
         restore_error_handler();
     }
+}
+
+/**
+ * Describes the settings normalize_config() will ignore, in the author's terms.
+ *
+ * The normalisation is deliberately quiet at render time — a wrongly-shaped
+ * value falls back to its default rather than taking the site down. But quiet
+ * at *save* time would mean typing a setting, being told "Settings saved
+ * successfully", and watching it have no effect with nothing to explain why.
+ * This is the "communicate failure" half: the settings handler flashes these
+ * alongside the success message.
+ *
+ * Only shape is reported. Whether a value is a usable timezone, URL or theme
+ * name is each reader's business and each already has its own fallback.
+ *
+ * @param string $ini_text The raw INI text as the author submitted it.
+ * @return list<string> Human-readable warnings, empty when every value fits.
+ */
+function shape_warnings(string $ini_text): array
+{
+    $defaults = parse_ini_safe(get_default_ini_text());
+    $warnings = [];
+
+    foreach (parse_ini_safe($ini_text) as $key => $value) {
+        $expects_section = is_config_section((string) $key, $defaults);
+
+        if ($expects_section && !is_array($value)) {
+            $warnings[] = "`{$key}` is a list of entries: write it as a `[{$key}]` section. "
+                . 'The single value was ignored.';
+            continue;
+        }
+
+        if (!$expects_section && is_array($value)) {
+            $warnings[] = "`{$key}` takes one value: write it as `{$key} = ...`, not a "
+                . "`[{$key}]` section. The section was ignored.";
+            continue;
+        }
+
+        if (!is_array($value)) {
+            continue;
+        }
+
+        foreach ($value as $label => $entry) {
+            if (!is_scalar($entry)) {
+                $warnings[] = "`{$label}` appears more than once in `[{$key}]`, "
+                    . 'which makes it a list. The entry was ignored.';
+            }
+        }
+    }
+
+    return $warnings;
 }
 
 /**
