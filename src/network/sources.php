@@ -2,7 +2,6 @@
 
 namespace Lamb\Network;
 
-use RedBeanPHP\R;
 use SimplePie\File as SimplePieFile;
 use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
@@ -122,9 +121,7 @@ function init_simplepie_feed(string $url): SimplePie
  */
 function record_feed_crawl(string $name, string $url, SimplePie $feed): array
 {
-    $status = feed_status_bean($name, $url);
-    $now    = (int)date('U');
-    $status->last_attempt = $now;
+    [$status, $now] = begin_crawl($name, $url);
 
     $error = $feed->error();
     if (is_array($error)) {
@@ -132,11 +129,7 @@ function record_feed_crawl(string $name, string $url, SimplePie $feed): array
     }
 
     if (!$feed->data || $error) {
-        $message = (string)($error ?: 'Feed fetch failed: no data returned.');
-        $status->last_error    = $now;
-        $status->error_message = $message;
-        R::store($status);
-        return ['ok' => false, 'items' => 0, 'error' => $message];
+        return record_crawl_failure($status, $now, (string)($error ?: 'Feed fetch failed: no data returned.'));
     }
 
     $watermark = (int)$status->last_success;
@@ -148,10 +141,5 @@ function record_feed_crawl(string $name, string $url, SimplePie $feed): array
         }
     }
 
-    $status->last_success  = $now;
-    $status->item_count    = $items;
-    $status->error_message = '';
-    R::store($status);
-
-    return ['ok' => true, 'items' => $items, 'error' => null];
+    return record_crawl_success($status, $now, $items);
 }
