@@ -144,8 +144,8 @@ function date_created(OODBBean $bean): string
 
     return sprintf(
         '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
-        ltrim($slug, '/'),
-        $bean->created,
+        escape(ltrim($slug, '/')),
+        escape((string) $bean->created),
         $human_created
     );
 }
@@ -319,7 +319,14 @@ function title_link(OODBBean $bean): string
     if (empty($bean->title)) {
         return '';
     }
-    return sprintf('<a class="p-name title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
+    // The permalink carries the slug, which is stored close to verbatim
+    // (sanitize_explicit_slug() only strips leading slashes), so escape it like
+    // any other value going into an attribute.
+    return sprintf(
+        '<a class="p-name title-link" href="%s">%s</a>',
+        escape(permalink($bean)),
+        escape($bean->title)
+    );
 }
 
 /**
