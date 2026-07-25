@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\Bootstrap\ensure_post_columns;
 use function Lamb\Response\count_drafts;
 use function Lamb\Response\count_trash;
+use function Lamb\Response\listing_data;
 use function Lamb\Response\respond_404;
 use function Lamb\Response\respond_drafts;
 use function Lamb\Response\respond_home;
@@ -19,6 +20,9 @@ use function Lamb\Response\respond_tag;
 use function Lamb\Response\respond_trash;
 use function Lamb\Response\restore_post;
 use function Lamb\Response\soft_delete_post;
+
+use const Lamb\SQL_IS_DRAFT;
+use const Lamb\SQL_IS_SCHEDULED;
 
 class ResponseHandlersTest extends TestCase
 {
@@ -637,6 +641,43 @@ class ResponseHandlersTest extends TestCase
         $ids = array_map(fn($p) => $p->id, $result['posts']);
         $this->assertContains($deleted->id, $ids);
         $this->assertNotContains($live->id, $ids);
+    }
+
+    // listing_data
+
+    public function testListingDataReturnsTitlePostsAndPagination(): void
+    {
+        $post = R::dispense('post');
+        $post->body    = 'A draft';
+        $post->draft   = 1;
+        $post->created = date('Y-m-d H:i:s');
+        $post->updated = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $data = listing_data('Drafts', 'created DESC', SQL_IS_DRAFT);
+
+        $this->assertSame('Drafts', $data['title']);
+        $this->assertSame([$post->id], array_values(array_map(fn($p) => $p->id, $data['posts'])));
+        $this->assertSame(1, $data['pagination']['total_posts']);
+    }
+
+    public function testListingDataBindsSuppliedParameters(): void
+    {
+        $future = R::dispense('post');
+        $future->body    = 'Scheduled';
+        $future->created = date('Y-m-d H:i:s', time() + 3600);
+        $future->updated = date('Y-m-d H:i:s');
+        R::store($future);
+
+        $past = R::dispense('post');
+        $past->body    = 'Published';
+        $past->created = date('Y-m-d H:i:s', time() - 3600);
+        $past->updated = date('Y-m-d H:i:s');
+        R::store($past);
+
+        $data = listing_data('Scheduled', 'created ASC', SQL_IS_SCHEDULED, [\Lamb\now()]);
+
+        $this->assertSame([$future->id], array_values(array_map(fn($p) => $p->id, $data['posts'])));
     }
 
     // count_drafts / count_trash
