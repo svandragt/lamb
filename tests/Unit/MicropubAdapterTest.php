@@ -1282,6 +1282,74 @@ class MicropubAdapterTest extends TestCase
         $this->assertEquals(1, $updated->deleted, 'the post must still be deleted');
     }
 
+    // --- scope gating across the callbacks ---
+
+    /**
+     * Stores a post and returns an adapter whose token carries only 'read' —
+     * a real scope, but never the one a scope-gated callback asks for.
+     *
+     * @return array{0: LambMicropubAdapter, 1: string} The adapter and the post URL.
+     */
+    private function readOnlyTokenFor(string $body, bool $deleted = false): array
+    {
+        $bean = R::dispense('post');
+        $bean->body    = $body;
+        $bean->slug    = '';
+        $bean->deleted = $deleted ? 1 : null;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['read']];
+
+        return [$adapter, ROOT_URL . '/status/' . $bean->id];
+    }
+
+    private function assertChallengeNamesScope(mixed $result, string $scope): void
+    {
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $this->assertStringContainsString(
+            'scope="' . $scope . '"',
+            $result->getHeaderLine('www-authenticate')
+        );
+    }
+
+    public function testDeleteChallengeNamesTheDeleteScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not deletable by a read token');
+        $this->assertChallengeNamesScope($adapter->deleteCallback($url), 'delete');
+    }
+
+    public function testUndeleteChallengeNamesTheDeleteScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not restorable by a read token', deleted: true);
+        $this->assertChallengeNamesScope($adapter->undeleteCallback($url), 'delete');
+    }
+
+    public function testUpdateChallengeNamesTheUpdateScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not editable by a read token');
+        $result = $adapter->updateCallback($url, ['replace' => ['content' => ['nope']]]);
+        $this->assertChallengeNamesScope($result, 'update');
+    }
+
+    public function testScopeGatedCallbackAllowsAnUnauthenticatedCall(): void
+    {
+        // No token at all (the logged-in web paths): the scope gate must not
+        // fire, otherwise every non-Micropub caller would 403.
+        $bean = R::dispense('post');
+        $bean->body    = 'Deletable without a token';
+        $bean->slug    = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id));
+    }
+
     // --- beanToMf2Properties (via sourceQueryCallback) ---
 
     public function testSourceQueryReturnsNamePropertyForTitledPost(): void

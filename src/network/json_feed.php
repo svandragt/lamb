@@ -2,8 +2,6 @@
 
 namespace Lamb\Network;
 
-use RedBeanPHP\R;
-
 use function Lamb\Http\fetch_guarded;
 
 // FEED_FETCH_TIMEOUT is defined in constants.php
@@ -62,9 +60,7 @@ function parse_json_feed(string $json): ?array
  */
 function record_json_feed_crawl(string $name, string $url): array
 {
-    $status = feed_status_bean($name, $url);
-    $now    = (int) date('U');
-    $status->last_attempt = $now;
+    [$status, $now] = begin_crawl($name, $url);
 
     // A configured feed URL is admin-trusted, but nothing pins where it (or a
     // redirect from it) actually points — fetch_guarded() re-checks the
@@ -76,13 +72,9 @@ function record_json_feed_crawl(string $name, string $url): array
     $feed     = $response === null ? null : parse_json_feed($response['body']);
 
     if ($feed === null) {
-        $message = $response === null
+        return record_crawl_failure($status, $now, $response === null
             ? 'Feed fetch failed: no data returned.'
-            : 'Not a valid JSON Feed (missing jsonfeed.org version).';
-        $status->last_error    = $now;
-        $status->error_message = $message;
-        R::store($status);
-        return ['ok' => false, 'items' => 0, 'error' => $message];
+            : 'Not a valid JSON Feed (missing jsonfeed.org version).');
     }
 
     $watermark = (int) $status->last_success;
@@ -93,12 +85,7 @@ function record_json_feed_crawl(string $name, string $url): array
         }
     }
 
-    $status->last_success  = $now;
-    $status->item_count    = $items;
-    $status->error_message = '';
-    R::store($status);
-
-    return ['ok' => true, 'items' => $items, 'error' => null];
+    return record_crawl_success($status, $now, $items);
 }
 
 /**
