@@ -15,6 +15,7 @@ use function Lamb\Network\feed_fetch_due;
 use function Lamb\Network\get_structured_content;
 use function Lamb\Network\purge_deleted_posts;
 use function Lamb\Network\webmention_line;
+use function Lamb\Post\parse_matter;
 
 class NetworkTest extends TestCase
 {
@@ -83,7 +84,9 @@ class NetworkTest extends TestCase
         $item = $this->makeItem('My Post Title', 'Some content', 'https://example.com');
         $result = get_structured_content($item, 'Blog');
         $this->assertStringContainsString('---', $result);
-        $this->assertStringContainsString('title: My Post Title', $result);
+        // Assert the parsed title rather than the literal line: the block is
+        // rendered with Yaml::dump(), so the scalar may legitimately be quoted.
+        $this->assertSame('My Post Title', parse_matter($result)['title']);
     }
 
     public function testGetStructuredContentWithoutTitleHasNoFrontMatter(): void
@@ -101,11 +104,44 @@ class NetworkTest extends TestCase
         $this->assertStringContainsString('Originally written on', $result);
     }
 
-    public function testGetStructuredContentEscapesTitleSlashes(): void
+    public function testGetStructuredContentRoundTripsAnApostropheInTheTitle(): void
     {
+        // An apostrophe is the character YAML quoting exists for. The title has
+        // to come back out exactly as the feed sent it — the previous
+        // addslashes() left the backslash in the stored title.
         $item = $this->makeItem("It's a test", 'Content', 'https://example.com');
         $result = get_structured_content($item, 'Blog');
-        $this->assertStringContainsString("title: It\\'s a test", $result);
+        $this->assertSame("It's a test", parse_matter($result)['title']);
+    }
+
+    /**
+     * A remote feed must not be able to pick the YAML *type* of its own title.
+     *
+     * @dataProvider typedFeedTitleProvider
+     */
+    public function testGetStructuredContentKeepsATypedTitleAsText(string $title): void
+    {
+        $item = $this->makeItem($title, 'Content', 'https://example.com');
+
+        // Before the block was dumped rather than interpolated, `[a, b]` parsed
+        // as a list and `2024-01-02` as a date object — neither a string — and
+        // the ingest run died on the first such item.
+        $this->assertSame($title, parse_matter(get_structured_content($item, 'Blog'))['title']);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function typedFeedTitleProvider(): array
+    {
+        return [
+            'list'    => ['[a, b]'],
+            'map'     => ['{a: b}'],
+            'date'    => ['2024-01-02'],
+            'boolean' => ['true'],
+            'number'  => ['42'],
+            'null'    => ['~'],
+        ];
     }
 
     public function testGetStructuredContentReturnsString(): void
@@ -123,8 +159,11 @@ class NetworkTest extends TestCase
         $result = get_structured_content($item, 'Blog');
         // The injected "slug:" must not appear on its own front-matter line.
         $this->assertStringNotContainsString("\nslug:", $result);
-        // And the title must collapse to a single line.
-        $this->assertStringContainsString('title: Innocent slug: /evil', $result);
+        // And the whole thing must come back as one title, with the slug still
+        // derived from it rather than dictated by the feed.
+        $matter = parse_matter($result);
+        $this->assertSame('Innocent slug: /evil', $matter['title']);
+        $this->assertNotSame('/evil', $matter['slug']);
     }
 
     public function testGetStructuredContentTitleCannotCloseFrontMatterEarly(): void

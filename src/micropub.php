@@ -15,6 +15,7 @@ use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
+use function Lamb\normalize_datetime;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
@@ -22,6 +23,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
+use function Lamb\Post\matter_string;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\split_frontmatter;
@@ -352,9 +354,14 @@ class LambMicropubAdapter extends MicropubAdapter
             $bean->transformed = $this->sanitizeHtml($content);
         }
 
-        $published = $props['published'][0] ?? null;
-        if ($published) {
-            $bean->created = date('Y-m-d H:i:s', strtotime($published));
+        // normalize_datetime() rather than strtotime(): it accepts the same
+        // shapes front matter does and returns null instead of false, so a
+        // non-string `published` no longer TypeErrors and an unparseable one no
+        // longer silently backdates the post to 1970 (strtotime() returns false,
+        // which date() reads as the epoch).
+        $published = normalize_datetime($props['published'][0] ?? null);
+        if ($published !== null) {
+            $bean->created = $published;
         }
 
         $postStatus = $props['post-status'][0] ?? null;
@@ -582,9 +589,13 @@ class LambMicropubAdapter extends MicropubAdapter
     {
         $currentBody  = $bean->body ?? '';
         $matter       = parse_matter($currentBody);
-        $title        = $matter['title'] ?? null;
-        $replyTo      = $matter['in-reply-to'] ?? null;
-        $syndicatedTo = $matter['syndicated-to'] ?? null;
+        // matter_string(), not a bare read: parse_matter() normalises these
+        // keys, but the ?string parameters below turn any survivor into a fatal
+        // TypeError, and an update is the one Micropub call that re-reads front
+        // matter the author wrote by hand.
+        $title        = matter_string($matter['title'] ?? null);
+        $replyTo      = matter_string($matter['in-reply-to'] ?? null);
+        $syndicatedTo = matter_string($matter['syndicated-to'] ?? null);
 
         $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
@@ -704,8 +715,13 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildBody(array $props, string $content): string
     {
-        $title = $props['name'][0] ?? null;
-        $replyTo = $props['in-reply-to'][0] ?? null;
+        // Microformats properties are arrays of values, and a value is not
+        // necessarily a string: `in-reply-to` is legitimately an embedded
+        // h-cite object, and a client is free to send a nested array for
+        // `name`. Both reached the ?string parameters of assembleFrontMatter()
+        // as arrays and 500ed the create.
+        $title = matter_string($props['name'][0] ?? null);
+        $replyTo = matter_string($props['in-reply-to'][0] ?? null);
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -722,7 +738,13 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . "\n\n" . $extra;
         }
 
-        $syndicateTo  = array_filter(array_values((array) ($props['mp-syndicate-to'] ?? [])));
+        // Filter to scalars before imploding: a nested array here produced an
+        // "Array to string conversion" warning and stored the literal "Array"
+        // as the syndication target.
+        $syndicateTo  = array_filter(
+            array_map(matter_string(...), array_values((array) ($props['mp-syndicate-to'] ?? []))),
+            fn(?string $uid) => $uid !== null && $uid !== ''
+        );
         $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
         return build_matter(
