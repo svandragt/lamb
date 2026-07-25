@@ -12,6 +12,8 @@ use function Lamb\Response\redirect_created;
 use function Lamb\Response\redirect_edited;
 use function Lamb\Response\respond_edit;
 use function Lamb\Response\safe_referer_path;
+use function Lamb\Response\store_slug_change_redirect;
+use function Lamb\Response\warn_if_manual_redirect;
 
 class ResponsePostsTest extends TestCase
 {
@@ -57,6 +59,84 @@ class ResponsePostsTest extends TestCase
         $_SESSION = [];
         $_POST    = [];
         $_GET     = [];
+    }
+
+    // -------------------------------------------------------------------------
+    // warn_if_manual_redirect
+    // -------------------------------------------------------------------------
+
+    public function testWarnIfManualRedirectFlashesWhenConfigStillRedirectsTheSlug(): void
+    {
+        global $config;
+        $config['redirections'] = ['about' => 'https://example.com/elsewhere'];
+
+        warn_if_manual_redirect('about');
+
+        $this->assertCount(1, $_SESSION['flash'] ?? []);
+        $this->assertStringContainsString('about', $_SESSION['flash'][0]);
+        $this->assertStringContainsString('[redirections]', $_SESSION['flash'][0]);
+    }
+
+    public function testWarnIfManualRedirectStaysQuietForAnUnrelatedSlug(): void
+    {
+        global $config;
+        $config['redirections'] = ['about' => 'https://example.com/elsewhere'];
+
+        warn_if_manual_redirect('contact');
+
+        $this->assertSame([], $_SESSION['flash'] ?? []);
+    }
+
+    public function testWarnIfManualRedirectStaysQuietForAnEmptySlug(): void
+    {
+        global $config;
+        $config['redirections'] = ['' => 'https://example.com/elsewhere'];
+
+        warn_if_manual_redirect('');
+
+        $this->assertSame([], $_SESSION['flash'] ?? []);
+    }
+
+    // -------------------------------------------------------------------------
+    // store_slug_change_redirect
+    // -------------------------------------------------------------------------
+
+    public function testStoreSlugChangeRedirectPointsTheOldSlugAtTheNewOne(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+
+        store_slug_change_redirect('old-slug', 'new-slug');
+
+        $redirect = R::findOne('redirect', ' from_slug = ? ', ['old-slug']);
+        $this->assertNotNull($redirect);
+        $this->assertSame('/new-slug', $redirect->to_url);
+    }
+
+    public function testStoreSlugChangeRedirectDropsAnyRedirectAwayFromTheNewSlug(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+        // A stale redirect from an earlier rename would otherwise send visitors
+        // of the new slug straight back out again.
+        $stale = R::dispense('redirect');
+        $stale->from_slug = 'new-slug';
+        $stale->to_url    = '/somewhere-else';
+        R::store($stale);
+
+        store_slug_change_redirect('old-slug', 'new-slug');
+
+        $this->assertNull(R::findOne('redirect', ' from_slug = ? ', ['new-slug']));
+    }
+
+    public function testStoreSlugChangeRedirectSanitizesTheTarget(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+
+        store_slug_change_redirect('old-slug', '/evil.example.com/phish');
+
+        $redirect = R::findOne('redirect', ' from_slug = ? ', ['old-slug']);
+        $this->assertNotNull($redirect);
+        // Must stay a local path — never a protocol-relative "//host/..." target.
+        $this->assertStringStartsNotWith('//', $redirect->to_url);
     }
 
     // -------------------------------------------------------------------------
