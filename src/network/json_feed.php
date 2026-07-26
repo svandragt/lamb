@@ -51,8 +51,9 @@ function parse_json_feed(string $json): ?array
  * feedstatus bean — the JSON Feed counterpart of record_feed_crawl().
  *
  * Mirrors the SimplePie path: a failed fetch or a body that is not a JSON Feed
- * stamps the error without advancing the success watermark; on success, items
- * newer than the watermark are created/updated and the watermark advances.
+ * stamps the error without advancing the success watermark; on success, entries
+ * newer than the newest one this feed has offered before are created/updated and
+ * that ingestion watermark is raised.
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -77,15 +78,9 @@ function record_json_feed_crawl(string $name, string $url): array
             : 'Not a valid JSON Feed (missing jsonfeed.org version).');
     }
 
-    $watermark = (int) $status->last_success;
-    $items     = 0;
-    foreach ($feed['items'] as $item) {
-        if (ingest_item($item, $name, $watermark)) {
-            $items++;
-        }
-    }
+    [$items, $newest] = ingest_items($feed['items'], $name, $status);
 
-    return record_crawl_success($status, $now, $items);
+    return record_crawl_success($status, $now, $items, $newest);
 }
 
 /**

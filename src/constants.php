@@ -32,6 +32,10 @@ define('FEED_FETCH_TIMEOUT', 15);
 // an endless body into the worker's memory until it fatals.
 define('FEED_FETCH_MAX_BYTES', 5_000_000);
 define('MINUTE_IN_SECONDS', 60);
+// How often /_cron re-fetches an individual feed. Also caps how long SimplePie may
+// serve a feed from its own cache: a cache outliving this window would make every
+// other crawl read a stale copy of the feed while still counting as a success.
+define('FEED_FETCH_INTERVAL', 30 * MINUTE_IN_SECONDS);
 // Current post render-format version. Bump when `transformed` output changes
 // (e.g. new syntax highlighting); older posts are re-parsed on read by upgrade_posts().
 define('POST_VERSION', 3);
