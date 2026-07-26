@@ -8,6 +8,8 @@ use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\convert_to_webp_from_bytes;
 use function Lamb\Response\get_upload_dir;
+use function Lamb\Response\image_decoder_for_type;
+use function Lamb\Response\max_upload_pixels;
 use function Lamb\Response\normalize_uploaded_files;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
@@ -35,6 +37,7 @@ class UploadTest extends TestCase
     {
         // Clean up any directories created under tempRootDir
         $this->removeDirectory($this->tempRootDir);
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
     }
 
     private function removeDirectory(string $path): void
@@ -342,6 +345,47 @@ class UploadTest extends TestCase
         $this->assertFileDoesNotExist($dest);
     }
 
+    // image_decoder_for_type — this dispatch table is what lets convert_to_webp()
+    // decode straight from $src_path (GD's own file-reading decoders) instead of
+    // file_get_contents() + imagecreatefromstring(), so the encoded file is never
+    // also held as a second full PHP string alongside GD's decoded pixel buffer.
+    // A wrong or missing mapping here would silently reintroduce that double-buffering
+    // for the affected format.
+
+    public function testImageDecoderForTypeMapsPng(): void
+    {
+        $decoder = image_decoder_for_type(IMAGETYPE_PNG);
+        $src = $this->makePng(10, 10);
+
+        $this->assertNotNull($decoder);
+        $this->assertInstanceOf(\GdImage::class, $decoder($src));
+    }
+
+    public function testImageDecoderForTypeMapsJpeg(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_JPEG));
+    }
+
+    public function testImageDecoderForTypeMapsGif(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_GIF));
+    }
+
+    public function testImageDecoderForTypeMapsWebp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_WEBP));
+    }
+
+    public function testImageDecoderForTypeMapsBmp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_BMP));
+    }
+
+    public function testImageDecoderForTypeReturnsNullForUnmappedType(): void
+    {
+        $this->assertNull(image_decoder_for_type(IMAGETYPE_TIFF_II));
+    }
+
     public function testConvertRejectsDeclaredDimensionsOverPixelCap(): void
     {
         // Decompression-bomb guard: a PNG whose IHDR declares an enormous
@@ -366,6 +410,51 @@ class UploadTest extends TestCase
 
         $this->assertTrue(convert_to_webp_from_bytes((string) file_get_contents($src), $dest));
         $this->assertFileExists($dest);
+    }
+
+    // max_upload_pixels — LAMB_MAX_UPLOAD_PIXELS lets a self-hoster lower the
+    // pixel cap if conversions are getting OOM-killed on a memory-constrained host.
+
+    public function testMaxUploadPixelsDefaultsWhenEnvUnset(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsUsesValidEnvOverride(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=8000000');
+
+        $this->assertSame(8_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnNonNumericEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=lots');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnZeroOrNegativeEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=0');
+        $this->assertSame(40_000_000, max_upload_pixels());
+
+        putenv('LAMB_MAX_UPLOAD_PIXELS=-5');
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testConvertRejectsUnderLoweredEnvPixelCap(): void
+    {
+        // A 40x30 image (1,200px) is well within the 40MP default but exceeds
+        // a self-hoster's lowered cap.
+        putenv('LAMB_MAX_UPLOAD_PIXELS=1000');
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/out.webp';
+
+        $this->assertFalse(convert_to_webp($src, $dest));
+        $this->assertFileDoesNotExist($dest);
     }
 
     /**
