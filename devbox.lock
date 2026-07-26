@@ -209,14 +209,6 @@
         }
       }
     },
-    "path:/home/sander/dev/php/lamb/.devbox/virtenv/php/flake": {
-      "last_modified": "2026-06-21T12:25:34Z",
-      "resolved": "path:/home/sander/dev/php/lamb/.devbox/virtenv/php/flake?lastModified=1782044734&narHash=sha256-YK3rOLjOqftyZUcaIcer%2B%2BqWt1AgLW9PnR35inXweiU%3D"
-    },
-    "path:/home/sander/dev/php/lamb/.devbox/virtenv/php/flake#composer": {
-      "last_modified": "2026-06-21T12:25:34Z",
-      "resolved": "path:/home/sander/dev/php/lamb/.devbox/virtenv/php/flake?lastModified=1782044734&narHash=sha256-YK3rOLjOqftyZUcaIcer%2B%2BqWt1AgLW9PnR35inXweiU%3D#composer"
-    },
     "php82Extensions.xdebug@latest": {
       "last_modified": "2026-06-13T05:27:44Z",
       "resolved": "github:NixOS/nixpkgs/5a722a7155bfc9fbe657f28d26b71860d95324bc#php82Extensions.xdebug",
