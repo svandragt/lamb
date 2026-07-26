@@ -154,7 +154,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
-- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
+- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
 - `webmentionoutbox` — outbound webmention queue processed by `/_cron`; columns: `post_id`, `source`, `target`, `endpoint`, `status`, `attempts`, `created`, `processed_at`
@@ -424,6 +424,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
 - `respond_upload()` (`src/response/upload.php`) and `respond_checkbox()` (`src/response/posts.php`) call `Security\require_login()` but deliberately skip `require_csrf()` — both fire mid-composition/mid-edit, and consuming the single-use token there would break the subsequent form submit's own CSRF check. Their protection rests entirely on `LAMBSESSID`/`lamb_logged_in` being `SameSite=Strict` (a cross-site POST carries neither cookie, so no session, so `require_login()` redirects). That invariant is pinned by `testSessionCookieIsSameSiteStrict()` / `testGetCookieOptionsSameSiteIsStrict()` rather than assumed — see #536
+- Login brute-force throttle (#443): after `LOGIN_THROTTLE_MAX_FAILURES` failed `/login` attempts from one client address, further attempts are refused for `LOGIN_THROTTLE_WINDOW` with `429` + `Retry-After`, checked *before* `password_verify()` so a blocked client costs no bcrypt. The counter is a `login_fail_<hmac(ip)>` row in the `option` table (no session exists on `/login` — see #462), cleared on a successful login and lazily pruned on the failure write path. Refused attempts are not counted, so retrying can't extend a block. `client_ip()` reads `REMOTE_ADDR` only — `X-Forwarded-For` is attacker-controlled on a directly-exposed install and would hand out a fresh bucket per request
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
 - Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies

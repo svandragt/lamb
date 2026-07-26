@@ -9,6 +9,7 @@ use Lamb\Config;
 use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
+use RedBeanPHP\R;
 
 /**
  * Handles the /login route without starting a session for anonymous visitors.
@@ -54,9 +55,20 @@ function redirect_login(): array
     }
     require_login_csrf();
 
+    // Refuse a client that has already burned through its attempts, before
+    // bcrypt runs (issue #443). A refused attempt is not itself recorded, so
+    // retrying can't extend the block indefinitely.
+    $ip  = client_ip();
+    $now = time();
+    $retry_after = login_throttle_retry_after($ip, $now);
+    if ($retry_after > 0) {
+        return throttled_login_response($retry_after);
+    }
+
     $user_pass = $_POST['password'] ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();
+        record_login_failure($ip, $now);
         // Re-render the login page in place with the error: /login is sessionless
         // now, so there is no flash to carry the message across a redirect (#462).
         return login_page_data('Password is incorrect, please try again.');
@@ -68,6 +80,7 @@ function redirect_login(): array
     session_regenerate_id(true);
     set_login_marker();
     clear_login_csrf();
+    clear_login_failures($ip);
     $where = local_redirect_target(filter_input(INPUT_POST, 'redirect_to', FILTER_SANITIZE_URL) ?: null);
     redirect_uri($where);
 }
@@ -204,26 +217,224 @@ function clear_login_csrf(): void
 }
 
 /**
+ * Returns the client address for logging and throttling, or "unknown".
+ *
+ * Trust the value only behind a known proxy: REMOTE_ADDR is the immediate peer,
+ * so behind a reverse proxy it is the proxy's address rather than the real
+ * client. X-Forwarded-For is deliberately not consulted — it is attacker-
+ * controlled on a directly-exposed install, and honouring it would let one
+ * client mint a fresh throttle bucket per request.
+ *
+ * @return string
+ */
+function client_ip(): string
+{
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (!is_string($ip) || $ip === '') {
+        return 'unknown';
+    }
+    return $ip;
+}
+
+/**
  * Writes an audit line for a failed admin login attempt via error_log().
  *
  * The line carries a fixed "failed admin login" marker (easy to grep) and the
- * client IP from REMOTE_ADDR, falling back to "unknown" when it is absent. It
- * deliberately records no secret — never the submitted password. error_log()
- * respects the host's configured log destination (web server / PHP-FPM), so a
- * self-hoster needs no new dependency to capture brute-force attempts.
- *
- * Trust the IP only behind a known proxy: REMOTE_ADDR is the immediate peer, so
- * behind a reverse proxy it is the proxy's address rather than the real client.
+ * client IP. It deliberately records no secret — never the submitted password.
+ * error_log() respects the host's configured log destination (web server /
+ * PHP-FPM), so a self-hoster needs no new dependency to capture brute-force
+ * attempts.
  *
  * @return void
  */
 function log_failed_login(): void
 {
-    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
-    if (!is_string($ip) || $ip === '') {
-        $ip = 'unknown';
+    error_log(sprintf('failed admin login from %s', client_ip()));
+}
+
+/**
+ * Names the `option` row holding one client's failed-attempt counter.
+ *
+ * The address is hashed rather than stored: the counter is a throttle, not a
+ * visitor log, and a fixed-width key keeps the rows uniform. The per-install
+ * login hash is the HMAC key so the same address yields a different row on
+ * different installs.
+ *
+ * @param string $ip Client address from client_ip().
+ * @return string    Option name, prefixed so pruning can find these rows.
+ */
+function login_throttle_key(string $ip): string
+{
+    return LOGIN_THROTTLE_PREFIX . substr(hash_hmac('sha256', $ip, LOGIN_PASSWORD), 0, 32);
+}
+
+/**
+ * Serialises a throttle counter as "<count>:<expires>".
+ *
+ * @param int $count   Failures recorded in the current window.
+ * @param int $expires Unix timestamp at which the window (and any block) lapses.
+ * @return string
+ */
+function encode_throttle_state(int $count, int $expires): string
+{
+    return $count . ':' . $expires;
+}
+
+/**
+ * Parses a stored throttle counter, treating anything unrecognised as "no
+ * failures" — a corrupt row must fail open rather than lock the author out.
+ *
+ * @param mixed $raw Stored option value.
+ * @return array{count: int, expires: int}
+ */
+function decode_throttle_state(mixed $raw): array
+{
+    $empty = ['count' => 0, 'expires' => 0];
+    if (!is_string($raw) && !is_int($raw)) {
+        return $empty;
     }
-    error_log(sprintf('failed admin login from %s', $ip));
+    $parts = explode(':', (string) $raw);
+    if (count($parts) !== 2 || !ctype_digit($parts[0]) || !ctype_digit($parts[1])) {
+        return $empty;
+    }
+
+    return ['count' => (int) $parts[0], 'expires' => (int) $parts[1]];
+}
+
+/**
+ * Decides how long a client must wait, given its counter — the pure half of the
+ * throttle, so the policy is testable without a database.
+ *
+ * A window that has lapsed means the counter is stale: the client starts over
+ * with a clean slate rather than staying blocked.
+ *
+ * @param array{count: int, expires: int} $state Decoded counter.
+ * @param int                             $now   Current Unix timestamp.
+ * @return int Seconds to wait, or 0 when the attempt may proceed.
+ */
+function throttle_retry_after(array $state, int $now): int
+{
+    if ($state['expires'] <= $now || $state['count'] < LOGIN_THROTTLE_MAX_FAILURES) {
+        return 0;
+    }
+
+    return $state['expires'] - $now;
+}
+
+/**
+ * Reads a client's counter and returns how long it must wait (0 = go ahead).
+ *
+ * @param string $ip  Client address.
+ * @param int    $now Current Unix timestamp.
+ * @return int Seconds to wait.
+ */
+function login_throttle_retry_after(string $ip, int $now): int
+{
+    $bean = \Lamb\get_option(login_throttle_key($ip), '');
+
+    return throttle_retry_after(decode_throttle_state($bean->value), $now);
+}
+
+/**
+ * Records a failed attempt for a client, starting a fresh window when the
+ * previous one has lapsed, and prunes rows left behind by other clients.
+ *
+ * Pruning rides on the write path because that is the only thing that creates
+ * these rows: a burst of attempts from many addresses cleans up after itself
+ * once each window lapses, so the `option` table doesn't keep a permanent row
+ * per address that ever probed the login form.
+ *
+ * @param string $ip  Client address.
+ * @param int    $now Current Unix timestamp.
+ * @return void
+ */
+function record_login_failure(string $ip, int $now): void
+{
+    prune_login_throttle($now);
+
+    $bean  = \Lamb\get_option(login_throttle_key($ip), '');
+    $state = decode_throttle_state($bean->value);
+    $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
+
+    \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
+}
+
+/**
+ * Drops the client's counter after a successful login, so a session of typos
+ * costs nothing once the right password lands.
+ *
+ * @param string $ip Client address.
+ * @return void
+ */
+function clear_login_failures(string $ip): void
+{
+    $bean = R::findOne('option', ' name = ? ', [login_throttle_key($ip)]);
+    if ($bean !== null) {
+        R::trash($bean);
+    }
+}
+
+/**
+ * Deletes throttle rows whose window has lapsed.
+ *
+ * Bounded per call: a run only has to keep pace with the writes that create the
+ * rows, and an unbounded delete on a large table would make the login request
+ * that triggers it pay for every address that ever probed the site.
+ *
+ * @param int $now Current Unix timestamp.
+ * @return int Number of rows removed.
+ */
+function prune_login_throttle(int $now): int
+{
+    $rows = R::find('option', ' name LIKE ? LIMIT 200 ', [LOGIN_THROTTLE_PREFIX . '%']);
+
+    $pruned = 0;
+    foreach ($rows as $row) {
+        if (decode_throttle_state($row->value)['expires'] <= $now) {
+            R::trash($row);
+            $pruned++;
+        }
+    }
+
+    return $pruned;
+}
+
+/**
+ * Phrases the refusal for the login page: the author locked out by their own
+ * typos needs to know when to come back, not just that they were refused.
+ *
+ * @param int $seconds Seconds left on the block.
+ * @return string
+ */
+function throttle_message(int $seconds): string
+{
+    $minutes = max(1, (int) ceil($seconds / MINUTE_IN_SECONDS));
+
+    return sprintf(
+        'Too many failed attempts. Try again in %d %s.',
+        $minutes,
+        $minutes === 1 ? 'minute' : 'minutes'
+    );
+}
+
+/**
+ * Refuses a throttled login attempt: 429 with Retry-After, and the login page
+ * re-rendered in place with the wait spelled out.
+ *
+ * Deliberately not a sleep() — delaying the response would park a PHP-FPM
+ * worker for the duration, making the throttle a cheaper denial of service than
+ * the brute force it prevents.
+ *
+ * @param int $retryAfter Seconds left on the block.
+ * @return array<string, mixed>
+ * @throws RandomException
+ */
+function throttled_login_response(int $retryAfter): array
+{
+    header(($_SERVER['SERVER_PROTOCOL'] ?? 'HTTP/1.1') . ' 429 Too Many Requests');
+    header('Retry-After: ' . $retryAfter);
+
+    return login_page_data(throttle_message($retryAfter));
 }
 
 /**

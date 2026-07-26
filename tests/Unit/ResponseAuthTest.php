@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
 use function Lamb\Response\local_redirect_target;
 use function Lamb\Response\log_failed_login;
@@ -15,6 +16,14 @@ class ResponseAuthTest extends TestCase
 
     protected function setUp(): void
     {
+        // A failed login now writes a throttle counter to the `option` table
+        // (issue #443), so redirect_login() needs a database.
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        R::nuke();
+
         $_SESSION = [];
         $_POST    = [];
         $_COOKIE  = [];
@@ -144,6 +153,53 @@ class ResponseAuthTest extends TestCase
         $this->assertSame('Password is incorrect, please try again.', $result['login_error']);
         $this->assertArrayHasKey('login_csrf', $result);
         $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
+    }
+
+    /**
+     * Past the failure limit the same client is refused before password_verify()
+     * runs (issue #443): the page comes back with the wait spelled out rather
+     * than the generic wrong-password error, and no session is started.
+     */
+    public function testRedirectLoginRefusesOnceTheThrottleTrips(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.7', time());
+        }
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']         = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME] = $token;
+        $_POST['password']       = 'definitely-the-wrong-password-xyz';
+
+        $result = redirect_login();
+
+        $this->assertArrayHasKey('login_error', $result);
+        $this->assertStringContainsString('Too many failed attempts', $result['login_error']);
+        $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
+    }
+
+    /**
+     * A refused attempt must not extend its own block — otherwise a client that
+     * keeps retrying (a script, or a browser tab on refresh) could never get
+     * back in.
+     */
+    public function testRefusedAttemptDoesNotExtendTheBlock(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        $now = time();
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.7', $now);
+        }
+        $before = \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now);
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']         = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME] = $token;
+        $_POST['password']       = 'definitely-the-wrong-password-xyz';
+        redirect_login();
+
+        $this->assertSame($before, \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now));
     }
 
     // local_redirect_target — the post-login redirect must stay on this site
