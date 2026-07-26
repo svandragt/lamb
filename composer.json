@@ -11,6 +11,7 @@
   ],
   "require": {
     "php": ">=8.2",
+    "ext-curl": "*",
     "ext-gettext": "*",
     "ext-pdo_mysql": "*",
     "ext-simplexml": "*",

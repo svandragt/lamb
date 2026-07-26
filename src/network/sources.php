@@ -5,8 +5,8 @@ namespace Lamb\Network;
 use SimplePie\File as SimplePieFile;
 use SimplePie\SimplePie;
 
-use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\Http\resolve_validated_ip;
 
 // FEED_FETCH_TIMEOUT is defined in constants.php
 
@@ -24,7 +24,8 @@ function get_feeds(): array
 
 /**
  * SimplePie's remote-fetch class, hardened against SSRF: refuses to make a
- * request when the destination doesn't resolve to a public address.
+ * request when the destination doesn't resolve to a public address, and pins
+ * the curl connection to the exact address that was validated.
  *
  * A feed URL is admin-configured (trusted at add-time), but nothing pins its
  * *eventual* destination — if the feed host is later compromised, or simply
@@ -34,6 +35,15 @@ function get_feeds(): array
  * constructor), which — since PHP dispatches `$this->__construct()`
  * virtually — re-enters *this* subclass's override on every hop, so each
  * redirect target is checked, not just the initial URL.
+ *
+ * Checking the URL and then letting curl make its own, independent DNS
+ * lookup is itself a DNS-rebinding TOCTOU — the address curl connects to
+ * could differ from the one just validated. `CURLOPT_RESOLVE` closes that:
+ * it pins curl to a chosen address for a given host:port while still using
+ * the original hostname for the `Host:` header, SNI, and certificate
+ * verification. That only works through curl, so a request forced through
+ * `fsockopen` (which has no equivalent) is refused rather than left
+ * unpinned.
  */
 class SafeFile extends SimplePieFile
 {
@@ -49,13 +59,53 @@ class SafeFile extends SimplePieFile
         bool $force_fsockopen = false,
         array $curl_options = []
     ) {
-        if (!is_public_http_url($url)) {
+        $pinned = self::buildPinnedCurlOptions($url, $curl_options, $force_fsockopen);
+        if ($pinned === false) {
             $this->success = false;
             $this->error = 'Blocked: URL does not resolve to a public, routable address';
             return;
         }
 
-        parent::__construct($url, $timeout, $redirects, $headers, $useragent, $force_fsockopen, $curl_options);
+        parent::__construct($url, $timeout, $redirects, $headers, $useragent, false, $pinned);
+    }
+
+    /**
+     * Validates the URL's destination and, if safe, merges a `CURLOPT_RESOLVE`
+     * entry into `$curl_options` pinning the connection to it. Pure logic
+     * split out of the constructor so it can be unit-tested without making a
+     * real request (the constructor fetches immediately via SimplePie).
+     *
+     * @param array<int, mixed> $curl_options
+     * @return array<int, mixed>|false Merged curl options, or false when the
+     *                                  URL is unsafe or pinning isn't possible.
+     */
+    public static function buildPinnedCurlOptions(
+        string $url,
+        array $curl_options,
+        bool $force_fsockopen,
+        ?callable $resolver = null
+    ): array|false {
+        // fsockopen has no CURLOPT_RESOLVE equivalent, so a forced fsockopen
+        // request would re-resolve the host itself and reopen the TOCTOU.
+        if ($force_fsockopen || !is_valid_http_url($url)) {
+            return false;
+        }
+
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        $ip = resolve_validated_ip($host, $resolver);
+        if ($ip === false) {
+            return false;
+        }
+
+        $port = parse_url($url, PHP_URL_PORT)
+            ?? (strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80);
+
+        $curl_options[CURLOPT_RESOLVE] = array_merge(
+            $curl_options[CURLOPT_RESOLVE] ?? [],
+            ["$host:$port:$ip"]
+        );
+
+        return $curl_options;
     }
 }
 
