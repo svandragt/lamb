@@ -112,26 +112,6 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Override handleRequest to allow unauthenticated ?q=config discovery queries,
-     * and to accept bearer tokens sent in both the Authorization header and POST body
-     * (common in real-world clients like Quill and micro.blog for backward compatibility).
-     *
-     * @param \Psr\Http\Message\ServerRequestInterface $request
-     * @return \Psr\Http\Message\ResponseInterface
-     */
-    public function handleRequest(\Psr\Http\Message\ServerRequestInterface $request): \Psr\Http\Message\ResponseInterface
-    {
-        // q=config is a discovery endpoint; return it without requiring a token.
-        if (strtolower($request->getMethod()) === 'get' && ($request->getQueryParams()['q'] ?? '') === 'config') {
-            $this->request = $request;
-            $configResult = $this->configurationQueryCallback($request->getQueryParams());
-            return new Response(200, ['content-type' => 'application/json'], json_encode($configResult) ?: '');
-        }
-
-        return parent::handleRequest($request);
-    }
-
-    /**
      * Verify the bearer token by introspecting it against the configured token endpoint.
      *
      * @param string $token
