@@ -3,7 +3,6 @@
 namespace Lamb\Network;
 
 use SimplePie\File as SimplePieFile;
-use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
 use function Lamb\Http\is_public_http_url;
@@ -79,16 +78,18 @@ function ensure_feed_cache(string $dir): string|false
 }
 
 /**
- * Builds and initialises a SimplePie instance for a feed URL, wiring up the
- * shared cache directory (disabling caching when it is not writable) and the
- * per-fetch timeout that stops a slow or hostile feed stalling the cron run.
+ * Wires a SimplePie instance up for a feed URL: the SSRF-guarded fetch class, the
+ * shared cache directory (disabling caching when it is not writable), the cache
+ * lifetime, and the per-fetch timeout that stops a slow or hostile feed stalling
+ * the cron run. Split from init_simplepie_feed() so the wiring is testable without
+ * a network fetch.
  *
- * @param string $url The RSS/Atom feed URL.
- * @return SimplePie The initialised SimplePie instance.
+ * @param SimplePie $feed The instance to configure.
+ * @param string    $url  The RSS/Atom feed URL.
+ * @return void
  */
-function init_simplepie_feed(string $url): SimplePie
+function configure_simplepie_feed(SimplePie $feed, string $url): void
 {
-    $feed = new SimplePie();
     $feed->get_registry()->register(SimplePieFile::class, SafeFile::class, true);
     $cache_dir = ensure_feed_cache('../data/cache/simplepie');
     if ($cache_dir === false) {
@@ -97,9 +98,26 @@ function init_simplepie_feed(string $url): SimplePie
         /** @noinspection PhpDeprecationInspection */
         $feed->set_cache_location($cache_dir);
     }
+    // SimplePie keeps a feed for an hour by default, while /_cron re-fetches every
+    // half hour: every other crawl then read an up-to-an-hour-old copy of the feed
+    // and still recorded a success. Align the two so a crawl always revalidates
+    // (the cache stays useful — it is what carries the ETag/Last-Modified).
+    $feed->set_cache_duration(FEED_FETCH_INTERVAL);
     $feed->set_feed_url($url);
     // Cap each fetch so a slow or hostile feed URL cannot stall the cron run.
     $feed->set_timeout(FEED_FETCH_TIMEOUT);
+}
+
+/**
+ * Builds and initialises a SimplePie instance for a feed URL.
+ *
+ * @param string $url The RSS/Atom feed URL.
+ * @return SimplePie The initialised SimplePie instance.
+ */
+function init_simplepie_feed(string $url): SimplePie
+{
+    $feed = new SimplePie();
+    configure_simplepie_feed($feed, $url);
     $feed->init();
 
     return $feed;
@@ -110,9 +128,9 @@ function init_simplepie_feed(string $url): SimplePie
  *
  * A failed fetch (`!$feed->data` or a non-empty `$feed->error()`) does NOT advance the
  * success watermark — it only stamps `last_attempt` and records the error so the
- * Logs tab can surface it. On success, items newer than the watermark are created or
- * updated, the watermark advances, the item count is recorded and any prior error is
- * cleared.
+ * Logs tab can surface it. On success, entries newer than the newest one this feed
+ * has offered before are created or updated, that ingestion watermark is raised, the
+ * item count is recorded and any prior error is cleared.
  *
  * @param string    $name Feed name from config.
  * @param string    $url  Feed URL from config.
@@ -132,14 +150,7 @@ function record_feed_crawl(string $name, string $url, SimplePie $feed): array
         return record_crawl_failure($status, $now, (string)($error ?: 'Feed fetch failed: no data returned.'));
     }
 
-    $watermark = (int)$status->last_success;
-    $items     = 0;
-    /** @var SimplePieItem $item */
-    foreach ($feed->get_items() as $item) {
-        if (ingest_item($item, $name, $watermark)) {
-            $items++;
-        }
-    }
+    [$items, $newest] = ingest_items($feed->get_items(), $name, $status);
 
-    return record_crawl_success($status, $now, $items);
+    return record_crawl_success($status, $now, $items, $newest);
 }

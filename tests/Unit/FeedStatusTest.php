@@ -169,7 +169,7 @@ class FeedStatusTest extends TestCase
     {
         R::exec('DELETE FROM post');
         $status = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
-        $status->last_success = time() + 7200; // watermark in the future
+        $status->last_item_date = time() + 7200; // watermark in the future
         R::store($status);
 
         $items = [$this->makeItem('old', 'Old', time(), time())];
