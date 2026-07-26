@@ -6,7 +6,11 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
+use function Lamb\Response\convert_to_webp_from_bytes;
 use function Lamb\Response\get_upload_dir;
+use function Lamb\Response\image_decoder_for_type;
+use function Lamb\Response\max_upload_pixels;
+use function Lamb\Response\normalize_uploaded_files;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
@@ -33,6 +37,7 @@ class UploadTest extends TestCase
     {
         // Clean up any directories created under tempRootDir
         $this->removeDirectory($this->tempRootDir);
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
     }
 
     private function removeDirectory(string $path): void
@@ -52,6 +57,50 @@ class UploadTest extends TestCase
             }
         }
         rmdir($path);
+    }
+
+    // normalize_uploaded_files
+
+    public function testNormalizeUploadedFilesGroupsPerFieldArraysIntoOneEntryPerFile(): void
+    {
+        // The shape PHP builds for name="imageFiles[]": one array per attribute.
+        $field = [
+            'name'     => ['a.png', 'b.jpg'],
+            'type'     => ['image/png', 'image/jpeg'],
+            'tmp_name' => ['/tmp/php111', '/tmp/php222'],
+            'error'    => [UPLOAD_ERR_OK, UPLOAD_ERR_NO_FILE],
+            'size'     => [123, 456],
+        ];
+
+        $files = normalize_uploaded_files($field);
+
+        $this->assertCount(2, $files);
+        $this->assertSame('a.png', $files[0]['name']);
+        $this->assertSame('/tmp/php111', $files[0]['tmp_name']);
+        $this->assertSame(UPLOAD_ERR_OK, $files[0]['error']);
+        $this->assertSame('b.jpg', $files[1]['name']);
+        $this->assertSame(UPLOAD_ERR_NO_FILE, $files[1]['error']);
+    }
+
+    public function testNormalizeUploadedFilesReturnsEmptyForAnEmptyField(): void
+    {
+        $this->assertSame([], normalize_uploaded_files([]));
+    }
+
+    public function testNormalizeUploadedFilesHandlesASingleNonArrayUpload(): void
+    {
+        // The shape PHP builds for a plain name="imageFiles" (no brackets).
+        $field = [
+            'name'     => 'only.png',
+            'tmp_name' => '/tmp/php333',
+            'error'    => UPLOAD_ERR_OK,
+        ];
+
+        $files = normalize_uploaded_files($field);
+
+        $this->assertCount(1, $files);
+        $this->assertSame('only.png', $files[0]['name']);
+        $this->assertSame('/tmp/php333', $files[0]['tmp_name']);
     }
 
     // get_upload_dir
@@ -294,6 +343,136 @@ class UploadTest extends TestCase
 
         $this->assertFalse(convert_to_webp($src, $dest));
         $this->assertFileDoesNotExist($dest);
+    }
+
+    // image_decoder_for_type — this dispatch table is what lets convert_to_webp()
+    // decode straight from $src_path (GD's own file-reading decoders) instead of
+    // file_get_contents() + imagecreatefromstring(), so the encoded file is never
+    // also held as a second full PHP string alongside GD's decoded pixel buffer.
+    // A wrong or missing mapping here would silently reintroduce that double-buffering
+    // for the affected format.
+
+    public function testImageDecoderForTypeMapsPng(): void
+    {
+        $decoder = image_decoder_for_type(IMAGETYPE_PNG);
+        $src = $this->makePng(10, 10);
+
+        $this->assertNotNull($decoder);
+        $this->assertInstanceOf(\GdImage::class, $decoder($src));
+    }
+
+    public function testImageDecoderForTypeMapsJpeg(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_JPEG));
+    }
+
+    public function testImageDecoderForTypeMapsGif(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_GIF));
+    }
+
+    public function testImageDecoderForTypeMapsWebp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_WEBP));
+    }
+
+    public function testImageDecoderForTypeMapsBmp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_BMP));
+    }
+
+    public function testImageDecoderForTypeReturnsNullForUnmappedType(): void
+    {
+        $this->assertNull(image_decoder_for_type(IMAGETYPE_TIFF_II));
+    }
+
+    public function testConvertRejectsDeclaredDimensionsOverPixelCap(): void
+    {
+        // Decompression-bomb guard: a PNG whose IHDR declares an enormous
+        // width/height forces GD to allocate the full pixel buffer as soon as
+        // imagecreatefromstring() decodes it — before this app's own
+        // downscaling ever runs. A tiny file with a huge *declared* size (no
+        // real pixel data needed) must be rejected via the header-only
+        // getimagesizefromstring() check, without ever reaching that decode.
+        $bytes = $this->makeFakePngHeader(20000, 20000);
+        $dest = $this->tempRootDir . '/bomb.webp';
+
+        $this->assertFalse(convert_to_webp_from_bytes($bytes, $dest));
+        $this->assertFileDoesNotExist($dest);
+    }
+
+    public function testConvertAllowsDeclaredDimensionsWithinPixelCap(): void
+    {
+        // A real, fully-formed image at a below-cap size still converts —
+        // the guard only rejects the declared size, not real uploads.
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/ok.webp';
+
+        $this->assertTrue(convert_to_webp_from_bytes((string) file_get_contents($src), $dest));
+        $this->assertFileExists($dest);
+    }
+
+    // max_upload_pixels — LAMB_MAX_UPLOAD_PIXELS lets a self-hoster lower the
+    // pixel cap if conversions are getting OOM-killed on a memory-constrained host.
+
+    public function testMaxUploadPixelsDefaultsWhenEnvUnset(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsUsesValidEnvOverride(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=8000000');
+
+        $this->assertSame(8_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnNonNumericEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=lots');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnZeroOrNegativeEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=0');
+        $this->assertSame(40_000_000, max_upload_pixels());
+
+        putenv('LAMB_MAX_UPLOAD_PIXELS=-5');
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testConvertRejectsUnderLoweredEnvPixelCap(): void
+    {
+        // A 40x30 image (1,200px) is well within the 40MP default but exceeds
+        // a self-hoster's lowered cap.
+        putenv('LAMB_MAX_UPLOAD_PIXELS=1000');
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/out.webp';
+
+        $this->assertFalse(convert_to_webp($src, $dest));
+        $this->assertFileDoesNotExist($dest);
+    }
+
+    /**
+     * Builds a minimal well-formed PNG (correct signature, IHDR with valid
+     * CRC, IEND) declaring the given width/height — enough for
+     * getimagesizefromstring() to report those dimensions — with no real
+     * pixel data, so it never risks actually allocating a huge buffer even if
+     * the pixel-count guard under test were absent.
+     */
+    private function makeFakePngHeader(int $width, int $height): string
+    {
+        $signature = "\x89PNG\r\n\x1a\n";
+        // bit depth 8, color type 2 (truecolor), compression/filter/interlace 0.
+        $ihdrData = pack('NN', $width, $height) . pack('C5', 8, 2, 0, 0, 0);
+        $ihdrChunk = pack('N', strlen($ihdrData)) . 'IHDR' . $ihdrData . pack('N', crc32('IHDR' . $ihdrData));
+        $iendChunk = pack('N', 0) . 'IEND' . pack('N', crc32('IEND'));
+
+        return $signature . $ihdrChunk . $iendChunk;
     }
 
     // scaled_dimensions — downscale large uploads to a sane maximum edge

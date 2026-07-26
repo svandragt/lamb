@@ -105,6 +105,62 @@ function build_exclude_slugs_clause(array $slugs): ?array
 }
 
 /**
+ * The WHERE clause selecting posts that belong in a public listing: publicly
+ * visible (published, not trashed, not future-dated) and not pinned as a menu
+ * item — menu posts are pages reachable from the nav, so they are kept out of
+ * the chronological stream and the feeds.
+ *
+ * Owned in one place so the homepage and the feeds can't drift apart on what
+ * "public" means; both used to assemble the two clauses inline, in opposite
+ * orders.
+ *
+ * @return array{sql: string, params: array<int, mixed>}
+ */
+function public_posts_clause(): array
+{
+    $visible = \Lamb\visible_clause();
+    $sql     = $visible['sql'];
+    $params  = $visible['params'];
+
+    $exclude = build_exclude_slugs_clause(\Lamb\Config\get_menu_slugs());
+    if ($exclude !== null) {
+        $sql   .= ' AND ' . $exclude['sql'];
+        $params = array_merge($params, $exclude['params']);
+    }
+
+    return ['sql' => $sql, 'params' => $params];
+}
+
+/**
+ * Clamps a requested page against the available range and returns the row window.
+ *
+ * The one place the page arithmetic lives: both pagination paths (in-memory array
+ * and DB query) need the same clamp-then-offset, and build_pagination_meta() needs
+ * the same page count to derive prev/next from.
+ *
+ * A non-positive $per_page is treated as 1 rather than dividing by zero: it comes
+ * from `posts_per_page` in the INI config, which nothing validates, so `= 0` would
+ * otherwise fatal every listing page.
+ *
+ * @param int $total_posts Total number of matching posts.
+ * @param int $page        Requested page (1-based).
+ * @param int $per_page    Items per page.
+ * @return array{page: int, offset: int, total_pages: int}
+ */
+function pagination_window(int $total_posts, int $page, int $per_page): array
+{
+    $per_page    = max(1, $per_page);
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $page        = min($page, $total_pages);
+
+    return [
+        'page'        => $page,
+        'offset'      => ($page - 1) * $per_page,
+        'total_pages' => $total_pages,
+    ];
+}
+
+/**
  * Builds the pagination metadata array from pre-computed values.
  *
  * @param int $page         Current page number (1-based).
@@ -115,7 +171,7 @@ function build_exclude_slugs_clause(array $slugs): ?array
  */
 function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
 {
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $total_pages = pagination_window($total_posts, $page, $per_page)['total_pages'];
     return [
         'current'     => $page,
         'per_page'    => $per_page,
@@ -237,9 +293,7 @@ function upgrade_posts(array $posts): void
 function paginate_array(array $values, int $page, int $per_page): array
 {
     $total_posts = count($values);
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
-    $page   = min($page, $total_pages);
-    $offset = ($page - 1) * $per_page;
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
 
     return [
         'items'      => array_slice($values, $offset, $per_page),
@@ -262,9 +316,7 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
 {
     $total_posts = !empty($where_sql) ? R::count($bean_type, $where_sql, $params) : R::count($bean_type);
 
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
-    $page   = min($page, $total_pages);
-    $offset = ($page - 1) * $per_page;
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
 
     if (!empty($where_sql)) {
         // When params are provided, use R::find with param binding and append offset/limit
@@ -302,6 +354,9 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
         global $config;
         $per_page = (int)($config['posts_per_page'] ?? 10);
     }
+    // Clamped here as well as in pagination_window() so the page count, the row
+    // offset and the SQL LIMIT all agree on the same size (see that helper).
+    $per_page = max(1, $per_page);
 
     // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));

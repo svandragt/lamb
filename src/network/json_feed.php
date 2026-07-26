@@ -2,9 +2,7 @@
 
 namespace Lamb\Network;
 
-use RedBeanPHP\R;
-
-use function Lamb\Http\fetch;
+use function Lamb\Http\fetch_guarded;
 
 // FEED_FETCH_TIMEOUT is defined in constants.php
 
@@ -53,8 +51,9 @@ function parse_json_feed(string $json): ?array
  * feedstatus bean — the JSON Feed counterpart of record_feed_crawl().
  *
  * Mirrors the SimplePie path: a failed fetch or a body that is not a JSON Feed
- * stamps the error without advancing the success watermark; on success, items
- * newer than the watermark are created/updated and the watermark advances.
+ * stamps the error without advancing the success watermark; on success, entries
+ * newer than the newest one this feed has offered before are created/updated and
+ * that ingestion watermark is raised.
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -62,37 +61,26 @@ function parse_json_feed(string $json): ?array
  */
 function record_json_feed_crawl(string $name, string $url): array
 {
-    $status = feed_status_bean($name, $url);
-    $now    = (int) date('U');
-    $status->last_attempt = $now;
+    [$status, $now] = begin_crawl($name, $url);
 
-    $response = fetch($url, ['timeout' => FEED_FETCH_TIMEOUT]);
+    // A configured feed URL is admin-trusted, but nothing pins where it (or a
+    // redirect from it) actually points — fetch_guarded() re-checks the
+    // destination is a public, non-internal address on every hop.
+    $response = fetch_guarded($url, [
+        'timeout' => FEED_FETCH_TIMEOUT,
+        'max_bytes' => FEED_FETCH_MAX_BYTES,
+    ]);
     $feed     = $response === null ? null : parse_json_feed($response['body']);
 
     if ($feed === null) {
-        $message = $response === null
+        return record_crawl_failure($status, $now, $response === null
             ? 'Feed fetch failed: no data returned.'
-            : 'Not a valid JSON Feed (missing jsonfeed.org version).';
-        $status->last_error    = $now;
-        $status->error_message = $message;
-        R::store($status);
-        return ['ok' => false, 'items' => 0, 'error' => $message];
+            : 'Not a valid JSON Feed (missing jsonfeed.org version).');
     }
 
-    $watermark = (int) $status->last_success;
-    $items     = 0;
-    foreach ($feed['items'] as $item) {
-        if (ingest_item($item, $name, $watermark)) {
-            $items++;
-        }
-    }
+    [$items, $newest] = ingest_items($feed['items'], $name, $status);
 
-    $status->last_success  = $now;
-    $status->item_count    = $items;
-    $status->error_message = '';
-    R::store($status);
-
-    return ['ok' => true, 'items' => $items, 'error' => null];
+    return record_crawl_success($status, $now, $items, $newest);
 }
 
 /**

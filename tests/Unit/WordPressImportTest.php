@@ -8,6 +8,7 @@ use SimpleXMLElement;
 
 use function Lamb\Import\asset_dir_for_date;
 use function Lamb\Import\build_post_body;
+use function Lamb\Import\default_image_downloader;
 use function Lamb\Import\response_is_image;
 use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
@@ -941,5 +942,19 @@ XML;
         } finally {
             rmdir($dir);
         }
+    }
+
+    public function testDefaultImageDownloaderBlocksLoopbackDestination(): void
+    {
+        // Regression (SSRF): an image URL embedded in the WXR file being
+        // imported is just as attacker-influenced as a webmention source —
+        // a loopback/private/link-local destination must be rejected before
+        // any request is made, not just fetched and stored.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_wp_import_' . uniqid('', true));
+        }
+
+        $this->assertNull(default_image_downloader('http://127.0.0.1/evil.jpg', '2024/03'));
+        $this->assertNull(default_image_downloader('http://169.254.169.254/evil.png', '2024/03'));
     }
 }

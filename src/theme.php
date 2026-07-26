@@ -15,6 +15,7 @@ use RedBeanPHP\R;
 use RuntimeException;
 
 use function Lamb\get_tags;
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\Post\body_has_tag;
@@ -143,8 +144,8 @@ function date_created(OODBBean $bean): string
 
     return sprintf(
         '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
-        ltrim($slug, '/'),
-        $bean->created,
+        escape(ltrim($slug, '/')),
+        escape((string) $bean->created),
         $human_created
     );
 }
@@ -318,7 +319,14 @@ function title_link(OODBBean $bean): string
     if (empty($bean->title)) {
         return '';
     }
-    return sprintf('<a class="p-name title-link" href="%s">%s</a>', permalink($bean), escape($bean->title));
+    // The permalink carries the slug, which is stored close to verbatim
+    // (sanitize_explicit_slug() only strips leading slashes), so escape it like
+    // any other value going into an attribute.
+    return sprintf(
+        '<a class="p-name title-link" href="%s">%s</a>',
+        escape(permalink($bean)),
+        escape($bean->title)
+    );
 }
 
 /**
@@ -336,6 +344,15 @@ function link_source(OODBBean $bean): string
     $feeds = get_feeds();
 
     $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
+
+    // escape() only encodes HTML metacharacters, not URL schemes: a
+    // `javascript:`-scheme URL passes through untouched into the href
+    // attribute. source_url is attacker-influenced (any subscribed feed's
+    // item permalink), so require a genuine http(s) URL before linking it,
+    // matching the scheme allowlist Parsedown's safe mode applies elsewhere.
+    if (!is_valid_http_url($url)) {
+        return sprintf('Via %s', escape($bean->feed_name));
+    }
 
     return sprintf('Via <a href="%s" title="View %s">%s</a>', escape($url), escape($bean->feed_name), escape($bean->feed_name));
 }
@@ -356,7 +373,12 @@ function syndication_links(OODBBean $bean): string
     $targets = $config['syndicate_to'] ?? [];
     $links = [];
     foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
-        if ($uid === '') {
+        // Same reasoning as link_source() above: escape() encodes HTML
+        // metacharacters, not URL schemes, so a `javascript:` target passed
+        // straight into the href. syndicated_to is not author-only — a Micropub
+        // client holding just `create` scope sets it via mp-syndicate-to — so
+        // require a real http(s) URL before linking it.
+        if ($uid === '' || !is_valid_http_url($uid)) {
             continue;
         }
         $name = $targets[$uid] ?? (parse_url($uid, PHP_URL_HOST) ?: $uid);

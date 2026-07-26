@@ -502,6 +502,27 @@ reads it in — but **only under the `cli-server` SAPI** and **non-overriding** 
 env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
 this no-ops on a `--no-dev` install.
 
+### Claude Code on the web
+
+`.claude/hooks/session-start.sh` provisions the toolchain (composer, pnpm, `.env`,
+phpcs's `installed_paths`) at session start, so `composer lint`, `composer analyse`
+and `vendor/bin/codecept run` work without any manual setup. It exits immediately
+unless `CLAUDE_CODE_REMOTE=true`, so devbox, the devcontainer and Workshop keep
+their own setup paths.
+
+Two remote-only quirks it papers over:
+
+- **Composer scripts refuse to run as root.** The container is root, so every
+  `composer <script>` aborts ("Aborting as no plugin should be loaded…") while
+  `vendor/bin/*` still works. The hook exports `COMPOSER_ALLOW_SUPERUSER=1`.
+- **`api.github.com`/`codeload.github.com` may be blocked** by the environment's
+  network policy, which 403s every dist download. The hook falls back to
+  `--prefer-source` (composer clones through the session's git proxy instead) and
+  clones `phpstan/phpstan` — the one dist-only dependency — at its locked version.
+  Allowing those two hosts in the environment's network policy makes the plain
+  `--prefer-dist` path work and is noticeably faster; see
+  <https://code.claude.com/docs/en/claude-code-on-the-web>.
+
 ## Branching
 
 - `release` — stable branch for end users running a blog; check out this branch if you want the latest released version

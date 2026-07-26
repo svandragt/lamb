@@ -7,9 +7,12 @@ use RedBeanPHP\R;
 use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
+use function Lamb\Network\begin_crawl;
 use function Lamb\Network\feed_status_bean;
 use function Lamb\Network\get_feed_statuses;
 use function Lamb\Network\prune_feed_status;
+use function Lamb\Network\record_crawl_failure;
+use function Lamb\Network\record_crawl_success;
 use function Lamb\Network\record_feed_crawl;
 
 class FeedStatusTest extends TestCase
@@ -166,7 +169,7 @@ class FeedStatusTest extends TestCase
     {
         R::exec('DELETE FROM post');
         $status = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
-        $status->last_success = time() + 7200; // watermark in the future
+        $status->last_item_date = time() + 7200; // watermark in the future
         R::store($status);
 
         $items = [$this->makeItem('old', 'Old', time(), time())];
@@ -175,6 +178,51 @@ class FeedStatusTest extends TestCase
         $result = record_feed_crawl('TestBlog', 'https://testblog.example.com/feed', $feed);
         $this->assertSame(0, $result['items']);
         $this->assertSame(0, R::count('post'));
+    }
+
+    // begin_crawl / record_crawl_failure / record_crawl_success
+
+    public function testBeginCrawlStampsAttemptWithoutTouchingSuccessWatermark(): void
+    {
+        $seed = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $seed->last_success = 1700000000;
+        R::store($seed);
+
+        [$status, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+
+        $this->assertGreaterThan(0, $now);
+        $this->assertSame($now, (int)$status->last_attempt);
+        $this->assertSame(1700000000, (int)$status->last_success);
+    }
+
+    public function testRecordCrawlFailurePersistsMessageAndReturnsOutcome(): void
+    {
+        [$status, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+
+        $result = record_crawl_failure($status, $now, 'boom');
+
+        $this->assertSame(['ok' => false, 'items' => 0, 'error' => 'boom'], $result);
+        $reloaded = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $this->assertSame('boom', (string)$reloaded->error_message);
+        $this->assertSame($now, (int)$reloaded->last_error);
+        $this->assertSame($now, (int)$reloaded->last_attempt);
+        $this->assertSame(0, (int)$reloaded->last_success);
+    }
+
+    public function testRecordCrawlSuccessAdvancesWatermarkAndClearsError(): void
+    {
+        $seed = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $seed->error_message = 'old failure';
+        R::store($seed);
+
+        [$status, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+        $result = record_crawl_success($status, $now, 3);
+
+        $this->assertSame(['ok' => true, 'items' => 3, 'error' => null], $result);
+        $reloaded = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $this->assertSame($now, (int)$reloaded->last_success);
+        $this->assertSame(3, (int)$reloaded->item_count);
+        $this->assertSame('', (string)$reloaded->error_message);
     }
 
     // get_feed_statuses

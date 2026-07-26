@@ -9,6 +9,7 @@ use SimplePie\Item;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
+use function Lamb\Http\is_valid_http_url;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -43,7 +44,13 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
             $bean->feed_name = $feed_name;
         }
-        $bean->source_url = $feed_item->get_permalink();
+        // A feed item's permalink is attacker-influenced (any feed the site
+        // subscribes to can supply it) and is later rendered into an <a href>
+        // by Theme\link_source() — reject anything that isn't a well-formed
+        // http(s) URL so a `javascript:`/other-scheme permalink can't reach
+        // that attribute unescaped for scheme.
+        $permalink = (string) $feed_item->get_permalink();
+        $bean->source_url = is_valid_http_url($permalink) ? $permalink : null;
     }
 
     parse_bean($bean);
@@ -145,12 +152,125 @@ function parse_matter(string $body): array
     }
 
     $matter = normalize_matter_keys($matter);
+    $matter = normalize_matter_values($matter);
+
+    // normalize_matter_values() has already made both of these a string when
+    // present; the casts keep the static analyser's `mixed` narrowing happy.
+    if (isset($matter['slug'])) {
+        $matter['slug'] = sanitize_explicit_slug((string) $matter['slug']);
+    }
 
     if (isset($matter['title']) && !isset($matter['slug'])) {
-        $matter['slug'] = slugify($matter['title']);
+        $matter['slug'] = slugify((string) $matter['title']);
     }
 
     return $matter;
+}
+
+/**
+ * The front-matter keys the rest of the codebase reads as plain text.
+ *
+ * These are the values normalize_matter_values() coerces to a string (or drops
+ * as absent). Keys outside this list — `created`, `draft` — carry their own
+ * type handling downstream and are left as YAML parsed them.
+ */
+const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'in-reply-to', 'syndicated-to'];
+
+/**
+ * Coerces a front-matter value to the string its readers assume, or null when
+ * it has no faithful textual form.
+ *
+ * YAML is a typed format and the author picks the type by how they write the
+ * line: `title: [a, b]` is a list, `title: 2024-01-02` is a date object (front
+ * matter is parsed with PARSE_DATETIME), `title: yes` is a boolean. Everything
+ * downstream — slugify(), the `(string)` casts in apply_frontmatter(), the
+ * `?string` parameters in the Micropub adapter — expects a string, and PHP 8
+ * turns that mismatch into a fatal rather than a warning, so one mistyped line
+ * took down the whole save. Where it did not, an array cast to the literal
+ * string "Array" and was stored as the post's title or slug.
+ *
+ * The coercion:
+ *  - strings, integers and floats become their textual form;
+ *  - a list collapses to its first entry — the shape `in-reply-to` already
+ *    accepted, generalised, so `title: [a, b]` reads as `a`;
+ *  - dates are formatted back to the wall-clock text the author typed;
+ *  - a map, a nested list, a boolean or null have no faithful text (neither
+ *    "1" nor "true" is what `title: yes` meant), so they are reported as
+ *    absent and the caller's own fallback applies.
+ *
+ * @param mixed $value The raw front-matter value.
+ * @return string|null The value as text, or null when it has none.
+ */
+function matter_string(mixed $value): ?string
+{
+    if (is_array($value)) {
+        // One level only: the first entry of a list of lists is still not text.
+        $value = array_is_list($value) ? ($value[0] ?? null) : null;
+    }
+    if (is_string($value)) {
+        return $value;
+    }
+    if (is_int($value) || is_float($value)) {
+        return (string) $value;
+    }
+    if ($value instanceof \DateTimeInterface) {
+        // A bare `2024-01-02` parses to midnight; render it back without the
+        // time the author never typed.
+        return $value->format($value->format('H:i:s') === '00:00:00' ? 'Y-m-d' : 'Y-m-d H:i:s');
+    }
+
+    return null;
+}
+
+/**
+ * Normalises the textual front-matter values to strings before they are matched.
+ *
+ * The companion to normalize_matter_keys(): that one canonicalises how a key is
+ * spelled, this one canonicalises what its value is. Running both inside
+ * parse_matter() makes it the single place the rest of the codebase has to
+ * trust — every consumer of MATTER_TEXT_KEYS gets a string or nothing, and a
+ * key whose value has no textual form is removed so `isset()` reports it as
+ * absent rather than handing on an array.
+ *
+ * @param array<int|string, mixed> $matter The parsed front matter.
+ * @return array<int|string, mixed> The front matter with textual values coerced.
+ */
+function normalize_matter_values(array $matter): array
+{
+    foreach (MATTER_TEXT_KEYS as $key) {
+        if (!array_key_exists($key, $matter)) {
+            continue;
+        }
+        $text = matter_string($matter[$key]);
+        if ($text === null) {
+            unset($matter[$key]);
+            continue;
+        }
+        $matter[$key] = $text;
+    }
+
+    return $matter;
+}
+
+/**
+ * Strips leading slashes/backslashes from an explicit front-matter `slug:`
+ * value.
+ *
+ * An explicit slug (unlike a title-derived one, which goes through
+ * slugify()) is stored verbatim and later feeds an automatic redirect's
+ * `to_url` on a subsequent slug change (`'/' . $slug`, in redirect_edited()).
+ * A slug beginning with `/` (or `\`, which some browsers normalise to `/` in
+ * a URL) would make that concatenation a protocol-relative `//host/...` (or
+ * `/\host/...`) URL — an open redirect off the site. Stripped rather than
+ * rejected outright so a legitimate custom slug that merely has redundant
+ * leading slashes still saves.
+ *
+ * @param string $slug
+ * @return string
+ */
+function sanitize_explicit_slug(string $slug): string
+{
+    return ltrim($slug, "/\\");
 }
 
 /**
@@ -264,12 +384,13 @@ function build_matter(array $matter, string $content): string
         return $content;
     }
 
-    $lines = [];
-    foreach ($matter as $key => $value) {
-        $lines[] = "$key: $value";
-    }
-
-    return "---\n" . implode("\n", $lines) . "\n---\n$content";
+    // Yaml::dump() rather than "$key: $value": the values come from Micropub
+    // request properties, and an unescaped newline in one (a `name` of
+    // "Title\nid: 1") injected extra front-matter keys, which apply_frontmatter()
+    // then applied to the bean. It also fixes the mirror-image bug — a title
+    // containing a colon produced invalid YAML, so parse_matter() returned
+    // nothing and the title was silently dropped.
+    return "---\n" . Yaml::dump($matter) . "---\n$content";
 }
 
 /**

@@ -274,6 +274,18 @@ class WebmentionSendTest extends TestCase
     }
 
     /**
+     * A fake DNS resolver so tests using example.com/example.org/etc.
+     * hostnames (RFC 2606, not actually resolvable) pass the SSRF
+     * public-host check without a real network lookup.
+     *
+     * @return callable(string): string[]
+     */
+    private function publicResolver(): callable
+    {
+        return fn (string $host): array => ['93.184.216.34'];
+    }
+
+    /**
      * A fetcher/sender pair that fails the test if either is invoked.
      *
      * @return array{0: callable, 1: callable}
@@ -300,7 +312,7 @@ class WebmentionSendTest extends TestCase
             return 202;
         };
 
-        $result = process_outbound($fetcher, $sender);
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
         $this->assertSame(1, $result['sent']);
         $this->assertSame('sent', R::findOne('webmentionoutbox')->status);
     }
@@ -338,7 +350,7 @@ class WebmentionSendTest extends TestCase
         $fetcher = fn (string $url) => ['headers' => ['<https://other.example/wm>; rel="webmention"'], 'body' => ''];
         $sender = fn (string $e, string $s, string $t): int => 400;
 
-        $result = process_outbound($fetcher, $sender);
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
         $this->assertSame(1, $result['failed']);
         $this->assertSame('failed', R::findOne('webmentionoutbox')->status);
     }
@@ -410,7 +422,7 @@ class WebmentionSendTest extends TestCase
         $fetcher = fn (string $url) => ['headers' => ['<https://other.example/wm>; rel="webmention"'], 'body' => ''];
         $sender = fn (string $e, string $s, string $t): int => 202;
 
-        $result = process_outbound($fetcher, $sender);
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
         $this->assertSame(1, $result['sent']);
         $this->assertSame('sent', R::findOne('webmentionoutbox')->status);
     }

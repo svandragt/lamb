@@ -3,9 +3,12 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Lamb\Micropub\LambMicropubAdapter;
 use Tests\Support\StubMicropubAdapter;
+
+use function Lamb\Micropub\has_micropub_scope;
 
 class MicropubAdapterTest extends TestCase
 {
@@ -22,6 +25,10 @@ class MicropubAdapterTest extends TestCase
         // reads it unguarded, so seed it here rather than relying on a sibling
         // test having populated the global $config first.
         $config['site_title'] = $config['site_title'] ?? 'Test Blog';
+        // Token verification compares the token's `me` against the configured
+        // canonical URL, never the request host, so a Micropub install must set
+        // site_url. Seed it to match ROOT_URL for the happy-path tests.
+        $config['site_url'] = 'http://localhost';
 
         if (!defined('ROOT_URL')) {
             define('ROOT_URL', 'http://localhost');
@@ -42,7 +49,7 @@ class MicropubAdapterTest extends TestCase
     protected function tearDown(): void
     {
         global $config;
-        unset($config['micropub_debug']);
+        unset($config['micropub_debug'], $config['site_url']);
         if (isset($GLOBALS['lamb_mp_log_path'])) {
             @unlink($GLOBALS['lamb_mp_log_path']);
             unset($GLOBALS['lamb_mp_log_path']);
@@ -51,13 +58,37 @@ class MicropubAdapterTest extends TestCase
 
     // --- handleRequest ---
 
-    public function testConfigQueryResponds200WithoutAccessToken(): void
+    public function testConfigQueryRequiresAccessToken(): void
     {
+        // W3C Micropub §3.7 requires a token on the query endpoint; q=config must
+        // not be a special-cased exception, or it discloses the media-endpoint URL
+        // and every configured syndicate-to target to anyone (#534).
         $adapter = new StubMicropubAdapter();
 
         $request = new \Nyholm\Psr7\ServerRequest(
             'GET',
             ROOT_URL . '/micropub?q=config'
+        );
+        $request = $request->withQueryParams(['q' => 'config']);
+
+        $response = $adapter->handleRequest($request);
+        $this->assertSame(401, $response->getStatusCode());
+    }
+
+    public function testConfigQueryRespondsWithAnyValidToken(): void
+    {
+        // Same rule as q=source/q=syndicate-to: any verified token may read
+        // q=config, regardless of its scope.
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $request = new \Nyholm\Psr7\ServerRequest(
+            'GET',
+            ROOT_URL . '/micropub?q=config',
+            ['Authorization' => 'Bearer valid-jwt']
         );
         $request = $request->withQueryParams(['q' => 'config']);
 
@@ -179,6 +210,37 @@ class MicropubAdapterTest extends TestCase
         $this->assertIsArray($result['scope']);
         $this->assertContains('create', $result['scope']);
         $this->assertContains('update', $result['scope']);
+    }
+
+    public function testVerifyTokenRejectsIdentityMatchingOnlyTheRequestHost(): void
+    {
+        // The request host is attacker-chosen (a spoofed Host header reaches PHP
+        // through any catch-all vhost), so a token whose `me` matches it must still
+        // be refused when it does not match the configured canonical URL.
+        global $config;
+        $config['site_url'] = 'https://real-site.example';
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $this->assertFalse($adapter->verifyAccessTokenCallback('token-for-request-host'));
+    }
+
+    public function testVerifyTokenFailsClosedWhenNoSiteUrlIsConfigured(): void
+    {
+        global $config;
+        unset($config['site_url']);
+
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $this->assertFalse($adapter->verifyAccessTokenCallback('any-token'));
     }
 
     public function testVerifyTokenHandlesMissingTrailingSlash(): void
@@ -550,6 +612,98 @@ class MicropubAdapterTest extends TestCase
         $this->assertArrayNotHasKey('category', $result['properties']);
     }
 
+    // --- sourceQueryCallback visibility (regression: content disclosure) ---
+    // A source query has no scope of its own, unlike create/update/delete —
+    // without a visibility check, ANY valid token could read the full
+    // content of any draft/scheduled/trashed post, not merely learn it
+    // exists (sequential /status/<id> ids make this trivial to enumerate).
+
+    private function makeHiddenPost(array $fields): OODBBean
+    {
+        $bean = R::dispense('post');
+        $bean->body = $fields['body'] ?? 'Hidden content';
+        $bean->slug = '';
+        $bean->created = $fields['created'] ?? date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        $bean->draft = $fields['draft'] ?? 0;
+        $bean->deleted = $fields['deleted'] ?? 0;
+        R::store($bean);
+        return $bean;
+    }
+
+    public function testSourceQueryReturnsFalseForDraftWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['draft' => 1]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result, 'a create-only token must not read a draft\'s content via source query');
+    }
+
+    public function testSourceQueryReturnsContentForDraftWithUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['draft' => 1, 'body' => 'Draft-only content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Draft-only content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsFalseForScheduledWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['created' => date('Y-m-d H:i:s', strtotime('+1 day'))]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result);
+    }
+
+    public function testSourceQueryReturnsFalseForTrashedWithoutUpdateScope(): void
+    {
+        $bean = $this->makeHiddenPost(['deleted' => 1]);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertFalse($result);
+    }
+
+    public function testSourceQueryReturnsContentForTrashedWithUpdateScope(): void
+    {
+        // update scope may still see a trashed post's source (e.g. to decide
+        // whether to restore it via the separately delete-scoped undelete).
+        $bean = $this->makeHiddenPost(['deleted' => 1, 'body' => 'Trashed content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Trashed content', $result['properties']['content'][0]);
+    }
+
+    public function testSourceQueryReturnsContentForPublishedPostRegardlessOfScope(): void
+    {
+        // A published post's content is already public — any valid token
+        // may read it, matching pre-fix behaviour for the common case.
+        $bean = $this->makeHiddenPost(['body' => 'Published content']);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => []];
+
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+        $this->assertIsArray($result);
+        $this->assertStringContainsString('Published content', $result['properties']['content'][0]);
+    }
+
     public function testCreateCallbackPublishedSetsCreatedDate(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -589,16 +743,19 @@ class MicropubAdapterTest extends TestCase
     {
         $adapter = new LambMicropubAdapter();
 
-        // Create a real temp file to simulate an upload
+        // A real GIF: uploads whose bytes don't match their extension are
+        // rejected, and GIF is stored as-is rather than re-encoded to WebP, so
+        // the stored name keeps the extension this test asserts on.
+        $bytes = self::gifBytes();
         $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
-        file_put_contents($tmpFile, 'fake image data');
+        file_put_contents($tmpFile, $bytes);
 
         $uploadedFile = new \Nyholm\Psr7\UploadedFile(
             $tmpFile,
-            15,
+            strlen($bytes),
             UPLOAD_ERR_OK,
-            'test-photo.jpg',
-            'image/jpeg'
+            'test-photo.gif',
+            'image/gif'
         );
 
         $data = [
@@ -613,7 +770,53 @@ class MicropubAdapterTest extends TestCase
         $this->assertIsString($result);
         $post = R::findOne('post', ' body LIKE ? ', ['%A post with an uploaded photo%']);
         $this->assertNotNull($post);
-        $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.jpg\)/', $post->body);
+        $this->assertMatchesRegularExpression('/!\[.*\]\(.+\.gif\)/', $post->body);
+    }
+
+    /**
+     * A minimal valid 1x1 GIF, so upload fixtures carry bytes that really are
+     * the image type their filename claims.
+     */
+    private static function gifBytes(): string
+    {
+        return (string) base64_decode('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7');
+    }
+
+    public function testUploadedPhotosWithSameClientFilenameDoNotCollide(): void
+    {
+        // Regression: the on-disk filename was sha1(client filename) with no
+        // salt, so two uploads sharing a client filename in the same month
+        // silently overwrote each other.
+        $adapter = new LambMicropubAdapter();
+
+        $makeUpload = function (): \Nyholm\Psr7\UploadedFile {
+            $bytes = self::gifBytes();
+            $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
+            file_put_contents($tmpFile, $bytes);
+            return new \Nyholm\Psr7\UploadedFile(
+                $tmpFile,
+                strlen($bytes),
+                UPLOAD_ERR_OK,
+                'photo.gif',
+                'image/gif'
+            );
+        };
+
+        $first = $adapter->createCallback(
+            ['type' => ['h-entry'], 'properties' => ['content' => ['First post']]],
+            ['photo' => $makeUpload()]
+        );
+        $second = $adapter->createCallback(
+            ['type' => ['h-entry'], 'properties' => ['content' => ['Second post']]],
+            ['photo' => $makeUpload()]
+        );
+
+        preg_match('/!\[.*\]\((.+\.gif)\)/', R::findOne('post', ' body LIKE ? ', ['%First post%'])->body, $m1);
+        preg_match('/!\[.*\]\((.+\.gif)\)/', R::findOne('post', ' body LIKE ? ', ['%Second post%'])->body, $m2);
+
+        $this->assertNotEmpty($m1[1] ?? null);
+        $this->assertNotEmpty($m2[1] ?? null);
+        $this->assertNotSame($m1[1], $m2[1], 'uploads with the same client filename must not collide on disk');
     }
 
     public function testCreateCallbackWithDraftPostStatusSavesAsDraft(): void
@@ -747,6 +950,34 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(ROOT_URL . '/status/999999', ['replace' => ['content' => ['new']]]);
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForTrashedPost(): void
+    {
+        // Regression: a soft-deleted post is meant to stay immutable until
+        // restored via the (delete-scoped) undeleteCallback() — an
+        // update-scoped token must not be able to silently rewrite trashed
+        // content while it stays hidden, and the response must be
+        // indistinguishable from "no such post".
+        $bean = R::dispense('post');
+        $bean->body = 'Trashed content must not change';
+        $bean->slug = '';
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Attempted overwrite']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Trashed content must not change', $updated->body);
     }
 
     public function testUpdateCallbackReplaceContentUpdatesBody(): void
@@ -1000,6 +1231,32 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    public function testDeleteCallbackReturnsInsufficientScopeWhenTokenLacksDeleteScope(): void
+    {
+        // Regression: deleteCallback() previously had no scope check at all,
+        // so any valid token — regardless of granted scope — could delete
+        // arbitrary posts.
+        $bean = R::dispense('post');
+        $bean->body = 'Should survive an unscoped delete attempt';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
+
+        $updated = R::load('post', $bean->id);
+        $this->assertEmpty($updated->deleted, 'the post must not have been deleted');
+    }
+
     // --- undeleteCallback ---
 
     public function testUndeleteCallbackClearsDeletedFlag(): void
@@ -1025,6 +1282,96 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->undeleteCallback(ROOT_URL . '/status/999999');
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUndeleteCallbackReturnsInsufficientScopeWhenTokenLacksDeleteScope(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Should stay deleted against an unscoped undelete attempt';
+        $bean->slug = '';
+        $bean->deleted = 1;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
+
+        $result = $adapter->undeleteCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+
+        $updated = R::load('post', $bean->id);
+        $this->assertEquals(1, $updated->deleted, 'the post must still be deleted');
+    }
+
+    // --- scope gating across the callbacks ---
+
+    /**
+     * Stores a post and returns an adapter whose token carries only 'read' —
+     * a real scope, but never the one a scope-gated callback asks for.
+     *
+     * @return array{0: LambMicropubAdapter, 1: string} The adapter and the post URL.
+     */
+    private function readOnlyTokenFor(string $body, bool $deleted = false): array
+    {
+        $bean = R::dispense('post');
+        $bean->body    = $body;
+        $bean->slug    = '';
+        $bean->deleted = $deleted ? 1 : null;
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['read']];
+
+        return [$adapter, ROOT_URL . '/status/' . $bean->id];
+    }
+
+    private function assertChallengeNamesScope(mixed $result, string $scope): void
+    {
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $this->assertStringContainsString(
+            'scope="' . $scope . '"',
+            $result->getHeaderLine('www-authenticate')
+        );
+    }
+
+    public function testDeleteChallengeNamesTheDeleteScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not deletable by a read token');
+        $this->assertChallengeNamesScope($adapter->deleteCallback($url), 'delete');
+    }
+
+    public function testUndeleteChallengeNamesTheDeleteScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not restorable by a read token', deleted: true);
+        $this->assertChallengeNamesScope($adapter->undeleteCallback($url), 'delete');
+    }
+
+    public function testUpdateChallengeNamesTheUpdateScope(): void
+    {
+        [$adapter, $url] = $this->readOnlyTokenFor('Not editable by a read token');
+        $result = $adapter->updateCallback($url, ['replace' => ['content' => ['nope']]]);
+        $this->assertChallengeNamesScope($result, 'update');
+    }
+
+    public function testScopeGatedCallbackAllowsAnUnauthenticatedCall(): void
+    {
+        // No token at all (the logged-in web paths): the scope gate must not
+        // fire, otherwise every non-Micropub caller would 403.
+        $bean = R::dispense('post');
+        $bean->body    = 'Deletable without a token';
+        $bean->slug    = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id));
     }
 
     // --- beanToMf2Properties (via sourceQueryCallback) ---
@@ -1254,5 +1601,32 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body LIKE ? ', ['%syndicated-to%']);
         $this->assertNotNull($post, 'syndicated-to must survive a content update');
         $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
+    }
+
+    // --- has_micropub_scope ---
+
+    public function testHasMicropubScopeTrueWhenScopePresent(): void
+    {
+        $user = ['me' => ROOT_URL . '/', 'scope' => ['create', 'update']];
+        $this->assertTrue(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseWhenScopeAbsent(): void
+    {
+        // Regression: the Micropub media endpoint accepted any valid token
+        // regardless of scope, unlike createCallback()/updateCallback().
+        $user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
+        $this->assertFalse(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseWhenNoScopeKey(): void
+    {
+        $user = ['me' => ROOT_URL . '/'];
+        $this->assertFalse(has_micropub_scope($user, 'create'));
+    }
+
+    public function testHasMicropubScopeFalseForFailedToken(): void
+    {
+        $this->assertFalse(has_micropub_scope(false, 'create'));
     }
 }

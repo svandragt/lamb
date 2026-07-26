@@ -6,9 +6,16 @@ use PHPUnit\Framework\TestCase;
 use SimplePie\Item as SimplePieItem;
 use RedBeanPHP\R;
 
+use function Lamb\Network\acquire_cron_lock;
 use function Lamb\Network\attributed_content;
+use function Lamb\Network\count_line;
+use function Lamb\Network\crawl_line;
+use function Lamb\Network\cron_run_due;
+use function Lamb\Network\feed_fetch_due;
 use function Lamb\Network\get_structured_content;
 use function Lamb\Network\purge_deleted_posts;
+use function Lamb\Network\webmention_line;
+use function Lamb\Post\parse_matter;
 
 class NetworkTest extends TestCase
 {
@@ -77,7 +84,9 @@ class NetworkTest extends TestCase
         $item = $this->makeItem('My Post Title', 'Some content', 'https://example.com');
         $result = get_structured_content($item, 'Blog');
         $this->assertStringContainsString('---', $result);
-        $this->assertStringContainsString('title: My Post Title', $result);
+        // Assert the parsed title rather than the literal line: the block is
+        // rendered with Yaml::dump(), so the scalar may legitimately be quoted.
+        $this->assertSame('My Post Title', parse_matter($result)['title']);
     }
 
     public function testGetStructuredContentWithoutTitleHasNoFrontMatter(): void
@@ -95,11 +104,44 @@ class NetworkTest extends TestCase
         $this->assertStringContainsString('Originally written on', $result);
     }
 
-    public function testGetStructuredContentEscapesTitleSlashes(): void
+    public function testGetStructuredContentRoundTripsAnApostropheInTheTitle(): void
     {
+        // An apostrophe is the character YAML quoting exists for. The title has
+        // to come back out exactly as the feed sent it — the previous
+        // addslashes() left the backslash in the stored title.
         $item = $this->makeItem("It's a test", 'Content', 'https://example.com');
         $result = get_structured_content($item, 'Blog');
-        $this->assertStringContainsString("title: It\\'s a test", $result);
+        $this->assertSame("It's a test", parse_matter($result)['title']);
+    }
+
+    /**
+     * A remote feed must not be able to pick the YAML *type* of its own title.
+     *
+     * @dataProvider typedFeedTitleProvider
+     */
+    public function testGetStructuredContentKeepsATypedTitleAsText(string $title): void
+    {
+        $item = $this->makeItem($title, 'Content', 'https://example.com');
+
+        // Before the block was dumped rather than interpolated, `[a, b]` parsed
+        // as a list and `2024-01-02` as a date object — neither a string — and
+        // the ingest run died on the first such item.
+        $this->assertSame($title, parse_matter(get_structured_content($item, 'Blog'))['title']);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function typedFeedTitleProvider(): array
+    {
+        return [
+            'list'    => ['[a, b]'],
+            'map'     => ['{a: b}'],
+            'date'    => ['2024-01-02'],
+            'boolean' => ['true'],
+            'number'  => ['42'],
+            'null'    => ['~'],
+        ];
     }
 
     public function testGetStructuredContentReturnsString(): void
@@ -117,8 +159,11 @@ class NetworkTest extends TestCase
         $result = get_structured_content($item, 'Blog');
         // The injected "slug:" must not appear on its own front-matter line.
         $this->assertStringNotContainsString("\nslug:", $result);
-        // And the title must collapse to a single line.
-        $this->assertStringContainsString('title: Innocent slug: /evil', $result);
+        // And the whole thing must come back as one title, with the slug still
+        // derived from it rather than dictated by the feed.
+        $matter = parse_matter($result);
+        $this->assertSame('Innocent slug: /evil', $matter['title']);
+        $this->assertNotSame('/evil', $matter['slug']);
     }
 
     public function testGetStructuredContentTitleCannotCloseFrontMatterEarly(): void
@@ -207,5 +252,148 @@ class NetworkTest extends TestCase
 
         $loaded = R::load('post', $liveId);
         $this->assertSame($liveId, $loaded->id);
+    }
+
+    // acquire_cron_lock — regression: /_cron's rate-limit watermark is only
+    // written after a full run completes, so without a mutual-exclusion lock,
+    // a burst of concurrent (unauthenticated) requests would all read the
+    // same stale watermark and run in parallel.
+
+    private function lockPath(): string
+    {
+        return sys_get_temp_dir() . '/lamb_cron_lock_test_' . uniqid('', true) . '.lock';
+    }
+
+    public function testAcquireCronLockSucceedsWhenUnlocked(): void
+    {
+        $path = $this->lockPath();
+        $handle = acquire_cron_lock($path);
+
+        $this->assertNotNull($handle);
+        $this->assertFileExists($path);
+
+        fclose($handle);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockFailsWhileAlreadyHeld(): void
+    {
+        $path = $this->lockPath();
+        $first = acquire_cron_lock($path);
+        $this->assertNotNull($first, 'precondition: first acquisition must succeed');
+
+        $second = acquire_cron_lock($path);
+        $this->assertNull($second, 'a concurrent run must not acquire the lock while another holds it');
+
+        fclose($first);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockSucceedsAfterPriorHolderReleases(): void
+    {
+        $path = $this->lockPath();
+        $first = acquire_cron_lock($path);
+        $this->assertNotNull($first);
+        fclose($first);
+
+        $second = acquire_cron_lock($path);
+        $this->assertNotNull($second, 'the lock must be acquirable again once released');
+
+        fclose($second);
+        unlink($path);
+    }
+
+    public function testAcquireCronLockCreatesLockFileWhenAbsent(): void
+    {
+        $path = $this->lockPath();
+        $this->assertFileDoesNotExist($path);
+
+        $handle = acquire_cron_lock($path);
+        $this->assertFileExists($path);
+
+        fclose($handle);
+        unlink($path);
+    }
+
+    // cron_run_due — the whole-run rate limit (1 minute)
+
+    public function testCronRunIsNotDueWithinAMinuteOfTheLastRun(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertFalse(cron_run_due($now - 59, $now));
+    }
+
+    public function testCronRunIsDueAfterAFullMinute(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertTrue(cron_run_due($now - MINUTE_IN_SECONDS, $now));
+    }
+
+    public function testCronRunIsDueWhenItHasNeverRun(): void
+    {
+        $this->assertTrue(cron_run_due(0, 1_700_000_000));
+    }
+
+    // feed_fetch_due — the per-feed rate limit (30 minutes)
+
+    public function testFeedFetchIsNotDueWithinThirtyMinutesOfTheLastAttempt(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertFalse(feed_fetch_due($now - (29 * MINUTE_IN_SECONDS), $now));
+    }
+
+    public function testFeedFetchIsDueAfterThirtyMinutes(): void
+    {
+        $now = 1_700_000_000;
+        $this->assertTrue(feed_fetch_due($now - (30 * MINUTE_IN_SECONDS), $now));
+    }
+
+    public function testFeedFetchIsDueForAFeedNeverAttempted(): void
+    {
+        $this->assertTrue(feed_fetch_due(0, 1_700_000_000));
+    }
+
+    // count_line — maintenance summary lines are omitted when nothing happened
+
+    public function testCountLineIsEmptyForZero(): void
+    {
+        $this->assertSame('', count_line(0, 'Purged %d deleted post(s).'));
+    }
+
+    public function testCountLineFormatsAndTerminatesTheLine(): void
+    {
+        $this->assertSame('Purged 3 deleted post(s).' . PHP_EOL, count_line(3, 'Purged %d deleted post(s).'));
+    }
+
+    // crawl_line
+
+    public function testCrawlLineReportsIngestedCountOnSuccess(): void
+    {
+        $line = crawl_line('MyBlog', ['ok' => true, 'items' => 2, 'error' => null]);
+        $this->assertStringContainsString('OK: MyBlog', $line);
+        $this->assertStringContainsString('2 item(s)', $line);
+    }
+
+    public function testCrawlLineReportsTheErrorOnFailure(): void
+    {
+        $line = crawl_line('MyBlog', ['ok' => false, 'items' => 0, 'error' => 'could not resolve host']);
+        $this->assertStringContainsString('FAILED: MyBlog', $line);
+        $this->assertStringContainsString('could not resolve host', $line);
+    }
+
+    // webmention_line
+
+    public function testWebmentionLineIsEmptyWhenNothingHappened(): void
+    {
+        $this->assertSame('', webmention_line(['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0]));
+    }
+
+    public function testWebmentionLineReportsEveryCounter(): void
+    {
+        $line = webmention_line(['sent' => 1, 'failed' => 2, 'skipped' => 3, 'cancelled' => 4]);
+        $this->assertStringContainsString('sent: 1', $line);
+        $this->assertStringContainsString('failed: 2', $line);
+        $this->assertStringContainsString('skipped: 3', $line);
+        $this->assertStringContainsString('cancelled: 4', $line);
     }
 }

@@ -16,10 +16,31 @@ Bootstrap\bootstrap_session($data_dir);
 $config = Config\load();
 Config\apply_timezone($config);
 
-define('ROOT_URL', (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"]);
+// Prefer the author's configured canonical URL; fall back to the requested host
+// for installs that have not set one. The fallback is validated to a strict host
+// charset, so a malformed Host can no longer be reflected into HTML or headers —
+// but it is still attacker-chosen, which is why security decisions (the Micropub
+// IndieAuth `me` check) use Config\canonical_site_url() directly instead of this.
+$root_url = Config\canonical_site_url($config) ?? Http\request_root_url($_SERVER);
+if ($root_url === null) {
+    header(($_SERVER['SERVER_PROTOCOL'] ?? 'HTTP/1.1') . ' 400 Bad Request');
+    die('Bad Request');
+}
+define('ROOT_URL', $root_url);
 // Config\ensure_explicit_theme() guarantees a renderable theme value on read,
-// so no runtime fallback/alias is needed here (see #291).
-define("THEME", (string) $config['theme']);
+// so no runtime fallback/alias is needed here (see #291). The value still
+// comes verbatim from the admin-editable config INI, though, and is used
+// both to build a require() path (THEME_DIR) and echoed raw into HTML on
+// every page view (THEME_URL, e.g. themes/2026/html.php's font preload
+// links) — sanitize_filename() (already used by Theme\part() for the same
+// reason) keeps it to a safe filename charset, closing both a path-traversal
+// primitive and a site-wide stored-XSS surface a stray HTML-breaking
+// character in `theme = ...` would otherwise open up.
+// `?? 'base'` is not the old runtime fallback returning: ensure_explicit_theme()
+// still guarantees a `theme` line exists. It covers the one case that line
+// cannot be trusted — a `[theme]` section header, which normalize_config()
+// drops because an array cannot name a theme directory.
+define("THEME", Theme\sanitize_filename((string) ($config['theme'] ?? 'base')));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 

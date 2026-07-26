@@ -52,8 +52,21 @@ class NetworkFeedTest extends TestCase
         $item->method('get_description')->willReturn($description);
         $item->method('get_permalink')->willReturn($permalink);
         $item->method('get_id')->willReturn($id);
-        $item->method('get_date')->willReturn($date);
-        $item->method('get_updated_date')->willReturn($updated);
+        // Format-aware, as SimplePie is: `U` is a Unix timestamp, anything else
+        // goes through date(). The ingest decisions compare `U` values against
+        // stored timestamps, so a mock that returns a date string for every
+        // format would compare 2024 (the cast of '2024-01-01 …') against epoch
+        // seconds and exercise nothing real.
+        $item->method('get_date')->willReturnCallback(
+            fn(string $format = 'U') => $format === 'U'
+                ? (string) strtotime($date)
+                : date($format, (int) strtotime($date))
+        );
+        $item->method('get_updated_date')->willReturnCallback(
+            fn(string $format = 'U') => $format === 'U'
+                ? (string) strtotime($updated)
+                : date($format, (int) strtotime($updated))
+        );
         return $item;
     }
 

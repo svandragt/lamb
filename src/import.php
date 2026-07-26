@@ -11,7 +11,7 @@ use RuntimeException;
 use SimpleXMLElement;
 use Symfony\Component\Yaml\Yaml;
 
-use function Lamb\Http\fetch;
+use function Lamb\Http\fetch_guarded;
 use function Lamb\Response\asset_url;
 
 /**
@@ -621,10 +621,16 @@ function default_image_downloader(string $url, string $sub_path): ?string
             return $existing;
         }
     }
-    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0777, true) && !is_dir($dest_dir)) {
+    // 0755, not 0777: only the user running the import needs to write here.
+    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
         return null;
     }
-    $response = fetch($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
+    // $url is embedded in the WXR file being imported — an untrusted export
+    // an admin may have received from elsewhere — so it's just as
+    // attacker-influenced as a webmention source; use the same SSRF-safe
+    // fetcher (rejects loopback/private/link-local destinations and
+    // re-checks every redirect hop) rather than the unguarded fetch().
+    $response = fetch_guarded($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
     if ($response === null || $response['body'] === '') {
         return null;
     }
@@ -638,7 +644,7 @@ function default_image_downloader(string $url, string $sub_path): ?string
 }
 
 /**
- * Scans raw HTTP response headers (as returned by Lamb\Http\fetch) for an
+ * Scans raw HTTP response headers (as returned by Lamb\Http\fetch_guarded) for an
  * image/* Content-Type. Lets the downloader reject 200-OK HTML error pages,
  * CDN block pages, or login-required HTML returned for unauthenticated asset
  * URLs — situations the URL extension and status code alone don't catch.

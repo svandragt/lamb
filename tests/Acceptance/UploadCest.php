@@ -8,17 +8,19 @@ class UploadCest
 {
     // respond_upload
 
-    public function testUploadWithoutFilesReturns400(AcceptanceTester $I): void
+    public function testUploadRequiresLogin(AcceptanceTester $I): void
     {
-        // A GET request carries no $_FILES, so the guard fires immediately
+        // require_login() runs before the request is inspected, so an anonymous
+        // caller is bounced to the login page rather than being told whether the
+        // upload it sent was well-formed.
         $I->amOnPage('/upload');
-        $I->seeResponseCodeIs(400);
+        $I->seeInCurrentUrl('/login');
     }
 
-    public function testUploadWithoutFilesReturnsErrorBody(AcceptanceTester $I): void
+    public function testUploadDoesNotRevealRequestValidityToAnonymousCallers(AcceptanceTester $I): void
     {
         $I->amOnPage('/upload');
-        $I->see('No files uploaded');
+        $I->dontSee('No files uploaded');
     }
 
     public function testUploadWithoutFilesHasNoPhpErrors(AcceptanceTester $I): void

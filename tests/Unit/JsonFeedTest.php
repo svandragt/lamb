@@ -5,9 +5,11 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Network\feed_status_bean;
 use function Lamb\Network\ingest_item;
 use function Lamb\Network\is_json_feed_url;
 use function Lamb\Network\parse_json_feed;
+use function Lamb\Network\record_json_feed_crawl;
 
 class JsonFeedTest extends TestCase
 {
@@ -116,5 +118,24 @@ class JsonFeedTest extends TestCase
         $this->assertSame(1, R::count('post'));
 
         $config = $original;
+    }
+
+    public function testRecordJsonFeedCrawlBlocksLoopbackTargetAndRecordsFailure(): void
+    {
+        // A compromised/malicious feed host redirecting the cron's fetch to
+        // an internal address is exactly the SSRF fetch_guarded() blocks;
+        // record_json_feed_crawl() must degrade to a recorded failure, not an
+        // exception or a silently "successful" empty crawl.
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::nuke();
+
+        $result = record_json_feed_crawl('LoopbackFeed', 'http://127.0.0.1/feed.json');
+
+        $this->assertFalse($result['ok']);
+        $status = feed_status_bean('LoopbackFeed', 'http://127.0.0.1/feed.json');
+        $this->assertNotEmpty($status->error_message);
+        $this->assertEmpty($status->last_success);
     }
 }
