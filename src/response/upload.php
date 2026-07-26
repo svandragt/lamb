@@ -558,3 +558,59 @@ function asset_url(string $sub_path, string $filename): string
 {
     return "/assets/$sub_path/$filename";
 }
+
+/**
+ * The pixel dimensions of a locally stored asset, given the URL a post body
+ * points at, or null when they cannot be determined.
+ *
+ * The inverse of asset_url(): it maps a root-relative `/assets/…` URL back to
+ * the file under ROOT_DIR so the renderer can emit intrinsic `width`/`height`
+ * on `<img>` (see LambDown::setImageSizeResolver()). Kept here rather than in
+ * the parser because this file already owns the URL ↔ disk-path mapping.
+ *
+ * Everything that isn't provably a file inside src/assets/ returns null, so
+ * the caller renders exactly as it did before rather than with wrong numbers:
+ *
+ * - A URL with a scheme or host, including protocol-relative `//host/assets/…`:
+ *   a remote path that merely starts with /assets/ must not be resolved
+ *   against the local tree.
+ * - Anything that escapes src/assets/ once resolved. Post bodies are
+ *   hand-written Markdown, so `/assets/../../etc/passwd` (percent-encoded or
+ *   not) is reachable input; realpath() containment rejects it, and covers
+ *   symlinks out of the tree too.
+ * - Files getimagesize() can't measure — a video, a truncated upload, or an
+ *   asset that has since been deleted.
+ *
+ * @param string $url The `src` from a post body's Markdown image.
+ * @return array{0:int,1:int}|null The [width, height] in pixels, or null.
+ */
+function asset_dimensions(string $url): ?array
+{
+    if (!defined('ROOT_DIR')) {
+        return null;
+    }
+    $parts = parse_url($url);
+    if ($parts === false || isset($parts['scheme']) || isset($parts['host'])) {
+        return null;
+    }
+    $path = $parts['path'] ?? '';
+    if (!str_starts_with($path, '/assets/')) {
+        return null;
+    }
+
+    $assets_root = realpath(ROOT_DIR . '/assets');
+    $file = realpath(ROOT_DIR . rawurldecode($path));
+    if ($assets_root === false || $file === false) {
+        return null;
+    }
+    if (!str_starts_with($file, $assets_root . DIRECTORY_SEPARATOR)) {
+        return null;
+    }
+
+    $size = @getimagesize($file);
+    if (!is_array($size) || (int) $size[0] <= 0 || (int) $size[1] <= 0) {
+        return null;
+    }
+
+    return [(int) $size[0], (int) $size[1]];
+}

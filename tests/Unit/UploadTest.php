@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\asset_dimensions;
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\convert_to_webp_from_bytes;
@@ -558,6 +559,80 @@ class UploadTest extends TestCase
 
         $this->assertNull($result);
         $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+    }
+
+    // asset_dimensions — pixel size of a locally stored asset, for intrinsic
+    // width/height attributes on rendered <img> tags.
+
+    public function testAssetDimensionsReturnsStoredImageSize(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'dims_' . uniqid() . '.png';
+        $this->writePng("$dir/$filename", 640, 480);
+
+        $this->assertSame([640, 480], asset_dimensions(asset_url($sub_path, $filename)));
+
+        unlink("$dir/$filename");
+    }
+
+    public function testAssetDimensionsIgnoresAQueryString(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'dimsq_' . uniqid() . '.png';
+        $this->writePng("$dir/$filename", 12, 34);
+
+        $url = asset_url($sub_path, $filename) . '?ver=abc123';
+        $this->assertSame([12, 34], asset_dimensions($url));
+
+        unlink("$dir/$filename");
+    }
+
+    public function testAssetDimensionsReturnsNullForAMissingFile(): void
+    {
+        $this->assertNull(asset_dimensions(asset_url(upload_subpath(), 'nope_' . uniqid() . '.webp')));
+    }
+
+    public function testAssetDimensionsReturnsNullForARemoteUrl(): void
+    {
+        // A remote URL whose path happens to start with /assets/ must not be
+        // resolved against the local asset tree.
+        $this->assertNull(asset_dimensions('https://example.com/assets/2026/07/photo.webp'));
+        $this->assertNull(asset_dimensions('//example.com/assets/2026/07/photo.webp'));
+    }
+
+    public function testAssetDimensionsReturnsNullForANonAssetPath(): void
+    {
+        $this->assertNull(asset_dimensions('/themes/base/styles/styles.css'));
+        $this->assertNull(asset_dimensions('photo.png'));
+    }
+
+    public function testAssetDimensionsReturnsNullForPathTraversal(): void
+    {
+        // The URL comes from post Markdown, which the author types by hand.
+        $this->assertNull(asset_dimensions('/assets/../../../etc/passwd'));
+        $this->assertNull(asset_dimensions('/assets/%2e%2e/%2e%2e/etc/passwd'));
+    }
+
+    public function testAssetDimensionsReturnsNullForANonImageFile(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'clip_' . uniqid() . '.mp4';
+        file_put_contents("$dir/$filename", 'not really a video');
+
+        $this->assertNull(asset_dimensions(asset_url($sub_path, $filename)));
+
+        unlink("$dir/$filename");
+    }
+
+    private function writePng(string $path, int $w, int $h): void
+    {
+        $im = imagecreatetruecolor($w, $h);
+        imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
+        imagepng($im, $path);
+        imagedestroy($im);
     }
 
     private function makePng(int $w, int $h): string

@@ -48,6 +48,14 @@ To keep stored files small, **JPEG and PNG uploads are automatically re-encoded 
 
 If conversion ever fails (for example on a server whose PHP GD extension lacks WebP support), Lamb falls back to storing the original file unchanged, so uploads never break.
 
+## Image dimensions and layout shift
+
+Images in a post are rendered with their real pixel `width` and `height` on the `<img>` tag. Because images also load lazily, without those attributes the browser has no idea how tall an image will be until it arrives — so the text below it jumps down as you scroll. With them, the space is reserved up front and the page stays still.
+
+The dimensions are read from the stored file when the post is rendered, so they cost nothing on each page view, and they apply to older posts too: an existing post picks them up the next time Lamb re-renders it. Images hosted elsewhere (a plain `https://…` link in your Markdown) are left alone — Lamb won't fetch a remote file to measure it.
+
+This only sets the image's *intrinsic* size; how large it actually appears is still up to your theme's CSS. If you write your own theme, see [Themes]({{ site.baseurl }}{% link themes.md %}).
+
 ## Micropub uploads
 
 Images and video sent via Micropub — both inline `photo` files on a post and files sent to the media endpoint — go through the same storage (and, for images, WebP conversion) as editor uploads.
