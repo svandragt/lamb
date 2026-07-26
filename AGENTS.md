@@ -423,6 +423,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 ### Security
 
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
+- `respond_upload()` (`src/response/upload.php`) and `respond_checkbox()` (`src/response/posts.php`) call `Security\require_login()` but deliberately skip `require_csrf()` — both fire mid-composition/mid-edit, and consuming the single-use token there would break the subsequent form submit's own CSRF check. Their protection rests entirely on `LAMBSESSID`/`lamb_logged_in` being `SameSite=Strict` (a cross-site POST carries neither cookie, so no session, so `require_login()` redirects). That invariant is pinned by `testSessionCookieIsSameSiteStrict()` / `testGetCookieOptionsSameSiteIsStrict()` rather than assumed — see #536
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
 - Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
