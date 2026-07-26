@@ -58,13 +58,37 @@ class MicropubAdapterTest extends TestCase
 
     // --- handleRequest ---
 
-    public function testConfigQueryResponds200WithoutAccessToken(): void
+    public function testConfigQueryRequiresAccessToken(): void
     {
+        // W3C Micropub §3.7 requires a token on the query endpoint; q=config must
+        // not be a special-cased exception, or it discloses the media-endpoint URL
+        // and every configured syndicate-to target to anyone (#534).
         $adapter = new StubMicropubAdapter();
 
         $request = new \Nyholm\Psr7\ServerRequest(
             'GET',
             ROOT_URL . '/micropub?q=config'
+        );
+        $request = $request->withQueryParams(['q' => 'config']);
+
+        $response = $adapter->handleRequest($request);
+        $this->assertSame(401, $response->getStatusCode());
+    }
+
+    public function testConfigQueryRespondsWithAnyValidToken(): void
+    {
+        // Same rule as q=source/q=syndicate-to: any verified token may read
+        // q=config, regardless of its scope.
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $request = new \Nyholm\Psr7\ServerRequest(
+            'GET',
+            ROOT_URL . '/micropub?q=config',
+            ['Authorization' => 'Bearer valid-jwt']
         );
         $request = $request->withQueryParams(['q' => 'config']);
 
