@@ -48,7 +48,7 @@ Your site is now ready at http://localhost
 
 Uploaded images and video are stored under `src/assets/` inside the app container.
 
-Both images accept uploads up to 100&nbsp;MB (`upload_max_filesize = 100M`, `post_max_size = 100M`) — see [Media]({{ site.baseurl }}{% link media.md %}).
+Both images accept uploads up to 100&nbsp;MB (`upload_max_filesize = 100M`, `post_max_size = 100M`) — see [Media]({{ site.baseurl }}{% link media.md %}). On a memory-constrained host, `LAMB_MAX_UPLOAD_PIXELS` lets you lower how large an image WebP conversion will attempt to decode — see [Pixel cap and memory]({{ site.baseurl }}{% link media.md %}#pixel-cap-and-memory).
 
 Errors can be inspected with `docker compose logs -f app`.
 
