@@ -469,10 +469,16 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         foreach ($actions['replace'] ?? [] as $property => $values) {
+            if (!is_array($values) || !array_is_list($values)) {
+                return 'invalid_request';
+            }
             $this->applyReplace($bean, $property, $values);
         }
 
         foreach ($actions['add'] ?? [] as $property => $values) {
+            if (!is_array($values) || !array_is_list($values)) {
+                return 'invalid_request';
+            }
             $this->applyAdd($bean, $property, $values);
         }
 
@@ -485,6 +491,9 @@ class LambMicropubAdapter extends MicropubAdapter
         } else {
             // Associative array: delete specific values from each property.
             foreach ($delete as $property => $values) {
+                if (!is_array($values) || !array_is_list($values)) {
+                    return 'invalid_request';
+                }
                 $this->applyDeleteValues($bean, $property, $values);
             }
         }

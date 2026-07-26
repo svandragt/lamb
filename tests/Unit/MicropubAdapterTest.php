@@ -904,6 +904,43 @@ class MicropubAdapterTest extends TestCase
         $this->assertNotContains('A future dated micropub post', $bodies, 'Future-dated micropub posts must not appear on the homepage');
     }
 
+    public function testCreateCallbackWithNonStringNameDropsTitleInsteadOf500(): void
+    {
+        // Regression for #533: a nested array `name` (a legitimate mf2 shape) used
+        // to TypeError inside assembleFrontMatter(). matter_string() (#f40d5c5)
+        // now reports it as absent, so the post still saves, just without a title.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'name' => [['a' => 'b']],
+                'content' => ['Post body here.'],
+            ],
+        ];
+        $result = $adapter->createCallback($data);
+        $this->assertIsString($result);
+        $post = R::findOne('post', ' body = ? ', ['Post body here.']);
+        $this->assertNotNull($post);
+        $this->assertEmpty($post->title);
+    }
+
+    public function testCreateCallbackWithNonStringPublishedIgnoresDateInsteadOf500(): void
+    {
+        // Regression for #533: a non-string `published` used to TypeError inside
+        // strtotime(). normalize_datetime() (#f40d5c5) now returns null for it, so
+        // the post still saves with its default created date instead of crashing.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'published' => [['a' => 'b']],
+                'content' => ['Post body here.'],
+            ],
+        ];
+        $result = $adapter->createCallback($data);
+        $this->assertIsString($result);
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -978,6 +1015,66 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
         $updated = R::load('post', $bean->id);
         $this->assertSame('Trashed content must not change', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayReplaceValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => 'Updated content']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayAddValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['category' => 'not-an-array']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayDeleteValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content #tag';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['category' => 'not-an-array']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content #tag', $updated->body);
     }
 
     public function testUpdateCallbackReplaceContentUpdatesBody(): void
