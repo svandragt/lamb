@@ -129,6 +129,21 @@ class SessionBootstrapTest extends TestCase
     }
 
     /**
+     * /upload and /checkbox (src/response/upload.php, src/response/posts.php)
+     * skip require_csrf() and rely entirely on this cookie being SameSite=Strict
+     * to block cross-site POSTs (see issue #536). Pin it so a future change to
+     * configure_session() can't silently widen that gap.
+     */
+    public function testSessionCookieIsSameSiteStrict(): void
+    {
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        configure_session();
+        $this->assertSame('Strict', session_get_cookie_params()['samesite']);
+    }
+
+    /**
      * The server-side session must outlive the cookie too, or GC reaps the
      * session data before the persistent cookie expires.
      */
