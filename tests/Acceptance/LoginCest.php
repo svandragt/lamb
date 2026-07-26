@@ -10,6 +10,11 @@ use Tests\Support\AcceptanceTester;
  * The cache-headers suite proves a *correct* password logs in; the security-
  * critical rejection of a *wrong* password, and the gating of settings/scheduled
  * (LogoutCest covers drafts/trash) had no browser-level coverage.
+ *
+ * Keep the number of wrong-password submissions in this suite below
+ * LOGIN_THROTTLE_MAX_FAILURES (issue #443): they all come from one address, and
+ * tripping the throttle would refuse the *correct* password for the rest of the
+ * run, failing every later cest that logs in.
  */
 class LoginCest
 {

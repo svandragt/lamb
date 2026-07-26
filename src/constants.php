@@ -39,6 +39,17 @@ define('REMEMBER_LIFETIME', 7 * 24 * 60 * MINUTE_IN_SECONDS); // one week
 // page is never cached (no-store), so a visitor always gets a fresh token, and
 // an expired one just means reloading /login.
 define('LOGIN_CSRF_LIFETIME', 60 * MINUTE_IN_SECONDS); // one hour
+// Failed /login attempts tolerated from one client address before further
+// attempts are refused without running bcrypt (issue #443). Ten per window is
+// ~40 guesses an hour — hopeless against any real password — while leaving room
+// for a typo-prone author (and for the browser suites, which submit several
+// wrong passwords from one address in a single run).
+define('LOGIN_THROTTLE_MAX_FAILURES', 10);
+// How long failures accumulate, and how long a refusal lasts once the limit is
+// met. Also the lifetime of a throttle row before it is pruned.
+define('LOGIN_THROTTLE_WINDOW', 15 * MINUTE_IN_SECONDS);
+// Prefix for the per-client throttle rows in the `option` table.
+define('LOGIN_THROTTLE_PREFIX', 'login_fail_');
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');

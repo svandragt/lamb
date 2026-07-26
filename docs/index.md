@@ -88,6 +88,7 @@ Devtools / local environments / sandbox:
 * [Drafts]({{ site.baseurl }}{% link drafts.md %})
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
 * [Known import]({{ site.baseurl }}{% link known-import.md %})
+* [Login security]({{ site.baseurl }}{% link login-security.md %})
 * [Media]({{ site.baseurl }}{% link media.md %})
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %})
