@@ -31,7 +31,7 @@ define('MINUTE_IN_SECONDS', 60);
 define('FEED_FETCH_INTERVAL', 30 * MINUTE_IN_SECONDS);
 // Current post render-format version. Bump when `transformed` output changes
 // (e.g. new syntax highlighting); older posts are re-parsed on read by upgrade_posts().
-define('POST_VERSION', 3);
+define('POST_VERSION', 4);
 // How long a login is remembered. The session cookie and the server-side session
 // both persist this long, so logins survive a browser restart and idle time.
 define('REMEMBER_LIFETIME', 7 * 24 * 60 * MINUTE_IN_SECONDS); // one week

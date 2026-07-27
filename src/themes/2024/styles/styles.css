@@ -43,6 +43,10 @@ pre code {
 
 img {
     max-width: 100%;
+    /* Images carry intrinsic width/height attributes so the browser can
+       reserve their box; height: auto keeps the aspect ratio when max-width
+       shrinks one that is wider than its container. */
+    height: auto;
 }
 
 input[type='submit'], button {

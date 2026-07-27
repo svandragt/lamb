@@ -7,6 +7,13 @@ use Parsedown;
 class LambDown extends Parsedown
 {
     /**
+     * Resolves an image `src` to its pixel dimensions, or null when unknown.
+     *
+     * @var (callable(string): (array{0:int,1:int}|null))|null
+     */
+    private $imageSizeResolver = null;
+
+    /**
      * Registers the GitHub-style task-list checkbox block.
      *
      * Internalised from leblanc-simon/parsedown-checkbox (which targets
@@ -193,6 +200,25 @@ class LambDown extends Parsedown
     }
 
     /**
+     * Supplies the lookup used to stamp intrinsic `width`/`height` on images.
+     *
+     * Injected rather than looked up here so the parser stays a pure
+     * string→string transform: it needs an image's pixel size but has no
+     * business knowing that uploads live under ROOT_DIR/assets, and unit tests
+     * can pass a stub instead of writing real files. Callers wire in
+     * Response\asset_dimensions(); with no resolver set, no dimensions are
+     * emitted and the markup is unchanged.
+     *
+     * @param (callable(string): (array{0:int,1:int}|null))|null $resolver
+     *        Receives an image `src`, returns [width, height] or null.
+     * @return void
+     */
+    public function setImageSizeResolver(?callable $resolver): void
+    {
+        $this->imageSizeResolver = $resolver;
+    }
+
+    /**
      * Inject lazy-loading attributes on every inline image so post bodies
      * with embedded screenshots do not block first paint on the homepage.
      *
@@ -220,11 +246,41 @@ class LambDown extends Parsedown
             return $image;
         }
 
-        $image['element']['attributes'] += [
+        $image['element']['attributes'] += $this->intrinsicDimensions($src) + [
             'loading'  => 'lazy',
             'decoding' => 'async',
         ];
         return $image;
+    }
+
+    /**
+     * The `width`/`height` attributes for an image, or none when its size is
+     * unknown.
+     *
+     * These are what let the browser reserve the right box before the image
+     * arrives — without them, `loading="lazy"` above guarantees every image in
+     * a post shifts the text below it as it decodes. They describe the
+     * intrinsic pixel size, and the themes' `img { max-width: 100%; height:
+     * auto; }` keeps CSS in charge of the rendered size.
+     *
+     * @param string $src The image's `src` attribute.
+     * @return array<string, string> `width`/`height`, or an empty array.
+     */
+    private function intrinsicDimensions(string $src): array
+    {
+        if ($this->imageSizeResolver === null) {
+            return [];
+        }
+
+        $size = ($this->imageSizeResolver)($src);
+        if ($size === null) {
+            return [];
+        }
+
+        return [
+            'width'  => (string) (int) $size[0],
+            'height' => (string) (int) $size[1],
+        ];
     }
 
     /**

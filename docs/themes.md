@@ -56,6 +56,8 @@ Default:
 * Logged-in users additionally get the admin scripts in `src/scripts/logged_in/`.
 * Post bodies are stored at the author's literal heading levels (`#` → `<h1>`, `##` → `<h2>`, …). A theme decides where those headings sit in its own outline at render time with `anchor_headings($bean->transformed, $top)`: it shifts the body so its highest heading lands at level `$top`, keeping the rest relative (clamped at `<h6>`) so the outline stays in order for screen readers. The shift is signed — a body written deeper than `$top` is pulled up just as a shallower one is pushed down — so the level the author typed is immaterial. The built-in themes render the post title at `<h2>` and pass `$top = 3`, so the body's first heading always becomes `<h3>`. A theme that titles posts differently passes a different level, and one that wants the literal levels can echo `$bean->transformed` without anchoring.
 
+* Images inside `$bean->transformed` carry intrinsic `width` and `height` attributes (see [Media]({{ site.baseurl }}{% link media.md %})), so a theme's stylesheet **must** leave the aspect ratio free. If you constrain image width — the usual `img { max-width: 100% }` — pair it with `height: auto`, or images wider than their container will be squashed to the attribute's height. All three built-in themes set both.
+
 Have a look at the pre-existing themes for examples of the above.
 
 Any suggestions to improve theming are welcomed.
@@ -63,4 +65,5 @@ Any suggestions to improve theming are welcomed.
 ## Related
 
 * [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %}): reference for the helper functions theme parts call.
+* [Media]({{ site.baseurl }}{% link media.md %}): rendered images carry intrinsic dimensions a theme's CSS has to accommodate.
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set the `theme` key in the config to activate a theme.

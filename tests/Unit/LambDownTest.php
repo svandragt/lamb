@@ -170,4 +170,58 @@ class LambDownTest extends TestCase
         $this->assertStringContainsString('<video', $html);
         $this->assertStringContainsString('src="video.mp4"', $html);
     }
+
+    public function testImageGetsIntrinsicDimensionsFromResolver(): void
+    {
+        $this->parser->setImageSizeResolver(static fn(string $src): array => [1600, 1200]);
+
+        $html = $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertStringContainsString('width="1600"', $html);
+        $this->assertStringContainsString('height="1200"', $html);
+    }
+
+    public function testImageWithoutResolverHasNoDimensions(): void
+    {
+        $html = $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertStringNotContainsString('width=', $html);
+        $this->assertStringNotContainsString('height=', $html);
+    }
+
+    public function testResolverReturningNullOmitsDimensions(): void
+    {
+        // An image whose size cannot be determined (remote URL, deleted file)
+        // must render exactly as it did before, not with bogus dimensions.
+        $this->parser->setImageSizeResolver(static fn(string $src): ?array => null);
+
+        $html = $this->parser->text('![photo](https://example.com/photo.png)');
+        $this->assertStringContainsString('<img', $html);
+        $this->assertStringNotContainsString('width=', $html);
+    }
+
+    public function testResolverReceivesTheImageSource(): void
+    {
+        $seen = [];
+        $this->parser->setImageSizeResolver(static function (string $src) use (&$seen): ?array {
+            $seen[] = $src;
+            return null;
+        });
+
+        $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertSame(['/assets/2026/07/photo.webp'], $seen);
+    }
+
+    public function testVideoIsNotMeasured(): void
+    {
+        // getimagesize() cannot measure a video container, and <video> takes a
+        // different sizing path — the resolver must not be consulted for it.
+        $called = false;
+        $this->parser->setImageSizeResolver(static function (string $src) use (&$called): ?array {
+            $called = true;
+            return [640, 480];
+        });
+
+        $html = $this->parser->text('![clip](/assets/2026/07/clip.mp4)');
+        $this->assertFalse($called);
+        $this->assertStringNotContainsString('width=', $html);
+    }
 }
