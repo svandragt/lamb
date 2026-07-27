@@ -273,7 +273,7 @@ class LambDown extends Parsedown
         }
 
         $size = ($this->imageSizeResolver)($src);
-        if (!is_array($size) || !isset($size[0], $size[1])) {
+        if ($size === null) {
             return [];
         }
 
