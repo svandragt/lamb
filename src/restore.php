@@ -35,7 +35,7 @@ const MAX_UNCOMPRESSED_BYTES = 2147483648; // 2 GiB
  */
 function parse_restore_args(array $argv): array
 {
-    [$path, $dry_run, $replace] = \Lamb\Import\parse_import_args($argv);
+    [$path, $dry_run, $replace] = \Lamb\Import\parse_import_args($argv, ['--site-url=']);
     if ($path === null) {
         return [null, false, false, null];
     }

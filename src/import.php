@@ -705,15 +705,19 @@ function store_redirect(string $from, string $to): void
  * the path is missing or help was asked for.
  *
  * Shared by every CLI importer, including Lamb\Restore\parse_restore_args(),
- * which adds only its own `--site-url=` on top — so `--dry-run` and
- * `--replace` are spelled in exactly one place. Flag-looking arguments are
- * never taken as the path: an unrecognised `--foo` is ignored rather than
- * silently becoming the file to import.
+ * which passes its own `--site-url=` as an extra prefix — so `--dry-run` and
+ * `--replace` are spelled in exactly one place.
+ *
+ * An unrecognised flag refuses the whole invocation rather than being ignored.
+ * `--dryrun` is one keystroke from `--dry-run`, and ignoring it would run the
+ * real, unrehearsed import the operator was explicitly trying to avoid; the
+ * caller prints usage and exits non-zero on a null path.
  *
  * @param array<int,string> $argv
+ * @param list<string>      $extra_prefixes Flag prefixes a caller accepts on top of the shared ones.
  * @return array{0: ?string, 1: bool, 2: bool}
  */
-function parse_import_args(array $argv): array
+function parse_import_args(array $argv, array $extra_prefixes = []): array
 {
     $path = null;
     $dry_run = false;
@@ -725,7 +729,14 @@ function parse_import_args(array $argv): array
             $replace = true;
         } elseif ($arg === '--help' || $arg === '-h') {
             return [null, false, false];
-        } elseif ($path === null && !str_starts_with($arg, '-')) {
+        } elseif (str_starts_with($arg, '-')) {
+            foreach ($extra_prefixes as $prefix) {
+                if (str_starts_with($arg, $prefix)) {
+                    continue 2;
+                }
+            }
+            return [null, false, false];
+        } elseif ($path === null) {
             $path = $arg;
         }
     }

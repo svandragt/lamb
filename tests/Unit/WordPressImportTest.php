@@ -987,6 +987,17 @@ XML;
         $this->assertSame([null, false, false], parse_import_args(['x', '--help']));
     }
 
+    /**
+     * A mistyped flag must not degrade into a real import. `--dryrun` is one
+     * keystroke from `--dry-run`, and silently ignoring it would run the
+     * unrehearsed import the operator was explicitly trying to avoid.
+     */
+    public function testParseImportArgsRefusesAnUnknownFlag(): void
+    {
+        $this->assertSame([null, false, false], parse_import_args(['x', '--dryrun', 'wxr.xml']));
+        $this->assertSame([null, false, false], parse_import_args(['x', 'wxr.xml', '-n']));
+    }
+
     public function testImportItemDryRunDoesNotStore(): void
     {
         if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
