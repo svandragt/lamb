@@ -70,6 +70,7 @@ Each entry in `posts` points at a file in the archive and records the things a M
 | `deleted` / `deleted_at` | `true` and a timestamp for a post in the [trash]({{ site.baseurl }}{% link trash.md %}). |
 | `post_version` | Which revision of Lamb's post pipeline last rendered the post. |
 | `feed_name`, `feeditem_uuid`, `source_url` | Set when the post came from a subscribed feed rather than being written locally. Locally authored posts have `null` in all three. |
+| `site.url` (in the top-level `site` block, not per-post) | The origin the [Lamb importer]({{ site.baseurl }}{% link lamb-import.md %}) uses to namespace restored post ids, so archives from two different sites never collide on id. |
 
 Deliberately absent: titles and bodies (they live in the Markdown file, so there is only ever one source of truth for your content) and preview tokens (they are access credentials for unpublished posts, and an export is a file you may pass around).
 
@@ -94,5 +95,6 @@ Export needs PHP's `zip` extension. It is present in the Docker image and in mos
 - [Trash]({{ site.baseurl }}{% link trash.md %}) — trashed posts are included in the export and flagged in the manifest.
 - [Drafts]({{ site.baseurl }}{% link drafts.md %}) — so are drafts.
 - [Media]({{ site.baseurl }}{% link media.md %}) — how the assets in the archive were stored and converted.
+- [Lamb import]({{ site.baseurl }}{% link lamb-import.md %}) — restores an archive produced here, straight back into Lamb.
 - [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}) — the same format, in the opposite direction.
 - [Known import]({{ site.baseurl }}{% link known-import.md %}) — likewise.

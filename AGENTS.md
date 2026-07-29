@@ -76,6 +76,7 @@ lamb/
 │   ├── routes.php        # register_route() / call_route() helpers
 │   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, visibility clauses, redirects
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify, finalize_slug
+│   ├── restore.php       # Lamb export importer: archive reader, manifest validation, post/asset restore
 │   ├── response.php      # Response helpers: pagination, conditional GET/304, 404, upgrade_posts
 │   ├── response/         # Route handlers (respond_*, redirect_*), split by area
 │   │   ├── auth.php      # Login/logout/settings
@@ -109,6 +110,7 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
+├── import-lamb.php       # CLI: restore a Lamb export archive (src/restore.php) into the DB
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
@@ -143,6 +145,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
 | `response.php` + `response/*.php` | `Lamb\Response` |
+| `restore.php` | `Lamb\Restore` |
 | `routes.php` | `Lamb\Route` |
 | `security.php` | `Lamb\Security` |
 | `theme.php` + `theme/*.php` | `Lamb\Theme` |

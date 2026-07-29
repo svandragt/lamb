@@ -23,6 +23,18 @@ WXR was rejected: it is WordPress's schema, has no clean home for Lamb's draft/d
 
 ---
 
+## 2026-07-29 — Lamb export import identity via a separate `import_uuid` column
+
+**Status:** Accepted
+**Context:** Issue #554 asked for a lamb-to-lamb importer that restores a `/export` archive back into the database, idempotently. The two existing importers (WordPress, Known) dedupe re-runs via `feeditem_uuid`, and reusing that column for restored posts too was the obvious first idea — one less column.
+
+It was rejected. `lock_if_feed_sourced()` (`src/response/posts.php:329`) sets `feed_locked` on any post with a non-empty `feeditem_uuid` when it is edited, to stop hand-editing content a feed will overwrite on the next cron run. A restored local post is not feed-sourced — nothing will overwrite it — so giving it a `feeditem_uuid` to get free dedup would also silently feed-lock it, changing edit behaviour for a post that never subscribed to anything.
+
+**Decision:** Add a dedicated `import_uuid` column (`Bootstrap\ensure_post_columns()`, `src/bootstrap.php`), computed as `md5('lamb-' . $origin . '#' . $source_id)`. `$origin` is the exporting site's URL (from the manifest's `site.url`, or `--site-url` when given) rather than `ROOT_URL`, because `ROOT_URL` is host-derived and the same install reached on two hostnames would otherwise mint two origins for one site's posts.
+**Consequences:** Restored posts carry both an empty `feeditem_uuid` and a populated `import_uuid`, so they are editable without tripping feed-lock. `run_import()` (`src/import.php`) gained an optional `$find_existing` callable so its shared counters/summary machinery can dedupe on either column without duplicating the loop.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted
