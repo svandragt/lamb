@@ -8,7 +8,11 @@ use RuntimeException;
 use ZipArchive;
 
 use function Lamb\Bootstrap\ensure_post_columns;
+use function Lamb\Export\build_export_archive;
 use function Lamb\Import\run_import;
+use function Lamb\Restore\import_post;
+use function Lamb\Restore\item_skip_reason;
+use function Lamb\Restore\manifest_items;
 use function Lamb\Restore\open_source;
 use function Lamb\Restore\origin_id;
 use function Lamb\Restore\parse_restore_args;
@@ -349,6 +353,247 @@ class LambRestoreTest extends TestCase
             restore_uuid('https://example.test', 7),
             restore_uuid('https://other.test', 7)
         );
+    }
+
+    /**
+     * The post shape build_export_archive() consumes, matching collect_posts().
+     *
+     * @param array<string, mixed> $overrides
+     * @return array<string, mixed>
+     */
+    private function post(array $overrides = []): array
+    {
+        return $overrides + [
+            'id'            => 1,
+            'slug'          => 'hello-world',
+            'body'          => "---\ntitle: Hello World\nslug: hello-world\n---\n\nBody text.\n",
+            'created'       => '2026-07-14 09:30:00',
+            'updated'       => '2026-07-15 11:00:00',
+            'draft'         => false,
+            'deleted'       => false,
+            'deleted_at'    => null,
+            'version'       => 3,
+            'feed_name'     => null,
+            'feeditem_uuid' => null,
+            'source_url'    => null,
+        ];
+    }
+
+    /**
+     * The posts the round-trip exercises: every state the manifest records.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function samplePosts(): array
+    {
+        return [
+            $this->post(),
+            $this->post([
+                'id'   => 2,
+                'slug' => 'work-in-progress',
+                'body' => "---\ntitle: Work in progress\nslug: work-in-progress\n---\n\nNot done.\n",
+                'draft' => true,
+            ]),
+            $this->post([
+                'id'   => 3,
+                'slug' => 'regrets',
+                'body' => "---\ntitle: Regrets\nslug: regrets\n---\n\nBinned.\n",
+                'deleted' => true,
+                'deleted_at' => '2026-07-20 08:00:00',
+            ]),
+            $this->post([
+                'id'   => 4,
+                'slug' => '',
+                'body' => "Just a status.\n",
+            ]),
+            $this->post([
+                'id'   => 5,
+                'slug' => 'with-a-photo',
+                'body' => "---\nslug: with-a-photo\n---\n\n![](/assets/2026/07/photo.png)\n",
+            ]),
+        ];
+    }
+
+    /**
+     * An uploads tree holding the one asset samplePosts() references.
+     */
+    private function assetsRoot(): string
+    {
+        $root = "$this->tmp_dir/assets_src";
+        if (!is_dir("$root/2026/07")) {
+            mkdir("$root/2026/07", 0777, true);
+        }
+        $image = imagecreatetruecolor(4, 3);
+        imagepng($image, "$root/2026/07/photo.png");
+        imagedestroy($image);
+
+        return $root;
+    }
+
+    /**
+     * @param list<array<string, mixed>>|null $posts
+     */
+    private function buildArchive(?array $posts = null, string $url = 'https://example.test', string $name = 'export.zip'): string
+    {
+        $path = "$this->tmp_dir/$name";
+        build_export_archive(
+            $posts ?? $this->samplePosts(),
+            $this->assetsRoot(),
+            $path,
+            '2026-07-29T10:00:00+00:00',
+            ['title' => 'Notes', 'url' => $url],
+        );
+
+        return $path;
+    }
+
+    /**
+     * Runs the importer over an archive the way import-lamb.php does.
+     */
+    private function importArchive(string $path, bool $replace = false, ?string $site_url = null): string
+    {
+        [, $reader] = open_source($path);
+        $manifest = read_manifest($reader);
+        $items = manifest_items($manifest, $reader, origin_id($manifest, $site_url));
+
+        ob_start();
+        run_import(
+            $items,
+            item_skip_reason(...),
+            static fn(array $item): string => (string) $item['import_uuid'],
+            import_post(...),
+            false,
+            static fn(string $uuid): ?\RedBeanPHP\OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
+            $replace,
+        );
+
+        return (string) ob_get_clean();
+    }
+
+    public function testRoundTripRestoresEveryPostState(): void
+    {
+        $this->importArchive($this->buildArchive());
+
+        $this->assertSame(5, R::count('post'));
+
+        $hello = R::findOne('post', ' slug = ? ', ['hello-world']);
+        $this->assertNotNull($hello);
+        $this->assertSame("---\ntitle: Hello World\nslug: hello-world\n---\n\nBody text.\n", $hello->body);
+        $this->assertSame('2026-07-14 09:30:00', $hello->created);
+        $this->assertSame('2026-07-15 11:00:00', $hello->updated);
+        $this->assertSame(0, (int) $hello->draft);
+        $this->assertSame(0, (int) $hello->deleted);
+
+        $draft = R::findOne('post', ' slug = ? ', ['work-in-progress']);
+        $this->assertSame(1, (int) $draft->draft);
+
+        $trashed = R::findOne('post', ' slug = ? ', ['regrets']);
+        $this->assertSame(1, (int) $trashed->deleted);
+        $this->assertSame('2026-07-20 08:00:00', $trashed->deleted_at);
+
+        $status = R::findOne('post', ' body LIKE ? ', ['%Just a status%']);
+        $this->assertNotNull($status);
+        $this->assertSame('', (string) $status->slug);
+
+        $photo = R::findOne('post', ' slug = ? ', ['with-a-photo']);
+        $this->assertStringContainsString('/assets/2026/07/photo.png', (string) $photo->body);
+    }
+
+    public function testReimportingTheSameArchiveChangesNothing(): void
+    {
+        $archive = $this->buildArchive();
+        $this->importArchive($archive);
+        $output = $this->importArchive($archive);
+
+        $this->assertSame(5, R::count('post'));
+        $this->assertStringContainsString('created=0 existed=5', $output);
+    }
+
+    public function testReplaceOverwritesLocalEditsAndRestoresTrashState(): void
+    {
+        $archive = $this->buildArchive();
+        $this->importArchive($archive);
+
+        $edited = R::findOne('post', ' slug = ? ', ['hello-world']);
+        $edited->body = "---\ntitle: Hello World\nslug: hello-world\n---\n\nLocally edited.\n";
+        R::store($edited);
+        $untrashed = R::findOne('post', ' slug = ? ', ['regrets']);
+        $untrashed->deleted = 0;
+        $untrashed->deleted_at = null;
+        R::store($untrashed);
+
+        $output = $this->importArchive($archive, true);
+
+        $this->assertStringContainsString('replaced=5', $output);
+        $this->assertSame(5, R::count('post'));
+        $this->assertSame(
+            "---\ntitle: Hello World\nslug: hello-world\n---\n\nBody text.\n",
+            R::load('post', $edited->id)->body
+        );
+        $this->assertSame(1, (int) R::load('post', $untrashed->id)->deleted);
+        $this->assertSame('2026-07-20 08:00:00', R::load('post', $untrashed->id)->deleted_at);
+    }
+
+    public function testArchivesFromDifferentSitesDoNotCollide(): void
+    {
+        $posts = [$this->post()];
+        $this->importArchive($this->buildArchive($posts, 'https://example.test', 'a.zip'));
+        $this->importArchive($this->buildArchive($posts, 'https://other.test', 'b.zip'));
+
+        $this->assertSame(2, R::count('post'));
+    }
+
+    public function testAnArchiveWithoutASiteUrlStillImportsAndDedupes(): void
+    {
+        $archive = $this->buildArchive([$this->post()], '', 'no-site.zip');
+        $this->importArchive($archive);
+        $this->importArchive($archive);
+
+        $this->assertSame(1, R::count('post'));
+    }
+
+    public function testTheSiteUrlOverrideNamespacesTheImport(): void
+    {
+        $archive = $this->buildArchive([$this->post()], '', 'no-site.zip');
+        $this->importArchive($archive);
+        $this->importArchive($archive, false, 'https://restored.test');
+
+        $this->assertSame(2, R::count('post'));
+    }
+
+    public function testAManifestPathWithNoArchiveEntryIsSkipped(): void
+    {
+        $manifest = $this->manifest([
+            'posts' => [
+                ['path' => 'posts/2026/07/gone.md', 'id' => 1, 'slug' => 'gone', 'created' => '2026-07-01 00:00:00'],
+                ['path' => 'posts/../../evil.md', 'id' => 2],
+                ['path' => 'posts/2026/07/blank.md', 'id' => 3],
+            ],
+        ]);
+        $archive = $this->zip([
+            'manifest.json'            => (string) json_encode($manifest),
+            'posts/2026/07/blank.md'   => "   \n",
+        ]);
+
+        $output = $this->importArchive($archive);
+
+        $this->assertSame(0, R::count('post'));
+        $this->assertStringContainsString('1' . "\t" . 'missing file', $output);
+        $this->assertStringContainsString('1' . "\t" . 'bad path', $output);
+        $this->assertStringContainsString('1' . "\t" . 'empty body', $output);
+    }
+
+    public function testAnUnpackedDirectoryImportsLikeTheZip(): void
+    {
+        $zip = new ZipArchive();
+        $zip->open($this->buildArchive());
+        $zip->extractTo("$this->tmp_dir/unpacked");
+        $zip->close();
+
+        $this->importArchive("$this->tmp_dir/unpacked");
+
+        $this->assertSame(5, R::count('post'));
+        $this->assertSame('2026-07-14 09:30:00', R::findOne('post', ' slug = ? ', ['hello-world'])->created);
     }
 
     public function testParseRestoreArgsReadsTheFlags(): void

@@ -3,6 +3,8 @@
 namespace Lamb\Restore;
 
 use JsonException;
+use Lamb\Post;
+use RedBeanPHP\OODBBean;
 use RuntimeException;
 use ZipArchive;
 
@@ -237,4 +239,130 @@ function origin_id(array $manifest, ?string $override): string
 function restore_uuid(string $origin, int $id): string
 {
     return md5('lamb-' . $origin . '#' . $id);
+}
+
+/**
+ * Turns the manifest's post entries into the items run_import() walks.
+ *
+ * Each item carries the manifest's own fields, the body read out of the
+ * archive (null when the entry is absent) and the dedup uuid. `title` is the
+ * in-archive path: it is only ever used for the progress line, and the path is
+ * what identifies a post to someone watching a restore.
+ *
+ * The manifest is part of the untrusted archive, so a `path` it names is
+ * validated before anything is read and cross-checked against what the archive
+ * actually contains — a path the reader cannot resolve is reported as a missing
+ * file rather than restored as an empty post.
+ *
+ * @param array<string, mixed>     $manifest
+ * @param callable(string):?string $reader
+ * @return list<array<string, mixed>>
+ */
+function manifest_items(array $manifest, callable $reader, string $origin): array
+{
+    $items = [];
+    $posts = $manifest['posts'] ?? [];
+    if (!is_array($posts)) {
+        return [];
+    }
+
+    foreach ($posts as $post) {
+        if (!is_array($post)) {
+            continue;
+        }
+        $path = (string) ($post['path'] ?? '');
+        $safe = safe_entry_path($path);
+        $items[] = $post + [
+            'title'       => $path,
+            'path'        => $path,
+            'body'        => $safe === null ? null : read_entry($reader, $safe),
+            'import_uuid' => restore_uuid($origin, (int) ($post['id'] ?? 0)),
+        ];
+    }
+
+    return $items;
+}
+
+/**
+ * Explains why a manifest entry cannot be restored, or null when it can.
+ *
+ * @param array<string, mixed> $item
+ */
+function item_skip_reason(array $item): ?string
+{
+    if (safe_entry_path((string) ($item['path'] ?? '')) === null) {
+        return 'bad path';
+    }
+    $body = $item['body'] ?? null;
+    if ($body === null) {
+        return 'missing file';
+    }
+    if (trim((string) $body) === '') {
+        return 'empty body';
+    }
+
+    return null;
+}
+
+/**
+ * Restores one manifest entry as a post.
+ *
+ * The body goes through the ordinary post pipeline, so a restored post is
+ * rendered, tagged and slugged exactly as one written today. The manifest state
+ * is applied *after* populate_bean(), which stamps created/updated with now()
+ * and can rewrite created from front matter — a restore that re-dates every
+ * post to the moment it ran is not a restore.
+ *
+ * $bean is the row to overwrite under --replace; without it a new post is
+ * created. No webmentions or WebSub pings: restored posts are not new
+ * publications.
+ *
+ * @param array<string, mixed>     $item
+ * @param callable(string,string):?string $_downloader Unused: an archive carries its own assets.
+ */
+function import_post(array $item, callable $_downloader, bool $dry_run = false, ?OODBBean $bean = null): OODBBean
+{
+    if ($dry_run) {
+        return $bean ?? \RedBeanPHP\R::dispense('post');
+    }
+
+    $bean = Post\populate_bean((string) ($item['body'] ?? ''), null, null, $bean);
+    apply_manifest_state($bean, $item);
+    Post\finalize_and_store_post($bean);
+
+    return $bean;
+}
+
+/**
+ * Overwrites everything on the bean that the manifest describes.
+ *
+ * This is deliberately total rather than additive: a restore that leaves a post
+ * published when the backup says it was trashed, or dated today when the backup
+ * says 2019, has not restored anything. The manifest slug wins only when it is
+ * non-empty — a slugless status post keeps the empty slug and its
+ * /status/<id> permalink.
+ *
+ * @param array<string, mixed> $item
+ */
+function apply_manifest_state(OODBBean $bean, array $item): void
+{
+    $created = (string) ($item['created'] ?? '');
+    $updated = (string) ($item['updated'] ?? '');
+    if ($created !== '') {
+        $bean->created = $created;
+    }
+    $bean->updated = $updated !== '' ? $updated : $bean->created;
+
+    $slug = (string) ($item['slug'] ?? '');
+    if ($slug !== '') {
+        $bean->slug = $slug;
+    }
+
+    $bean->draft = empty($item['draft']) ? 0 : 1;
+    $bean->deleted = empty($item['deleted']) ? 0 : 1;
+    $bean->deleted_at = $item['deleted_at'] ?? null;
+    $bean->feed_name = $item['feed_name'] ?? null;
+    $bean->feeditem_uuid = $item['feeditem_uuid'] ?? null;
+    $bean->source_url = $item['source_url'] ?? null;
+    $bean->import_uuid = (string) ($item['import_uuid'] ?? '');
 }
