@@ -15,10 +15,10 @@ use function Lamb\Http\fetch_guarded;
 use function Lamb\Response\asset_url;
 
 /**
- * Stable dedup key for an imported feed item. Mirrors the feed-ingest
- * convention (`feeditem_uuid = md5($feed_name . $id)`), so re-running an
- * import never recreates a row. Called with a per-CMS prefix ('wordpress-',
- * 'known-', …) so dedup identity can never collide across importers.
+ * Stable dedup key for an imported item, stored on the post's `import_uuid`
+ * column, so re-running an import never recreates a row. Called with a
+ * per-CMS prefix ('wordpress-', 'known-', …) so dedup identity can never
+ * collide across importers.
  */
 function import_uuid(string $prefix, string $guid): string
 {
@@ -730,18 +730,14 @@ function parse_import_args(array $argv): array
  * summary. Used by both import-wordpress.php and import-known.php so the two
  * scripts' output stays byte-identical in shape.
  *
- * $find_existing lets an importer dedupe on its own column instead of
- * feeditem_uuid, and $replace re-imports into the bean it returns rather than
- * counting the item as already present. $replace is honoured only when
- * $find_existing is supplied — an importer that takes three parameters cannot
- * accept a bean to overwrite, so handing it one would quietly create a
- * duplicate and report it as a replacement.
+ * $find_existing looks an already-imported row up by uuid; $replace re-imports
+ * into the bean it returns rather than counting the item as already present.
  *
  * @param list<array<string, mixed>>      $items      Items from extract_items().
  * @param callable(array<string,mixed>):?string $skip_reason Explains why an item is out of scope, or null.
  * @param callable(array<string,mixed>):string  $uuid       Computes the item's dedup uuid.
  * @param callable(array<string,mixed>,callable,bool,\RedBeanPHP\OODBBean|null=):?\RedBeanPHP\OODBBean $import Imports a single item.
- * @param callable(string):?\RedBeanPHP\OODBBean|null $find_existing Finds an already-imported row by uuid.
+ * @param callable(string):?\RedBeanPHP\OODBBean $find_existing Finds an already-imported row by uuid.
  */
 function run_import(
     array $items,
@@ -749,13 +745,12 @@ function run_import(
     callable $uuid,
     callable $import,
     bool $dry_run,
-    ?callable $find_existing = null,
+    callable $find_existing,
     bool $replace = false
 ): void {
     $downloader = $dry_run
         ? static fn(): ?string => null
         : 'Lamb\\Import\\default_image_downloader';
-    $replace = $replace && $find_existing !== null;
 
     $created = 0;
     $existed = 0;
@@ -773,9 +768,7 @@ function run_import(
             continue;
         }
         $item_uuid = $uuid($item);
-        $existing = $find_existing !== null
-            ? $find_existing($item_uuid)
-            : R::findOne('post', ' feeditem_uuid = ? ', [$item_uuid]);
+        $existing = $find_existing($item_uuid);
         if ($existing && !$replace) {
             $existed++;
             continue;

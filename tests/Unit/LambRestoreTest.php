@@ -143,10 +143,12 @@ class LambRestoreTest extends TestCase
 
     /**
      * @param list<array<string, mixed>> $items
-     * @param array<int, mixed>          $extra Trailing run_import() arguments.
+     * @param array<int, mixed>          $extra Trailing run_import() arguments,
+     *                                           replacing the default import_uuid lookup.
      */
     private function captureImport(array $items, callable $import, array $extra = []): string
     {
+        $extra = $extra ?: [static fn(string $uuid): ?\RedBeanPHP\OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid])];
         ob_start();
         run_import(
             $items,
@@ -160,11 +162,11 @@ class LambRestoreTest extends TestCase
         return (string) ob_get_clean();
     }
 
-    public function testRunImportStillDedupesOnFeeditemUuidWithoutALookup(): void
+    public function testRunImportCountsAnAlreadyImportedItemAsExisting(): void
     {
         $existing = R::dispense('post');
         $existing->body = 'Already here.';
-        $existing->feeditem_uuid = 'u1';
+        $existing->import_uuid = 'u1';
         R::store($existing);
 
         $output = $this->captureImport(
@@ -222,31 +224,6 @@ class LambRestoreTest extends TestCase
         );
 
         $this->assertStringNotContainsString('replaced=', $output);
-    }
-
-    public function testRunImportIgnoresReplaceWithoutALookup(): void
-    {
-        $existing = R::dispense('post');
-        $existing->body = 'Already here.';
-        $existing->feeditem_uuid = 'u1';
-        R::store($existing);
-
-        // A three-parameter importer, as import-wordpress.php and
-        // import-known.php supply: it cannot accept the bean to replace, so
-        // handing it one would silently create a duplicate instead.
-        $output = $this->captureImport(
-            [['uuid' => 'u1', 'title' => 'One']],
-            static function (array $item, callable $downloader, bool $dry_run): \RedBeanPHP\OODBBean {
-                $bean = R::dispense('post');
-                $bean->body = 'Duplicate.';
-                R::store($bean);
-                return $bean;
-            },
-            [null, true],
-        );
-
-        $this->assertStringContainsString('created=0 existed=1 skipped=0 total=1', $output);
-        $this->assertSame(1, R::count('post'));
     }
 
     public function testSafeEntryPathAcceptsTheExportLayout(): void
