@@ -49,7 +49,7 @@ The importer writes directly to the same database your site uses, so the posts a
 
 A few things worth checking manually:
 
-- **Slugs.** Every post keeps the slug it was exported with. The one case that cannot be restored is a post that had no slug to begin with — a titleless status post. Its permalink was `/status/<its old id>`, and source ids cannot be restored into a populated database (a new row gets a new id). It comes back as a status post again, but at `/status/<new id>` — a different URL than before.
+- **Slugs.** Every post keeps the slug it was exported with. The one case that cannot be restored is a post that had no slug to begin with — a titleless status post. Its permalink was `/status/<its old id>`, and source ids cannot be restored into a populated database (a new row gets a new id). It comes back as a status post again, but at `/status/<new id>` — a different URL than before. Only the URL is affected: posts are matched on the id recorded in the manifest, not on their slug, so a slugless post still imports exactly once no matter how often you re-run the importer.
 - **Media.** Run a quick `git status` on `src/assets/` to see what was restored.
 
 ## Related
