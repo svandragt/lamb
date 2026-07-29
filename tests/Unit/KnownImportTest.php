@@ -503,6 +503,33 @@ XML;
         $this->assertCount(1, R::findAll('post'));
     }
 
+    public function testImportItemReplacesAnEditedPostInPlace(): void
+    {
+        $items = $this->sampleItems();
+        $downloader = fn(): ?string => null;
+
+        $first = import_item($items[0], $downloader, false);
+        $this->assertNotNull($first);
+        $id = (int) $first->id;
+        $uuid = (string) $first->import_uuid;
+
+        // Local edit since the import: body rewritten and the post drafted.
+        $first->body = "---\ntitle: Edited\n---\n\nLocal changes.\n";
+        $first->draft = 1;
+        R::store($first);
+
+        $replaced = import_item($items[0], $downloader, false, R::load('post', $id));
+
+        $this->assertNotNull($replaced);
+        $this->assertSame($id, (int) $replaced->id);
+        $this->assertSame($uuid, (string) $replaced->import_uuid);
+        $this->assertStringContainsString('People recognise faces.', (string) $replaced->body);
+        $this->assertStringNotContainsString('Local changes.', (string) $replaced->body);
+        $this->assertSame(0, (int) $replaced->draft);
+        $this->assertSame('2020-05-26 12:48:16', (string) $replaced->created);
+        $this->assertCount(1, R::findAll('post'));
+    }
+
     public function testImportItemDryRunStoresNothing(): void
     {
         $items = $this->sampleItems();

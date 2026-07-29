@@ -9,10 +9,13 @@
  * round. Idempotent: re-running an import never recreates a row (dedup by
  * md5('wordpress-' . guid) on the import_uuid column).
  *
- *   php import-wordpress.php path/to/wxr.xml [--dry-run]
+ *   php import-wordpress.php path/to/wxr.xml [--dry-run] [--replace]
  *
  * --dry-run     Parse and convert every item but write nothing to the DB
  *               or filesystem. Use this first to surface parsing errors.
+ * --replace     Re-apply every already-imported item over its existing post
+ *               instead of skipping it. Local edits made since the import are
+ *               lost. For re-running an export after a conversion fix.
  *
  * The script intentionally does NOT emit outbound webmentions or WebSub
  * pings — imported posts are pre-existing content, not new publications.
@@ -33,9 +36,9 @@ if (PHP_SAPI !== 'cli') {
 define('ROOT_DIR', __DIR__ . '/src');
 require __DIR__ . '/vendor/autoload.php';
 
-[$path, $dry_run] = Import\parse_import_args($argv);
+[$path, $dry_run, $replace] = Import\parse_import_args($argv);
 if ($path === null) {
-    fwrite(STDERR, "Usage: php import-wordpress.php <wxr.xml> [--dry-run]\n");
+    fwrite(STDERR, "Usage: php import-wordpress.php <wxr.xml> [--dry-run] [--replace]\n");
     exit(1);
 }
 
@@ -61,4 +64,5 @@ Import\run_import(
     WordPress\import_item(...),
     $dry_run,
     static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
+    $replace,
 );

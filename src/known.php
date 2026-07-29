@@ -285,6 +285,12 @@ function normalize_known_html_in_dom(DOMDocument $dom): void
  * `known_uuid()` already exists the existing bean is returned untouched —
  * re-running an import is therefore safe and idempotent.
  *
+ * Passing $bean (run_import() does so under `--replace`) re-imports into that
+ * row instead: everything the export describes is written over it, in place, so
+ * the row keeps its id and its import_uuid and any local edit since the
+ * original import is lost. This is the escape hatch for re-running an import
+ * after a fix to the HTML→Markdown conversion.
+ *
  * Synthetic-title items (Known-generated status updates — title ends `...`
  * or the body carries microformats2 `p-name`) are imported titleless, so
  * they fall through to Lamb's native `/status/<id>` permalink instead of
@@ -299,17 +305,20 @@ function normalize_known_html_in_dom(DOMDocument $dom): void
  *
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
+ * @param OODBBean|null                   $bean       Existing row to overwrite.
  */
-function import_item(array $item, callable $downloader, bool $dry_run = false): ?OODBBean
+function import_item(array $item, callable $downloader, bool $dry_run = false, ?OODBBean $bean = null): ?OODBBean
 {
     if (!should_import($item)) {
         return null;
     }
 
     $uuid = known_uuid((string) $item['guid']);
-    $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
-    if ($existing) {
-        return $existing;
+    if ($bean === null) {
+        $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
+        if ($existing) {
+            return $existing;
+        }
     }
 
     $body_html = (string) ($item['content'] ?? '');
@@ -340,7 +349,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false): 
 
     $body = build_post_body($title, $markdown, $tags, $slug);
 
-    $bean = populate_bean($body);
+    $bean = populate_bean($body, null, null, $bean);
     if (!empty($item['created'])) {
         $bean->created = (string) $item['created'];
     }
