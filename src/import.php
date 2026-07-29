@@ -701,26 +701,35 @@ function store_redirect(string $from, string $to): void
 }
 
 /**
- * Parses argv into [path, dry_run]. Returns [null, false] when the path is
- * missing.
+ * Parses argv into [path, dry_run, replace]. Returns [null, false, false] when
+ * the path is missing or help was asked for.
+ *
+ * Shared by every CLI importer, including Lamb\Restore\parse_restore_args(),
+ * which adds only its own `--site-url=` on top — so `--dry-run` and
+ * `--replace` are spelled in exactly one place. Flag-looking arguments are
+ * never taken as the path: an unrecognised `--foo` is ignored rather than
+ * silently becoming the file to import.
  *
  * @param array<int,string> $argv
- * @return array{0: ?string, 1: bool}
+ * @return array{0: ?string, 1: bool, 2: bool}
  */
 function parse_import_args(array $argv): array
 {
     $path = null;
     $dry_run = false;
+    $replace = false;
     foreach (array_slice($argv, 1) as $arg) {
         if ($arg === '--dry-run') {
             $dry_run = true;
+        } elseif ($arg === '--replace') {
+            $replace = true;
         } elseif ($arg === '--help' || $arg === '-h') {
-            return [null, false];
-        } elseif ($path === null) {
+            return [null, false, false];
+        } elseif ($path === null && !str_starts_with($arg, '-')) {
             $path = $arg;
         }
     }
-    return [$path, $dry_run];
+    return [$path, $dry_run, $replace];
 }
 
 /**
