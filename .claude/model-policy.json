@@ -1,0 +1,49 @@
+{
+  "$schema": "https://github.com/akshatagarwal/calibrate/policy/schema.json",
+  "version": 1,
+  "calibratedAt": "2026-07-29",
+  "complexity": {
+    "score": "medium",
+    "rationale": "Single PHP app, ~13.7k LOC across 56 files in src/, namespaced-function style with no framework and no distributed components — but a real security surface (IndieAuth/Micropub tokens, session auth with login throttling, file uploads, webmention fetches) and a strict safety net that catches most mechanical error."
+  },
+  "phases": {
+    "plan": {
+      "model": "opus",
+      "rationale": "One tier above code: features here are cross-cutting (a route + a src/ module + theme templates + docs + DECISIONS.md), and the recurring hard part is format/contract decisions like the lamb-export/1 round trip, not the code itself. Not fable — no monorepo, no distributed systems, nothing needing multi-hour autonomous horizon."
+    },
+    "code": {
+      "model": "sonnet",
+      "rationale": "Strong safety net makes mid-tier safe: 1489 unit tests across 118 files, PHPStan level 8 with a baseline, phpcs, a 70% coverage gate, and a 4-version CI matrix (PHP 8.2-8.5) plus Playwright e2e. Not lowered further — 13.7k LOC of hand-rolled routing and auth is not boilerplate CRUD."
+    },
+    "review": {
+      "model": "sonnet",
+      "rationale": "CI already enforces lint, static analysis, coverage and cross-version tests, so review is hunting logic and design rather than mechanical defects; the paths where that is not enough are covered by explicit escalations below."
+    },
+    "explore": {
+      "model": "haiku",
+      "rationale": "Flat, greppable layout — one namespace per file in src/, routes in src/routes.php and src/response/*.php — so locating code is a search problem, not a reasoning one."
+    }
+  },
+  "escalations": [
+    {
+      "when": "paths:src/security.php,src/response/auth.php,src/micropub.php",
+      "action": "review uses opus — session auth, login throttling and IndieAuth/Micropub token verification; a subtle miss here is an authentication bypass, not a bug report"
+    },
+    {
+      "when": "paths:src/response/upload.php,src/export.php,src/network.php,src/webmention.php",
+      "action": "review uses opus — untrusted input crossing a trust boundary: uploaded files under the web root, archive paths and secret allowlisting on export, outbound fetches (SSRF)"
+    },
+    {
+      "when": "paths:.github/workflows/**,.docker/**,bin/upgrade",
+      "action": "review uses opus — release and deploy infrastructure ships to self-hosted installs and is not covered by the test suite"
+    },
+    {
+      "when": "tests_failed_twice",
+      "action": "raise code one tier for this task — two failures means the mental model is wrong, not the syntax"
+    },
+    {
+      "when": "task involves parsing an untrusted archive or feed (import, restore, feed ingest)",
+      "action": "raise code one tier — zip-slip, traversal and resource-exhaustion classes are easy to write past and the tests only catch the cases you thought of"
+    }
+  ]
+}
