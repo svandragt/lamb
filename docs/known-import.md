@@ -33,7 +33,9 @@ php import-known.php /path/to/export.rss --dry-run
 php import-known.php /path/to/export.rss
 ```
 
-The script prints one line per item (`imported:` or `would import:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `feeditem_uuid` (md5 of `'known-' + guid`) and left alone.
+The script prints one line per item (`imported:` or `would import:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'known-' + guid`) and left alone.
+
+Imported posts are treated as **your own content**, not as syndicated feed items: they carry no "Via …" attribution line, and they take part in webmentions and WebSub exactly like a post you wrote in Lamb. The import run itself stays silent — nothing is pinged for content that was published years ago — but editing an imported post later notifies the way any other edit does.
 
 ## After the import
 

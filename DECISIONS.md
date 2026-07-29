@@ -23,6 +23,21 @@ WXR was rejected: it is WordPress's schema, has no clean home for Lamb's draft/d
 
 ---
 
+## 2026-07-29 — Imported posts are your own content, not feed items
+
+**Status:** Accepted
+**Context:** The WordPress and Known importers stamped every migrated post with `feed_name = 'wordpress'`/`'known'` and a `feeditem_uuid`, borrowing the feed-ingest columns to get re-run dedup for free. Neither importer sets `source_url`, so `Theme\link_source()` took its plain-text branch and every migrated post publicly read "Via wordpress" / "Via known". Worse, `Webmention\enqueue_for_post()` and `WebSub\ping_for_post()` both bail on a non-empty `feed_name`, and the WebSub ping query excludes those rows — so a migrated post could never send a webmention or a WebSub ping, not even when edited years later. `lock_if_feed_sourced()` would also feed-lock them on first edit: exactly the trap the lamb-export importer had already refused to walk into.
+
+**Decision:** Both importers now write their dedup key to `import_uuid` — the column the lamb-export importer added — and set no feed identity at all. The `'wordpress-'`/`'known-'` prefixes stay, so the three importers keep separate dedup namespaces. Suppressing outbound notifications during an import run is still correct, and still happens the same way: `import_item()` stops at `finalize_and_store_post()`, which never calls `notify_post_subscribers()`. What is no longer true is that the suppression is permanent.
+
+With all three importers supplying their own lookup, `run_import()`'s `$find_existing` parameter became required and its `feeditem_uuid` fallback was deleted — one dedup concept instead of two.
+
+Installs that already ran an import are migrated on boot by `Bootstrap\backfill_imported_post_identity()`. It only touches rows with `source_url IS NULL`, because a user may legitimately subscribe to a feed literally named `wordpress` or `known`: feed ingestion always records the item permalink in `source_url` (`src/post.php`), the importers never did. `bootstrap_db()` runs before `Config\load()`, so the configured feed names cannot be consulted there — the `source_url` guard is the only discriminator available, and mangling someone's real feed posts would be far worse than leaving a cosmetic attribution line in place.
+
+**Consequences:** Migrated posts render without attribution and participate in webmentions and WebSub like any other post. The backfill is idempotent and skips a row whose uuid another post already claims, so it is safe to run on every boot, matching the existing `UPDATE post SET version = 1 WHERE version IS NULL` precedent.
+
+---
+
 ## 2026-07-29 — Lamb export import identity via a separate `import_uuid` column
 
 **Status:** Accepted
@@ -31,7 +46,7 @@ WXR was rejected: it is WordPress's schema, has no clean home for Lamb's draft/d
 It was rejected. `lock_if_feed_sourced()` (`src/response/posts.php:329`) sets `feed_locked` on any post with a non-empty `feeditem_uuid` when it is edited, to stop hand-editing content a feed will overwrite on the next cron run. A restored local post is not feed-sourced — nothing will overwrite it — so giving it a `feeditem_uuid` to get free dedup would also silently feed-lock it, changing edit behaviour for a post that never subscribed to anything.
 
 **Decision:** Add a dedicated `import_uuid` column (`Bootstrap\ensure_post_columns()`, `src/bootstrap.php`), computed as `md5('lamb-' . $origin . '#' . $source_id)`. `$origin` is the exporting site's URL (from the manifest's `site.url`, or `--site-url` when given) rather than `ROOT_URL`, because `ROOT_URL` is host-derived and the same install reached on two hostnames would otherwise mint two origins for one site's posts.
-**Consequences:** Restored posts carry both an empty `feeditem_uuid` and a populated `import_uuid`, so they are editable without tripping feed-lock. `run_import()` (`src/import.php`) gained an optional `$find_existing` callable so its shared counters/summary machinery can dedupe on either column without duplicating the loop.
+**Consequences:** Restored posts carry both an empty `feeditem_uuid` and a populated `import_uuid`, so they are editable without tripping feed-lock. `run_import()` (`src/import.php`) gained an optional `$find_existing` callable so its shared counters/summary machinery can dedupe on either column without duplicating the loop. (Superseded above: the parameter is now required and the `feeditem_uuid` fallback is gone.)
 
 ---
 

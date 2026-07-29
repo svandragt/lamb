@@ -159,7 +159,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
 
 **Tables used:**
-- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
+- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
@@ -292,6 +292,7 @@ index.php
 | `$bean->updated` | Datetime string |
 | `$bean->feed_name` | Source feed name (only present for ingested feed items) |
 | `$bean->feeditem_uuid` | MD5 dedup key (only for feed items) |
+| `$bean->import_uuid` | MD5 dedup key for posts brought in by an importer (WordPress, Known, lamb export) |
 | `$bean->source_url` | Permalink of the original feed item (only for feed items; used by `link_source()`) |
 | `$bean->is_menu_item` | Truthy if the post is pinned as a menu item |
 
