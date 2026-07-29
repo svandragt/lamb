@@ -50,3 +50,4 @@ A few things worth checking manually:
 - [Cross-posting](cross-posting.md) — outbound syndication, the opposite direction.
 - [Feeds](feeds.md) — how Lamb publishes content for other readers to ingest.
 - [Media](media.md) — how uploaded images are stored and converted.
+- [Export](export.md) — the same Markdown format, in the opposite direction.

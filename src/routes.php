@@ -78,6 +78,7 @@ function register_app_routes(
     register_private_route('scheduled', 'Lamb\\Response\\respond_scheduled');
     register_private_route('trash', 'Lamb\\Response\\respond_trash');
     register_private_route('edit', 'Lamb\\Response\\respond_edit', $lookup);
+    register_private_route('export', 'Lamb\\Response\\respond_export');
     register_route('feed', 'Lamb\\Response\\respond_feed');
     register_route('feed.json', 'Lamb\\Response\\respond_feed_json');
     register_route('sitemap.xml', 'Lamb\\Response\\respond_sitemap');

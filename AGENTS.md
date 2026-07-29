@@ -72,12 +72,14 @@ lamb/
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
 │   ├── constants.php     # Static app-wide constants (POST_VERSION, SESSION_LOGIN, …)
+│   ├── export.php        # Site export: archive layout, manifest, zip assembly
 │   ├── routes.php        # register_route() / call_route() helpers
 │   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, visibility clauses, redirects
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify, finalize_slug
 │   ├── response.php      # Response helpers: pagination, conditional GET/304, 404, upgrade_posts
 │   ├── response/         # Route handlers (respond_*, redirect_*), split by area
 │   │   ├── auth.php      # Login/logout/settings
+│   │   ├── export.php    # /export download (login required)
 │   │   ├── feeds.php     # Home, drafts/trash/scheduled, search, tag, Atom + JSON feeds
 │   │   ├── posts.php     # Status/slug pages, create/edit/delete/restore
 │   │   └── upload.php    # Image upload + WebP conversion
@@ -133,6 +135,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 |------|-----------|
 | `bootstrap.php` | `Lamb\Bootstrap` |
 | `config.php` | `Lamb\Config` |
+| `export.php` | `Lamb\Export` |
 | `highlight.php` | `Lamb\Highlight` |
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |

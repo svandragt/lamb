@@ -6,6 +6,23 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-07-26 — Export format is front-matter Markdown plus a JSON manifest
+
+**Status:** Accepted
+**Context:** Issue #440 asked for an own-your-data export and left the format open: WXR, JSON, or a Markdown bundle. The original objection to an export at all — "SQLite is already browsable, and Lamb has no lock-in" — had weakened: Lamb had gained two importers (WordPress, Known) and still no way out, and the only backup path was copying the binary `data/lamb.db` and hoping the RedBean schema still matched on restore.
+
+A "convert everything to a Lamb-specific JSON first, then into the system" intermediate representation was considered. The code turned out to already have an answer: neither importer builds a JSON IR. Both converge on `Import\build_post_body()`, which emits Markdown with YAML front matter — precisely what `Post\parse_matter()` reads back, and precisely what the `post.body` column stores.
+
+**Decision:** The export is a zip of `posts/YYYY/MM/<slug>.md` (each post's stored body, byte-for-byte), `assets/YYYY/MM/…` (only files the posts reference), and a `manifest.json`. Post bodies are written verbatim rather than re-serialised, so the export cannot drift from what an import produces. The Markdown files carry only what `parse_matter()` understands; everything Lamb-internal (id, timestamps, draft/deleted state, feed provenance) lives in the manifest, and the manifest's field list is an explicit allowlist so preview tokens — credentials for unpublished posts — can never travel with an archive. Drafts and trashed posts are exported and flagged.
+
+WXR was rejected: it is WordPress's schema, has no clean home for Lamb's draft/deleted/feed state, and the Known importer had already shown that real-world "WXR" is a partial veneer, so emitting it means choosing which dialect to be wrong in. Conversion to WXR/Hugo/Jekyll belongs in a separate converter that consumes this format. A second flat-JSON export variant was also rejected for now: a programmatic consumer reads `manifest.json` for metadata and the `.md` files for content, and two formats would mean two things to keep in sync.
+
+`ext-zip` is checked at runtime rather than added to `composer.json` require, so an existing install upgrading into this feature cannot fail `composer install` over an extension it never needed.
+
+**Consequences:** The format both importers already emit is now documented (`docs/export.md`) and versioned (`lamb-export/1`) rather than being an internal detail. A future lamb→lamb importer — the actually-missing piece for backup/restore — has a specified input to read. Additive manifest fields stay within version 1; consumers must ignore unknown fields.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

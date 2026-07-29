@@ -19,3 +19,4 @@ Feed ingested posts are saved as drafts by default to prioritize authorship over
 - [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed ingestion that produces drafts.
 - [Micropub]({{ site.baseurl }}{% link micropub.md %}): Drafts created via Micropub get the same 24-hour preview link.
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): The cron endpoint triggers feed ingestion.
+- [Export]({{ site.baseurl }}{% link export.md %}): Drafts are included in an export and flagged in the manifest.

@@ -86,6 +86,7 @@ Devtools / local environments / sandbox:
 * [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %})
 * [Drafts]({{ site.baseurl }}{% link drafts.md %})
+* [Export]({{ site.baseurl }}{% link export.md %})
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
 * [Known import]({{ site.baseurl }}{% link known-import.md %})
 * [Login security]({{ site.baseurl }}{% link login-security.md %})
