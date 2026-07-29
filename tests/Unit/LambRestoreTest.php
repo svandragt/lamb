@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use RuntimeException;
+use Symfony\Component\Process\Process;
 use ZipArchive;
 
 use function Lamb\Bootstrap\ensure_post_columns;
@@ -695,6 +696,34 @@ class LambRestoreTest extends TestCase
 
         $this->assertSame(1, $tally['restored']);
         $this->assertFalse(is_dir($root));
+    }
+
+    public function testTheCliScriptRunsAnArchiveEndToEnd(): void
+    {
+        $archive = $this->buildArchive();
+        $data_dir = "$this->tmp_dir/data";
+
+        $process = new Process(
+            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] Done. created=5', $process->getOutput());
+    }
+
+    public function testTheCliScriptRefusesAnArchiveItCannotRead(): void
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('import-lamb.php'), "$this->tmp_dir/absent.zip"],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
     }
 
     public function testParseRestoreArgsReadsTheFlags(): void
