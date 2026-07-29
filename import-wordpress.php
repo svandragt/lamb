@@ -7,7 +7,7 @@
  * published Post and Page through Lamb's existing post-creation pipeline.
  * Drafts, private posts, comments and custom post types are skipped this
  * round. Idempotent: re-running an import never recreates a row (dedup by
- * md5('wordpress-' . guid) on the feeditem_uuid column).
+ * md5('wordpress-' . guid) on the import_uuid column).
  *
  *   php import-wordpress.php path/to/wxr.xml [--dry-run]
  *
@@ -22,6 +22,8 @@ namespace Lamb;
 
 use Lamb\Import;
 use Lamb\WordPress;
+use RedBeanPHP\OODBBean;
+use RedBeanPHP\R;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "import-wordpress.php must be run from the command line.\n");
@@ -58,4 +60,5 @@ Import\run_import(
     static fn(array $item): string => WordPress\wordpress_uuid((string) $item['guid']),
     WordPress\import_item(...),
     $dry_run,
+    static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
 );

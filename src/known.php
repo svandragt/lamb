@@ -61,9 +61,10 @@ function strip_structural_hashtags(string $markdown): string
 }
 
 /**
- * Stable dedup key for a Known post. Mirrors the feed-ingest convention
- * (`feeditem_uuid = md5($feed_name . $id)`), so re-running an import never
- * recreates a row.
+ * Stable dedup key for a Known post, stored on the post's `import_uuid`
+ * column, so re-running an import never recreates a row. Imported posts are
+ * the author's own content, so they deliberately do NOT get feed identity
+ * (`feed_name`/`feeditem_uuid`) — see DECISIONS.md.
  */
 function known_uuid(string $guid): string
 {
@@ -306,7 +307,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false): 
     }
 
     $uuid = known_uuid((string) $item['guid']);
-    $existing = R::findOne('post', ' feeditem_uuid = ? ', [$uuid]);
+    $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
     if ($existing) {
         return $existing;
     }
@@ -346,8 +347,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false): 
     if (!empty($item['updated'])) {
         $bean->updated = (string) $item['updated'];
     }
-    $bean->feeditem_uuid = $uuid;
-    $bean->feed_name = 'known';
+    $bean->import_uuid = $uuid;
 
     if ($dry_run) {
         return $bean;

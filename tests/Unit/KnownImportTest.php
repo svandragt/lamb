@@ -17,6 +17,7 @@ use function Lamb\Known\should_import;
 use function Lamb\Known\skip_reason;
 use function Lamb\Known\strip_structural_hashtags;
 use function Lamb\Post\split_frontmatter;
+use function Lamb\Theme\link_source;
 
 /**
  * Covers parsing, Known-specific DOM normalisation, body assembly and
@@ -410,7 +411,7 @@ XML;
         $this->assertSame(1, substr_count(strtolower((string) $bean->body), '#cuttlefish'));
     }
 
-    public function testImportItemCreatesPostWithKnownUuidFeedNameAndDates(): void
+    public function testImportItemCreatesPostWithKnownUuidAndDatesButNoFeedIdentity(): void
     {
         $items = $this->sampleItems();
         $downloader = fn(): ?string => null;
@@ -419,8 +420,13 @@ XML;
 
         $this->assertNotNull($bean);
         $this->assertNotEmpty($bean->id);
-        $this->assertSame(known_uuid('https://known.example/view/aaaa1111'), $bean->feeditem_uuid);
-        $this->assertSame('known', $bean->feed_name);
+        $this->assertSame(known_uuid('https://known.example/view/aaaa1111'), $bean->import_uuid);
+        // An imported post is the author's own content, not a feed item: it
+        // must not carry feed identity, or it would render "Via known" and be
+        // permanently barred from webmentions and WebSub.
+        $this->assertEmpty($bean->feed_name);
+        $this->assertEmpty($bean->feeditem_uuid);
+        $this->assertSame('', link_source($bean));
         $this->assertSame('2020-05-26 12:48:16', $bean->created);
     }
 

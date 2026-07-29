@@ -9,7 +9,7 @@
  * rather than <content:encoded>, there is no <wp:post_name> (the slug comes
  * from the <link> path leaf instead), and dates only carry <pubDate>.
  * Idempotent: re-running an import never recreates a row (dedup by
- * md5('known-' . guid) on the feeditem_uuid column).
+ * md5('known-' . guid) on the import_uuid column).
  *
  *   php import-known.php path/to/export.rss [--dry-run]
  *
@@ -24,6 +24,8 @@ namespace Lamb;
 
 use Lamb\Import;
 use Lamb\Known;
+use RedBeanPHP\OODBBean;
+use RedBeanPHP\R;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "import-known.php must be run from the command line.\n");
@@ -60,4 +62,5 @@ Import\run_import(
     static fn(array $item): string => Known\known_uuid((string) $item['guid']),
     Known\import_item(...),
     $dry_run,
+    static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
 );

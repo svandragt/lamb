@@ -13,6 +13,7 @@ use function Lamb\Import\response_is_image;
 use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
 use function Lamb\Response\persist_image_bytes;
+use function Lamb\Theme\link_source;
 use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
@@ -766,7 +767,13 @@ XML;
         $this->assertNotNull($bean);
         $this->assertNotEmpty($bean->id);
         $expected = md5('wordpress-https://oldsite.example/?p=42');
-        $this->assertSame($expected, $bean->feeditem_uuid);
+        $this->assertSame($expected, $bean->import_uuid);
+        // An imported post is the author's own content, not a feed item: it
+        // must not carry feed identity, or it would render "Via wordpress"
+        // and be permanently barred from webmentions and WebSub.
+        $this->assertEmpty($bean->feed_name);
+        $this->assertEmpty($bean->feeditem_uuid);
+        $this->assertSame('', link_source($bean));
         $this->assertSame('2024-03-03 10:00:00', $bean->created);
         $this->assertStringContainsString('**world**', (string) $bean->body);
         $this->assertStringContainsString('#news', (string) $bean->body);
