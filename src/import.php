@@ -730,19 +730,34 @@ function parse_import_args(array $argv): array
  * summary. Used by both import-wordpress.php and import-known.php so the two
  * scripts' output stays byte-identical in shape.
  *
+ * $find_existing lets an importer dedupe on its own column instead of
+ * feeditem_uuid, and $replace re-imports into the bean it returns rather than
+ * counting the item as already present. The four-argument $import call is only
+ * reachable when both are supplied, so the three-parameter importers keep
+ * working unchanged.
+ *
  * @param list<array<string, mixed>>      $items      Items from extract_items().
  * @param callable(array<string,mixed>):?string $skip_reason Explains why an item is out of scope, or null.
  * @param callable(array<string,mixed>):string  $uuid       Computes the item's dedup uuid.
- * @param callable(array<string,mixed>,callable,bool):?\RedBeanPHP\OODBBean $import Imports a single item.
+ * @param callable(array<string,mixed>,callable,bool,\RedBeanPHP\OODBBean|null=):?\RedBeanPHP\OODBBean $import Imports a single item.
+ * @param callable(string):?\RedBeanPHP\OODBBean|null $find_existing Finds an already-imported row by uuid.
  */
-function run_import(array $items, callable $skip_reason, callable $uuid, callable $import, bool $dry_run): void
-{
+function run_import(
+    array $items,
+    callable $skip_reason,
+    callable $uuid,
+    callable $import,
+    bool $dry_run,
+    ?callable $find_existing = null,
+    bool $replace = false
+): void {
     $downloader = $dry_run
         ? static fn(): ?string => null
         : 'Lamb\\Import\\default_image_downloader';
 
     $created = 0;
     $existed = 0;
+    $replaced = 0;
     $skipped = 0;
     /** @var array<string, int> $skip_reasons */
     $skip_reasons = [];
@@ -756,26 +771,37 @@ function run_import(array $items, callable $skip_reason, callable $uuid, callabl
             continue;
         }
         $item_uuid = $uuid($item);
-        if (R::findOne('post', ' feeditem_uuid = ? ', [$item_uuid])) {
+        $existing = $find_existing !== null
+            ? $find_existing($item_uuid)
+            : R::findOne('post', ' feeditem_uuid = ? ', [$item_uuid]);
+        if ($existing && !$replace) {
             $existed++;
             continue;
         }
 
-        $bean = $import($item, $downloader, $dry_run);
+        $label = trim((string) ($item['title'] ?? ''));
+        $bean = $existing
+            ? $import($item, $downloader, $dry_run, $existing)
+            : $import($item, $downloader, $dry_run);
         if ($bean === null) {
             $skipped++;
             $skip_reasons['conversion failed'] = ($skip_reasons['conversion failed'] ?? 0) + 1;
-            echo "[" . ($i + 1) . "/$total] skipped (conversion failed): "
-                . trim((string) $item['title']) . "\n";
+            echo "[" . ($i + 1) . "/$total] skipped (conversion failed): $label\n";
             continue;
         }
-        $created++;
-        $verb = $dry_run ? 'would import' : 'imported';
-        echo "[" . ($i + 1) . "/$total] $verb: " . trim((string) $item['title']) . "\n";
+        if ($existing) {
+            $replaced++;
+            $verb = $dry_run ? 'would replace' : 'replaced';
+        } else {
+            $created++;
+            $verb = $dry_run ? 'would import' : 'imported';
+        }
+        echo "[" . ($i + 1) . "/$total] $verb: $label\n";
     }
 
     $prefix = $dry_run ? '[dry-run] ' : '';
-    echo "\n{$prefix}Done. created=$created existed=$existed skipped=$skipped total=$total\n";
+    $replaced_summary = $replace ? " replaced=$replaced" : '';
+    echo "\n{$prefix}Done. created=$created existed=$existed{$replaced_summary} skipped=$skipped total=$total\n";
     if ($skip_reasons) {
         arsort($skip_reasons);
         echo "Skipped breakdown:\n";
