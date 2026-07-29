@@ -732,9 +732,10 @@ function parse_import_args(array $argv): array
  *
  * $find_existing lets an importer dedupe on its own column instead of
  * feeditem_uuid, and $replace re-imports into the bean it returns rather than
- * counting the item as already present. The four-argument $import call is only
- * reachable when both are supplied, so the three-parameter importers keep
- * working unchanged.
+ * counting the item as already present. $replace is honoured only when
+ * $find_existing is supplied — an importer that takes three parameters cannot
+ * accept a bean to overwrite, so handing it one would quietly create a
+ * duplicate and report it as a replacement.
  *
  * @param list<array<string, mixed>>      $items      Items from extract_items().
  * @param callable(array<string,mixed>):?string $skip_reason Explains why an item is out of scope, or null.
@@ -754,6 +755,7 @@ function run_import(
     $downloader = $dry_run
         ? static fn(): ?string => null
         : 'Lamb\\Import\\default_image_downloader';
+    $replace = $replace && $find_existing !== null;
 
     $created = 0;
     $existed = 0;

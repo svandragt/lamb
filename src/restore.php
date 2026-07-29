@@ -174,10 +174,12 @@ function safe_entry_path(string $name): ?string
     }
 
     $stem = '[A-Za-z0-9_-][A-Za-z0-9._-]*';
-    if (preg_match('#^posts/\d{4}/\d{2}/' . $stem . '\.md$#', $name) === 1) {
+    // The D modifier: without it `$` also matches before a trailing newline, so
+    // "assets/2026/07/photo.jpg\n" would pass a gate that exists to be exact.
+    if (preg_match('#^posts/\d{4}/\d{2}/' . $stem . '\.md$#D', $name) === 1) {
         return $name;
     }
-    if (preg_match('#^assets/\d{4}/\d{2}/' . $stem . '$#', $name) === 1) {
+    if (preg_match('#^assets/\d{4}/\d{2}/' . $stem . '$#D', $name) === 1) {
         return $name;
     }
 
@@ -235,6 +237,27 @@ function origin_id(array $manifest, ?string $override): string
 }
 
 /**
+ * The origin to namespace by, with a stand-in for an archive that names no site.
+ *
+ * An empty origin is not an identity: every siteless archive would share one
+ * namespace, so restoring a second one would count all of its posts as already
+ * present and silently drop them. The manifest's own export stamp and counts
+ * stand in — stable across a re-import of the same archive, different for two
+ * different ones. Not a substitute for --site-url, which is what makes the
+ * namespace match a later archive from the same site.
+ *
+ * @param array<string, mixed> $manifest
+ */
+function namespaced_origin(array $manifest, string $origin): string
+{
+    if ($origin !== '') {
+        return $origin;
+    }
+
+    return 'archive:' . md5(serialize([$manifest['exported_at'] ?? '', $manifest['counts'] ?? []]));
+}
+
+/**
  * The dedup key stored on a restored post's import_uuid column.
  */
 function restore_uuid(string $origin, int $id): string
@@ -246,7 +269,8 @@ function restore_uuid(string $origin, int $id): string
  * Turns the manifest's post entries into the items run_import() walks.
  *
  * Each item carries the manifest's own fields, the body read out of the
- * archive (null when the entry is absent) and the dedup uuid. `title` is the
+ * archive (null when the entry is absent) and the dedup uuid, namespaced by
+ * $origin — or, when that is empty, by namespaced_origin()'s stand-in. `title` is the
  * in-archive path: it is only ever used for the progress line, and the path is
  * what identifies a post to someone watching a restore.
  *
@@ -266,6 +290,7 @@ function manifest_items(array $manifest, callable $reader, string $origin): arra
     if (!is_array($posts)) {
         return [];
     }
+    $origin = namespaced_origin($manifest, $origin);
 
     foreach ($posts as $post) {
         if (!is_array($post)) {
@@ -273,12 +298,14 @@ function manifest_items(array $manifest, callable $reader, string $origin): arra
         }
         $path = (string) ($post['path'] ?? '');
         $safe = safe_entry_path($path);
-        $items[] = $post + [
+        // array_merge(), not `+`: the manifest is untrusted, so its own
+        // `import_uuid` or `body` must never win over the computed ones.
+        $items[] = array_merge($post, [
             'title'       => $path,
             'path'        => $path,
             'body'        => $safe === null ? null : read_entry($reader, $safe),
             'import_uuid' => restore_uuid($origin, (int) ($post['id'] ?? 0)),
-        ];
+        ]);
     }
 
     return $items;
@@ -374,8 +401,9 @@ function apply_manifest_state(OODBBean $bean, array $item): void
  * The archive is the same trust boundary as an upload — it is a file the author
  * was handed, possibly by someone else — so every asset clears the same two
  * gates a browser upload does: the extension allowlist, and a content sniff of
- * the bytes actually written. Both run before the file is moved into place, so
- * a rejected asset never exists at a servable path even briefly.
+ * the bytes themselves. Both run before anything is written, so a rejected
+ * asset never exists at a servable path even briefly and --dry-run tallies
+ * exactly what a real run would.
  *
  * Destination paths are assembled from the validated `YYYY/MM/<name>` tail, not
  * from the archive's own name, and an existing file is never overwritten: a
@@ -417,6 +445,12 @@ function restore_assets(array $manifest, string $assets_root, callable $reader, 
             $tally['skipped']++;
             continue;
         }
+        // Sniffed in memory, before the dry-run branch, so --dry-run reports the
+        // same tally the real run produces.
+        if (!Response\upload_content_allowed(Response\sniff_bytes_content_type($bytes), $ext)) {
+            $tally['rejected']++;
+            continue;
+        }
         if ($dry_run) {
             $tally['restored']++;
             continue;
@@ -428,16 +462,11 @@ function restore_assets(array $manifest, string $assets_root, callable $reader, 
             $tally['skipped']++;
             continue;
         }
-        // Written beside the destination under a non-servable name, sniffed,
-        // and only then renamed into place.
+        // Written beside the destination under a non-servable name and only
+        // then renamed into place, so a half-written file is never servable.
         $staged = $dest . '.part';
         if (file_put_contents($staged, $bytes) === false) {
             $tally['skipped']++;
-            continue;
-        }
-        if (!Response\upload_content_allowed(Response\sniff_file_content_type($staged), $ext)) {
-            unlink($staged);
-            $tally['rejected']++;
             continue;
         }
         rename($staged, $dest);

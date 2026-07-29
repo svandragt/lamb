@@ -224,6 +224,31 @@ class LambRestoreTest extends TestCase
         $this->assertStringNotContainsString('replaced=', $output);
     }
 
+    public function testRunImportIgnoresReplaceWithoutALookup(): void
+    {
+        $existing = R::dispense('post');
+        $existing->body = 'Already here.';
+        $existing->feeditem_uuid = 'u1';
+        R::store($existing);
+
+        // A three-parameter importer, as import-wordpress.php and
+        // import-known.php supply: it cannot accept the bean to replace, so
+        // handing it one would silently create a duplicate instead.
+        $output = $this->captureImport(
+            [['uuid' => 'u1', 'title' => 'One']],
+            static function (array $item, callable $downloader, bool $dry_run): \RedBeanPHP\OODBBean {
+                $bean = R::dispense('post');
+                $bean->body = 'Duplicate.';
+                R::store($bean);
+                return $bean;
+            },
+            [null, true],
+        );
+
+        $this->assertStringContainsString('created=0 existed=1 skipped=0 total=1', $output);
+        $this->assertSame(1, R::count('post'));
+    }
+
     public function testSafeEntryPathAcceptsTheExportLayout(): void
     {
         $this->assertSame('manifest.json', safe_entry_path('manifest.json'));
@@ -247,6 +272,8 @@ class LambRestoreTest extends TestCase
             ['posts/2026/07/notes.txt'],
             ['README.md'],
             ['assets/2026/07/'],
+            ["assets/2026/07/photo.jpg\n"],
+            ["posts/2026/07/hello.md\n"],
         ];
     }
 
@@ -357,6 +384,40 @@ class LambRestoreTest extends TestCase
         );
     }
 
+    public function testAManifestSuppliedImportUuidIsIgnored(): void
+    {
+        $manifest = $this->manifest([
+            'posts' => [
+                ['path' => 'posts/2026/07/hello.md', 'id' => 7, 'import_uuid' => 'attacker-chosen'],
+            ],
+        ]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json'          => (string) json_encode($manifest),
+            'posts/2026/07/hello.md' => "Hello.\n",
+        ], 'forged-uuid.zip'));
+
+        $items = manifest_items($manifest, $reader, 'https://example.test');
+
+        $this->assertSame(restore_uuid('https://example.test', 7), $items[0]['import_uuid']);
+    }
+
+    public function testAManifestSuppliedBodyIsIgnored(): void
+    {
+        $manifest = $this->manifest([
+            'posts' => [
+                ['path' => 'posts/2026/07/gone.md', 'id' => 1, 'body' => 'Injected body.'],
+            ],
+        ]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json' => (string) json_encode($manifest),
+        ], 'forged-body.zip'));
+
+        $items = manifest_items($manifest, $reader, 'https://example.test');
+
+        $this->assertNull($items[0]['body']);
+        $this->assertSame('missing file', item_skip_reason($items[0]));
+    }
+
     /**
      * The post shape build_export_archive() consumes, matching collect_posts().
      *
@@ -435,14 +496,18 @@ class LambRestoreTest extends TestCase
     /**
      * @param list<array<string, mixed>>|null $posts
      */
-    private function buildArchive(?array $posts = null, string $url = 'https://example.test', string $name = 'export.zip'): string
-    {
+    private function buildArchive(
+        ?array $posts = null,
+        string $url = 'https://example.test',
+        string $name = 'export.zip',
+        string $exported_at = '2026-07-29T10:00:00+00:00'
+    ): string {
         $path = "$this->tmp_dir/$name";
         build_export_archive(
             $posts ?? $this->samplePosts(),
             $this->assetsRoot(),
             $path,
-            '2026-07-29T10:00:00+00:00',
+            $exported_at,
             ['title' => 'Notes', 'url' => $url],
         );
 
@@ -554,6 +619,15 @@ class LambRestoreTest extends TestCase
         $this->assertSame(1, R::count('post'));
     }
 
+    public function testTwoArchivesWithoutASiteUrlDoNotCollide(): void
+    {
+        $posts = [$this->post()];
+        $this->importArchive($this->buildArchive($posts, '', 'no-site-a.zip', '2026-07-29T10:00:00+00:00'));
+        $this->importArchive($this->buildArchive($posts, '', 'no-site-b.zip', '2026-06-01T08:00:00+00:00'));
+
+        $this->assertSame(2, R::count('post'));
+    }
+
     public function testTheSiteUrlOverrideNamespacesTheImport(): void
     {
         $archive = $this->buildArchive([$this->post()], '', 'no-site.zip');
@@ -561,6 +635,26 @@ class LambRestoreTest extends TestCase
         $this->importArchive($archive, false, 'https://restored.test');
 
         $this->assertSame(2, R::count('post'));
+    }
+
+    public function testASlugCollisionRewritesTheSlugWithoutRedatingThePost(): void
+    {
+        // finalize_slug() suffixes the slug and rewrites the body's front
+        // matter, so finalize_and_store_post() stores a second time. The
+        // manifest's dates must survive that store, not be re-stamped.
+        $local = R::dispense('post');
+        $local->slug = 'hello-world';
+        $local->body = "---\nslug: hello-world\n---\n\nMine.\n";
+        R::store($local);
+
+        $this->importArchive($this->buildArchive([$this->post()], 'https://example.test', 'clash.zip'));
+
+        $restored = R::findOne('post', ' import_uuid IS NOT NULL ');
+        $this->assertNotNull($restored);
+        $this->assertSame('hello-world-' . $restored->id, $restored->slug);
+        $this->assertStringContainsString('slug: hello-world-' . $restored->id, (string) $restored->body);
+        $this->assertSame('2026-07-14 09:30:00', $restored->created);
+        $this->assertSame('2026-07-15 11:00:00', $restored->updated);
     }
 
     public function testAManifestPathWithNoArchiveEntryIsSkipped(): void
@@ -695,6 +789,16 @@ class LambRestoreTest extends TestCase
         [$tally, $root] = $this->restoreAssets(['assets/2026/07/photo.png' => $this->pngBytes()], true);
 
         $this->assertSame(1, $tally['restored']);
+        $this->assertFalse(is_dir($root));
+    }
+
+    public function testRestoreAssetsRejectsMismatchedContentOnADryRunToo(): void
+    {
+        [$tally, $root] = $this->restoreAssets([
+            'assets/2026/07/evil.jpg' => '<html><body><script>alert(1)</script></body></html>',
+        ], true);
+
+        $this->assertSame(['restored' => 0, 'skipped' => 0, 'rejected' => 1], $tally);
         $this->assertFalse(is_dir($root));
     }
 
