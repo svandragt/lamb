@@ -17,6 +17,7 @@ use function Lamb\Restore\open_source;
 use function Lamb\Restore\origin_id;
 use function Lamb\Restore\parse_restore_args;
 use function Lamb\Restore\read_entry;
+use function Lamb\Restore\restore_assets;
 use function Lamb\Restore\read_manifest;
 use function Lamb\Restore\restore_uuid;
 use function Lamb\Restore\safe_entry_path;
@@ -594,6 +595,106 @@ class LambRestoreTest extends TestCase
 
         $this->assertSame(5, R::count('post'));
         $this->assertSame('2026-07-14 09:30:00', R::findOne('post', ' slug = ? ', ['hello-world'])->created);
+    }
+
+    private function pngBytes(): string
+    {
+        $image = imagecreatetruecolor(4, 3);
+        ob_start();
+        imagepng($image);
+        imagedestroy($image);
+
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * @param array<string, string> $entries In-archive asset path => bytes.
+     * @return array{0: array{restored:int,skipped:int,rejected:int}, 1: string}
+     */
+    private function restoreAssets(array $entries, bool $dry_run = false): array
+    {
+        $manifest = $this->manifest(['assets' => array_keys($entries)]);
+        [, $reader] = open_source($this->zip(
+            ['manifest.json' => (string) json_encode($manifest)] + $entries,
+            'assets-' . bin2hex(random_bytes(4)) . '.zip'
+        ));
+        $root = "$this->tmp_dir/assets_dest";
+
+        return [restore_assets($manifest, $root, $reader, $dry_run), $root];
+    }
+
+    public function testRestoreAssetsWritesFilesUnderTheirDatedDirectory(): void
+    {
+        $bytes = $this->pngBytes();
+        [$tally, $root] = $this->restoreAssets(['assets/2026/07/photo.png' => $bytes]);
+
+        $this->assertSame(['restored' => 1, 'skipped' => 0, 'rejected' => 0], $tally);
+        $this->assertSame($bytes, file_get_contents("$root/2026/07/photo.png"));
+    }
+
+    public function testRestoreAssetsRefusesAnExecutableExtension(): void
+    {
+        [$tally, $root] = $this->restoreAssets(['assets/2026/07/shell.php' => '<?php echo 1;']);
+
+        $this->assertSame(1, $tally['rejected']);
+        $this->assertFalse(is_file("$root/2026/07/shell.php"));
+    }
+
+    public function testRestoreAssetsRefusesContentThatDoesNotMatchItsExtension(): void
+    {
+        [$tally, $root] = $this->restoreAssets([
+            'assets/2026/07/evil.png' => '<html><body><script>alert(1)</script></body></html>',
+        ]);
+
+        $this->assertSame(1, $tally['rejected']);
+        $this->assertFalse(is_file("$root/2026/07/evil.png"));
+        $this->assertSame([], glob("$root/2026/07/*") ?: []);
+    }
+
+    public function testRestoreAssetsRefusesAPathOutsideTheAssetLayout(): void
+    {
+        $manifest = $this->manifest(['assets' => ['assets/2026/07/../../x.php']]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json' => (string) json_encode($manifest),
+        ], 'traversal.zip'));
+        $root = "$this->tmp_dir/assets_dest";
+
+        $tally = restore_assets($manifest, $root, $reader, false);
+
+        $this->assertSame(1, $tally['rejected']);
+        $this->assertFalse(is_file("$this->tmp_dir/x.php"));
+    }
+
+    public function testRestoreAssetsNeverOverwritesAnExistingFile(): void
+    {
+        $root = "$this->tmp_dir/assets_dest";
+        mkdir("$root/2026/07", 0777, true);
+        file_put_contents("$root/2026/07/photo.png", 'keep me');
+
+        [$tally] = $this->restoreAssets(['assets/2026/07/photo.png' => $this->pngBytes()]);
+
+        $this->assertSame(1, $tally['skipped']);
+        $this->assertSame('keep me', file_get_contents("$root/2026/07/photo.png"));
+    }
+
+    public function testRestoreAssetsSkipsAnAssetMissingFromTheArchive(): void
+    {
+        $manifest = $this->manifest(['assets' => ['assets/2026/07/gone.png']]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json' => (string) json_encode($manifest),
+        ], 'no-assets.zip'));
+
+        $tally = restore_assets($manifest, "$this->tmp_dir/assets_dest", $reader, false);
+
+        $this->assertSame(['restored' => 0, 'skipped' => 1, 'rejected' => 0], $tally);
+    }
+
+    public function testRestoreAssetsWritesNothingOnADryRun(): void
+    {
+        [$tally, $root] = $this->restoreAssets(['assets/2026/07/photo.png' => $this->pngBytes()], true);
+
+        $this->assertSame(1, $tally['restored']);
+        $this->assertFalse(is_dir($root));
     }
 
     public function testParseRestoreArgsReadsTheFlags(): void

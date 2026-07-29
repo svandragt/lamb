@@ -4,6 +4,7 @@ namespace Lamb\Restore;
 
 use JsonException;
 use Lamb\Post;
+use Lamb\Response;
 use RedBeanPHP\OODBBean;
 use RuntimeException;
 use ZipArchive;
@@ -365,4 +366,83 @@ function apply_manifest_state(OODBBean $bean, array $item): void
     $bean->feeditem_uuid = $item['feeditem_uuid'] ?? null;
     $bean->source_url = $item['source_url'] ?? null;
     $bean->import_uuid = (string) ($item['import_uuid'] ?? '');
+}
+
+/**
+ * Writes the archive's assets back under $assets_root.
+ *
+ * The archive is the same trust boundary as an upload — it is a file the author
+ * was handed, possibly by someone else — so every asset clears the same two
+ * gates a browser upload does: the extension allowlist, and a content sniff of
+ * the bytes actually written. Both run before the file is moved into place, so
+ * a rejected asset never exists at a servable path even briefly.
+ *
+ * Destination paths are assembled from the validated `YYYY/MM/<name>` tail, not
+ * from the archive's own name, and an existing file is never overwritten: a
+ * restore into a live site must not clobber a newer upload that happens to
+ * share a filename.
+ *
+ * @param array<string, mixed>     $manifest
+ * @param callable(string):?string $reader
+ * @return array{restored:int,skipped:int,rejected:int}
+ */
+function restore_assets(array $manifest, string $assets_root, callable $reader, bool $dry_run): array
+{
+    $tally = ['restored' => 0, 'skipped' => 0, 'rejected' => 0];
+    $assets = $manifest['assets'] ?? [];
+    if (!is_array($assets)) {
+        return $tally;
+    }
+
+    foreach ($assets as $entry) {
+        $name = safe_entry_path((string) $entry);
+        if ($name === null || !str_starts_with($name, 'assets/')) {
+            $tally['rejected']++;
+            continue;
+        }
+        $relative = substr($name, strlen('assets/'));
+        $ext = Response\safe_upload_extension($relative);
+        if ($ext === null) {
+            $tally['rejected']++;
+            continue;
+        }
+
+        $dest = "$assets_root/$relative";
+        if (is_file($dest)) {
+            $tally['skipped']++;
+            continue;
+        }
+        $bytes = read_entry($reader, $name);
+        if ($bytes === null) {
+            $tally['skipped']++;
+            continue;
+        }
+        if ($dry_run) {
+            $tally['restored']++;
+            continue;
+        }
+
+        $dir = dirname($dest);
+        // 0755, not 0777: only the user running the import needs to write here.
+        if (!is_dir($dir) && !mkdir($dir, 0755, true) && !is_dir($dir)) {
+            $tally['skipped']++;
+            continue;
+        }
+        // Written beside the destination under a non-servable name, sniffed,
+        // and only then renamed into place.
+        $staged = $dest . '.part';
+        if (file_put_contents($staged, $bytes) === false) {
+            $tally['skipped']++;
+            continue;
+        }
+        if (!Response\upload_content_allowed(Response\sniff_file_content_type($staged), $ext)) {
+            unlink($staged);
+            $tally['rejected']++;
+            continue;
+        }
+        rename($staged, $dest);
+        $tally['restored']++;
+    }
+
+    return $tally;
 }
