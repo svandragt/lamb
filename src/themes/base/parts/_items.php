@@ -23,11 +23,10 @@ if (empty($data['posts'])) :
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
-        // Menu pages are reachable from the nav, so they stay out of listings —
-        // tag and search have no SQL-level exclusion (unlike the home listing
-        // and the feeds, filtered in public_posts_clause). Not on a permalink,
-        // though: there the menu page *is* the requested post. Matches the
-        // 2024/2026 themes.
+        // Menu pages stay out of listings; tag and search have no SQL-level
+        // exclusion (unlike home and the feeds, via public_posts_clause). The
+        // `status` guard is load-bearing: on a permalink the menu page *is* the
+        // requested post, so skipping it there renders an empty page.
         if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
             continue;
         endif;

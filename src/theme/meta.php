@@ -42,10 +42,6 @@ function the_opengraph(): void
     }
     $og_tags += [
         'og:locale' => 'en_GB',
-        // `created` is when the post was published and `updated` when it was
-        // last changed; the two were wired to the opposite OpenGraph properties,
-        // so every scraper read a post's edit time as its publication date (and
-        // an unedited post as "modified" before it existed).
         'og:modified_time' => $bean->updated,
         'og:published_time' => $bean->created,
         'og:publisher' => ROOT_URL,
