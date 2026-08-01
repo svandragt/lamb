@@ -57,7 +57,7 @@ A few things worth checking manually:
 ## Related
 
 - [Known import](known-import.md) — the sibling importer this one shares its image-download and Markdown-conversion pipeline with.
-- [Lamb import](lamb-import.md) — restoring a Lamb export rather than converting from another platform.
+- [Lamb import](lamb-import.md): Restore a Lamb export, rather than converting from another platform.
 - [Cross-posting](cross-posting.md) — outbound syndication, the opposite direction.
 - [Feeds](feeds.md) — how Lamb publishes content for other readers to ingest.
 - [Media](media.md) — how uploaded images are stored and converted.
