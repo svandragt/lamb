@@ -6,10 +6,7 @@ use function Lamb\Theme\page_title;
 
 global $data;
 
-// The path the visitor asked for. It used to read $data['action'], which the
-// router has always overwritten with the literal '404' by the time this runs —
-// so the page offered to search for "404". It is request-controlled, so it is
-// escaped for the href and the link text rather than echoed raw.
+// Request-controlled, so escaped at both output sites below.
 $requested = (string) ($data['requested'] ?? '');
 ?>
 <?= page_title() ?>

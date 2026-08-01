@@ -219,16 +219,11 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
     header('HTTP/1.0 404 Not Found');
 
     return [
-        // A human title, not the raw status line: this is rendered as the page's
-        // <title> and <h1>, so visitors (and search results) were shown the
-        // literal string "HTTP/1.0 404 Not Found".
         'title' => 'Page not found',
         'intro' => 'Page not found.',
         'action' => '404',
-        // What the visitor asked for, so the template can offer to search for it.
-        // $data['action'] is always the literal '404' by the time the template
-        // runs (the router overwrites it with this array's own action), so the
-        // search suggestion offered to search for "404".
+        // Not derivable from `action`: the router overwrites that with this
+        // array's own '404' before the template renders.
         'requested' => \Lamb\Http\requested_path(),
     ];
 }
