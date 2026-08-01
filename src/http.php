@@ -24,17 +24,15 @@ function get_request_uri(): string|false
 }
 
 /**
- * The current request's path, without its leading or trailing slashes.
+ * The current request's path, without its leading or trailing slashes — the
+ * request as the visitor typed it, for showing back to them.
  *
- * The plain "what did the visitor ask for?" reading of the request, for callers
- * that want to show it back to them (the 404 page's search suggestion). Distinct
- * from {@see get_request_uri}, which is the router's view: that one keeps the
- * leading slash and rewrites `/` to `/home`, neither of which is something to
- * put in front of a visitor.
+ * Not {@see get_request_uri}, which is the router's view: it keeps the leading
+ * slash and rewrites `/` to `/home`, so a 404 at the site root would suggest
+ * searching for "home".
  *
- * Returns '' when there is no usable path (the site root, or a malformed
- * REQUEST_URI), so callers can drop the UI that depends on it rather than
- * render an empty one.
+ * Returns '' when there is no usable path, so callers can drop the UI that
+ * depends on it rather than render an empty one.
  *
  * @return string The path, e.g. `tag/php` for `/tag/php?utm=1`.
  */
