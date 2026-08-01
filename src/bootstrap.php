@@ -65,7 +65,8 @@ function bootstrap_db(string $data_dir): void
 }
 
 /**
- * Ensures the post table has the columns introduced by soft-delete and draft features.
+ * Ensures the post table has the columns introduced by the soft-delete, draft
+ * and export-import features.
  * Safe to call on any DB: no-ops if the table or columns don't exist yet.
  *
  * @return void
@@ -82,6 +83,9 @@ function ensure_post_columns(): void
     }
     if (!in_array('draft', $columns, true)) {
         R::exec('ALTER TABLE post ADD COLUMN draft INTEGER');
+    }
+    if (!in_array('import_uuid', $columns, true)) {
+        R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
     }
 }
 

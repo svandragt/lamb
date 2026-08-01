@@ -89,6 +89,7 @@ Devtools / local environments / sandbox:
 * [Export]({{ site.baseurl }}{% link export.md %})
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
 * [Known import]({{ site.baseurl }}{% link known-import.md %})
+* [Lamb import]({{ site.baseurl }}{% link lamb-import.md %})
 * [Login security]({{ site.baseurl }}{% link login-security.md %})
 * [Media]({{ site.baseurl }}{% link media.md %})
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})

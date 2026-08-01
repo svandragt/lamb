@@ -55,6 +55,7 @@
       "src/network/ingest.php",
       "src/network/json_feed.php",
       "src/post.php",
+      "src/restore.php",
       "src/response.php",
       "src/response/auth.php",
       "src/response/discovery.php",
