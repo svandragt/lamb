@@ -41,10 +41,8 @@ function respond_upload(array $_args): void
     $out = '';
     foreach ($files as $f) {
         if ($f['error'] !== UPLOAD_ERR_OK) {
-            // File upload failed. The status code matters: the browser-side
-            // handler keys on response.ok to decide whether the body is markdown
-            // to insert or an error to report, and a 200 here made it paste the
-            // error message into the post.
+            // The status is load-bearing: upload-image.js keys on response.ok to
+            // tell markdown-to-insert from error-to-report.
             header('HTTP/1.1 400 Bad Request');
             echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
             die();

@@ -63,11 +63,8 @@ function handleFiles(files, textarea) {
     fetch('/upload', {
         method: 'POST', body: formData
     })
-        // The endpoint answers a rejected upload with an error status and a JSON
-        // *string* ("Unsupported file type.", "File contents do not match its
-        // type."). That message is for the author, not for the post: without
-        // this check it was inserted as if it were the markdown. Read the body
-        // either way, so a refusal can be reported rather than swallowed.
+        // A refusal carries a JSON *string* message, not markdown — hence the
+        // ok check. The body is read either way so the message can be shown.
         .then(response => response.json().catch(() => null).then(body => {
             if (!response.ok) {
                 throw new Error(uploadErrorMessage(body, response.status))
