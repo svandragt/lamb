@@ -122,7 +122,7 @@ Add the cache directives to the `location ~ \.php$` block in
 ```nginx
 location ~ \.php$  {
     include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php8.2-fpm.sock;
+    fastcgi_pass unix:/run/php/php8.4-fpm.sock;
 
     # --- fastcgi_cache (optional) ---
     fastcgi_cache       lamb;

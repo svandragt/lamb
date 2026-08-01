@@ -9,7 +9,7 @@ RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-a
 COPY src/ src/
 RUN composer dump-autoload --no-dev --optimize --ignore-platform-reqs
 
-FROM dunglas/frankenphp:php8.2
+FROM dunglas/frankenphp:php8.4
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 

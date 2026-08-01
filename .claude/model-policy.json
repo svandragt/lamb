@@ -13,7 +13,7 @@
     },
     "code": {
       "model": "sonnet",
-      "rationale": "Strong safety net makes mid-tier safe: 1489 unit tests across 118 files, PHPStan level 8 with a baseline, phpcs, a 70% coverage gate, and a 4-version CI matrix (PHP 8.2-8.5) plus Playwright e2e. Not lowered further — 13.7k LOC of hand-rolled routing and auth is not boilerplate CRUD."
+      "rationale": "Strong safety net makes mid-tier safe: 1489 unit tests across 118 files, PHPStan level 8 with a baseline, phpcs, a 70% coverage gate, and a 2-version CI matrix (PHP 8.4-8.5) plus Playwright e2e. Not lowered further — 13.7k LOC of hand-rolled routing and auth is not boilerplate CRUD."
     },
     "review": {
       "model": "sonnet",

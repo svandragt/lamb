@@ -10,7 +10,7 @@ Barrier free super simple blogging, self-hosted. [Read about the features](https
 
 ## Requirements
 
-- PHP 8.2 – 8.5
+- PHP 8.4 – 8.5
 - SQLite3, gettext, simplexml, mbstring, pdo_mysql extensions (pdo_mysql is required by the database library even though Lamb uses SQLite)
 - gd extension, recommended: converts image uploads to WebP (without it originals are stored as-is)
 

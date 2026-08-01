@@ -17,7 +17,7 @@ don't touch e2e-relevant paths like `src/**`; see the `changes` job.)
 Why this matters: without a required status check, a PR can be merged the
 instant it opens — before CI has finished, or even when it has failed.
 That is exactly how red PRs reached `main` (e.g. #309 merged with a failing
-`test (8.2)`). The `ci` job is also written with `if: always()` so a failed
+`test (8.4)`). The `ci` job is also written with `if: always()` so a failed
 dependency makes it report **failure**, not *skipped* — GitHub counts a
 skipped required check as passing, so a plain aggregate job would not block
 anything.
