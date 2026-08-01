@@ -11,19 +11,18 @@ $post = $data['post'];
 if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
     $submitLabel = SUBMIT_EDIT;
     $heading     = 'Edit Status';
+    // escape(), not strip_tags(): the body is Markdown source, not markup to be
+    // filtered. strip_tags() deleted every `<…>` run in it, and that mangled
+    // text was what the form posted back — so opening the editor and saving
+    // destroyed content.
+    $body        = escape((string) $post->body);
     ?>
     <h2><?= $heading ?></h2>
 
     <form method="post" action="/edit" id="editform">
         <label for="contents">Contents</label><textarea placeholder="What's happening?" name="contents" required
                                                         id="contents"
-        ><?php // escape(), not strip_tags(): the body is Markdown source, not
-                // markup to be filtered. strip_tags() *deleted* every `<…>` run
-                // in it — an autolink, an HTML snippet inside a code fence, a
-                // literal `<` — and the mangled text was what the form posted
-                // back, so opening the editor and saving silently destroyed
-                // content. Escaping is what a textarea needs anyway.
-        ?><?= escape((string) $post->body) ?></textarea>
+        ><?= $body ?></textarea>
         <input type="hidden" name="id" value="<?= (int) $post->id ?>"/>
         <input type="submit" form="editform" name="submit" value="<?= $submitLabel ?>">
         <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
