@@ -392,6 +392,10 @@ function post_form(string $url, array $fields, int $timeout, string $user_agent)
  */
 function fetch_pinned(string $url, array $opts, array $pin): ?array
 {
+    if ($url === '') {
+        return null;
+    }
+
     $ch = curl_init();
     if ($ch === false) {
         return null;
@@ -419,10 +423,15 @@ function fetch_pinned(string $url, array $opts, array $pin): ?array
     $truncated = false;
     $responseHeaders = [];
 
+    $method = $opts['method'] ?? 'GET';
+    if (!is_string($method) || $method === '') {
+        $method = 'GET';
+    }
+
     $options = [
         CURLOPT_URL => $url,
         CURLOPT_RESOLVE => ["{$pin['host']}:$port:{$pin['ip']}"],
-        CURLOPT_CUSTOMREQUEST => $opts['method'] ?? 'GET',
+        CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $headers,
         CURLOPT_FOLLOWLOCATION => false,
         CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$responseHeaders): int {
