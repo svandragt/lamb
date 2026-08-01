@@ -203,7 +203,9 @@ function redirect_404(string $fallback): void
  *
  * @param array<int, string> $_args   Unused.
  * @param bool  $use_fallback Whether to redirect to the configured fallback URL.
- * @return array{title: string, intro: string, action: string} An array containing the title, intro, and action of the 404 error page.
+ * @return array{title: string, intro: string, action: string, requested: string} The
+ *         404 page's view data: the human title, intro, the action marker the
+ *         router switches on, and the path the visitor actually asked for.
  */
 function respond_404(array $_args = [], bool $use_fallback = false): array
 {
@@ -214,14 +216,36 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
             redirect_404($fallback);
         }
     }
-    $header = "HTTP/1.0 404 Not Found";
-    header($header);
+    header('HTTP/1.0 404 Not Found');
 
     return [
-        'title' => $header,
+        // A human title, not the raw status line: this is rendered as the page's
+        // <title> and <h1>, so visitors (and search results) were shown the
+        // literal string "HTTP/1.0 404 Not Found".
+        'title' => 'Page not found',
         'intro' => 'Page not found.',
         'action' => '404',
+        // What the visitor asked for, so the template can offer to search for it.
+        // $data['action'] is always the literal '404' by the time the template
+        // runs (the router overwrites it with this array's own action), so the
+        // search suggestion offered to search for "404".
+        'requested' => requested_path(),
     ];
+}
+
+/**
+ * The path segment of the current request, without leading/trailing slashes.
+ *
+ * Returns '' when there is no usable path, so callers can drop the UI that
+ * depends on it rather than render an empty one.
+ *
+ * @return string
+ */
+function requested_path(): string
+{
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+
+    return is_string($path) ? trim($path, '/') : '';
 }
 
 /**
