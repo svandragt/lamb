@@ -69,6 +69,13 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Separate multiple hubs with commas.
 ;websub_hubs = https://hub.example.com/
 
+;; Gates features still gathering real-world testing before general release
+;; (currently: the WordPress, Known, and Lamb-export import CLI scripts).
+;; Off by default, and reset to false automatically whenever an upgrade
+;; changes what this gates — see docs for what is currently covered before
+;; turning it back on.
+experimental_features = false
+
 [menu_items]
 ;; Add <label>=<url> entries here where URL is either:
 ;;   - Slugs of an existing post, which is then hidden in the feed and the timeline (
@@ -403,6 +410,62 @@ function apply_timezone(array $config): string
 }
 
 /**
+ * Whether experimental features are enabled for this install — currently the
+ * WordPress, Known, and Lamb-export import CLI scripts.
+ *
+ * @param array<string, mixed> $config The loaded configuration.
+ * @return bool
+ */
+function experimental_features_enabled(array $config): bool
+{
+    return filter_var($config['experimental_features'] ?? false, FILTER_VALIDATE_BOOLEAN);
+}
+
+/**
+ * Bumped only when the set of features gated behind `experimental_features`
+ * changes (one graduates out, or a new one joins) — not on every release.
+ * reset_stale_experimental_flag() uses this to force a re-opt-in when that
+ * happens, so enabling the flag once cannot silently keep covering whatever
+ * gets added to the gate later.
+ */
+const EXPERIMENTAL_GATE_VERSION = 1;
+
+/**
+ * Forces `experimental_features` back to `false` when the gated feature set
+ * has changed since this install last read config, so opting in once cannot
+ * silently keep covering something added to the gate later.
+ *
+ * Tracked via a hidden `experimental_gate_version` option row — not part of
+ * the user-edited INI — compared against EXPERIMENTAL_GATE_VERSION. The
+ * stamp advances every time this runs behind, even when the flag is already
+ * `false`, so a stale stamp cannot cause a rewrite (and a save_ini_text()
+ * call) on every single read.
+ *
+ * @param string $ini_text The raw INI configuration text.
+ * @return string The INI text, with `experimental_features` reset if stale.
+ */
+function reset_stale_experimental_flag(string $ini_text): string
+{
+    $stamp = get_option('experimental_gate_version', 0);
+    if ((int) $stamp->value >= EXPERIMENTAL_GATE_VERSION) {
+        return $ini_text;
+    }
+
+    set_option($stamp, EXPERIMENTAL_GATE_VERSION);
+
+    if (!experimental_features_enabled(parse_ini_safe($ini_text))) {
+        return $ini_text;
+    }
+
+    return (string) preg_replace(
+        '/^(\h*experimental_features\h*=).*$/mi',
+        '${1} false',
+        $ini_text,
+        1
+    );
+}
+
+/**
  * Retrieves the raw INI text from the database or bootstraps it if not present.
  *
  * @return string The raw INI configuration text.
@@ -415,6 +478,10 @@ function get_ini_text(): string
         // can eventually be removed. Only rewrites (and bumps the cache
         // validator) on the first request after upgrade.
         $ini_text = ensure_explicit_theme($option->value);
+        // Same idea for the experimental-features gate: force a re-opt-in
+        // whenever the set of features it covers has changed since this
+        // install last saw it.
+        $ini_text = reset_stale_experimental_flag($ini_text);
         if ($ini_text !== $option->value) {
             save_ini_text($ini_text);
         }
@@ -432,6 +499,7 @@ function get_ini_text(): string
     }
 
     $ini_text = ensure_explicit_theme($ini_text);
+    $ini_text = reset_stale_experimental_flag($ini_text);
     save_ini_text($ini_text);
 
     return $ini_text;

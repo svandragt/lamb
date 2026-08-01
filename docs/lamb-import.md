@@ -7,6 +7,8 @@ nav_order: 31
 
 Lamb ships a CLI script that reads a [Lamb export](export.md) — the `.zip` that `/export` produces, or an already-unpacked copy of one — and restores every post and asset it describes. It's a Lamb-to-Lamb restore rather than a converter: it writes back exactly what you exported, through the same low-level pipeline every other importer uses. The importer works fully offline, with no credentials and no API access, and re-running it is safe.
 
+**Experimental.** This importer is still gathering real-world testing. Enable it by setting `experimental_features = true` in [Settings](site-configuration.md) before running the script — it refuses to run otherwise.
+
 ## What you get
 
 - Lamb restores every post in the manifest: its body, front matter, slug, `created` and `updated` timestamps, and draft or trash state, exactly as recorded.

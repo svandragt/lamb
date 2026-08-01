@@ -60,6 +60,11 @@ global $config;
 $config = Config\load();
 Config\apply_timezone($config);
 
+if (!Config\experimental_features_enabled($config)) {
+    fwrite(STDERR, "The Lamb export importer is experimental. Enable it first: set experimental_features = true in Settings.\n");
+    exit(1);
+}
+
 try {
     $manifest = Restore\read_manifest($reader);
 } catch (RuntimeException $e) {

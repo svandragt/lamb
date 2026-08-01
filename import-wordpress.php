@@ -54,6 +54,11 @@ global $config;
 $config = Config\load();
 Config\apply_timezone($config);
 
+if (!Config\experimental_features_enabled($config)) {
+    fwrite(STDERR, "The WordPress importer is experimental. Enable it first: set experimental_features = true in Settings.\n");
+    exit(1);
+}
+
 $rss = WordPress\parse_wxr_file($path);
 $items = WordPress\extract_items($rss);
 
