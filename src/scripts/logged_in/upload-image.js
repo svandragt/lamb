@@ -65,16 +65,70 @@ function handleFiles(files, textarea) {
     })
         // The endpoint answers a rejected upload with an error status and a JSON
         // *string* ("Unsupported file type.", "File contents do not match its
-        // type."). Without this check that message was treated as the markdown
-        // to insert, so a failed upload silently pasted the error text into the
-        // post being written. Reject instead and leave the textarea untouched.
-        .then(response => response.ok ? response.json() : Promise.reject(new Error(`Upload failed (${response.status})`)))
+        // type."). That message is for the author, not for the post: without
+        // this check it was inserted as if it were the markdown. Read the body
+        // either way, so a refusal can be reported rather than swallowed.
+        .then(response => response.json().catch(() => null).then(body => {
+            if (!response.ok) {
+                throw new Error(uploadErrorMessage(body, response.status))
+            }
+            return body
+        }))
         .then(data => {
             const markdown = data.replace(/!\[[^\]]*\]/g, '![]')
             textarea.value = text.slice(0, cursor) + markdown + text.slice(cursor)
             const altStart = cursor + markdown.indexOf('![') + 2
             textarea.setSelectionRange(altStart, altStart)
             textarea.dispatchEvent(new Event('input'))
+            clearUploadError()
         })
-        .catch(error => console.error(error))
+        .catch(error => {
+            console.error(error)
+            showUploadError(textarea, error.message)
+        })
+}
+
+/**
+ * The message to show for a refused upload: the endpoint's own explanation when
+ * it sent one, otherwise the bare status so the author still gets something
+ * actionable.
+ *
+ * @param {*} body - The parsed response body (a string for this endpoint's errors).
+ * @param {number} status - The HTTP status code.
+ * @returns {string}
+ */
+function uploadErrorMessage(body, status) {
+    return typeof body === 'string' && body.trim() !== ''
+        ? body.trim()
+        : `Upload failed (${status})`
+}
+
+/**
+ * Shows an upload failure above the entry form.
+ *
+ * Uploads happen without a page load, so the server-rendered $_SESSION['flash']
+ * messages can't carry this — but reusing their `.flash` class means the notice
+ * is styled by whichever theme is active, with no new CSS. Replacing the text of
+ * an existing notice keeps repeated failures from stacking up.
+ *
+ * @param {HTMLElement} textarea - The textarea the upload was started from.
+ * @param {string} message
+ */
+function showUploadError(textarea, message) {
+    const anchor = textarea.closest('form') || textarea
+    let flash = $('.flash.upload-error')
+    if (!flash) {
+        flash = document.createElement('div')
+        flash.className = 'flash upload-error'
+        flash.setAttribute('role', 'alert')
+        anchor.parentNode.insertBefore(flash, anchor)
+    }
+    flash.textContent = `⚠ ${message}`
+}
+
+/**
+ * Removes a previous upload failure notice once an upload succeeds.
+ */
+function clearUploadError() {
+    $('.flash.upload-error')?.remove()
 }
