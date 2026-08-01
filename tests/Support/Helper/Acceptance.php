@@ -30,6 +30,37 @@ class Acceptance extends Module
     }
 
     /**
+     * Reads a single column off a stored post, straight from the SQLite file the
+     * test server writes to.
+     *
+     * Some post state is deliberately invisible in the rendered page — the
+     * `version` column records which render format `transformed` was produced
+     * with — so asserting on it needs a look at the row itself.
+     */
+    public function grabPostColumn(int $id, string $column): mixed
+    {
+        $db = dirname(__DIR__) . '/Data/lamb.db';
+        $this->assertFileExists($db, 'Expected the acceptance database to exist');
+
+        $pdo = new \PDO('sqlite:' . $db, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        // The column name is test-supplied, never request data; quote it so a
+        // reserved word still parses.
+        $stmt = $pdo->prepare('SELECT "' . str_replace('"', '', $column) . '" FROM post WHERE id = ?');
+        $stmt->execute([$id]);
+
+        return $stmt->fetchColumn();
+    }
+
+    /**
+     * Asserts a stored post's column holds the expected value (compared as text,
+     * since SQLite's fluid columns may hand back either an int or a string).
+     */
+    public function seePostColumnEquals(int $id, string $column, mixed $expected): void
+    {
+        $this->assertSame((string) $expected, (string) $this->grabPostColumn($id, $column));
+    }
+
+    /**
      * Returns all values of a response header, joined by newlines.
      *
      * The installed PhpBrowser/InnerBrowser has no seeHttpHeader/grabHttpHeader,

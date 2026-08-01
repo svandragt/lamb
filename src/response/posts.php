@@ -277,7 +277,12 @@ function redirect_edited(): void
 
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
-    $bean->version = 1;
+    // POST_VERSION, not a hardcoded 1: `version` records which render format
+    // `transformed` was produced with, and parse_bean() above has just produced
+    // the current one. Stamping 1 marked every freshly edited post as stale, so
+    // upgrade_posts() re-parsed and re-stored it on the next read — a write on a
+    // GET, and one that applies upgrade (not edit) semantics to the bean.
+    $bean->version = POST_VERSION;
     $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
