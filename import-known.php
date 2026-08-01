@@ -56,6 +56,11 @@ global $config;
 $config = Config\load();
 Config\apply_timezone($config);
 
+if (!Config\experimental_features_enabled($config)) {
+    fwrite(STDERR, "The Known importer is experimental. Enable it first: set experimental_features = true in Settings.\n");
+    exit(1);
+}
+
 $rss = Import\parse_rss_file($path);
 $items = Known\extract_items($rss);
 

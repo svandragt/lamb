@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Config\compose_config;
 use function Lamb\Config\ensure_explicit_theme;
+use function Lamb\Config\experimental_features_enabled;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
@@ -257,5 +258,30 @@ class ConfigTest extends TestCase
         $config = compose_config("feeds_draft = false\n", get_default_ini_text());
 
         $this->assertFalse(filter_var($config['feeds_draft'], FILTER_VALIDATE_BOOLEAN));
+    }
+
+    public function testDefaultIniDisablesExperimentalFeaturesForNewInstalls(): void
+    {
+        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertArrayHasKey('experimental_features', $parsed);
+        $this->assertFalse(filter_var($parsed['experimental_features'], FILTER_VALIDATE_BOOLEAN));
+    }
+
+    // experimental_features_enabled
+
+    public function testExperimentalFeaturesEnabledReturnsFalseWhenKeyMissing(): void
+    {
+        $this->assertFalse(experimental_features_enabled([]));
+    }
+
+    public function testExperimentalFeaturesEnabledReturnsTrueWhenSetTrue(): void
+    {
+        $this->assertTrue(experimental_features_enabled(['experimental_features' => 'true']));
+    }
+
+    public function testExperimentalFeaturesEnabledReturnsFalseWhenSetFalse(): void
+    {
+        $this->assertFalse(experimental_features_enabled(['experimental_features' => 'false']));
     }
 }

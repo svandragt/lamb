@@ -51,6 +51,13 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Separate multiple hubs with commas.
 ;websub_hubs = https://hub.example.com/
 
+;; Gates features still gathering real-world testing before general release
+;; (currently: the WordPress, Known, and Lamb-export import CLI scripts — see
+;; wordpress-import.md, known-import.md, lamb-import.md). Off by default, and
+;; reset to false automatically whenever an upgrade changes what this gates,
+;; so check the docs for what's currently covered before turning it back on.
+experimental_features = false
+
 [menu_items]
 ;; Add <label>=<url> entries. URL can be:
 ;;   - A post slug, which hides the post from the feed and timeline

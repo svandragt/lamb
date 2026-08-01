@@ -6,6 +6,8 @@ title: Known import
 
 Lamb ships a CLI script that reads a [Known CMS](https://withknown.com) RSS export and feeds each published item through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
+**Experimental.** This importer is still gathering real-world testing. Enable it by setting `experimental_features = true` in [Settings](site-configuration.md) before running the script — it refuses to run otherwise.
+
 ## What you get
 
 - Every published item in the export is imported. Known's RSS export is a partial WXR veneer: post content lives in `<description>` (not `<content:encoded>`), there's no `<wp:post_name>`, and the only date field is `<pubDate>` — so a post's `created` and `updated` timestamps are always identical.

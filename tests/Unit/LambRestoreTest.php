@@ -492,6 +492,40 @@ class LambRestoreTest extends TestCase
     }
 
     /**
+     * Seeds a fresh, file-backed data dir with `experimental_features = true`,
+     * so a CLI-script subprocess pointed at it doesn't hit the experimental
+     * gate. A separate PHP process, because the subprocess under test bootstraps
+     * its own SQLite file at $data_dir — a distinct connection from this test's
+     * in-memory DB.
+     */
+    private function enableExperimentalFeaturesInDataDir(string $data_dir): void
+    {
+        mkdir($data_dir, 0777, true);
+        // __DIR__ has no file to resolve against in `-r` code, so the repo
+        // root is embedded as a literal instead.
+        $root = rtrim(codecept_root_dir(), '/');
+        $setup = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                // Mirrors a real install: some earlier request always calls
+                // Config\load() (bumping the gate-version stamp) before a
+                // human can ever reach Settings to flip the flag on. Skipping
+                // straight to save_ini_text() would leave the stamp at 0, so
+                // the importer's own Config\load() would see this as a
+                // genuinely stale install and reset the flag right back.
+                . "\\Lamb\\Config\\load(); "
+                . "\\Lamb\\Config\\save_ini_text(\"experimental_features = true\\n\");",
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $setup->mustRun();
+    }
+
+    /**
      * Runs the importer over an archive the way import-lamb.php does.
      */
     private function importArchive(string $path, bool $replace = false, ?string $site_url = null): string
@@ -783,6 +817,7 @@ class LambRestoreTest extends TestCase
     {
         $archive = $this->buildArchive();
         $data_dir = "$this->tmp_dir/data";
+        $this->enableExperimentalFeaturesInDataDir($data_dir);
 
         $process = new Process(
             ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
@@ -795,8 +830,25 @@ class LambRestoreTest extends TestCase
         $this->assertStringContainsString('[dry-run] Done. created=5', $process->getOutput());
     }
 
+    public function testTheCliScriptRefusesWhenExperimentalFeaturesDisabled(): void
+    {
+        $archive = $this->buildArchive();
+
+        $process = new Process(
+            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('experimental', $process->getErrorOutput());
+    }
+
     public function testTheCliScriptRefusesAnArchiveItCannotRead(): void
     {
+        // Fails on the unreadable-path check, before Config\load() runs — so
+        // this exits(1) for that reason regardless of experimental_features.
         $process = new Process(
             ['php', codecept_root_dir('import-lamb.php'), "$this->tmp_dir/absent.zip"],
             codecept_root_dir(),
