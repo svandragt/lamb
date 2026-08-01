@@ -1,36 +1,44 @@
 CONTRIBUTING
 
-Contributions are welcomed! Thank you for considering to contribute!
+Contributions are welcome. Thank you for considering one.
 
-To get started follow these steps:
+To get started:
 
 1. Fork the repository and clone your fork.
-2. Setup your environment using the README instructions.
+2. Set up your environment using the README instructions.
 
-Basic advice can be found in the GitHub docs: https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project
+For general advice, see the GitHub docs: https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project
 
 You can then start working on your fork.
 
 CONTRIBUTING CODE
 
-Please first open an issue to state the problem you'd like to address, and get agreement from the code owners that the feature aligns with the goals and aims of the project. 
+First open an issue describing the problem you'd like to address, and get
+agreement from the code owners that the feature aligns with the goals and aims of
+the project.
 
-I wouldn't want you to spend a lot of effort building a feature that I'm unwilling to maintain or merge.
+I wouldn't want you to spend a lot of effort building a feature that I'm unwilling
+to maintain or merge.
 
 Have fun!
 
 MERGE PROTECTION (MAINTAINERS)
 
-Pull requests into main and release must not be merged until the `ci` status
-check passes. This is enforced by a GitHub ruleset, which lives in repository
-settings rather than the repo tree. The intended configuration is checked in
-at .github/rulesets/require-ci.json — see .github/rulesets/README.md for how
-to import and verify it.
+Don't merge pull requests into main or release until the `ci` status check passes.
+A GitHub ruleset enforces this. The ruleset lives in repository settings rather
+than the repo tree, and the intended configuration is checked in at
+.github/rulesets/require-ci.json. For how to import and verify it, see
+.github/rulesets/README.md.
 
 DEVELOPMENT ENVIRONMENTS
 
-Set up your environment using the README. Alternatives are documented for end users in docs/ (Devbox, DDev, Docker, local PHP). For a sandboxed, reproducible environment using Canonical Workshop, see .workshop/README.md.
+Set up your environment using the README. The docs/ directory documents the
+alternatives for end users: Devbox, DDEV, Docker, and local PHP. For a sandboxed,
+reproducible environment using Canonical Workshop, see .workshop/README.md.
 
 DEBUGGING WITH XDEBUG
 
-When debugging locally with XDebug, open the site as http://localhost:8747/ (rather than 127.0.0.1 or another host alias) so the XDebug client picks up the session correctly. Applies to all local setups: built-in PHP server, Devbox, DDev.
+When you debug locally with Xdebug, open the site at http://localhost:8747/ rather
+than 127.0.0.1 or another host alias, so the Xdebug client picks up the session
+correctly. This applies to all local setups: the built-in PHP server, Devbox, and
+DDEV.

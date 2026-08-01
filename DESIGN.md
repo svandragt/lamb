@@ -222,10 +222,11 @@ No layout-property animations. No bounce, no elastic. `prefers-reduced-motion: r
 
 ## File map
 
-- `themes/2026/html.php` — HTML shell, Google Fonts link, tightened nav markup.
+- `themes/2026/html.php` — HTML shell, self-hosted font preloads, tightened nav markup.
 - `themes/2026/styles/styles.css` — full visual definition.
+- `themes/2026/styles/fonts/` — the self-hosted Geist Mono and Public Sans woff2 subsets.
 - `themes/2026/parts/_items.php` — moves `<strong itemprop="author">` into `.screen-reader-text`.
-- Everything else falls back to `themes/default/`.
+- Everything else falls back to `themes/base/`.
 
 ## Activation
 

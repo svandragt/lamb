@@ -1,16 +1,16 @@
 # Workshop development environment
 
 [Canonical Workshop](https://ubuntu.com/workshop/docs/) provides a sandboxed,
-reproducible dev environment for lamb — an alternative to Devbox/DDev. The
+reproducible dev environment for Lamb, as an alternative to Devbox and DDEV. The
 definition here installs the same toolchain (PHP, Node, Ruby) and bootstraps
 the project automatically.
 
-This directory is developer tooling, not end-user documentation (which lives in
-`docs/`).
+This directory is developer tooling, not end-user documentation. End-user
+documentation lives in `docs/`.
 
 ## Prerequisites
 
-The `workshop` CLI (snap, classic confinement):
+The `workshop` CLI, installed as a snap with classic confinement:
 
 ```sh
 sudo snap install workshop --classic
@@ -38,13 +38,13 @@ workshop stop dev / workshop start dev
 
 `dev.yaml`:
 
-- `node` (store SDK) — Node.js 24, mirrors `devbox.json`'s `nodejs@24`.
-- `claude-code` (store SDK) — agent tooling.
-- `project-lamb` — an **in-project SDK** (`.workshop/lamb/`) that provides the
+- `node` (store SDK): Node.js 24, mirroring `devbox.json`'s `nodejs@24`.
+- `claude-code` (store SDK): agent tooling.
+- `project-lamb`: an **in-project SDK** at `.workshop/lamb/` that provides the
   PHP toolchain, because the Workshop Store has no PHP or Ruby SDK.
-- `actions:` — `serve` (runs `composer serve`) and `url` (prints the URL).
+- `actions:`: `serve`, which runs `composer serve`, and `url`, which prints the URL.
 
-`lamb/` (the in-project SDK):
+`lamb/`, the in-project SDK:
 
 | Hook | Runs as | Does |
 |------|---------|------|
@@ -52,16 +52,16 @@ workshop stop dev / workshop start dev
 | `setup-project` | workshop user, every launch/refresh | `composer install` + `pnpm install` (mirrors `devbox.json` `init_hook`) |
 | `check-health` | workshop user, after setup | verifies php/composer/node/ruby + required extensions, reports health |
 
-## Accessing the server from the host
+## Access the server from the host
 
 The environment is an LXD container on the LXD bridge, directly routable from
 the host. The server binds `0.0.0.0:8747`, so:
 
-- `workshop run dev url` prints `http://<container-ip>:8747` (reads the IP from
-  inside the container, so it survives restarts that change the address).
-- The IP changes when the workshop restarts — re-run `workshop run dev url`.
-- Optional stable `localhost` forward (added outside the Workshop definition, so
-  a recreate drops it):
+- `workshop run dev url` prints `http://<container-ip>:8747`. It reads the IP from
+  inside the container, so it survives restarts that change the address.
+- The IP changes when the workshop restarts, so re-run `workshop run dev url`.
+- You can add an optional stable `localhost` forward. It lives outside the
+  Workshop definition, so recreating the environment drops it:
   ```sh
   lxc config device add dev-<project-id> lamb proxy \
     listen=tcp:127.0.0.1:8747 connect=tcp:127.0.0.1:8747 --project workshop.sander
@@ -70,15 +70,15 @@ the host. The server binds `0.0.0.0:8747`, so:
 ## Gotchas worth knowing
 
 - **Shared project mount.** Workshop bind-mounts your host checkout at
-  `/project`, so `composer install` / `pnpm install` write to the *same*
-  `vendor/` and `node_modules/` that Devbox uses. They are not isolated; the
-  trees are built for slightly different PHP/Node versions (8.2 vs 8.3) but are
-  compatible in practice.
-- **`ext-pdo_mysql` is required** even though lamb uses SQLite — RedBeanPHP
+  `/project`, so `composer install` and `pnpm install` write to the *same*
+  `vendor/` and `node_modules/` that Devbox uses. They aren't isolated. The
+  trees are built for slightly different PHP and Node versions (8.2 against 8.3)
+  but are compatible in practice.
+- **`ext-pdo_mysql` is required** even though Lamb uses SQLite, because RedBeanPHP
   references a MySQL PDO constant at load time and fatals without it. It's
-  declared in `composer.json`; `setup-base` installs `php8.3-mysql`.
-- **`workshopctl set-health`** statuses are lowercase (`okay` / `waiting` /
-  `error` / `unknown`).
+  declared in `composer.json`, and `setup-base` installs `php8.3-mysql`.
+- **`workshopctl set-health`** statuses are lowercase: `okay`, `waiting`,
+  `error`, and `unknown`.
 
 ## Related
 

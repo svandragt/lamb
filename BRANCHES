@@ -1,20 +1,30 @@
-Branching Structure:
- - main branch: This is the main development branch where new features are implemented and merged.
- - release branch: This is the branch used to create and manage releases.
+BRANCHING STRUCTURE
 
-Other Branches:
- - next: allows targeting the next major version, when the next release is a bugfix one.
- - *-pinned: pinned branch, kept for reference reasons.
+ - main: the main development branch, where new features are implemented and merged.
+ - release: the branch used to create and manage releases.
 
-Default Branch:
- - The default branch should be main, as this is the branch where the active development and feature work is happening.
- - This allows for continuous integration and deployment of new changes, as the main branch represents the most up-to-date state of the project.
+OTHER BRANCHES
 
-Release Process:
- - When you're ready to create a new release, you create a release branch from the main branch.
- - This allows you to maintain a stable release branch while development continues on the main branch.
- - After a release is made from the release branch, you may want to merge those changes back into the main branch to keep them in sync.
+ - next: targets the next major version, when the next release is a bugfix one.
+ - *-pinned: a pinned branch, kept for reference.
 
-Branching Strategy Alignment:
- - This approach of using main for development and release for releases aligns with common Git branching strategies, such as Git Flow or GitHub Flow.
- - It provides a clear separation between the development work and the release process, which can make the overall workflow more manageable.
+DEFAULT BRANCH
+
+ - The default branch is main, because that's where active development and feature
+   work happens.
+ - This supports continuous integration and deployment of new changes, because main
+   represents the most up-to-date state of the project.
+
+RELEASE PROCESS
+
+ - When you're ready to create a new release, create a release branch from main.
+ - This keeps the release branch stable while development continues on main.
+ - After you make a release from the release branch, merge those changes back into
+   main to keep the two in sync.
+
+BRANCHING STRATEGY ALIGNMENT
+
+ - Using main for development and release for releases aligns with common Git
+   branching strategies such as Git Flow and GitHub Flow.
+ - It separates development work from the release process clearly, which makes the
+   overall workflow easier to manage.

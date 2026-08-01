@@ -97,8 +97,9 @@ Small, deliberate touches that reward attention but don't ask for it:
 
 ## Files
 
-- `html.php`: overrides the default to add Geist Mono + Public Sans via Google Fonts and a slightly tightened nav.
+- `html.php`: overrides the default to preload the self-hosted Geist Mono + Public Sans woff2 files and a slightly tightened nav.
 - `styles/styles.css`: full visual definition.
+- `styles/fonts/`: the self-hosted woff2 subsets.
 - `parts/_items.php`: minimal override to move the author into `screen-reader-text`.
 
 Everything else falls back to `themes/base/`.
@@ -113,7 +114,7 @@ theme = 2026
 
 ## Trade-offs and known limits
 
-- **Google Fonts dependency.** `html.php` loads Geist Mono and Public Sans from `fonts.googleapis.com`. That's an external request and a privacy consideration for a self-hosted blog. Drop the link from `html.php` and the design falls back to `ui-monospace` and `system-ui`, which works but loses the typographic personality. Self-hosting the woff2 files in `themes/2026/styles/fonts/` is the better long-term fix.
+- **Fonts must ship with the theme.** Geist Mono and Public Sans are self-hosted as woff2 subsets in `themes/2026/styles/fonts/`, so there's no third-party request and no privacy consideration. The cost is that the files travel with the theme. If they're missing, the stack falls back to `ui-monospace` and `system-ui`, which works but loses the typographic personality. (An earlier version loaded these from `fonts.googleapis.com`; self-hosting replaced it.)
 - **`display: contents` on `<header>`.** Required to make grid placement work without changing the markup. Modern browsers handle this correctly; older screen readers might lose the `<header>` landmark, but in this template the header only contains the title and timestamp, so the impact is low.
 - **Long human-readable timestamps.** The 6.5rem time column comfortably fits "Monday at 2:15 pm" but will wrap on anything longer. Acceptable; longer values are uncommon.
 - **Single-post pages** (`.status`, `.post`) intentionally bypass the grid. The `<h1>` already carries the title, and a one-article page doesn't need a gutter to balance against. The CSS sets `display: block` on `.status article` and `.post article`.

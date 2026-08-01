@@ -1,62 +1,64 @@
 # Releasing Lamb
 
 Maintainer checklist for cutting a release. Lamb ships from the `release`
-branch (see `BRANCHES`); `main` is the active development branch. Versions are
-plain SemVer tags (`0.9.0`); pre-releases use a suffix (`0.9.0-rc1`). There is
-no version string in the code — **the Git tag is the source of truth**.
+branch (see `BRANCHES`), and `main` is the active development branch. Versions
+are plain SemVer tags such as `0.9.0`, and pre-releases use a suffix such as
+`0.9.0-rc1`. There's no version string in the code — **the Git tag is the
+source of truth**.
 
 > **Run everything below from Lamb's devbox shell** (`devbox shell` in the repo)
-> or via `devbox run -- …`. The pre-push hook runs the test suite, which needs
-> PHP — a bare shell (or the *global* devbox) won't have it.
+> or through `devbox run -- …`. The pre-push hook runs the test suite, which
+> needs PHP, and a bare shell or the *global* devbox won't have it.
 
 ## 1. Pre-flight (on `main`)
 
-- [ ] All intended PRs are merged into `main`; nothing release-worthy is still open.
-- [ ] Working tree is clean and `main` is up to date: `git checkout main && git pull`.
-- [ ] Tests pass: `vendor/bin/codecept run` (Unit + Acceptance).
-      Acceptance needs `.env` (`SITE_URL`, `LAMB_TEST_PASSWORD`); generate it with
+- [ ] All intended PRs are merged into `main`, and nothing release-worthy is still open.
+- [ ] The working tree is clean and `main` is up to date: `git checkout main && git pull`.
+- [ ] Tests pass: `vendor/bin/codecept run` (unit and acceptance).
+      Acceptance needs `.env` with `SITE_URL` and `LAMB_TEST_PASSWORD`. Generate it with
       `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` so the cleartext
-      `LAMB_TEST_PASSWORD` is written (it is omitted by default). Acceptance starts
-      its own server, so don't have another server on the test port.
+      `LAMB_TEST_PASSWORD` is written, because it's omitted by default. Acceptance starts
+      its own server, so don't leave another server on the test port.
 - [ ] Static checks pass: `composer lint` && `composer analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
 
 ## 2. Choose the version
 
-- [ ] Decide the new version from the change set (SemVer):
-      patch = fixes only, minor = new features, major = breaking changes.
+- [ ] Decide the new version from the change set, using SemVer:
+      patch for fixes only, minor for new features, major for breaking changes.
 - [ ] Confirm it's unused: `git tag | sort -V | tail`.
-- [ ] If cutting a pre-release first, use an `-rcN` suffix and mark it
+- [ ] To cut a pre-release first, use an `-rcN` suffix and mark it
       pre-release in step 6.
 
 ## 3. Generate end-user release notes
 
-Notes are for **people running a Lamb blog**, not contributors. Start from the
-commit list, then curate.
+Notes are for **people running a Lamb blog**, not for contributors. Start from
+the commit list, then curate.
 
 ```sh
 # Everything on main since the last release tag (use the previous final tag):
 git log --format='- %s' <last-tag>..main
 ```
 
-- [ ] **Keep** changes an end user would notice: new/changed features, bug
-      fixes affecting the blog or admin, new config keys, install/upgrade
-      requirements (e.g. a newly required PHP extension), deployment changes
-      (Docker/FrankenPHP/Nginx/DDev/Devbox).
-- [ ] **Drop** internal-only changes: dev-environment tooling (e.g. Workshop),
-      CI, tests, refactors, code-comments/`CLAUDE.md`/`DECISIONS.md`, and
+- [ ] **Keep** changes an end user would notice: new and changed features, bug
+      fixes affecting the blog or admin, new config keys, install or upgrade
+      requirements such as a newly required PHP extension, and deployment
+      changes to Docker, FrankenPHP, NGINX, DDEV, or Devbox.
+- [ ] **Drop** internal-only changes: dev-environment tooling such as Workshop,
+      CI, tests, refactors, code comments, `CLAUDE.md` and `DECISIONS.md`, and
       dependency bumps with no user-visible effect.
-- [ ] Rewrite each kept line in plain language (what changed for the user, not
-      the PR title). Group under **Added / Changed / Fixed**.
+- [ ] Rewrite each kept line in plain language, describing what changed for the
+      user rather than repeating the PR title. Group the lines under
+      **Added**, **Changed**, and **Fixed**.
 - [ ] Call out anything requiring action on upgrade in an **Upgrade notes**
-      section (e.g. "install the `pdo_mysql` PHP extension", config changes).
-- [ ] Save the notes to a temp file (e.g. `/tmp/notes.md`) for step 5.
+      section, such as "install the `pdo_mysql` PHP extension" or config changes.
+- [ ] Save the notes to a temp file such as `/tmp/notes.md` for step 5.
 
-## 4. Promote `main` to `release` via PR
+## 4. Promote `main` to `release` through a PR
 
-Direct pushes to `release` are rejected by the branch ruleset (`GH013` —
-changes must go through a pull request), so promotion happens as a PR merged
-with a **merge commit** (not squash/rebase, to keep histories connected):
+The branch ruleset rejects direct pushes to `release` (`GH013` — changes must go
+through a pull request), so promotion happens as a PR merged with a **merge
+commit**, not a squash or rebase, to keep the histories connected:
 
 ```sh
 gh pr create --base release --head main \
@@ -66,21 +68,22 @@ gh pr merge --merge --subject "Release <version>"
 ```
 
 - [ ] Confirm the **release-verify** check is green on the PR before merging.
-      It runs the Acceptance suite against the Docker/FrankenPHP release image
-      and an nginx + php-fpm install — the well-travelled production paths —
+      It runs the acceptance suite against the Docker and FrankenPHP release image
+      and an NGINX plus PHP-FPM install — the well-travelled production paths —
       in addition to `ci`'s built-in-server run.
-- [ ] If the PR reports `BEHIND`, `release` has commits not on `main` (e.g.
-      old release merges). Sync first: branch from `main`, `git merge
-      origin/release` (a merge commit, no content changes expected), PR that
-      into `main`, then re-check the release PR.
-- [ ] Resolve any conflicts (uncommon — `main` is the source of truth, though
-      `release` may also carry the occasional release-only commit).
-- [ ] Re-run `vendor/bin/codecept run` on `release` to confirm green.
+- [ ] If the PR reports `BEHIND`, `release` has commits that `main` doesn't, such
+      as old release merges. Sync first: branch from `main`, run `git merge
+      origin/release` (a merge commit, with no content changes expected), open a
+      PR for that into `main`, then re-check the release PR.
+- [ ] Resolve any conflicts. These are uncommon, because `main` is the source of
+      truth, though `release` may also carry the occasional release-only commit.
+- [ ] Re-run `vendor/bin/codecept run` on `release` to confirm it's green.
 
 ## 5. Tag and create the GitHub release
 
-`gh release create` creates the tag itself at `--target release` (the merged
-branch tip) and publishes the release in one step — no separate `git tag` needed.
+`gh release create` creates the tag itself at `--target release`, which is the
+merged branch tip, and publishes the release in one step. You don't need a
+separate `git tag`.
 
 ```sh
 gh release create <version> \
@@ -92,9 +95,10 @@ gh release create <version> \
 ```
 
 **No local `gh`?** The `Cut release` workflow (`.github/workflows/cut-release.yml`)
-does the same `gh release create --target release` server-side from a
-`workflow_dispatch`, so it can be driven without a local checkout or token (e.g.
-from an automation session that can trigger workflows but not create releases):
+runs the same `gh release create --target release` server-side from a
+`workflow_dispatch`, so you can drive it without a local checkout or token, for
+example from an automation session that can trigger workflows but not create
+releases:
 
 ```sh
 gh workflow run cut-release.yml \
@@ -104,29 +108,29 @@ gh workflow run cut-release.yml \
 # omit prerelease (or set =false) for a final; add -f latest=true to mark it latest
 ```
 
-It tags the current `release` tip, so promote main → release (step 4) first.
+It tags the current `release` tip, so promote main to release (step 4) first.
 
-- [ ] Merge the release PR (step 4) first, so `--target release` tags the
-      intended commit. If the tag landed on the wrong commit, move it — the
+- [ ] Merge the release PR from step 4 first, so `--target release` tags the
+      intended commit. If the tag landed on the wrong commit, move it. The
       release object and its notes follow the tag:
       `git tag -f -m "<version>" <version> origin/release && git push -f origin <version>`.
-      The `release: published` event will **not** re-fire for a moved tag; use
+      The `release: published` event does **not** re-fire for a moved tag, so use
       the `workflow_dispatch` re-run from step 6 instead.
-- [ ] Final releases: pass `--latest`. Pre-releases: pass `--prerelease` and
-      do **not** mark latest.
-- [ ] Verify: `gh release view <version>`, and `git fetch --tags` to pull the
-      tag `gh` created.
+- [ ] For final releases, pass `--latest`. For pre-releases, pass `--prerelease`
+      and do **not** mark them latest.
+- [ ] Verify with `gh release view <version>`, and run `git fetch --tags` to pull
+      the tag that `gh` created.
 
 ## 6. Post-release
 
 - [ ] Publishing the release triggers the `Release artifacts` workflow. Verify it
       attached `lamb-<version>.tar.gz` to the release (`gh release view <version>`)
-      and pushed `ghcr.io/svandragt/lamb:<version>` (plus `:latest` for finals).
-      Re-run via `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
-- [ ] Announce / update any demo site if applicable.
-- [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a
+      and pushed `ghcr.io/svandragt/lamb:<version>`, plus `:latest` for finals.
+      Re-run it with `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
+- [ ] Announce the release and update any demo site, if applicable.
+- [ ] Docker, Devbox, and DDEV users pull from `release`, so confirm that a
       clean checkout of `release` installs and runs.
-- [ ] If a `next` branch exists (work parked for the next version — see
+- [ ] If a `next` branch exists, holding work parked for the next version (see
       `BRANCHES`), open a PR to merge it into `main` now that the release is
       out:
 
@@ -140,6 +144,6 @@ It tags the current `release` tip, so promote main → release (step 4) first.
 
 ## Related
 
-- `BRANCHES` — branch roles (`main`, `release`, `next`, pinned).
-- `CONTRIBUTING` — contribution workflow.
-- `docs/upgrading.md` — what end users run to upgrade.
+- `BRANCHES`: branch roles (`main`, `release`, `next`, pinned).
+- `CONTRIBUTING`: contribution workflow.
+- `docs/upgrading.md`: what end users run to upgrade.
