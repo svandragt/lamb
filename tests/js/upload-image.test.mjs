@@ -51,7 +51,7 @@ test('handleFiles inserts the upload response at the cursor and fires input', as
   let posted
   window.fetch = (url, opts) => {
     posted = { url, opts }
-    return Promise.resolve({ json: () => Promise.resolve('![](/img.webp)') })
+    return Promise.resolve({ ok: true, json: () => Promise.resolve('![](/img.webp)') })
   }
 
   api.handleFiles([new window.File(['x'], 'a.png', { type: 'image/png' })], ta)
@@ -73,7 +73,7 @@ test('handleFiles posts a dropped video file the same way as an image', async ()
   let posted
   window.fetch = (url, opts) => {
     posted = { url, opts }
-    return Promise.resolve({ json: () => Promise.resolve('![](/clip.mp4)') })
+    return Promise.resolve({ ok: true, json: () => Promise.resolve('![](/clip.mp4)') })
   }
 
   api.handleFiles([new window.File(['x'], 'clip.mp4', { type: 'video/mp4' })], ta)
@@ -90,7 +90,7 @@ test('handleFiles strips server alt text so the user sees empty [] to fill in', 
   ta.value = ''
   ta.setSelectionRange(0, 0)
 
-  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve('![photo.jpg](/img.webp)') })
 
   api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
   await flush()
@@ -104,7 +104,7 @@ test('handleFiles positions cursor inside [] after insertion', async () => {
   ta.value = 'abcd'
   ta.setSelectionRange(2, 2) // cursor between "ab" and "cd"
 
-  window.fetch = () => Promise.resolve({ json: () => Promise.resolve('![photo.jpg](/img.webp)') })
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve('![photo.jpg](/img.webp)') })
 
   api.handleFiles([new window.File(['x'], 'photo.jpg', { type: 'image/png' })], ta)
   await flush()
@@ -112,4 +112,27 @@ test('handleFiles positions cursor inside [] after insertion', async () => {
   assert.equal(ta.value, 'ab![](/img.webp)cd')
   assert.equal(ta.selectionStart, 4) // inside the [], after ![
   assert.equal(ta.selectionEnd, 4)
+})
+
+test('handleFiles leaves the textarea alone when the upload is rejected', async () => {
+  // A rejected upload answers with an error status and a JSON *string* error
+  // message. That message must never be inserted into the post being written.
+  const { window, document, api } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  ta.value = 'draft text'
+  ta.setSelectionRange(5, 5)
+
+  const errors = []
+  window.console.error = (e) => errors.push(e)
+  window.fetch = () => Promise.resolve({
+    ok: false,
+    status: 400,
+    json: () => Promise.resolve('Unsupported file type.'),
+  })
+
+  api.handleFiles([new window.File(['x'], 'evil.svg', { type: 'image/svg+xml' })], ta)
+  await flush()
+
+  assert.equal(ta.value, 'draft text')
+  assert.equal(errors.length, 1)
 })
