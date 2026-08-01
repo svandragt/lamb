@@ -5,7 +5,7 @@
     "@playwright/test": "^1.62.0",
     "@types/jsdom": "^28.0.3",
     "@types/node": "^26.1.2",
-    "jsdom": "^29.1.1"
+    "jsdom": "^30.0.0"
   },
   "scripts": {
     "screenshot": "pnpm exec node scripts/screenshot.mjs",
