@@ -229,23 +229,8 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
         // $data['action'] is always the literal '404' by the time the template
         // runs (the router overwrites it with this array's own action), so the
         // search suggestion offered to search for "404".
-        'requested' => requested_path(),
+        'requested' => \Lamb\Http\requested_path(),
     ];
-}
-
-/**
- * The path segment of the current request, without leading/trailing slashes.
- *
- * Returns '' when there is no usable path, so callers can drop the UI that
- * depends on it rather than render an empty one.
- *
- * @return string
- */
-function requested_path(): string
-{
-    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-
-    return is_string($path) ? trim($path, '/') : '';
 }
 
 /**
