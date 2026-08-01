@@ -41,7 +41,11 @@ function respond_upload(array $_args): void
     $out = '';
     foreach ($files as $f) {
         if ($f['error'] !== UPLOAD_ERR_OK) {
-            // File upload failed
+            // File upload failed. The status code matters: the browser-side
+            // handler keys on response.ok to decide whether the body is markdown
+            // to insert or an error to report, and a 200 here made it paste the
+            // error message into the post.
+            header('HTTP/1.1 400 Bad Request');
             echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
             die();
         }
@@ -73,6 +77,7 @@ function respond_upload(array $_args): void
             $new_fn = "$seed.$ext";
             $new_fp = sprintf("%s/%s", $dir, $new_fn);
             if (!move_uploaded_file($temp_fp, $new_fp)) {
+                header('HTTP/1.1 500 Internal Server Error');
                 echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
                 die();
             }

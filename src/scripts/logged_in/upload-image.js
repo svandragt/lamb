@@ -63,7 +63,12 @@ function handleFiles(files, textarea) {
     fetch('/upload', {
         method: 'POST', body: formData
     })
-        .then(response => response.json())
+        // The endpoint answers a rejected upload with an error status and a JSON
+        // *string* ("Unsupported file type.", "File contents do not match its
+        // type."). Without this check that message was treated as the markdown
+        // to insert, so a failed upload silently pasted the error text into the
+        // post being written. Reject instead and leave the textarea untouched.
+        .then(response => response.ok ? response.json() : Promise.reject(new Error(`Upload failed (${response.status})`)))
         .then(data => {
             const markdown = data.replace(/!\[[^\]]*\]/g, '![]')
             textarea.value = text.slice(0, cursor) + markdown + text.slice(cursor)
