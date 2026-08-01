@@ -24,6 +24,28 @@ function get_request_uri(): string|false
 }
 
 /**
+ * The current request's path, without its leading or trailing slashes.
+ *
+ * The plain "what did the visitor ask for?" reading of the request, for callers
+ * that want to show it back to them (the 404 page's search suggestion). Distinct
+ * from {@see get_request_uri}, which is the router's view: that one keeps the
+ * leading slash and rewrites `/` to `/home`, neither of which is something to
+ * put in front of a visitor.
+ *
+ * Returns '' when there is no usable path (the site root, or a malformed
+ * REQUEST_URI), so callers can drop the UI that depends on it rather than
+ * render an empty one.
+ *
+ * @return string The path, e.g. `tag/php` for `/tag/php?utm=1`.
+ */
+function requested_path(): string
+{
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+
+    return is_string($path) ? trim($path, '/') : '';
+}
+
+/**
  * Splits a trailing `/page/<N>` pagination segment off a request path.
  *
  * Clean pagination URLs append `/page/N` to whatever list path they paginate
