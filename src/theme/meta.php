@@ -42,8 +42,8 @@ function the_opengraph(): void
     }
     $og_tags += [
         'og:locale' => 'en_GB',
-        'og:modified_time' => $bean->created,
-        'og:published_time' => $bean->updated,
+        'og:modified_time' => $bean->updated,
+        'og:published_time' => $bean->created,
         'og:publisher' => ROOT_URL,
         'og:site_name' => $config['site_title'],
         'og:type' => 'article',
