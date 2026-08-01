@@ -41,7 +41,9 @@ function respond_upload(array $_args): void
     $out = '';
     foreach ($files as $f) {
         if ($f['error'] !== UPLOAD_ERR_OK) {
-            // File upload failed
+            // The status is load-bearing: upload-image.js keys on response.ok to
+            // tell markdown-to-insert from error-to-report.
+            header('HTTP/1.1 400 Bad Request');
             echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
             die();
         }
@@ -73,6 +75,7 @@ function respond_upload(array $_args): void
             $new_fn = "$seed.$ext";
             $new_fp = sprintf("%s/%s", $dir, $new_fn);
             if (!move_uploaded_file($temp_fp, $new_fp)) {
+                header('HTTP/1.1 500 Internal Server Error');
                 echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
                 die();
             }
