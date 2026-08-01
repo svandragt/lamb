@@ -355,6 +355,54 @@ class ThemeMetaTest extends TestCase
         return $dir;
     }
 
+    // -------------------------------------------------------------------------
+    // the_opengraph — published/modified times map to the right columns
+    // -------------------------------------------------------------------------
+
+    public function testOpenGraphPublishedTimeIsTheCreatedDate(): void
+    {
+        global $template, $data;
+        $template = 'status';
+
+        $bean              = R::dispense('post');
+        $bean->description = 'Timestamps';
+        $bean->created     = '2024-01-02 03:04:05';
+        $bean->updated     = '2025-06-07 08:09:10';
+        R::store($bean);
+        $data = ['posts' => [$bean]];
+
+        ob_start();
+        the_opengraph();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString(
+            '<meta property="og:published_time" content="2024-01-02 03:04:05"/>',
+            $output
+        );
+    }
+
+    public function testOpenGraphModifiedTimeIsTheUpdatedDate(): void
+    {
+        global $template, $data;
+        $template = 'status';
+
+        $bean              = R::dispense('post');
+        $bean->description = 'Timestamps';
+        $bean->created     = '2024-01-02 03:04:05';
+        $bean->updated     = '2025-06-07 08:09:10';
+        R::store($bean);
+        $data = ['posts' => [$bean]];
+
+        ob_start();
+        the_opengraph();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString(
+            '<meta property="og:modified_time" content="2025-06-07 08:09:10"/>',
+            $output
+        );
+    }
+
     /**
      * Renders the_opengraph() for a status post and returns the emitted markup.
      *
