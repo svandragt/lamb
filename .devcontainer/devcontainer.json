@@ -3,12 +3,12 @@
 	"name": "PHP",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
 	// bookworm, not bullseye: Debian 11 LTS security support ends 2026-08-31.
-	"image": "mcr.microsoft.com/devcontainers/php:1-8.2-bookworm",
+	"image": "mcr.microsoft.com/devcontainers/php:1-8.4-bookworm",
 
 	"features": {
 		"ghcr.io/devcontainers/features/php:1": {
 			"installComposer": true,
-			"version": "8.2"
+			"version": "8.4"
 		}
 	},
 
