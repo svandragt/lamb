@@ -30,6 +30,12 @@ than the repo tree, and the intended configuration is checked in at
 .github/rulesets/require-ci.json. For how to import and verify it, see
 .github/rulesets/README.md.
 
+DOCUMENTATION
+
+Documentation follows the Google developer documentation style guide, with the
+project's own decisions recorded in DOCS_STYLE.md. Read that before writing or
+editing anything in docs/.
+
 DEVELOPMENT ENVIRONMENTS
 
 Set up your environment using the README. The docs/ directory documents the

@@ -1,5 +1,6 @@
 ---
 title: Post types
+nav_order: 9
 ---
 
 There are two kinds of posts.

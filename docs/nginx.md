@@ -1,5 +1,6 @@
 ---
 title: NGINX configuration
+nav_order: 4
 ---
 
 # NGINX configuration

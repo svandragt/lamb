@@ -1,5 +1,6 @@
 ---
 title: Cross-posting from feeds
+nav_order: 20
 ---
 
 # Cross-posting from feeds

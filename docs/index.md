@@ -1,5 +1,6 @@
 ---
 title: Lamb
+nav_order: 1
 ---
 
 # Lamb — literally another micro blog
@@ -90,6 +91,7 @@ Development tools, local environments, and sandboxes:
 
 ## Main topics
 
+* [Backup and restore]({{ site.baseurl }}{% link backup-restore.md %})
 * [Cron scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %})
 * [Drafts]({{ site.baseurl }}{% link drafts.md %})
@@ -111,5 +113,6 @@ Development tools, local environments, and sandboxes:
 * [Theme functions]({{ site.baseurl }}{% link theme-functions.md %})
 * [Themes]({{ site.baseurl }}{% link themes.md %})
 * [Trash]({{ site.baseurl }}{% link trash.md %})
+* [Troubleshooting]({{ site.baseurl }}{% link troubleshooting.md %})
 * [Upgrading]({{ site.baseurl }}{% link upgrading.md %})
 * [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %})

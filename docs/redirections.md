@@ -1,5 +1,6 @@
 ---
 title: Redirections
+nav_order: 24
 ---
 
 # Redirections

@@ -1,5 +1,6 @@
 ---
 title: Export
+nav_order: 29
 ---
 
 # Export
@@ -91,6 +92,7 @@ Export needs PHP's `zip` extension. The Docker image and most PHP installations 
 
 ## Related
 
+- [Backup and restore]({{ site.baseurl }}{% link backup-restore.md %}): An export is a content archive. Your configuration, webmentions, and redirects live only in the database.
 - [Trash]({{ site.baseurl }}{% link trash.md %}): Exports include trashed posts and flag them in the manifest.
 - [Drafts]({{ site.baseurl }}{% link drafts.md %}): Exports include drafts too.
 - [Media]({{ site.baseurl }}{% link media.md %}): How Lamb stored and converted the assets in the archive.

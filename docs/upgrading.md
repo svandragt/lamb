@@ -1,5 +1,6 @@
 ---
 title: Upgrading
+nav_order: 8
 ---
 
 # Upgrading
@@ -53,6 +54,7 @@ The database and uploads live in the named volumes and survive the recreate.
 
 ## Related
 
+- [Backup and restore]({{ site.baseurl }}{% link backup-restore.md %}): Take a backup before you upgrade.
 - [Installation options]({{ site.baseurl }}{% link index.md %})
 - [Docker]({{ site.baseurl }}{% link docker.md %})
 - [Cron scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})

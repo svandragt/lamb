@@ -1,5 +1,6 @@
 ---
 title: Local PHP setup
+nav_order: 5
 ---
 
 # Local PHP setup

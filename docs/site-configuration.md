@@ -1,5 +1,6 @@
 ---
 title: Site configuration
+nav_order: 25
 ---
 
 # Site configuration

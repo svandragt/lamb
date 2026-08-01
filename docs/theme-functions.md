@@ -1,5 +1,6 @@
 ---
 title: Theme functions
+nav_order: 34
 ---
 
 Lamb ships a small library of helper functions that theme parts call to render

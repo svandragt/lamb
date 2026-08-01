@@ -1,5 +1,6 @@
 ---
 title: Project goals
+nav_order: 36
 ---
 
 # Project goals

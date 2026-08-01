@@ -1,5 +1,6 @@
 ---
 title: Cron scheduled tasks
+nav_order: 28
 ---
 
 # Cron scheduled tasks

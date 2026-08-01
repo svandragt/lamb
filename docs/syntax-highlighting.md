@@ -1,5 +1,6 @@
 ---
 title: Syntax highlighting
+nav_order: 15
 ---
 
 # Syntax highlighting
