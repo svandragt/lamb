@@ -4,24 +4,24 @@ title: Search
 
 # Search
 
-Lamb has a built-in full-text search that queries post bodies and titles.
+Lamb includes a full-text search that queries post bodies and titles.
 
-## How to search
+## Search your posts
 
-Navigate to `/search/<keywords>` or use the search form if your theme provides one. Multiple keywords are supported and the search is case-insensitive.
+Go to `/search/<keywords>`, or use the search form if your theme provides one. Search accepts multiple keywords and ignores case.
 
-Example: `/search/hello+world`
+For example: `/search/hello+world`
 
-You can also pass keywords via the `s` query parameter, which will redirect to the canonical URL form:
+You can also pass keywords in the `s` query parameter. Lamb redirects to the canonical URL form:
 
 `/search?s=hello+world` → `/search/hello+world`
 
 ## Search results
 
-Matching posts are displayed in reverse-chronological order. The results page includes a heading showing the search query and the number of matches found.
+Lamb displays matching posts in reverse-chronological order. The results page heading shows the search query and the number of matches.
 
-Keywords are highlighted in the search results using `<mark>` tags (styled by the active theme).
+Lamb highlights keywords in the results with `<mark>` tags, which the active theme styles.
 
 ## Related
 
-* [Post Types]({{ site.baseurl }}{% link post-types.md %}): The content that is searched.
+* [Post types]({{ site.baseurl }}{% link post-types.md %}): The content that Lamb searches.
