@@ -359,44 +359,19 @@ class ThemeMetaTest extends TestCase
     // the_opengraph — published/modified times map to the right columns
     // -------------------------------------------------------------------------
 
-    public function testOpenGraphPublishedTimeIsTheCreatedDate(): void
+    public function testOpenGraphMapsPublishedAndModifiedTimesToTheirColumns(): void
     {
-        global $template, $data;
-        $template = 'status';
-
-        $bean              = R::dispense('post');
-        $bean->description = 'Timestamps';
-        $bean->created     = '2024-01-02 03:04:05';
-        $bean->updated     = '2025-06-07 08:09:10';
-        R::store($bean);
-        $data = ['posts' => [$bean]];
-
-        ob_start();
-        the_opengraph();
-        $output = ob_get_clean();
+        // Asserted together, against distinct dates, so a swap of the two
+        // properties cannot satisfy either assertion.
+        $output = $this->renderStatus([
+            'created' => '2024-01-02 03:04:05',
+            'updated' => '2025-06-07 08:09:10',
+        ]);
 
         $this->assertStringContainsString(
             '<meta property="og:published_time" content="2024-01-02 03:04:05"/>',
             $output
         );
-    }
-
-    public function testOpenGraphModifiedTimeIsTheUpdatedDate(): void
-    {
-        global $template, $data;
-        $template = 'status';
-
-        $bean              = R::dispense('post');
-        $bean->description = 'Timestamps';
-        $bean->created     = '2024-01-02 03:04:05';
-        $bean->updated     = '2025-06-07 08:09:10';
-        R::store($bean);
-        $data = ['posts' => [$bean]];
-
-        ob_start();
-        the_opengraph();
-        $output = ob_get_clean();
-
         $this->assertStringContainsString(
             '<meta property="og:modified_time" content="2025-06-07 08:09:10"/>',
             $output
@@ -406,7 +381,7 @@ class ThemeMetaTest extends TestCase
     /**
      * Renders the_opengraph() for a status post and returns the emitted markup.
      *
-     * @param array $fields Post bean fields (transformed, title, description).
+     * @param array $fields Post bean fields (transformed, title, description, created, updated).
      */
     private function renderStatus(array $fields = []): string
     {
@@ -417,8 +392,8 @@ class ThemeMetaTest extends TestCase
         $bean->title       = $fields['title'] ?? 'Image Post';
         $bean->description = $fields['description'] ?? 'A description';
         $bean->transformed = $fields['transformed'] ?? '';
-        $bean->created     = date('Y-m-d H:i:s');
-        $bean->updated     = date('Y-m-d H:i:s');
+        $bean->created     = $fields['created'] ?? date('Y-m-d H:i:s');
+        $bean->updated     = $fields['updated'] ?? date('Y-m-d H:i:s');
         R::store($bean);
         $data = ['posts' => [$bean]];
 

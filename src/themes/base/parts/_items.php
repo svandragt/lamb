@@ -23,13 +23,11 @@ if (empty($data['posts'])) :
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
-        // is_menu_item() matches a slug. This read a non-existent `is_menu_item`
-        // property, so it always fell through to the numeric id and never
-        // matched — menu pages stayed in tag and search listings, which (unlike
-        // the home listing and the feeds) have no SQL-level exclusion. The
-        // `status` guard is what the 2024/2026 themes already carry: on a
-        // permalink the menu page *is* the requested post, so skipping it there
-        // would render an empty page.
+        // Menu pages are reachable from the nav, so they stay out of listings —
+        // tag and search have no SQL-level exclusion (unlike the home listing
+        // and the feeds, filtered in public_posts_clause). Not on a permalink,
+        // though: there the menu page *is* the requested post. Matches the
+        // 2024/2026 themes.
         if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
             continue;
         endif;
