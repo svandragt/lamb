@@ -1,36 +1,36 @@
 ---
-title: Cron Scheduled Tasks
+title: Cron scheduled tasks
 ---
 
-# Cron Scheduled Tasks
+# Cron scheduled tasks
 
-Lamb has an scheduled task endpoint that can be called periodically to run tasks in the background, available at `/_cron`.
+Lamb has a scheduled-task endpoint at `/_cron`. Call it periodically to run background tasks.
 
-(Looking to publish a post at a future date instead? See [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).)
+To publish a post at a future date instead, see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 
 The following tasks run periodically:
 
-1. **Purging trash.** Posts in the [trash]({{ site.baseurl }}{% link trash.md %}) are permanently deleted once they have been there for 30 days.
-2. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
-3. **Sending webmentions.** Any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts are delivered.
+1. **Purging trash.** Lamb permanently deletes posts that have been in the [trash]({{ site.baseurl }}{% link trash.md %}) for 30 days.
+2. **Cross-posting.** Lamb [ingests]({{ site.baseurl }}{% link cross-posting.md %}) new content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) as posts.
+3. **Sending webmentions.** Lamb delivers any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts.
 
-Note that the feed system has its own rate limiting system to prevent sending too many requests to the feed provider, so checking more often than every 30 minutes or so is not typically useful.
+The feed system has its own rate limiting to avoid sending too many requests to the feed provider, so calling the endpoint more often than every 30 minutes rarely helps.
 
-## How-to
+## Call the endpoint on a schedule
 
-It's your responsibility to call the endpoint periodically. If you don't have a server, you could setup a website monitor, a local scheduled task, maybe even IFTTT or Zapier. Be creative!
+Calling the endpoint periodically is your responsibility. If you don't have a server, you could set up a website monitor, a local scheduled task, or a service such as IFTTT or Zapier.
 
-For example the linux cron system can be setup as follows:
+For example, set up the Linux cron system as follows:
 
 ```
-# Schedule taks every 30 minutes
+# Schedule the task every 30 minutes.
 */30 * * * * /usr/bin/curl -s https://example.com/_cron > /dev/null 2>&1
 ```
 
 ## Related
 
-* [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
-* [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged after 30 days by the cron.
-* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions are sent during the cron run.
-* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
-* [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Publishing a post at a future date (a different feature, despite the similar name).
+* [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs through the cron endpoint.
+* [Trash]({{ site.baseurl }}{% link trash.md %}): The cron run purges trashed posts after 30 days.
+* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Lamb sends outbound webmentions during the cron run.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Lamb saves feed-ingested posts as drafts by default.
+* [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Publishing a post at a future date. This is a different feature, despite the similar name.

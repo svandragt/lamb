@@ -1,10 +1,10 @@
 ---
-title: Syntax Highlighting
+title: Syntax highlighting
 ---
 
-# Syntax Highlighting
+# Syntax highlighting
 
-Fenced code blocks with a language hint are syntax-highlighted automatically:
+Lamb highlights fenced code blocks that carry a language hint:
 
 ````markdown
 ```php
@@ -12,15 +12,15 @@ echo "Hello world";
 ```
 ````
 
-Highlighting happens on the server when the post is saved, so no JavaScript is shipped to visitors and pages without code stay exactly as light as before. Pages render with GitHub-style colours, and the bundled "Notes" (2026) theme switches to a matching dark palette when the visitor prefers dark mode.
+Highlighting happens on the server when you save the post, so Lamb ships no JavaScript to visitors and pages without code stay exactly as light as before. Pages render with GitHub-style colours, and the bundled "Notes" (2026) theme switches to a matching dark palette when the visitor prefers dark mode.
 
-Lamb uses [Phiki](https://github.com/phikiphp/phiki), which supports over 200 languages via TextMate grammars — including `html`, `css`, `scss`, `javascript`, `python`, `php`, `shell`, `yaml`, `ini`, and `gdscript`.
+Lamb uses [Phiki](https://github.com/phikiphp/phiki), which supports over 200 languages through TextMate grammars, including `html`, `css`, `scss`, `javascript`, `python`, `php`, `shell`, `yaml`, `ini`, and `gdscript`.
 
-Code blocks without a language hint, or with an unrecognised language, are rendered as plain preformatted text.
+Lamb renders code blocks without a language hint, or with an unrecognised language, as plain preformatted text.
 
-Posts written before this feature are re-rendered automatically the next time they are viewed.
+Posts you wrote before this feature existed are re-rendered automatically the next time someone views them.
 
 ## Related
 
-* [Post Types]({{ site.baseurl }}{% link post-types.md %}): Posts are written in markdown; fenced code blocks are part of standard markdown.
-* [Themes]({{ site.baseurl }}{% link themes.md %}): Custom themes can restyle highlighted blocks via the `.phiki` class.
+* [Post types]({{ site.baseurl }}{% link post-types.md %}): You write posts in Markdown, and fenced code blocks are part of standard Markdown.
+* [Themes]({{ site.baseurl }}{% link themes.md %}): Custom themes can restyle highlighted blocks through the `.phiki` class.

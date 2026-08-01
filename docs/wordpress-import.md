@@ -2,52 +2,52 @@
 title: WordPress import
 ---
 
-# Importing from WordPress
+# Import from WordPress
 
-Lamb ships a CLI script that reads a [WordPress WXR export](https://wordpress.com/support/export/) and feeds each published post and page through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
+Lamb ships a CLI script that reads a [WordPress WXR export](https://wordpress.com/support/export/) and feeds each published post and page through Lamb's existing post-creation pipeline. The importer works fully offline, with no credentials and no API access, and re-running it is safe.
 
 ## What you get
 
-The first-pass scope is intentionally small:
+The first-pass scope is deliberately small:
 
-- Published **Posts** and **Pages** are imported. Drafts, private posts, custom post types, comments, menus and theme settings are skipped.
-- HTML post bodies are sanitised (`<script>`, `<style>`, `<iframe>` and `on*` event attributes are stripped) and converted to Markdown.
-- Categories and tags become inline `#hashtags` at the end of the body — Lamb's tag index picks them up automatically.
-- Every image referenced in the body is downloaded into `src/assets/YYYY/MM/` (using the post's own creation date), re-encoded to WebP and scaled down to the upload pipeline's max edge ([details](media.md)), and the body links are rewritten to point at the local copies. Coverage includes `<img src>`, `data-full-url` (gallery blocks ship the original full-resolution URL there and a downscaled copy in `src` — the importer prefers the full one), `data-src` (lazy-loaded), and `<a href>` that points at an image file (so "view full size" links survive the migration). Images on a different host than `<wp:base_blog_url>` are pulled in too — a typical WP migration ships images from a CDN or a previous domain, and the downloader's content-type and extension checks keep arbitrary URLs safe. Downloads are capped at 20 MB and deduped by URL hash within a month, so a logo used across many posts is fetched once. Failed downloads, data: URIs and unresolvable relative URLs are left as-is.
-- Imported posts are **silent**: the importer calls the low-level save pipeline directly, so no outbound webmentions or WebSub hub pings are emitted. The content already exists somewhere else.
+- Lamb imports published **posts** and **pages**. It skips drafts, private posts, custom post types, comments, menus, and theme settings.
+- Lamb sanitises HTML post bodies, stripping `<script>`, `<style>`, `<iframe>`, and `on*` event attributes, then converts them to Markdown.
+- Categories and tags become inline `#hashtags` at the end of the body, and Lamb's tag index picks them up automatically.
+- Lamb downloads every image the body references into `src/assets/YYYY/MM/`, using the post's own creation date. It re-encodes each image to WebP and scales it down to the upload pipeline's maximum edge ([details](media.md)), then rewrites the body links to point at the local copies. Coverage includes `<img src>`, `data-full-url` (gallery blocks ship the original full-resolution URL there and a downscaled copy in `src`, and the importer prefers the full one), `data-src` for lazy-loaded images, and `<a href>` pointing at an image file, so "view full size" links survive the migration. Lamb also pulls in images hosted on a different host than `<wp:base_blog_url>`, because a typical WordPress migration ships images from a CDN or a previous domain. The downloader's content-type and extension checks keep arbitrary URLs safe. Downloads are capped at 20 MB and deduped by URL hash within a month, so Lamb fetches a logo used across many posts once. It leaves failed downloads, `data:` URIs, and unresolvable relative URLs unchanged.
+- Imported posts are **silent**. The importer calls the low-level save pipeline directly, so it emits no outbound webmentions and no WebSub hub pings. The content already exists somewhere else.
 
-## Exporting from WordPress
+## Export from WordPress
 
-In your WordPress admin, go to **Tools → Export** and download **All content**. You'll get a `.xml` file (the WXR format).
+In your WordPress admin, go to **Tools → Export** and download **All content**. You get a `.xml` file in the WXR format.
 
-## Running the importer
+## Run the importer
 
 From the project root:
 
 ```bash
-# Preview what would be imported without writing anything
+# Preview what the importer would do, without writing anything
 php import-wordpress.php /path/to/wordpress.WordPress.xml --dry-run
 
 # Run it for real
 php import-wordpress.php /path/to/wordpress.WordPress.xml
 ```
 
-The script prints one line per item (`imported:` or `would import:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `feeditem_uuid` (md5 of `'wordpress-' + guid`) and left alone.
+The script prints one line per item, either `imported:` or `would import:`, plus a final summary with the totals for created, existed, and skipped. It recognises an item that a previous run already imported by its `feeditem_uuid`, the md5 of `'wordpress-' + guid`, and leaves it alone.
 
 ## After the import
 
-The importer writes directly to the same database your site uses, so the posts are visible immediately. There is no separate review queue.
+The importer writes directly to the same database your site uses, so the posts are visible immediately. There's no separate review queue.
 
-A few things worth checking manually:
+A few things are worth checking manually:
 
-- **Slugs and redirects.** Page-like posts keep their original WordPress permalink leaf (`<wp:post_name>`), written into front matter as `slug:` so the URL is identical to the WP one (relative to your new domain). Titleless WordPress status posts whose old URL was `/status/<id>/` are imported as Lamb status posts and get an automatic 301 redirect from the old WordPress path to the new local `/status/<local-id>` URL. Where a WP slug collides with an existing Lamb post or a reserved route, Lamb appends the post id (matching the standard create flow), so that particular post's URL will differ — set up a 301 if it matters.
-- **Embedded shortcodes.** WordPress shortcodes (`[caption …]`, gallery shortcodes, etc.) are not expanded — they appear verbatim in the Markdown. Edit any you care about after the import.
-- **Media.** Run a quick `git status` on `src/assets/` to see what was downloaded.
+- **Slugs and redirects.** Page-like posts keep their original WordPress permalink leaf (`<wp:post_name>`), which the importer writes into front matter as `slug:`, so the URL is identical to the WordPress one relative to your new domain. Lamb imports titleless WordPress status posts whose old URL was `/status/<id>/` as Lamb status posts, and creates an automatic 301 redirect from the old WordPress path to the new local `/status/<local-id>` URL. Where a WordPress slug collides with an existing Lamb post or a reserved route, Lamb appends the post id, matching the standard create flow, so that post's URL differs. Set up a 301 if that matters to you.
+- **Embedded shortcodes.** The importer doesn't expand WordPress shortcodes such as `[caption …]` or gallery shortcodes, so they appear verbatim in the Markdown. Edit any you care about after the import.
+- **Media.** Run `git status` on `src/assets/` to see what the importer downloaded.
 
 ## Related
 
-- [Known import](known-import.md) — the sibling importer this one shares its image-download and Markdown-conversion pipeline with.
-- [Cross-posting](cross-posting.md) — outbound syndication, the opposite direction.
-- [Feeds](feeds.md) — how Lamb publishes content for other readers to ingest.
-- [Media](media.md) — how uploaded images are stored and converted.
-- [Export](export.md) — the same Markdown format, in the opposite direction.
+- [Known import](known-import.md): The sibling importer, which shares this one's image-download and Markdown-conversion pipeline.
+- [Cross-posting](cross-posting.md): Outbound syndication, the opposite direction.
+- [Feeds](feeds.md): How Lamb publishes content for other readers to ingest.
+- [Media](media.md): How Lamb stores and converts uploaded images.
+- [Export](export.md): The same Markdown format, in the opposite direction.

@@ -1,28 +1,27 @@
 ---
-title: DDev
+title: DDEV
 ---
 
-# DDev
+# DDEV
 
-> DDev is a convenience wrapper that runs Lamb under nginx + php-fpm in Docker. The underlying server setups are release-verified (see [Nginx]({{ site.baseurl }}{% link nginx.md %}) and [Docker]({{ site.baseurl }}{% link docker.md %})), but the DDev wrapper itself is not separately tested.
+> DDEV is a convenience wrapper that runs Lamb under NGINX and PHP-FPM in Docker. The underlying server setups are release-verified. See [NGINX]({{ site.baseurl }}{% link nginx.md %}) and [Docker]({{ site.baseurl }}{% link docker.md %}). The DDEV wrapper itself isn't tested separately.
 
-## Setup
+## Set up DDEV
 
-* [Install ddev](https://ddev.com/get-started/), if you haven't.
+1. [Install DDEV](https://ddev.com/get-started/), if you haven't already.
+2. Start the environment. DDEV installs the prerequisites for you:
 
-Make sure the tool's installed, then it will install prerequisites:
+   ```shell
+   ddev start
 
-```shell
-ddev start
+   # Set the /login password. Change `hackme` to something more secure.
+   ddev php make-password.php hackme
 
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
-ddev php make-password.php hackme
+   # Reload the environment.
+   ddev restart
+   ```
 
-# reload the environment
-ddev restart
-```
+## Daily workflow
 
-## Workflow
-
-- Run `ddev start`. The output will tell you where you can open the project.
-- Run `ddev stop` when finished.
+- Run `ddev start`. The output tells you where to open the project.
+- Run `ddev stop` when you finish.

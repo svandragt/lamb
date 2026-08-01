@@ -1,13 +1,14 @@
 ---
-title: Site Configuration
+title: Site configuration
 ---
 
-# Site Configuration
+# Site configuration
 
-Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
+Lamb doesn't need a configuration file and runs happily without one. It also provides a settings page, available after you log in, where you can configure the instance.
 
-The default configuration. Real defaults ship as active lines so you can edit
-one value rather than write it from scratch; personal details stay commented:
+Here's the default configuration. Real defaults ship as active lines, so you can
+edit one value rather than write it from scratch. Personal details stay
+commented out:
 
 ```
 ;; Title of the site, shown in the HTML and feed views
@@ -101,14 +102,14 @@ Feed = /feed
 
 ## Values and sections
 
-Every setting is one of two shapes, and the difference is a pair of brackets:
+Every setting is one of two shapes, and a pair of brackets is the difference:
 
-* A **single value**, written `key = value` — `site_title`, `theme`,
-  `posts_per_page`, `timezone` and the rest of the keys above the first
+* A **single value**, written `key = value`. This covers `site_title`, `theme`,
+  `posts_per_page`, `timezone`, and the rest of the keys above the first
   `[section]` header.
-* A **section** of `label = value` entries under a `[name]` header —
+* A **section** of `label = value` entries under a `[name]` header. This covers
   `[menu_items]`, `[footer_items]`, `[feeds]`, `[preconnect]`, `[me]`,
-  `[redirections]` and `[syndicate_to]`.
+  `[redirections]`, and `[syndicate_to]`.
 
 Getting the shape wrong is easy to do and easy to miss, because the file is
 still valid INI either way:
@@ -123,39 +124,38 @@ Home = /start         ;; wrong: a repeated label makes the entry a list
 ```
 
 Lamb ignores a setting written in the wrong shape and uses the default instead,
-so a slip cannot take the site down — and it tells you which ones it ignored
-when you save, alongside the "Settings saved successfully" message. If a
-setting you changed appears to have no effect, that message is the first place
-to look.
+so a slip can't take the site down. It also tells you which settings it ignored
+when you save, alongside the "Settings saved successfully" message. If a setting
+you changed appears to have no effect, that message is the first place to look.
 
-Note that everything after a `[section]` header belongs to that section until
-the next one. A single-value setting written below a section header becomes an
-entry in it, so keep them all at the top of the file.
+Everything after a `[section]` header belongs to that section until the next
+header. A single-value setting written below a section header becomes an entry
+in that section, so keep single values at the top of the file.
 
 ## Site URL
 
-`site_url` is the canonical address of your site, e.g. `https://example.com`. It is
+`site_url` is the canonical address of your site, such as `https://example.com`. It's
 optional for a plain blog, but worth setting:
 
-* **Micropub needs it.** IndieAuth tokens are issued for an identity, and Lamb has
+* **Micropub needs it.** IndieAuth issues tokens for an identity, and Lamb has
   to know its own identity to tell whether a token belongs to you. Without
-  `site_url` the Micropub endpoint refuses every token, and logs
-  `micropub: rejecting token, no site_url configured` via PHP's error log.
+  `site_url`, the Micropub endpoint refuses every token and logs
+  `micropub: rejecting token, no site_url configured` through PHP's error log.
 * **It pins absolute URLs.** Feeds, social embed tags, and the endpoint discovery
   links otherwise use whatever host the incoming request asked for. Setting
-  `site_url` keeps them on your real domain even if a request arrives with a
+  `site_url` keeps them on your real domain even when a request arrives with a
   different `Host` header.
 
-You can also set it outside the settings page with the `LAMB_SITE_URL` environment
-variable, which takes precedence over the INI value — handy when the same
-configuration is deployed to more than one hostname.
+You can also set it outside the settings page, with the `LAMB_SITE_URL` environment
+variable, which takes precedence over the INI value. This helps when you deploy the
+same configuration to more than one hostname.
 
 ## Related
 
-* [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.
-* [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
+* [Set up cross-posting]({{ site.baseurl }}{% link cross-posting.md %}#set-up-feeds): Requires site configuration changes.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether Lamb publishes ingested posts or saves them as drafts.
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
-* [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
+* [Menu items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
 * [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})

@@ -4,13 +4,13 @@ title: Export
 
 # Export
 
-Lamb can hand you everything you have written as a single zip file. Go to **Settings → Export** and click **Download export**, or visit `/export` directly while logged in.
+Lamb can hand you everything you've written as a single zip file. Go to **Settings → Export** and click **Download export**, or go to `/export` directly while logged in.
 
-The archive is a complete backup of your writing: every post, the images and videos those posts use, and a machine-readable description of each post's state. Drafts and trashed posts are included too — a backup that quietly dropped your unpublished work would not be much of a backup.
+The archive is a complete backup of your writing: every post, the images and videos those posts use, and a machine-readable description of each post's state. It includes drafts and trashed posts too, because a backup that quietly dropped your unpublished work wouldn't be much of a backup.
 
-Nothing is deleted or changed by exporting. You can do it as often as you like.
+Exporting deletes and changes nothing. You can do it as often as you like.
 
-## What is in the archive
+## What's in the archive
 
 ```
 lamb-export-2026-07-26.zip
@@ -21,11 +21,11 @@ lamb-export-2026-07-26.zip
     └── 2026/07/photo.webp
 ```
 
-**`posts/`** holds one Markdown file per post, foldered by the year and month the post was created. Each file is exactly what Lamb stores: the YAML front matter (`title:`, `slug:`) followed by the body, tags included as inline `#hashtags`. There is no export-specific wrapper to strip — these are ordinary Markdown files you can open in any editor, keep in a git repository, or feed to a static site generator.
+**`posts/`** holds one Markdown file per post, foldered by the year and month you created the post. Each file is exactly what Lamb stores: the YAML front matter (`title:`, `slug:`) followed by the body, with tags included as inline `#hashtags`. There's no export-specific wrapper to strip. These are ordinary Markdown files that you can open in any editor, keep in a Git repository, or feed to a static site generator.
 
-The filename comes from the post's slug. A post with no slug is named after its id (`post-42.md`), and in the rare case two posts would land on the same filename the id is appended to keep them distinct.
+The filename comes from the post's slug. Lamb names a post with no slug after its id, such as `post-42.md`. In the rare case where two posts would land on the same filename, it appends the id to keep them distinct.
 
-**`assets/`** holds the images and videos your posts link to, at the same `YYYY/MM` paths the posts reference. Only files that are actually used are included, so an old upload nothing links to any more will not appear. If a post links to a file that is no longer on disk, the export skips it rather than failing — compare `manifest.json` against your posts if you want to find those.
+**`assets/`** holds the images and videos your posts link to, at the same `YYYY/MM` paths the posts reference. Lamb includes only files that posts actually use, so an old upload that nothing links to any more doesn't appear. If a post links to a file that's no longer on disk, the export skips the file rather than failing. To find those files, compare `manifest.json` against your posts.
 
 **`manifest.json`** describes the export and every post in it.
 
@@ -58,7 +58,7 @@ The filename comes from the post's slug. A post with no slug is named after its 
 }
 ```
 
-Each entry in `posts` points at a file in the archive and records the things a Markdown file cannot express on its own:
+Each entry in `posts` points at a file in the archive and records the things a Markdown file can't express on its own:
 
 | Field | Meaning |
 | --- | --- |
@@ -71,28 +71,28 @@ Each entry in `posts` points at a file in the archive and records the things a M
 | `post_version` | Which revision of Lamb's post pipeline last rendered the post. |
 | `feed_name`, `feeditem_uuid`, `source_url` | Set when the post came from a subscribed feed rather than being written locally. Locally authored posts have `null` in all three. |
 
-Deliberately absent: titles and bodies (they live in the Markdown file, so there is only ever one source of truth for your content) and preview tokens (they are access credentials for unpublished posts, and an export is a file you may pass around).
+Two things are deliberately absent. Titles and bodies live in the Markdown file, so there's only ever one source of truth for your content. Preview tokens are access credentials for unpublished posts, and an export is a file you may pass around.
 
-## Working with an export
+## Work with an export
 
-Because the Markdown files are Lamb's own storage format, the export is the mirror image of an import — the same shape the [WordPress]({{ site.baseurl }}{% link wordpress-import.md %}) and [Known]({{ site.baseurl }}{% link known-import.md %}) importers produce when they convert a foreign export into Lamb posts.
+Because the Markdown files are Lamb's own storage format, the export is the mirror image of an import. It's the same shape the [WordPress]({{ site.baseurl }}{% link wordpress-import.md %}) and [Known]({{ site.baseurl }}{% link known-import.md %}) importers produce when they convert a foreign export into Lamb posts.
 
-Practically, that means you can:
+In practice, that means you can:
 
 - **Keep offsite backups** without copying `data/lamb.db`, and read them years later without Lamb or SQLite.
-- **Move to another tool.** Most static site generators read front-matter Markdown directly. For formats that need conversion (WordPress WXR, for instance), the archive is a stable input for a converter to work from.
-- **Search or process your archive** with ordinary tools — `grep`, a script over `manifest.json`, whatever you prefer.
+- **Move to another tool.** Most static site generators read front-matter Markdown directly. For formats that need conversion, such as WordPress WXR, the archive is a stable input for a converter to work from.
+- **Search or process your archive** with ordinary tools: `grep`, a script over `manifest.json`, or whatever you prefer.
 
-The `format` field identifies the layout described on this page. It changes only if a future version of Lamb makes a breaking change; new fields may be added within `lamb-export/1`, so a consumer should ignore fields it does not recognise.
+The `format` field identifies the layout described on this page. It changes only if a future version of Lamb makes a breaking change. New fields may be added within `lamb-export/1`, so a consumer should ignore fields it doesn't recognise.
 
 ## Requirements
 
-Export needs PHP's `zip` extension. It is present in the Docker image and in most PHP installations; if your server does not have it, `/export` says so instead of producing a broken file. Everything else Lamb does works without it.
+Export needs PHP's `zip` extension. The Docker image and most PHP installations have it. If your server doesn't, `/export` tells you so instead of producing a broken file. Everything else Lamb does works without it.
 
 ## Related
 
-- [Trash]({{ site.baseurl }}{% link trash.md %}) — trashed posts are included in the export and flagged in the manifest.
-- [Drafts]({{ site.baseurl }}{% link drafts.md %}) — so are drafts.
-- [Media]({{ site.baseurl }}{% link media.md %}) — how the assets in the archive were stored and converted.
-- [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}) — the same format, in the opposite direction.
-- [Known import]({{ site.baseurl }}{% link known-import.md %}) — likewise.
+- [Trash]({{ site.baseurl }}{% link trash.md %}): Exports include trashed posts and flag them in the manifest.
+- [Drafts]({{ site.baseurl }}{% link drafts.md %}): Exports include drafts too.
+- [Media]({{ site.baseurl }}{% link media.md %}): How Lamb stored and converted the assets in the archive.
+- [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}): The same format, in the opposite direction.
+- [Known import]({{ site.baseurl }}{% link known-import.md %}): Likewise.

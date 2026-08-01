@@ -4,11 +4,11 @@ title: Scheduling
 
 # Scheduling
 
-You can schedule a post to publish in the future by giving it a `created` date that is later than now. Until that date arrives the post is hidden from the homepage, feeds, tag pages, search, and its public URL. When the time passes it appears automatically — no cron job or extra step required.
+To schedule a post to publish in the future, give it a `created` date later than now. Until that date arrives, Lamb hides the post from the homepage, feeds, tag pages, search, and its public URL. When the time passes, the post appears automatically. You don't need a cron job or any extra step.
 
-## Scheduling a post
+## Schedule a post
 
-Add a `created` date to the front-matter:
+Add a `created` date to the front matter:
 
 ```
 ---
@@ -19,7 +19,7 @@ created: 2099-01-01 09:00:00
 Wishing you all the best for the year ahead. #news
 ```
 
-A date in the past publishes immediately (and back-dates the post); a date in the future schedules it.
+A date in the past publishes the post immediately and back-dates it. A date in the future schedules it.
 
 ### Accepted date formats
 
@@ -34,32 +34,32 @@ The `created` value is flexible. All of these work:
 | `tomorrow` | Tomorrow at midnight |
 | `1 Jan 2099 18:30` | Named-month form |
 
-The time you write is the time the post publishes — it is taken at face value and **not** shifted between timezones. If the value can't be understood as a date, the post simply publishes immediately.
+Lamb publishes the post at the time you write. It takes the time at face value and doesn't shift it between timezones. If Lamb can't read the value as a date, it publishes the post immediately.
 
-Relative phrases are resolved **when you save**, then pinned: Lamb rewrites the front-matter to the absolute date it worked out (so `created: next friday` becomes e.g. `created: '2026-06-05 00:00:00'`). This means a later edit won't quietly move the date to the *next* Friday — what you scheduled stays scheduled.
+Lamb resolves relative phrases when you save, then pins them: it rewrites the front matter to the absolute date it worked out, so `created: next friday` becomes something like `created: '2026-06-05 00:00:00'`. A later edit therefore can't quietly move the date to the *next* Friday. What you scheduled stays scheduled.
 
 ## Timezone
 
-Servers are usually set to UTC, which may not be your timezone. Set yours once in the site configuration at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock:
+Servers usually run on UTC, which may not be your timezone. Set yours once in the site configuration at `/settings`, so post dates, scheduling, and relative phrases such as `next friday` all use your local clock:
 
 ```ini
 timezone = Europe/London
 ```
 
-Use a name from the [list of supported timezones](https://www.php.net/manual/en/timezones.php). It defaults to `UTC`.
+Use a name from the [list of supported timezones](https://www.php.net/manual/en/timezones.php). The default is `UTC`.
 
-## Viewing scheduled posts
+## View scheduled posts
 
-When logged in and one or more posts are scheduled, a **Scheduled** link appears in the admin toolbar, listing future-dated posts soonest-first at `/scheduled`. You can still open a scheduled post directly via its `/status/<id>` URL to preview it before it goes live. Each scheduled post also shows a **Preview** link next to its Edit button — a shareable URL with an expiring 24-hour token that works without being logged in.
+When you're logged in and at least one post is scheduled, a **Scheduled** link appears in the admin toolbar. It lists future-dated posts soonest-first at `/scheduled`. You can also open a scheduled post directly at its `/status/<id>` URL to preview it before it goes live. Each scheduled post shows a **Preview** link next to its **Edit** button: a shareable URL with a token that expires after 24 hours and works without a login.
 
-## Via Micropub
+## Schedule through Micropub
 
-Micropub clients can schedule a post by sending a future `published` date. Sending `post-status: scheduled` is also accepted; the post stays hidden until its `published` date arrives and is never treated as a draft.
+Micropub clients can schedule a post by sending a future `published` date. Lamb also accepts `post-status: scheduled`. The post stays hidden until its `published` date arrives, and Lamb never treats it as a draft.
 
 ## Related
 
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set your `timezone` so scheduled posts go live at the right local time.
-* [Post Types]({{ site.baseurl }}{% link post-types.md %}): Front-matter is used to set the `created` date.
-* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are hidden until published; scheduled posts are hidden until their date.
-* [Micropub]({{ site.baseurl }}{% link micropub.md %}): Scheduling posts from a Micropub client.
-* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions for a scheduled post are sent when it goes live, not when you save it.
+* [Site configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set your `timezone` so scheduled posts go live at the right local time.
+* [Post types]({{ site.baseurl }}{% link post-types.md %}): Front matter sets the `created` date.
+* [Drafts]({{ site.baseurl }}{% link drafts.md %}): Lamb hides drafts until you publish them, and scheduled posts until their date.
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}): Schedule posts from a Micropub client.
+* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Lamb sends outbound webmentions for a scheduled post when it goes live, not when you save it.

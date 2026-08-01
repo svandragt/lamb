@@ -1,5 +1,5 @@
 ---
-title: Theme Functions
+title: Theme functions
 ---
 
 Lamb ships a small library of helper functions that theme parts call to render
@@ -7,7 +7,7 @@ posts, titles, navigation, and the page `<head>`. This page is the reference for
 theme authors. For how themes are structured and selected, see
 [Themes]({{ site.baseurl }}{% link themes.md %}).
 
-## Using the helpers
+## Use the helpers
 
 The helpers live in the `Lamb\Theme` namespace. Import each one with a
 `use function` statement at the top of the part before you call it:
@@ -21,20 +21,20 @@ use function Lamb\Theme\escape;
 <?= site_title() ?>
 ```
 
-The built-in themes (`base`, `2024`, `2026`) are the best worked examples — copy
-the `use function` lines from the part you are overriding.
+The built-in themes (`base`, `2024`, `2026`) are the best worked examples. Copy
+the `use function` lines from the part you're overriding.
 
 ## Globals available in every part
 
-Every part is included from `html.php`, so these variables are always in scope:
+Lamb includes every part from `html.php`, so these variables are always in scope:
 
 | Variable | Type | Contents |
 |----------|------|----------|
-| `$config` | `array` | Site config: `site_title`, `author_name`, `author_email`, `menu_items`, `feeds`, `theme`, … |
+| `$config` | `array` | Site config: `site_title`, `author_name`, `author_email`, `menu_items`, `feeds`, `theme`, and so on |
 | `$data` | `array` | Route-specific data, including `$data['posts']` (an array of post beans), `$data['pagination']`, `$data['title']`, and `$data['intro']` |
-| `$template` | `string` | Current template name (`home`, `status`, `tag`, `search`, `404`, …) |
+| `$template` | `string` | Current template name (`home`, `status`, `tag`, `search`, `404`, and so on) |
 
-Each entry in `$data['posts']` is a post bean. The properties you will use most:
+Each entry in `$data['posts']` is a post bean. The properties you use most are
 `$bean->title`, `$bean->transformed` (pre-rendered HTML — render this, never
 re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 `$bean->slug`, and `$bean->id`.
@@ -43,23 +43,23 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `site_title($type = 'html')` | `string` | The site title. Wrapped in `<h1>` for HTML output, or plain text when `$type` is not `'html'`. |
+| `site_title($type = 'html')` | `string` | The site title, wrapped in `<h1>` for HTML output, or plain text when `$type` isn't `'html'`. |
 | `page_title($type = 'html')` | `string` | The current page title (`$data['title']`), falling back to the site title. |
 | `site_or_page_title($type = 'html')` | `string` | The page title when one is set, otherwise the site title. |
-| `page_intro()` | `string` | A `<p>` wrapping `$data['intro']` (used on tag and search pages), or `''`. |
+| `page_intro()` | `string` | A `<p>` wrapping `$data['intro']`, used on tag and search pages, or `''`. |
 
 ## Posts and content
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `date_created($bean)` | `string` | An `<a class="u-url">` wrapping a `<time class="dt-published">` element, linking to the post permalink with a human-readable timestamp. `''` when the bean has no created date. |
+| `date_created($bean)` | `string` | An `<a class="u-url">` wrapping a `<time class="dt-published">` element, linking to the post permalink with a human-readable timestamp. Returns `''` when the bean has no created date. |
 | `title_link($bean)` | `string` | An `<a class="p-name title-link">` linking the post title to its permalink, or `''` when the post has no title. |
-| `author_card()` | `string` | A representative author `<a class="p-author h-card">` (name from `$config['author_name']`, linked to the site root), or `''` when no author name is set. Emit it inside each post's `h-entry`. |
-| `link_source($bean)` | `string` | A "Via …" attribution link for feed-ingested posts (uses `source_url`, falling back to the configured feed URL), or `''` for ordinary posts. |
-| `the_reply_context($bean)` | `string` | A "In reply to …" line with the `u-in-reply-to` microformats class when the post replies to another URL, or `''`. |
-| `anchor_headings($html, $top)` | `string` | Shifts the heading levels in a rendered body so its highest heading sits at level `$top`, keeping the rest relative (clamped at `<h6>`). The built-in themes title posts at `<h2>` and pass `$top = 3`. |
-| `related_posts($body, $exclude_id = 0)` | `array` | `['posts' => OODBBean[]]` — posts that share a hashtag with `$body`, excluding `$exclude_id`. |
-| `human_time($timestamp)` | `string` | A relative time string ("3 hours ago", "Yesterday at 2:15 pm", or an absolute date for older posts). Takes a Unix timestamp. |
+| `author_card()` | `string` | A representative author `<a class="p-author h-card">`, with the name from `$config['author_name']`, linked to the site root. Returns `''` when no author name is set. Emit it inside each post's `h-entry`. |
+| `link_source($bean)` | `string` | A "Via …" attribution link for feed-ingested posts, using `source_url` and falling back to the configured feed URL, or `''` for ordinary posts. |
+| `the_reply_context($bean)` | `string` | An "In reply to …" line with the `u-in-reply-to` microformats class when the post replies to another URL, or `''`. |
+| `anchor_headings($html, $top)` | `string` | Shifts the heading levels in a rendered body so its highest heading sits at level `$top`, keeping the rest relative and clamped at `<h6>`. The built-in themes title posts at `<h2>` and pass `$top = 3`. |
+| `related_posts($body, $exclude_id = 0)` | `array` | `['posts' => OODBBean[]]`, the posts that share a hashtag with `$body`, excluding `$exclude_id`. |
+| `human_time($timestamp)` | `string` | A relative time string, such as "3 hours ago" or "Yesterday at 2:15 pm", or an absolute date for older posts. Takes a Unix timestamp. |
 
 ## Navigation
 
@@ -69,16 +69,16 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 
 ## Admin actions (logged-in only)
 
-These return `''` for anonymous visitors, so they are safe to call
-unconditionally in a part — the admin controls only appear when you are
+These return `''` for anonymous visitors, so it's safe to call them
+unconditionally in a part. The admin controls only appear when you're
 logged in.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
 | `action_edit($bean)` | `string` | An "Edit" button for the post. |
-| `action_delete($bean)` | `string` | A delete `<form>` (with CSRF token) for the post. |
-| `action_restore($bean)` | `string` | A "Restore post" `<form>` — used on the Trash view. |
-| `action_preview($bean)` | `string` | A shareable "Preview" link for an unpublished (draft or scheduled) post that has a valid preview token. |
+| `action_delete($bean)` | `string` | A delete `<form>`, with a CSRF token, for the post. |
+| `action_restore($bean)` | `string` | A "Restore post" `<form>`, used on the trash view. |
+| `action_preview($bean)` | `string` | A shareable "Preview" link for an unpublished draft or scheduled post that has a valid preview token. |
 | `the_entry_form()` | `void` | Echoes the quick-post `<form>` used to create posts. |
 | `csrf_token()` | `string` | The current session CSRF token, creating one if needed. Include it in any `<form>` that POSTs. |
 
@@ -86,17 +86,17 @@ logged in.
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `the_styles()` | `void` | Emits the stylesheet. It always loads `styles/styles.css` from the active theme — small stylesheets are inlined, larger ones linked with a cache-busting hash. |
-| `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`; logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
-| `the_opengraph()` | `void` | Emits OpenGraph/Twitter `<meta>` tags (status pages only). |
+| `the_styles()` | `void` | Emits the stylesheet. It always loads `styles/styles.css` from the active theme, inlining small stylesheets and linking larger ones with a cache-busting hash. |
+| `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`. Logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
+| `the_opengraph()` | `void` | Emits OpenGraph and Twitter `<meta>` tags, on status pages only. |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` tags for the origins in `$config['preconnect']`. |
-| `the_reply_context($bean)` | `string` | See "Posts and content" above. |
+| `the_reply_context($bean)` | `string` | See [Posts and content](#posts-and-content). |
 
 ## Parts and includes
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `part($name, $dir = 'parts')` | `void` | Includes a theme part, falling back to the base theme when the active theme does not provide it. Pass `$dir = ''` for top-level files such as `html`. `$name` and `$dir` are sanitised to `[a-zA-Z0-9-_]`. |
+| `part($name, $dir = 'parts')` | `void` | Includes a theme part, falling back to the base theme when the active theme doesn't provide it. Pass `$dir = ''` for top-level files such as `html`. Lamb sanitises `$name` and `$dir` to `[a-zA-Z0-9-_]`. |
 
 ```php
 <?php use function Lamb\Theme\part; ?>
@@ -109,25 +109,25 @@ logged in.
 | Function | Returns | Description |
 |----------|---------|-------------|
 | `escape($str)` | `string` | `htmlspecialchars` for HTML5 output. Call it on every user-supplied value you print. |
-| `redirect_to()` | `string` | The sanitised `?redirect_to=` query value (used by the login form). |
+| `redirect_to()` | `string` | The sanitised `?redirect_to=` query value, used by the login form. |
 | `preload_text()` | `string` | The escaped `?text=` query value, used to pre-fill the entry form. |
 
-## Microformats2 (h-entry / h-card)
+## Microformats2 (h-entry and h-card)
 
-The built-in themes mark each post up with [microformats2](https://microformats.org/wiki/h-entry) so Webmention receivers, readers, and other parsers can extract the author, content, permalink and timestamp. If you build a custom `_items.php`, mirror this markup so your outgoing mentions stay parseable:
+The built-in themes mark each post up with [microformats2](https://microformats.org/wiki/h-entry), so webmention receivers, readers, and other parsers can extract the author, content, permalink, and timestamp. If you build a custom `_items.php`, mirror this markup so your outgoing mentions stay parseable:
 
 * `class="h-entry"` on the post's `<article>`.
 * `class="e-content"` on the element wrapping the rendered body.
-* `class="p-name"` on the post title (the helpers above already add it).
-* `date_created($bean)` supplies `u-url` + `dt-published`.
+* `class="p-name"` on the post title. The helpers above already add it.
+* `date_created($bean)` supplies `u-url` and `dt-published`.
 * `author_card()` supplies the `p-author h-card`, placed inside the `h-entry`.
 * `the_reply_context($bean)` supplies `u-in-reply-to` for replies.
 
-The classes coexist with the schema.org markup the themes also emit, and can be hidden visually (e.g. with `screen-reader-text`) without affecting parsers.
+The classes coexist with the schema.org markup the themes also emit, and you can hide them visually, for example with `screen-reader-text`, without affecting parsers.
 
 ## Related
 
-* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): how Lamb sends and receives mentions — the microformats2 markup above is what receivers parse.
-* [Themes]({{ site.baseurl }}{% link themes.md %}): how themes are structured, the fallback to `base`, and the part resolution rules.
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): the `theme` key and the config values exposed in `$config`.
-* [Post Types]({{ site.baseurl }}{% link post-types.md %}): how status posts and page-style posts differ, which affects `$bean->slug` and permalinks.
+* [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): How Lamb sends and receives mentions. The microformats2 markup above is what receivers parse.
+* [Themes]({{ site.baseurl }}{% link themes.md %}): How themes are structured, the fallback to `base`, and the part resolution rules.
+* [Site configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `theme` key and the config values exposed in `$config`.
+* [Post types]({{ site.baseurl }}{% link post-types.md %}): How status posts and page-style posts differ, which affects `$bean->slug` and permalinks.

@@ -6,9 +6,9 @@ title: Preconnect
 
 Lamb supports preconnect hints through the web settings page, in a section called `preconnect`.
 
-Preconnect hints tell the browser to establish a TCP connection to an external origin before it is needed, reducing latency when those resources are first requested. A [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) fallback is also emitted for browsers that do not support preconnect.
+Preconnect hints tell the browser to open a TCP connection to an external origin before it needs one, which reduces latency when a page first requests those resources. Lamb also emits a [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) fallback for browsers that don't support preconnect.
 
-This is most useful when your theme or content loads resources from external origins such as a font provider.
+Preconnect hints help most when your theme or content loads resources from external origins, such as a font provider.
 
 ```
 [preconnect]
@@ -16,9 +16,9 @@ google-fonts = https://fonts.googleapis.com
 google-fonts-static = https://fonts.gstatic.com
 ```
 
-Labels are used as keys, while the values are the origins (scheme + host, no trailing slash).
+Labels are the keys, and the values are the origins: a scheme and host, with no trailing slash.
 
-The above configuration emits the following in the HTML `<head>`:
+The preceding configuration emits the following in the HTML `<head>`:
 
 ```
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -29,4 +29,4 @@ The above configuration emits the following in the HTML `<head>`:
 
 ## Related
 
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): More information on the settings page.
+* [Site configuration]({{ site.baseurl }}{% link site-configuration.md %}): More information about the settings page.

@@ -4,7 +4,7 @@ title: Upgrading
 
 # Upgrading
 
-How you upgrade depends on how you installed Lamb. There is [more information about branches](https://github.com/svandragt/lamb/blob/main/BRANCHES) to be on — `release` is the stable branch.
+How you upgrade depends on how you installed Lamb. For [more information about the branches](https://github.com/svandragt/lamb/blob/main/BRANCHES) you can track, see the `BRANCHES` file. `release` is the stable branch.
 
 ## Git install
 
@@ -14,17 +14,17 @@ Run the bundled upgrade script:
 bin/upgrade
 ```
 
-It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds. If the health check fails, it prints the exact command to roll back to the previous version.
+The script resets your checkout to the latest version of the branch you're on and installs production dependencies. When `SITE_URL` is set in `.env`, it also checks that the site still responds. If the health check fails, the script prints the exact command to roll back to the previous version.
 
-Note: the reset discards any local changes to tracked files. Your database (`data/`), uploads (`src/assets/`), and `.env` are not tracked, so they are unaffected.
+The reset discards any local changes to tracked files. It doesn't affect your database (`data/`), uploads (`src/assets/`), or `.env`, because Git doesn't track them.
 
-To upgrade automatically every night, add it to cron:
+To upgrade automatically every night, add the script to cron:
 
 ```
 15 3 * * * /path/to/lamb/bin/upgrade
 ```
 
-Cron will email you the output if the health check fails (when your system is set up to deliver mail).
+Cron emails you the output if the health check fails, provided your system delivers mail.
 
 ## Tarball install
 
@@ -34,7 +34,7 @@ Download the latest `lamb-<version>.tar.gz` from the [releases page](https://git
 tar -xzf lamb-<version>.tar.gz --strip-components=1 -C /path/to/lamb
 ```
 
-Your database (`data/`), uploads (`src/assets/`), and `.env` are preserved — the tarball does not contain them.
+The tarball doesn't contain your database (`data/`), uploads (`src/assets/`), or `.env`, so the upgrade preserves them.
 
 ## Docker install
 
@@ -55,4 +55,4 @@ The database and uploads live in the named volumes and survive the recreate.
 
 - [Installation options]({{ site.baseurl }}{% link index.md %})
 - [Docker]({{ site.baseurl }}{% link docker.md %})
-- [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
+- [Cron scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
