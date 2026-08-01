@@ -105,6 +105,31 @@ class ResponseHandlersTest extends TestCase
         $this->assertStringContainsString('not found', strtolower($result['intro']));
     }
 
+    public function testRespond404TitleIsHumanReadableNotTheStatusLine(): void
+    {
+        // The title is rendered as the page's <title> and <h1>, so the raw
+        // status line ("HTTP/1.0 404 Not Found") must never reach it.
+        $result = respond_404();
+        $this->assertStringNotContainsString('HTTP/', $result['title']);
+        $this->assertStringContainsString('not found', strtolower($result['title']));
+    }
+
+    public function testRespond404ReportsTheRequestedPath(): void
+    {
+        // The template offers to search for what the visitor asked for; it used
+        // to read $data['action'], which is always the literal '404' by then.
+        $_SERVER['REQUEST_URI'] = '/no-such-page?utm=1';
+        $result = respond_404();
+        $this->assertSame('no-such-page', $result['requested']);
+    }
+
+    public function testRespond404RequestedPathIsEmptyForTheRoot(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/';
+        $result = respond_404();
+        $this->assertSame('', $result['requested']);
+    }
+
     // respond_home
 
     public function testRespondHomeReturnsArray(): void

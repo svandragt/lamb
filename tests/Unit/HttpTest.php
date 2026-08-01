@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Http\extract_page_segment;
 use function Lamb\Http\get_request_uri;
 use function Lamb\Http\page_path;
+use function Lamb\Http\requested_path;
 
 class HttpTest extends TestCase
 {
@@ -50,6 +51,42 @@ class HttpTest extends TestCase
     {
         $_SERVER['REQUEST_URI'] = '/tag/php';
         $this->assertSame('/tag/php', get_request_uri());
+    }
+
+    // requested_path — the visitor-facing reading of the request path, as
+    // opposed to get_request_uri()'s router-facing one (which keeps the leading
+    // slash and rewrites `/` to `/home`).
+
+    public function testRequestedPathStripsSurroundingSlashes(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/no-such-page/';
+        $this->assertSame('no-such-page', requested_path());
+    }
+
+    public function testRequestedPathStripsQueryString(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/tag/php?utm=1';
+        $this->assertSame('tag/php', requested_path());
+    }
+
+    public function testRequestedPathIsEmptyForTheRoot(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/';
+        $this->assertSame('', requested_path());
+    }
+
+    public function testRequestedPathIsEmptyWhenRequestUriIsAbsent(): void
+    {
+        unset($_SERVER['REQUEST_URI']);
+        $this->assertSame('', requested_path());
+    }
+
+    public function testRequestedPathDoesNotRewriteTheRootToHome(): void
+    {
+        // get_request_uri() maps `/` to `/home` for routing; showing "home" back
+        // to a visitor as the thing they asked for would be wrong.
+        $_SERVER['REQUEST_URI'] = '/';
+        $this->assertNotSame('home', requested_path());
     }
 
     public function testExtractPageSegmentFromRootPageMapsToHome(): void

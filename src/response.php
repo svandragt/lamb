@@ -203,7 +203,9 @@ function redirect_404(string $fallback): void
  *
  * @param array<int, string> $_args   Unused.
  * @param bool  $use_fallback Whether to redirect to the configured fallback URL.
- * @return array{title: string, intro: string, action: string} An array containing the title, intro, and action of the 404 error page.
+ * @return array{title: string, intro: string, action: string, requested: string} The
+ *         404 page's view data: the human title, intro, the action marker the
+ *         router switches on, and the path the visitor actually asked for.
  */
 function respond_404(array $_args = [], bool $use_fallback = false): array
 {
@@ -214,13 +216,15 @@ function respond_404(array $_args = [], bool $use_fallback = false): array
             redirect_404($fallback);
         }
     }
-    $header = "HTTP/1.0 404 Not Found";
-    header($header);
+    header('HTTP/1.0 404 Not Found');
 
     return [
-        'title' => $header,
+        'title' => 'Page not found',
         'intro' => 'Page not found.',
         'action' => '404',
+        // Not derivable from `action`: the router overwrites that with this
+        // array's own '404' before the template renders.
+        'requested' => \Lamb\Http\requested_path(),
     ];
 }
 
