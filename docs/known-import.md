@@ -33,7 +33,17 @@ php import-known.php /path/to/export.rss --dry-run
 php import-known.php /path/to/export.rss
 ```
 
-The script prints one line per item (`imported:` or `would import:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `feeditem_uuid` (md5 of `'known-' + guid`) and left alone.
+The script prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'known-' + guid`) and left alone.
+
+### `--replace`
+
+By default, an item that was already imported is left alone on a second run — the importer counts it as `existed` and moves on. Pass `--replace` to re-apply it instead: body, title, slug, `created`/`updated` and draft state are all set back to what the export describes. The post keeps its id and its `import_uuid`, so its permalink and every redirect pointing at it still work.
+
+This is deliberately total, not a merge. Local edits made to an imported post since the import are lost when you `--replace` it — that is what "replace" means. The case it exists for is Known's HTML→Markdown conversion: when a fix lands for something that came across badly, re-run the same export with `--replace` and take the new conversion.
+
+Images already downloaded by an earlier run are not fetched again: the downloader names each file after `sha1(<source url>)` and returns the existing file when it is already on disk.
+
+Imported posts are treated as **your own content**, not as syndicated feed items: they carry no "Via …" attribution line, and they take part in webmentions and WebSub exactly like a post you wrote in Lamb. The import run itself stays silent — nothing is pinged for content that was published years ago — but editing an imported post later notifies the way any other edit does.
 
 ## After the import
 

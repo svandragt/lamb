@@ -15,10 +15,10 @@ use function Lamb\Http\fetch_guarded;
 use function Lamb\Response\asset_url;
 
 /**
- * Stable dedup key for an imported feed item. Mirrors the feed-ingest
- * convention (`feeditem_uuid = md5($feed_name . $id)`), so re-running an
- * import never recreates a row. Called with a per-CMS prefix ('wordpress-',
- * 'known-', …) so dedup identity can never collide across importers.
+ * Stable dedup key for an imported item, stored on the post's `import_uuid`
+ * column, so re-running an import never recreates a row. Called with a
+ * per-CMS prefix ('wordpress-', 'known-', …) so dedup identity can never
+ * collide across importers.
  */
 function import_uuid(string $prefix, string $guid): string
 {
@@ -701,26 +701,46 @@ function store_redirect(string $from, string $to): void
 }
 
 /**
- * Parses argv into [path, dry_run]. Returns [null, false] when the path is
- * missing.
+ * Parses argv into [path, dry_run, replace]. Returns [null, false, false] when
+ * the path is missing or help was asked for.
+ *
+ * Shared by every CLI importer, including Lamb\Restore\parse_restore_args(),
+ * which passes its own `--site-url=` as an extra prefix — so `--dry-run` and
+ * `--replace` are spelled in exactly one place.
+ *
+ * An unrecognised flag refuses the whole invocation rather than being ignored.
+ * `--dryrun` is one keystroke from `--dry-run`, and ignoring it would run the
+ * real, unrehearsed import the operator was explicitly trying to avoid; the
+ * caller prints usage and exits non-zero on a null path.
  *
  * @param array<int,string> $argv
- * @return array{0: ?string, 1: bool}
+ * @param list<string>      $extra_prefixes Flag prefixes a caller accepts on top of the shared ones.
+ * @return array{0: ?string, 1: bool, 2: bool}
  */
-function parse_import_args(array $argv): array
+function parse_import_args(array $argv, array $extra_prefixes = []): array
 {
     $path = null;
     $dry_run = false;
+    $replace = false;
     foreach (array_slice($argv, 1) as $arg) {
         if ($arg === '--dry-run') {
             $dry_run = true;
+        } elseif ($arg === '--replace') {
+            $replace = true;
         } elseif ($arg === '--help' || $arg === '-h') {
-            return [null, false];
+            return [null, false, false];
+        } elseif (str_starts_with($arg, '-')) {
+            foreach ($extra_prefixes as $prefix) {
+                if (str_starts_with($arg, $prefix)) {
+                    continue 2;
+                }
+            }
+            return [null, false, false];
         } elseif ($path === null) {
             $path = $arg;
         }
     }
-    return [$path, $dry_run];
+    return [$path, $dry_run, $replace];
 }
 
 /**
@@ -730,18 +750,14 @@ function parse_import_args(array $argv): array
  * summary. Used by both import-wordpress.php and import-known.php so the two
  * scripts' output stays byte-identical in shape.
  *
- * $find_existing lets an importer dedupe on its own column instead of
- * feeditem_uuid, and $replace re-imports into the bean it returns rather than
- * counting the item as already present. $replace is honoured only when
- * $find_existing is supplied — an importer that takes three parameters cannot
- * accept a bean to overwrite, so handing it one would quietly create a
- * duplicate and report it as a replacement.
+ * $find_existing looks an already-imported row up by uuid; $replace re-imports
+ * into the bean it returns rather than counting the item as already present.
  *
  * @param list<array<string, mixed>>      $items      Items from extract_items().
  * @param callable(array<string,mixed>):?string $skip_reason Explains why an item is out of scope, or null.
  * @param callable(array<string,mixed>):string  $uuid       Computes the item's dedup uuid.
  * @param callable(array<string,mixed>,callable,bool,\RedBeanPHP\OODBBean|null=):?\RedBeanPHP\OODBBean $import Imports a single item.
- * @param callable(string):?\RedBeanPHP\OODBBean|null $find_existing Finds an already-imported row by uuid.
+ * @param callable(string):?\RedBeanPHP\OODBBean $find_existing Finds an already-imported row by uuid.
  */
 function run_import(
     array $items,
@@ -749,13 +765,12 @@ function run_import(
     callable $uuid,
     callable $import,
     bool $dry_run,
-    ?callable $find_existing = null,
+    callable $find_existing,
     bool $replace = false
 ): void {
     $downloader = $dry_run
         ? static fn(): ?string => null
         : 'Lamb\\Import\\default_image_downloader';
-    $replace = $replace && $find_existing !== null;
 
     $created = 0;
     $existed = 0;
@@ -773,9 +788,7 @@ function run_import(
             continue;
         }
         $item_uuid = $uuid($item);
-        $existing = $find_existing !== null
-            ? $find_existing($item_uuid)
-            : R::findOne('post', ' feeditem_uuid = ? ', [$item_uuid]);
+        $existing = $find_existing($item_uuid);
         if ($existing && !$replace) {
             $existed++;
             continue;

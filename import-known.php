@@ -9,12 +9,15 @@
  * rather than <content:encoded>, there is no <wp:post_name> (the slug comes
  * from the <link> path leaf instead), and dates only carry <pubDate>.
  * Idempotent: re-running an import never recreates a row (dedup by
- * md5('known-' . guid) on the feeditem_uuid column).
+ * md5('known-' . guid) on the import_uuid column).
  *
- *   php import-known.php path/to/export.rss [--dry-run]
+ *   php import-known.php path/to/export.rss [--dry-run] [--replace]
  *
  * --dry-run     Parse and convert every item but write nothing to the DB
  *               or filesystem. Use this first to surface parsing errors.
+ * --replace     Re-apply every already-imported item over its existing post
+ *               instead of skipping it. Local edits made since the import are
+ *               lost. For re-running an export after an HTML→Markdown fix.
  *
  * The script intentionally does NOT emit outbound webmentions or WebSub
  * pings — imported posts are pre-existing content, not new publications.
@@ -24,6 +27,8 @@ namespace Lamb;
 
 use Lamb\Import;
 use Lamb\Known;
+use RedBeanPHP\OODBBean;
+use RedBeanPHP\R;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "import-known.php must be run from the command line.\n");
@@ -33,9 +38,9 @@ if (PHP_SAPI !== 'cli') {
 define('ROOT_DIR', __DIR__ . '/src');
 require __DIR__ . '/vendor/autoload.php';
 
-[$path, $dry_run] = Import\parse_import_args($argv);
+[$path, $dry_run, $replace] = Import\parse_import_args($argv);
 if ($path === null) {
-    fwrite(STDERR, "Usage: php import-known.php <export.rss> [--dry-run]\n");
+    fwrite(STDERR, "Usage: php import-known.php <export.rss> [--dry-run] [--replace]\n");
     exit(1);
 }
 
@@ -60,4 +65,6 @@ Import\run_import(
     static fn(array $item): string => Known\known_uuid((string) $item['guid']),
     Known\import_item(...),
     $dry_run,
+    static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
+    $replace,
 );

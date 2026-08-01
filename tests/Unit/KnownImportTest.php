@@ -17,6 +17,7 @@ use function Lamb\Known\should_import;
 use function Lamb\Known\skip_reason;
 use function Lamb\Known\strip_structural_hashtags;
 use function Lamb\Post\split_frontmatter;
+use function Lamb\Theme\link_source;
 
 /**
  * Covers parsing, Known-specific DOM normalisation, body assembly and
@@ -410,7 +411,7 @@ XML;
         $this->assertSame(1, substr_count(strtolower((string) $bean->body), '#cuttlefish'));
     }
 
-    public function testImportItemCreatesPostWithKnownUuidFeedNameAndDates(): void
+    public function testImportItemCreatesPostWithKnownUuidAndDatesButNoFeedIdentity(): void
     {
         $items = $this->sampleItems();
         $downloader = fn(): ?string => null;
@@ -419,8 +420,13 @@ XML;
 
         $this->assertNotNull($bean);
         $this->assertNotEmpty($bean->id);
-        $this->assertSame(known_uuid('https://known.example/view/aaaa1111'), $bean->feeditem_uuid);
-        $this->assertSame('known', $bean->feed_name);
+        $this->assertSame(known_uuid('https://known.example/view/aaaa1111'), $bean->import_uuid);
+        // An imported post is the author's own content, not a feed item: it
+        // must not carry feed identity, or it would render "Via known" and be
+        // permanently barred from webmentions and WebSub.
+        $this->assertEmpty($bean->feed_name);
+        $this->assertEmpty($bean->feeditem_uuid);
+        $this->assertSame('', link_source($bean));
         $this->assertSame('2020-05-26 12:48:16', $bean->created);
     }
 
@@ -494,6 +500,33 @@ XML;
         $this->assertNotNull($first);
         $this->assertNotNull($second);
         $this->assertSame($first->id, $second->id);
+        $this->assertCount(1, R::findAll('post'));
+    }
+
+    public function testImportItemReplacesAnEditedPostInPlace(): void
+    {
+        $items = $this->sampleItems();
+        $downloader = fn(): ?string => null;
+
+        $first = import_item($items[0], $downloader, false);
+        $this->assertNotNull($first);
+        $id = (int) $first->id;
+        $uuid = (string) $first->import_uuid;
+
+        // Local edit since the import: body rewritten and the post drafted.
+        $first->body = "---\ntitle: Edited\n---\n\nLocal changes.\n";
+        $first->draft = 1;
+        R::store($first);
+
+        $replaced = import_item($items[0], $downloader, false, R::load('post', $id));
+
+        $this->assertNotNull($replaced);
+        $this->assertSame($id, (int) $replaced->id);
+        $this->assertSame($uuid, (string) $replaced->import_uuid);
+        $this->assertStringContainsString('People recognise faces.', (string) $replaced->body);
+        $this->assertStringNotContainsString('Local changes.', (string) $replaced->body);
+        $this->assertSame(0, (int) $replaced->draft);
+        $this->assertSame('2020-05-26 12:48:16', (string) $replaced->created);
         $this->assertCount(1, R::findAll('post'));
     }
 

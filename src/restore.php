@@ -26,26 +26,24 @@ const MAX_UNCOMPRESSED_BYTES = 2147483648; // 2 GiB
 /**
  * Parses argv into [path, dry_run, replace, site_url].
  *
+ * The path and the two flags every importer shares come from
+ * {@see \Lamb\Import\parse_import_args}; only `--site-url=`, which no other
+ * importer takes, is read here.
+ *
  * @param array<int,string> $argv
  * @return array{0: ?string, 1: bool, 2: bool, 3: ?string}
  */
 function parse_restore_args(array $argv): array
 {
-    $path = null;
-    $dry_run = false;
-    $replace = false;
+    [$path, $dry_run, $replace] = \Lamb\Import\parse_import_args($argv, ['--site-url=']);
+    if ($path === null) {
+        return [null, false, false, null];
+    }
+
     $site_url = null;
     foreach (array_slice($argv, 1) as $arg) {
-        if ($arg === '--dry-run') {
-            $dry_run = true;
-        } elseif ($arg === '--replace') {
-            $replace = true;
-        } elseif (str_starts_with($arg, '--site-url=')) {
+        if (str_starts_with($arg, '--site-url=')) {
             $site_url = substr($arg, strlen('--site-url='));
-        } elseif ($arg === '--help' || $arg === '-h') {
-            return [null, false, false, null];
-        } elseif ($path === null) {
-            $path = $arg;
         }
     }
 

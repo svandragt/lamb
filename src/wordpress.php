@@ -20,9 +20,10 @@ const WXR_NS = 'http://wordpress.org/export/1.2/';
 const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
 
 /**
- * Stable dedup key for a WordPress post. Mirrors the feed-ingest convention
- * (`feeditem_uuid = md5($feed_name . $id)`), so re-running an import never
- * recreates a row.
+ * Stable dedup key for a WordPress post, stored on the post's `import_uuid`
+ * column, so re-running an import never recreates a row. Imported posts are
+ * the author's own content, so they deliberately do NOT get feed identity
+ * (`feed_name`/`feeditem_uuid`) — see DECISIONS.md.
  */
 function wordpress_uuid(string $guid): string
 {
@@ -193,22 +194,30 @@ function html_to_markdown(string $html): string
  * an item with the same `wordpress_uuid()` already exists the existing bean is
  * returned untouched — re-running an import is therefore safe and idempotent.
  *
+ * Passing $bean (run_import() does so under `--replace`) re-imports into that
+ * row instead: everything the WXR describes is written over it, in place, so
+ * the row keeps its id and its import_uuid and any local edit since the
+ * original import is lost.
+ *
  * No outbound webmentions or WebSub pings are emitted: the call path stops at
  * finalize_and_store_post(), which never invokes notify_post_subscribers().
  *
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
+ * @param OODBBean|null                   $bean       Existing row to overwrite.
  */
-function import_item(array $item, callable $downloader, bool $dry_run = false): ?OODBBean
+function import_item(array $item, callable $downloader, bool $dry_run = false, ?OODBBean $bean = null): ?OODBBean
 {
     if (!should_import($item)) {
         return null;
     }
 
     $uuid = wordpress_uuid((string) $item['guid']);
-    $existing = R::findOne('post', ' feeditem_uuid = ? ', [$uuid]);
-    if ($existing) {
-        return $existing;
+    if ($bean === null) {
+        $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
+        if ($existing) {
+            return $existing;
+        }
     }
 
     // Sanitize and image-rewrite share one DOM so the body is parsed and
@@ -224,15 +233,14 @@ function import_item(array $item, callable $downloader, bool $dry_run = false): 
     $slug = wordpress_status_path($item) !== null ? '' : (string) ($item['slug'] ?? '');
     $body = build_post_body((string) $item['title'], $markdown, $tags, $slug);
 
-    $bean = populate_bean($body);
+    $bean = populate_bean($body, null, null, $bean);
     if (!empty($item['created'])) {
         $bean->created = (string) $item['created'];
     }
     if (!empty($item['updated'])) {
         $bean->updated = (string) $item['updated'];
     }
-    $bean->feeditem_uuid = $uuid;
-    $bean->feed_name = 'wordpress';
+    $bean->import_uuid = $uuid;
 
     if ($dry_run) {
         return $bean;

@@ -9,16 +9,20 @@ use SimpleXMLElement;
 use function Lamb\Import\asset_dir_for_date;
 use function Lamb\Import\build_post_body;
 use function Lamb\Import\default_image_downloader;
+use function Lamb\Import\parse_import_args;
 use function Lamb\Import\response_is_image;
+use function Lamb\Import\run_import;
 use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
 use function Lamb\Response\persist_image_bytes;
+use function Lamb\Theme\link_source;
 use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
 use function Lamb\WordPress\parse_wxr_file;
 use function Lamb\WordPress\parse_wxr_string;
 use function Lamb\WordPress\should_import;
+use function Lamb\WordPress\skip_reason;
 use function Lamb\WordPress\wordpress_uuid;
 
 /**
@@ -766,7 +770,13 @@ XML;
         $this->assertNotNull($bean);
         $this->assertNotEmpty($bean->id);
         $expected = md5('wordpress-https://oldsite.example/?p=42');
-        $this->assertSame($expected, $bean->feeditem_uuid);
+        $this->assertSame($expected, $bean->import_uuid);
+        // An imported post is the author's own content, not a feed item: it
+        // must not carry feed identity, or it would render "Via wordpress"
+        // and be permanently barred from webmentions and WebSub.
+        $this->assertEmpty($bean->feed_name);
+        $this->assertEmpty($bean->feeditem_uuid);
+        $this->assertSame('', link_source($bean));
         $this->assertSame('2024-03-03 10:00:00', $bean->created);
         $this->assertStringContainsString('**world**', (string) $bean->body);
         $this->assertStringContainsString('#news', (string) $bean->body);
@@ -873,6 +883,119 @@ XML;
         $this->assertNotNull($second);
         $this->assertSame($first->id, $second->id);
         $this->assertCount(1, R::findAll('post'));
+    }
+
+    /**
+     * The item the replace tests import, edit locally and re-import.
+     *
+     * @return array<string, mixed>
+     */
+    private function replaceItem(): array
+    {
+        return [
+            'title' => 'Once',
+            'guid' => 'https://oldsite.example/?p=7',
+            'created' => '2024-01-01 00:00:00',
+            'updated' => '2024-01-01 00:00:00',
+            'content' => '<p>From the export.</p>',
+            'tags' => [],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => 'once',
+        ];
+    }
+
+    /**
+     * Runs the item through the CLI loop exactly as import-wordpress.php does.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function runWordPressImport(array $item, bool $replace): string
+    {
+        ob_start();
+        run_import(
+            [$item],
+            skip_reason(...),
+            static fn(array $i): string => wordpress_uuid((string) $i['guid']),
+            import_item(...),
+            false,
+            static fn(string $uuid): ?\RedBeanPHP\OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
+            $replace,
+        );
+
+        return (string) ob_get_clean();
+    }
+
+    public function testRunImportWithReplaceRewritesTheImportedRowInPlace(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = $this->replaceItem();
+        $first = import_item($item, fn() => null, false);
+        $this->assertNotNull($first);
+        $id = (int) $first->id;
+        $uuid = (string) $first->import_uuid;
+
+        // Local edit since the import: body rewritten and the post drafted.
+        $first->body = "---\ntitle: Edited\n---\n\nLocal changes.\n";
+        $first->draft = 1;
+        R::store($first);
+
+        $output = $this->runWordPressImport($item, true);
+
+        $this->assertStringContainsString('replaced=1', $output);
+        $this->assertCount(1, R::findAll('post'));
+        $replaced = R::load('post', $id);
+        $this->assertSame($id, (int) $replaced->id);
+        $this->assertSame($uuid, (string) $replaced->import_uuid);
+        $this->assertStringContainsString('From the export.', (string) $replaced->body);
+        $this->assertStringNotContainsString('Local changes.', (string) $replaced->body);
+        $this->assertSame(0, (int) $replaced->draft);
+        $this->assertSame('2024-01-01 00:00:00', (string) $replaced->created);
+    }
+
+    public function testRunImportWithoutReplaceLeavesAnEditedRowAlone(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = $this->replaceItem();
+        $first = import_item($item, fn() => null, false);
+        $this->assertNotNull($first);
+        $first->body = "---\ntitle: Edited\n---\n\nLocal changes.\n";
+        $first->draft = 1;
+        R::store($first);
+
+        $output = $this->runWordPressImport($item, false);
+
+        $this->assertStringContainsString('created=0 existed=1', $output);
+        $this->assertStringNotContainsString('replaced=', $output);
+        $this->assertCount(1, R::findAll('post'));
+        $untouched = R::load('post', (int) $first->id);
+        $this->assertStringContainsString('Local changes.', (string) $untouched->body);
+        $this->assertSame(1, (int) $untouched->draft);
+    }
+
+    public function testParseImportArgsReadsTheFlags(): void
+    {
+        $this->assertSame(
+            ['wxr.xml', true, true],
+            parse_import_args(['import-wordpress.php', 'wxr.xml', '--dry-run', '--replace'])
+        );
+        $this->assertSame(['wxr.xml', false, false], parse_import_args(['x', 'wxr.xml']));
+        $this->assertSame([null, false, false], parse_import_args(['x', '--help']));
+    }
+
+    /**
+     * A mistyped flag must not degrade into a real import. `--dryrun` is one
+     * keystroke from `--dry-run`, and silently ignoring it would run the
+     * unrehearsed import the operator was explicitly trying to avoid.
+     */
+    public function testParseImportArgsRefusesAnUnknownFlag(): void
+    {
+        $this->assertSame([null, false, false], parse_import_args(['x', '--dryrun', 'wxr.xml']));
+        $this->assertSame([null, false, false], parse_import_args(['x', 'wxr.xml', '-n']));
     }
 
     public function testImportItemDryRunDoesNotStore(): void

@@ -87,6 +87,36 @@ function ensure_post_columns(): void
     if (!in_array('import_uuid', $columns, true)) {
         R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
     }
+    backfill_imported_post_identity($columns);
+}
+
+/**
+ * One-time migration: the WordPress and Known importers used to stamp migrated
+ * posts as feed items, which made every one of them render "Via wordpress" and
+ * barred them from webmentions and WebSub forever. Move them onto import_uuid.
+ *
+ * The `source_url IS NULL` guard is what keeps a genuinely subscribed feed
+ * literally named `wordpress` or `known` out of the migration: feed ingestion
+ * records the item permalink in source_url (src/post.php), the importers never
+ * did. bootstrap_db() runs before Config\load(), so the configured feed names
+ * are not available here — the guard is the only discriminator there is.
+ *
+ * Rows whose uuid is already claimed by another post's import_uuid are left
+ * alone rather than duplicated. Idempotent, so running it every boot is fine.
+ *
+ * @param list<string> $columns Column names as they were before this call.
+ */
+function backfill_imported_post_identity(array $columns): void
+{
+    if (!in_array('feed_name', $columns, true) || !in_array('feeditem_uuid', $columns, true)) {
+        return;
+    }
+    $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
+    R::exec(
+        'UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL'
+        . " WHERE feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
+        . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)'
+    );
 }
 
 /**
