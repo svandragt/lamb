@@ -2,7 +2,7 @@
 
 Lamb — Literally Another Micro Blog.
 
-Barrier free super simple blogging, self-hosted.
+Barrier-free super simple blogging, self-hosted.
 
 - Drag or paste an image and Lamb converts it to WebP automatically. There's no upload step and no asset library to manage.
 - Tag posts by typing `#hashtag` inline. There's no taxonomy UI, and the tags just appear.

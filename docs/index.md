@@ -6,7 +6,7 @@ title: Lamb
 
 <img src="{{ site.baseurl }}/og-image-lamb.webp" alt="Lamb made out of circuitry" />
 
-Barrier free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/README.md).
+Barrier-free super simple blogging, self-hosted. [Read about the features](https://github.com/svandragt/lamb/blob/main/README.md).
 
 ## Requirements
 
