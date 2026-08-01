@@ -11,10 +11,8 @@ $post = $data['post'];
 if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
     $submitLabel = SUBMIT_EDIT;
     $heading     = 'Edit Status';
-    // escape(), not strip_tags(): the body is Markdown source, not markup to be
-    // filtered. strip_tags() deleted every `<…>` run in it, and that mangled
-    // text was what the form posted back — so opening the editor and saving
-    // destroyed content.
+    // escape(), never strip_tags(): the body is Markdown source, and the form
+    // posts back whatever this renders — filtering it here destroys content.
     $body        = escape((string) $post->body);
     ?>
     <h2><?= $heading ?></h2>
