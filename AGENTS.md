@@ -458,6 +458,36 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - Underscore method names allowed in tests
 - Run `composer lint` before committing
 
+### Comments
+
+**Comment the constraint, not the changelog.**
+
+An inline comment earns its place when reverting the line would look *reasonable*
+to a future editor: a coupling across files, a counter-intuitive choice, a guard
+whose removal breaks something distant. Write what breaks if the line changes.
+
+Do not narrate the bug a line used to have. That belongs in the commit message,
+where `git blame` will find it. Once the code reads correctly on its own, the
+comment is noise:
+
+```php
+// Noise — archaeology. The line already states this.
+// `created` is when the post was published and `updated` when it was last
+// changed; the two were wired to the opposite properties, so every scraper
+// read a post's edit time as its publication date.
+'og:published_time' => $bean->created,
+
+// Earns its place — a coupling the next editor cannot see from here.
+// The status is load-bearing: upload-image.js keys on response.ok to tell
+// markdown-to-insert from error-to-report.
+header('HTTP/1.1 400 Bad Request');
+```
+
+Docblocks are the exception and are deliberately expansive in this codebase —
+they carry a function's "why" as a whole, and account for most of the ~44% of
+`src/` lines that are comments. Inline `//` rationale is the part to keep scarce:
+it runs at roughly **8% of non-docblock lines**, which is the level to aim for.
+
 ## Testing
 
 Tests use **Codeception 5** with PHPUnit underneath.
