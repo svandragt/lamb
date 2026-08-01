@@ -95,6 +95,6 @@ Export needs PHP's `zip` extension. It is present in the Docker image and in mos
 - [Trash]({{ site.baseurl }}{% link trash.md %}) — trashed posts are included in the export and flagged in the manifest.
 - [Drafts]({{ site.baseurl }}{% link drafts.md %}) — so are drafts.
 - [Media]({{ site.baseurl }}{% link media.md %}) — how the assets in the archive were stored and converted.
-- [Lamb import]({{ site.baseurl }}{% link lamb-import.md %}) — restores an archive produced here, straight back into Lamb.
+- [Lamb import]({{ site.baseurl }}{% link lamb-import.md %}): Restores an archive produced here, straight back into Lamb.
 - [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}) — the same format, in the opposite direction.
 - [Known import]({{ site.baseurl }}{% link known-import.md %}) — likewise.
