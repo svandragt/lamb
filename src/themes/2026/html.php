@@ -3,8 +3,8 @@
 use function Lamb\Theme\escape;
 use function Lamb\Theme\li_footer_items;
 use function Lamb\Theme\li_menu_items;
+use function Lamb\Theme\page_title;
 use function Lamb\Theme\part;
-use function Lamb\Theme\site_or_page_title;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 use function Lamb\Theme\the_preconnect;
@@ -22,7 +22,7 @@ global $template;
     <meta name="author" content="<?= escape($config['author_name'] ?? '') ?>">
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title><?= escape(site_or_page_title('text')) ?></title>
+    <title><?= escape(page_title('text')) ?></title>
     <link rel="alternate" type="application/atom+xml" href="<?= ROOT_URL . '/feed' ?>"
           title="<?= escape($config['site_title']) ?>">
     <link rel="alternate" type="application/feed+json" href="<?= ROOT_URL . '/feed.json' ?>"

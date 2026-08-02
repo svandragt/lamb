@@ -6,7 +6,6 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Theme\page_intro;
 use function Lamb\Theme\page_title;
-use function Lamb\Theme\site_or_page_title;
 use function Lamb\Theme\site_title;
 use function Lamb\Theme\wrap_title;
 
@@ -75,28 +74,6 @@ class ThemePageTest extends TestCase
     {
         $result = page_title('text');
         $this->assertSame('Test Blog', $result);
-    }
-
-    // site_or_page_title
-
-    public function testSiteOrPageTitleReturnsPageTitleWhenDataTitleSet(): void
-    {
-        global $data;
-        $data['title'] = 'Page Title';
-        $this->assertSame('<h1>Page Title</h1>', site_or_page_title());
-    }
-
-    public function testSiteOrPageTitleReturnsSiteTitleWhenNoDataTitle(): void
-    {
-        $result = site_or_page_title();
-        $this->assertStringContainsString('Test Blog', $result);
-    }
-
-    public function testSiteOrPageTitlePlainTextMode(): void
-    {
-        global $data;
-        $data['title'] = 'My Page';
-        $this->assertSame('My Page', site_or_page_title('text'));
     }
 
     // HTML escaping of titles (untrusted feed titles can reach $data['title'])
