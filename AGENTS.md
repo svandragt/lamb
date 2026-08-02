@@ -1,6 +1,6 @@
 # AGENTS.md — Lamb Codebase Guide
 
-Lamb is a self-hosted, single-author microblog. It uses PHP 8.2+, SQLite (via RedBeanPHP ORM), and a procedural-with-namespaces architecture. There is no MVC framework — routing, responses, and views are handled by small namespaced PHP files.
+Lamb is a self-hosted, single-author microblog. It uses PHP 8.4+, SQLite (via RedBeanPHP ORM), and a procedural-with-namespaces architecture. There is no MVC framework — routing, responses, and views are handled by small namespaced PHP files.
 
 ## Documentation (End-User)
 
@@ -455,7 +455,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ## Coding Standards
 
-- **PSR-12** with PHPCompatibility checks for PHP 8.2+
+- **PSR-12** with PHPCompatibility checks for PHP 8.4+
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests

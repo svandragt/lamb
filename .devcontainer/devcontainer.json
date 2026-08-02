@@ -2,12 +2,12 @@
 {
 	"name": "PHP",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/php:1-8.2-bullseye",
+	"image": "mcr.microsoft.com/devcontainers/php:1-8.4-bullseye",
 
 	"features": {
 		"ghcr.io/devcontainers/features/php:1": {
 			"installComposer": true,
-			"version": "8.2"
+			"version": "8.4"
 		}
 	},
 

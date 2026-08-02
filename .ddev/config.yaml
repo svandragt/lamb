@@ -1,7 +1,7 @@
 name: lamb
 type: php
 docroot: src
-php_version: "8.2"
+php_version: "8.4"
 webserver_type: nginx-fpm
 xdebug_enabled: true
 additional_hostnames: [ ]

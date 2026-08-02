@@ -14,7 +14,7 @@ Every release publishes a ready-to-run image to GitHub Container Registry. It bu
 
 ```shell
 # Generate a password hash on any machine with PHP, or inside a throwaway container:
-$ docker run --rm php:8.2-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
+$ docker run --rm php:8.4-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
 
 # Run Lamb
 $ docker run -d --name lamb -p 80:80 \

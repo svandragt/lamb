@@ -1,4 +1,4 @@
-FROM dunglas/frankenphp:php8.2
+FROM dunglas/frankenphp:php8.4
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 
 # Install application dependencies (gd powers WebP upload conversion)

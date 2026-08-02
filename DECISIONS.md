@@ -124,11 +124,11 @@ We rejected it. `lock_if_feed_sourced()` (`src/response/posts.php:329`) sets `fe
 
 ---
 
-## [deduced] PHP 8.2+ with PSR-12
+## [deduced] PHP 8.4+ with PSR-12
 
 **Status:** Accepted
 **Context:** Lamb targets modern PHP for type safety and performance. PSR-12 provides a widely understood coding standard.
-**Decision:** Require PHP 8.2+; enforce PSR-12 via PHP_CodeSniffer with PHPCompatibility checks.
+**Decision:** Require PHP 8.4+; enforce PSR-12 via PHP_CodeSniffer with PHPCompatibility checks.
 **Consequences:** Cannot run on older PHP versions; contributors must run `composer lint` before committing.
 
 ---
