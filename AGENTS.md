@@ -319,7 +319,6 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `escape($str)` | `string` | `htmlspecialchars` for HTML5 output — use on every user-supplied value |
 | `site_title($type='html')` | `string` | `<h1>` wrapping `$config['site_title']`, or plain text if `$type !== 'html'` |
 | `page_title($type='html')` | `string` | `<h1>` wrapping `$data['title']` (falls back to `site_title`) |
-| `site_or_page_title($type)` | `string` | Page title if set, otherwise site title |
 | `page_intro()` | `string` | `<p>` wrapping `$data['intro']`, or `''` |
 | `li_menu_items()` | `string` | `<li><a>` tags from `$config['menu_items']` |
 | `date_created($bean)` | `string` | `<a><time>` linking to the post permalink with human-readable timestamp |

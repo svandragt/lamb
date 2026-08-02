@@ -45,7 +45,6 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 |----------|---------|-------------|
 | `site_title($type = 'html')` | `string` | The site title. Wrapped in `<h1>` for HTML output, or plain text when `$type` is not `'html'`. |
 | `page_title($type = 'html')` | `string` | The current page title (`$data['title']`), falling back to the site title. |
-| `site_or_page_title($type = 'html')` | `string` | The page title when one is set, otherwise the site title. |
 | `page_intro()` | `string` | A `<p>` wrapping `$data['intro']` (used on tag and search pages), or `''`. |
 
 ## Posts and content
