@@ -52,6 +52,22 @@ We rejected it. `lock_if_feed_sourced()` (`src/response/posts.php:329`) sets `fe
 
 ---
 
+## 2026-08-03 — Private pages and preview links carry their own noindex hint
+
+**Status:** Accepted
+
+**Context:** `robots.txt` was the only thing keeping unlisted pages out of search indexes, and it has two gaps. It disallows by *path*, so it cannot describe a preview link — an ordinary permalink plus `?preview=<token>` (`src/lamb.php: preview_token_valid()`). And it is only consulted by crawlers that fetch it first: a preview link is meant to be handed to someone who is not logged in, which is exactly how an unpublished post gets pasted into a page a crawler already follows.
+
+**Decision:** Keep `robots.txt` as the polite-crawler hint (it gains a `Disallow: /*?preview=` wildcard) and add a per-response one that travels with the page. `Response\should_noindex($action, $_GET)` is true for a route registered via `register_private_route()` or for any request carrying a `preview` parameter; `index.php` calls it before dispatching and `Response\mark_noindex()` sends `X-Robots-Tag: noindex, nofollow`. `Theme\the_robots()` emits the matching `<meta name="robots">` in each theme's `<head>`, because a page saved to disk or re-served by a proxy keeps its markup but loses its headers.
+
+The decision runs on the request's action rather than inside the preview-token check, so a handler that dies with its own body (feeds, the export download) is still covered — by the time `preview_token_valid()` runs, the header may already be too late.
+
+The `preview` parameter counts even when empty or wrong. A bad token never grants access, but the URL is still a duplicate of the canonical permalink and has no business being indexed on its own.
+
+**Consequences:** Private routes are noindexed by registration, not by a second hand-kept list — the same registry `robots.txt` is derived from. A new theme that omits `the_robots()` still gets the header, which is the layer that matters for a live crawl. Public pages emit no robots meta at all, so the default stays "index this".
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

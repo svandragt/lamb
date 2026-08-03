@@ -45,4 +45,25 @@ class DraftPreviewLinkCest
         $I->amOnUrl($href);
         $I->see($this->uniqueContent);
     }
+
+    public function testPreviewPageTellsCrawlersNotToIndexIt(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $this->createDraft($I);
+
+        $I->amOnPage('/drafts');
+        $href = $I->grabAttributeFrom('//article[contains(., "' . $this->uniqueContent . '")]//a[contains(@href, "?preview=")]', 'href');
+
+        $I->amOnPage('/logout');
+        $I->amOnUrl($href);
+        $I->seeElement('//meta[@name="robots"][@content="noindex, nofollow"]');
+        $I->seeResponseHeaderContains('X-Robots-Tag', 'noindex, nofollow');
+    }
+
+    public function testPublishedPostStaysIndexable(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/');
+        $I->dontSeeElement('//meta[@name="robots"]');
+        $I->dontSeeResponseHeader('X-Robots-Tag');
+    }
 }

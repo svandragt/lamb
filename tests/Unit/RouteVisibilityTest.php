@@ -9,6 +9,8 @@ use function Lamb\Response\robots_txt_body;
 use function Lamb\Route\private_routes;
 use function Lamb\Route\register_app_routes;
 
+use const Lamb\Response\PREVIEW_DISALLOW;
+
 /**
  * Route visibility is the single source of truth behind robots.txt: a route is
  * registered either publicly (register_route) or privately (register_private_route),
@@ -88,6 +90,10 @@ class RouteVisibilityTest extends TestCase
             static fn ($action): string => '/' . ltrim((string) $action, '/'),
             private_routes()
         );
+        sort($expected);
+        // The one Disallow entry that is not a route: preview links are
+        // permalinks carrying a ?preview=<token> query.
+        $expected[] = PREVIEW_DISALLOW;
         sort($expected);
 
         $disallowed = [];
