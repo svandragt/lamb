@@ -7,6 +7,7 @@ use function Lamb\Theme\part;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 use function Lamb\Theme\the_preconnect;
+use function Lamb\Theme\the_robots;
 use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
 
@@ -40,6 +41,7 @@ global $template;
           title="<?= escape($data['title'] ?? $config['site_title']) ?>">
     <?php endif; ?>
     <?php
+    the_robots();
     the_meta_description();
     the_preconnect();
     the_styles();

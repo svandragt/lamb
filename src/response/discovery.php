@@ -113,6 +113,70 @@ function respond_sitemap(): never
 }
 
 /**
+ * The crawler hint emitted for pages that are not meant to be found: don't
+ * index this page, and don't follow the links on it (a preview page links back
+ * to its own ?preview= URL).
+ */
+const NOINDEX = 'noindex, nofollow';
+
+/**
+ * robots.txt pattern covering the shareable preview link. Preview URLs are
+ * ordinary permalinks plus a `?preview=<token>` query, so unlike the private
+ * routes they cannot be disallowed by path — hence the wildcard form, which
+ * the major crawlers understand.
+ */
+const PREVIEW_DISALLOW = '/*?preview=';
+
+/**
+ * Returns true when the current request must not be indexed: an admin/internal
+ * route, or a `?preview=` link.
+ *
+ * Preview links (src/lamb.php: preview_token_valid()) deliberately serve an
+ * unpublished post to anyone holding the token, with no login — which is
+ * exactly what makes them indexable if one is pasted into a page a crawler
+ * already follows. Any `preview` parameter counts, even an empty or wrong one:
+ * the token doesn't have to be valid for the URL to be a duplicate of the
+ * canonical permalink that should not be indexed on its own.
+ *
+ * @param bool|string          $action The current request action (first path segment).
+ * @param array<string, mixed> $query  The request query parameters (i.e. $_GET).
+ * @return bool
+ */
+function should_noindex(bool|string $action, array $query): bool
+{
+    return \Lamb\Route\is_private_route($action) || array_key_exists('preview', $query);
+}
+
+/**
+ * Marks the current response as noindex and sends the X-Robots-Tag header.
+ *
+ * The header covers responses no theme renders (redirects, the export
+ * download); Theme\the_robots() emits the matching <meta> so the hint survives
+ * a page saved or re-served without its headers.
+ *
+ * @return void
+ */
+function mark_noindex(): void
+{
+    global $noindex;
+    $noindex = true;
+    if (!headers_sent()) {
+        header('X-Robots-Tag: ' . NOINDEX);
+    }
+}
+
+/**
+ * Returns true when the current response has been marked noindex.
+ *
+ * @return bool
+ */
+function is_noindex(): bool
+{
+    global $noindex;
+    return !empty($noindex);
+}
+
+/**
  * Builds the default robots.txt body: allow crawling, point at the sitemap, and
  * disallow every private route.
  *
@@ -121,6 +185,9 @@ function respond_sitemap(): never
  * never drift out of sync with the admin/internal routes it is meant to cover.
  * It is already inaccessible to anonymous visitors, so this is a hint to
  * crawlers rather than a security control. Sorted for deterministic output.
+ *
+ * The preview-link pattern is appended after the sorted paths: it is not a
+ * route, so it has no entry in the private registry to sort with them.
  *
  * @return string The robots.txt content.
  */
@@ -131,6 +198,7 @@ function robots_txt_body(): string
         \Lamb\Route\private_routes()
     );
     sort($paths);
+    $paths[] = PREVIEW_DISALLOW;
 
     $lines = ['User-agent: *', 'Allow: /'];
     foreach ($paths as $path) {

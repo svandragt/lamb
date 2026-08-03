@@ -97,6 +97,13 @@ if (str_contains($redirect_path, '/')) {
 }
 
 Route\register_app_routes($action, $lookup, $sublookup);
+
+# Decided before the route runs, because a handler may send its own body and
+# die() (feeds, the export download) — by then it is too late for a header.
+if (Response\should_noindex($action, $_GET)) {
+    Response\mark_noindex();
+}
+
 $template = $action;
 if (post_has_slug($action) === $action) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);

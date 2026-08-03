@@ -358,6 +358,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `the_styles()` | `void` | Emits `<link rel="stylesheet">` for `styles/styles.css` in the active theme |
 | `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
+| `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` when the response is marked noindex (private routes, `?preview=` links); nothing otherwise |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` for `$config['preconnect']` origins |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
 | `csrf_token()` | `string` | Returns (and creates if needed) the current session CSRF token |

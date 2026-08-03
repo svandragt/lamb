@@ -51,6 +51,13 @@ class RobotsTest extends TestCase
         }
     }
 
+    public function testDisallowsPreviewLinks(): void
+    {
+        // Preview links are permalinks with a ?preview=<token> query, so the
+        // path-based Disallow entries above cannot reach them.
+        $this->assertStringContainsString('Disallow: /*?preview=', robots_txt_body());
+    }
+
     public function testStaticFileOverridesGeneratedBody(): void
     {
         $dir = sys_get_temp_dir() . '/lamb-robots-' . uniqid();
