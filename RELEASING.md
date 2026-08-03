@@ -20,6 +20,13 @@ no version string in the code — **the Git tag is the source of truth**.
       its own server, so don't have another server on the test port.
 - [ ] Static checks pass: `composer lint` && `composer analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
+- [ ] Outstanding **major** dependency updates reviewed. Patch/minor bumps
+      auto-merge, so majors are the only ones that accumulate — and a stale
+      major is how you end up on a branch that no longer gets security fixes.
+      List them without needing an install:
+      `composer show --locked --outdated --direct` and `pnpm outdated`.
+      Either take the bump now (its own PR, not this release) or consciously
+      leave it; check the branch you're on is still supported upstream.
 
 ## 2. Choose the version
 
