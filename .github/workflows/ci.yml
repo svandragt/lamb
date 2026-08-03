@@ -14,14 +14,16 @@ on:
 
 jobs:
 
-  # Detect whether files relevant to the browser (Playwright) suite changed.
-  # The workflow itself always runs (no `paths:` filter on the triggers above)
-  # so the required `ci` check is always reported; the expensive playwright
-  # job below is what we gate on these paths, keeping doc-only PRs fast.
+  # Detect whether files relevant to the browser (Playwright) suite or the
+  # release image changed. The workflow itself always runs (no `paths:` filter
+  # on the triggers above) so the required `ci` check is always reported; the
+  # expensive playwright and image-scan jobs below are what we gate on these
+  # paths, keeping doc-only PRs fast.
   changes:
     runs-on: ubuntu-latest
     outputs:
       e2e: ${{ steps.filter.outputs.e2e }}
+      docker: ${{ steps.filter.outputs.docker }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4
@@ -34,6 +36,8 @@ jobs:
               - 'playwright.config.ts'
               - 'package.json'
               - 'pnpm-lock.yaml'
+            docker:
+              - '.docker/**'
 
   quality:
     runs-on: ubuntu-latest
@@ -116,6 +120,45 @@ jobs:
       - name: Run JS tests
         run: pnpm test
 
+  # Build and scan the release image on PRs that change how it is built, so the
+  # image's CVE status is visible here rather than surfacing at release time.
+  #
+  # The scan is deliberately ADVISORY (exit-code 0): almost everything it finds
+  # lives in the base image's OS and Go layers, which a PR author neither
+  # introduced nor can fix. Blocking on that would hold unrelated work hostage
+  # to upstream's release cadence — a one-line Docker docs change should not be
+  # gated on a FrankenPHP Go dependency. The hard gate belongs in
+  # release-artifacts.yml, where publishing is a deliberate act and refusing to
+  # ship a known-vulnerable image is the right call. Read the findings in this
+  # job's log.
+  #
+  # The job still FAILS if the image does not build, which is a regression a PR
+  # can genuinely cause. Builds into the local daemon and never pushes, so it
+  # needs no registry credentials.
+  # Skipped when .docker/ is untouched, which the gate below treats as a pass.
+  image-scan:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+      - name: Build release image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: .docker/Dockerfile.release
+          load: true
+          tags: lamb:ci
+      - name: Scan image for vulnerabilities (advisory)
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: lamb:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '0'
+
   # Browser end-to-end suite. Only runs when e2e-relevant files change
   # (see the `changes` job); otherwise it is skipped and the gate below
   # treats that as a pass.
@@ -180,7 +223,7 @@ jobs:
   # passing — which would let a red PR merge.
   ci:
     runs-on: ubuntu-latest
-    needs: [quality, test, js-test, playwright]
+    needs: [quality, test, js-test, playwright, image-scan]
     if: always()
     steps:
       - name: Verify required jobs succeeded
@@ -189,6 +232,7 @@ jobs:
           echo "test:       ${{ needs.test.result }}"
           echo "js-test:    ${{ needs.js-test.result }}"
           echo "playwright: ${{ needs.playwright.result }}"
+          echo "image-scan: ${{ needs.image-scan.result }}"
           if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.js-test.result }}" != "success" ]; then
             echo "::error::quality, test or js-test did not succeed"
             exit 1
@@ -197,6 +241,11 @@ jobs:
           # only a real failure (or cancellation) should block the merge.
           if [ "${{ needs.playwright.result }}" != "success" ] && [ "${{ needs.playwright.result }}" != "skipped" ]; then
             echo "::error::playwright did not succeed"
+            exit 1
+          fi
+          # image-scan is likewise skipped when .docker/ is untouched.
+          if [ "${{ needs.image-scan.result }}" != "success" ] && [ "${{ needs.image-scan.result }}" != "skipped" ]; then
+            echo "::error::image-scan did not succeed"
             exit 1
           fi
           echo "All checks passed"
