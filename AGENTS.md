@@ -63,6 +63,35 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 - Chromium executable: `~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome` (note `chrome-linux64`; version dir may differ per machine — check `ls ~/.cache/ms-playwright/`)
 - Script: `scripts/screenshot.mjs [path] [outdir]`
 
+## Dependencies
+
+Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
+composer, npm, github-actions, docker, devcontainers — and
+`dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
+Vulnerabilities are caught by `composer audit` (quality job), `pnpm audit`
+(js-test job), and a Trivy scan of the release image before it is pushed.
+
+Two things that automation deliberately does **not** handle, so they need a
+human:
+
+- **Major bumps never auto-merge.** They arrive as individual PRs and will sit
+  until someone reviews them, which is how a project quietly ends up on an
+  unsupported branch. Check for outstanding majors when cutting a release —
+  it's a checklist item in `RELEASING.md` step 1. `composer show --locked
+  --outdated --direct` and `pnpm outdated` list them without needing an install.
+- **Hand-written pins and overrides are invisible to Dependabot.** It does not
+  update pnpm `overrides`, so a pin added to dodge an advisory becomes a
+  permanent *ceiling* that silently holds a package below what its parent
+  declares. This already bit us once: an `undici: ^7.28.0` override kept
+  resolving undici 7.x after jsdom 30 moved to `^8.7.0`. If you must add one,
+  say in a comment why it exists and what would let it go — then remove it as
+  soon as the upstream range covers the fix.
+
+New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
+`dependabot.yml`, `min-release-age` in `.npmrc`). To pull something newer by
+hand — e.g. a same-day security patch — use
+`pnpm install --config.minimum-release-age=0`.
+
 ## Project Structure
 
 ```
