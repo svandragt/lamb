@@ -74,11 +74,31 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      # Build into the local daemon rather than pushing straight away, so the
+      # image can be scanned before it is published.
       - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: .
           file: .docker/Dockerfile.release
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}:${{ env.TAG }}
-            ${{ steps.meta.outputs.prerelease == 'false' && format('ghcr.io/{0}:latest', github.repository) || '' }}
+          load: true
+          tags: ghcr.io/${{ github.repository }}:${{ env.TAG }}
+
+      # `composer audit` (in CI) only covers PHP packages. This catches CVEs in
+      # the OS and PHP layers of the frankenphp base image, which is what users
+      # actually run. ignore-unfixed keeps releases from being blocked by base
+      # image CVEs that have no patch available yet.
+      - name: Scan image for vulnerabilities
+        uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8 # v0.36.0
+        with:
+          image-ref: ghcr.io/${{ github.repository }}:${{ env.TAG }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+
+      - name: Push image
+        run: |
+          docker push "ghcr.io/${GITHUB_REPOSITORY}:${TAG}"
+          if [ "${{ steps.meta.outputs.prerelease }}" = 'false' ]; then
+            docker tag "ghcr.io/${GITHUB_REPOSITORY}:${TAG}" "ghcr.io/${GITHUB_REPOSITORY}:latest"
+            docker push "ghcr.io/${GITHUB_REPOSITORY}:latest"
+          fi

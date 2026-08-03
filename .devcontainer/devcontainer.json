@@ -2,7 +2,8 @@
 {
 	"name": "PHP",
 	// Or use a Dockerfile or Docker Compose file. More info: https://containers.dev/guide/dockerfile
-	"image": "mcr.microsoft.com/devcontainers/php:1-8.2-bullseye",
+	// bookworm, not bullseye: Debian 11 LTS security support ends 2026-08-31.
+	"image": "mcr.microsoft.com/devcontainers/php:1-8.2-bookworm",
 
 	"features": {
 		"ghcr.io/devcontainers/features/php:1": {
@@ -21,7 +22,7 @@
 	"forwardPorts": [8080, 9003],
 
 	// Install and configure Xdebug after container creation
-	"postCreateCommand": "pecl install xdebug && docker-php-ext-enable xdebug && cp .devcontainer/xdebug.ini /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini"
+	"postCreateCommand": "pecl install xdebug && docker-php-ext-enable xdebug && cp .devcontainer/xdebug.ini /usr/local/etc/php/conf.d/docker-php-ext-xdebug.ini",
 
 	// Set Xdebug configuration via environment
 	"containerEnv": {

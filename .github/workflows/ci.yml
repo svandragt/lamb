@@ -106,6 +106,13 @@ jobs:
           restore-keys: pnpm-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # Mirrors `composer audit` in the quality job for the JS side. Every JS
+      # dependency here is a devDependency, so an advisory affects CI runners
+      # and dev machines rather than a deployed site — hence the `high`
+      # threshold instead of composer audit's fail-on-anything. Dependabot
+      # alerts still surface the lower-severity ones.
+      - name: Security audit
+        run: pnpm audit --audit-level=high
       - name: Run JS tests
         run: pnpm test
 
