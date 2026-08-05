@@ -1025,11 +1025,17 @@ function respond_micropub(): void
 
     // The adapter returns a bare 201 + Location on success with no body (spec-compliant —
     // Micropub only requires the Location header). Some clients (e.g. mpcli) unconditionally
-    // JSON-parse the body and error out on the empty string, even though the post succeeded.
+    // JSON-parse the body and require url/preview/edit fields, even though the post succeeded.
+    // Lamb has no separate preview/edit URL, so all three point at the same permalink.
     if ($status === 201 && $response->getBody()->getSize() === 0) {
+        $location = $response->getHeaderLine('Location');
         $response = $response
             ->withHeader('Content-Type', 'application/json')
-            ->withBody(Stream::create(json_encode(['url' => $response->getHeaderLine('Location')]) ?: '{}'));
+            ->withBody(Stream::create(json_encode([
+                'url'     => $location,
+                'preview' => $location,
+                'edit'    => $location,
+            ]) ?: '{}'));
     }
 
     mp_log('response', [
@@ -1168,6 +1174,6 @@ function respond_micropub_media(): void
     http_response_code(201);
     header('Location: ' . $url);
     header('Content-Type: application/json');
-    echo json_encode(['url' => $url]);
+    echo json_encode(['url' => $url, 'preview' => $url, 'edit' => $url]);
     exit;
 }
