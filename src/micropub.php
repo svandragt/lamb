@@ -1029,7 +1029,7 @@ function respond_micropub(): void
     if ($status === 201 && $response->getBody()->getSize() === 0) {
         $response = $response
             ->withHeader('Content-Type', 'application/json')
-            ->withBody(Stream::create(json_encode(['url' => $response->getHeaderLine('Location')])));
+            ->withBody(Stream::create(json_encode(['url' => $response->getHeaderLine('Location')]) ?: '{}'));
     }
 
     mp_log('response', [
