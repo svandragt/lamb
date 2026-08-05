@@ -4,6 +4,7 @@ namespace Lamb\Micropub;
 
 use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
+use Nyholm\Psr7\Stream;
 use Nyholm\Psr7\UploadedFile;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
@@ -1022,6 +1023,15 @@ function respond_micropub(): void
         $response = $response->withHeader('WWW-Authenticate', bearer_challenge());
     }
 
+    // The adapter returns a bare 201 + Location on success with no body (spec-compliant —
+    // Micropub only requires the Location header). Some clients (e.g. mpcli) unconditionally
+    // JSON-parse the body and error out on the empty string, even though the post succeeded.
+    if ($status === 201 && $response->getBody()->getSize() === 0) {
+        $response = $response
+            ->withHeader('Content-Type', 'application/json')
+            ->withBody(Stream::create(json_encode(['url' => $response->getHeaderLine('Location')]) ?: '{}'));
+    }
+
     mp_log('response', [
         'status' => $status,
         // Only echo the body into the log on failures — it carries the error reason.
@@ -1157,5 +1167,7 @@ function respond_micropub_media(): void
 
     http_response_code(201);
     header('Location: ' . $url);
+    header('Content-Type: application/json');
+    echo json_encode(['url' => $url]);
     exit;
 }
