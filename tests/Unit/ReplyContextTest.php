@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\parse_bean;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\set_reply_to;
 use function Lamb\Theme\the_reply_context;
 
 class ReplyContextTest extends TestCase
@@ -115,6 +116,65 @@ class ReplyContextTest extends TestCase
         $this->assertSame('', the_reply_context($bean));
     }
 
+    // set_reply_to helper ----------------------------------------------------
+
+    public function testSetReplyToAddsFrontMatterBlockToPlainBody(): void
+    {
+        $body = set_reply_to('Just a status', 'https://other.example/post');
+        $bean = populate_bean($body);
+        $this->assertSame('https://other.example/post', $bean->in_reply_to);
+        $this->assertStringContainsString('Just a status', $bean->body);
+    }
+
+    public function testSetReplyToPreservesOtherFrontMatter(): void
+    {
+        $body = set_reply_to("---\nslug: keep-me\ndraft: true\n---\nBody text", 'https://other.example/post');
+        $this->assertStringContainsString('slug: keep-me', $body);
+        $this->assertStringContainsString('draft: true', $body);
+
+        $bean = populate_bean($body);
+        $this->assertSame('https://other.example/post', $bean->in_reply_to);
+        $this->assertSame('keep-me', $bean->slug);
+        $this->assertSame(1, (int) $bean->draft);
+    }
+
+    public function testSetReplyToReplacesUnderscoreSpelledKey(): void
+    {
+        // One key survives, whichever spelling the author used: two lines both
+        // matching parse_matter()'s normalisation would race for the value.
+        $body = set_reply_to("---\nin_reply_to: https://old.example/post\n---\nHi", 'https://new.example/post');
+        $this->assertStringNotContainsString('old.example', $body);
+        $this->assertSame('https://new.example/post', populate_bean($body)->in_reply_to);
+    }
+
+    public function testSetReplyToRemovesKeyWhenValueEmpty(): void
+    {
+        $body = set_reply_to("---\ntitle: Kept\nin-reply-to: https://other.example/post\n---\nHi", '');
+        $this->assertStringNotContainsString('in-reply-to', $body);
+        $this->assertStringContainsString('title: Kept', $body);
+        $this->assertSame('', (string) populate_bean($body)->in_reply_to);
+    }
+
+    public function testSetReplyToRemovesListValueAndEmptyBlock(): void
+    {
+        // A YAML list spans continuation lines; leaving them behind would make
+        // the block unparseable, and an emptied block must go entirely.
+        $body = set_reply_to(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi",
+            ''
+        );
+        $this->assertSame('Hi', trim($body));
+    }
+
+    public function testSetReplyToQuotesValueWithNewlineInjection(): void
+    {
+        // The value arrives from a Micropub request: a newline must not be able
+        // to inject further front-matter keys (as build_matter() guards too).
+        $body = set_reply_to('Status', "https://other.example/post\ndraft: true");
+        $bean = populate_bean($body);
+        $this->assertSame(0, (int) $bean->draft);
+    }
+
     // Atom feed -------------------------------------------------------------
 
     /**
@@ -156,6 +216,78 @@ class ReplyContextTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testAtomFeedContentCarriesReplyContextMarkup(): void
+    {
+        // thr:in-reply-to is invisible to most readers, and services that thread
+        // replies (micro.blog) look for u-in-reply-to in the item HTML — so the
+        // reply context has to travel inside <content>, not only in the theme.
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+
+        $bean = R::dispense('post');
+        $bean->title = '';
+        $bean->transformed = '<p>A reply</p>';
+        $bean->in_reply_to = 'https://other.example/post';
+        $bean->created = '2024-01-01 12:00:00';
+        $bean->updated = '2024-01-01 12:00:00';
+
+        global $config, $data;
+        $config = ['site_title' => 'Blog', 'author_name' => 'Author'];
+        $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
+
+        ob_start();
+        require __DIR__ . '/../../src/themes/base/feed.php';
+        $output = ob_get_clean();
+
+        $content = (string) (new \SimpleXMLElement($output))->entry->content;
+        $this->assertStringContainsString('u-in-reply-to', $content);
+        $this->assertStringContainsString('https://other.example/post', $content);
+        $this->assertStringContainsString('<p>A reply</p>', $content);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testAtomFeedContentUnchangedForNonReply(): void
+    {
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+
+        $bean = R::dispense('post');
+        $bean->title = '';
+        $bean->transformed = '<p>Not a reply</p>';
+        $bean->created = '2024-01-01 12:00:00';
+        $bean->updated = '2024-01-01 12:00:00';
+
+        global $config, $data;
+        $config = ['site_title' => 'Blog', 'author_name' => 'Author'];
+        $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
+
+        ob_start();
+        require __DIR__ . '/../../src/themes/base/feed.php';
+        $output = ob_get_clean();
+
+        $content = (string) (new \SimpleXMLElement($output))->entry->content;
+        $this->assertSame('<p>Not a reply</p>', $content);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testJsonFeedIncludesMicroblogInReplyTo(): void
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
@@ -184,5 +316,9 @@ class ReplyContextTest extends TestCase
 
         $json = json_decode($output, true);
         $this->assertSame('https://other.example/post', $json['items'][0]['_microblog']['in_reply_to_url']);
+        // `_microblog` is a JSON Feed extension no plain reader looks at: the
+        // same relationship has to be visible in content_html as well.
+        $this->assertStringContainsString('u-in-reply-to', $json['items'][0]['content_html']);
+        $this->assertStringContainsString('<p>A reply</p>', $json['items'][0]['content_html']);
     }
 }

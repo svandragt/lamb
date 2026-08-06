@@ -59,7 +59,14 @@ foreach ($data['posts'] as $bean) {
     $Entry->addChild('title', escape($bean->title ?: ''));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
-    $Content = $Entry->addChild('content', Lamb\absolute_urls($bean->transformed));
+    // The reply context travels inside <content>, not only in the theme: thr:
+    // below is invisible to readers that ignore the extension, and services that
+    // thread replies (micro.blog) look for the u-in-reply-to microformat in the
+    // item's HTML. Its markup is already escaped, so addChild() is safe here.
+    $Content = $Entry->addChild(
+        'content',
+        Lamb\Theme\the_reply_context($bean) . Lamb\absolute_urls($bean->transformed)
+    );
     $Content->addAttribute('type', 'html');
     if (!empty($bean->in_reply_to)) {
         // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping

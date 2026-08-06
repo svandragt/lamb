@@ -1700,6 +1700,249 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
     }
 
+    // --- in-reply-to (create / source / update) ---
+
+    /**
+     * Store a reply post and return its bean.
+     */
+    private function storeReply(string $body): OODBBean
+    {
+        $bean = R::dispense('post');
+        $bean->body = $body;
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        \Lamb\parse_bean($bean);
+        R::store($bean);
+
+        return $bean;
+    }
+
+    public function testCreateCallbackAcceptsInReplyToHCiteObject(): void
+    {
+        // Micropub allows in-reply-to to be a nested h-cite rather than a bare
+        // URL; the target has to come out of its `url` property, not be dropped.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['Replying to an h-cite'],
+                'in-reply-to' => [[
+                    'type'       => ['h-cite'],
+                    'properties' => [
+                        'url'  => ['https://other.example/their-post'],
+                        'name' => ['Their post'],
+                    ],
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Replying to an h-cite%']);
+        $this->assertNotNull($post);
+        $this->assertSame('https://other.example/their-post', $post->in_reply_to);
+    }
+
+    public function testCreateCallbackDoesNotDumpInReplyToAsExtraProperties(): void
+    {
+        // in-reply-to is consumed into front matter, so it must not also land in
+        // the body as a JSON code block of "unrecognised" properties.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['No json block please'],
+                'in-reply-to' => ['https://other.example/their-post'],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%No json block please%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('```json', $post->body);
+        $this->assertSame('https://other.example/their-post', $post->in_reply_to);
+    }
+
+    public function testSourceQueryReturnsInReplyTo(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nSource reply content");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertSame(['https://other.example/post'], $result['properties']['in-reply-to']);
+    }
+
+    public function testSourceQueryOmitsInReplyToForNormalPost(): void
+    {
+        $bean = $this->storeReply('An ordinary post');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertArrayNotHasKey('in-reply-to', $result['properties']);
+    }
+
+    public function testUpdateReplaceInReplyToSetsTarget(): void
+    {
+        $bean = $this->storeReply('Turning this into a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+        $this->assertStringContainsString('Turning this into a reply', $updated->body);
+    }
+
+    public function testUpdateReplaceInReplyToAcceptsHCiteObject(): void
+    {
+        $bean = $this->storeReply('Reply target as h-cite');
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['url' => ['https://other.example/post']],
+            ]]]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateReplaceInReplyToPreservesUnrelatedFrontMatter(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Kept Title\nslug: kept-slug\n---\nBody stays");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/kept-slug',
+            ['replace' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+        $this->assertSame('Kept Title', $updated->title);
+        $this->assertSame('kept-slug', $updated->slug);
+        $this->assertStringContainsString('Body stays', $updated->body);
+    }
+
+    public function testUpdateReplaceInReplyToRejectsValueCarryingNoUrl(): void
+    {
+        // An h-cite with no url is not a reply target; accepting it would either
+        // clear the existing one or report a change that never happened.
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['name' => ['No url here']],
+            ]]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateReplaceInReplyToWithEmptyValueClearsTarget(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nNo longer a reply");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => []]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateDeletePropertyRemovesInReplyTo(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nPlain post now");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to']]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+        $this->assertStringContainsString('Plain post now', $updated->body);
+    }
+
+    public function testUpdateDeleteInReplyToValueRemovesMatchingTarget(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateDeleteInReplyToValueLeavesDifferentTargetIntact(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://unrelated.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateAddInReplyToSetsTargetWhenAbsent(): void
+    {
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateAddSecondInReplyToIsRejected(): void
+    {
+        // Storage holds one reply target, so a second one cannot be honoured:
+        // Micropub requires an unsupported operation to fail rather than return
+        // success the client will read as "saved".
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://second.example/post']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
     // --- has_micropub_scope ---
 
     public function testHasMicropubScopeTrueWhenScopePresent(): void
