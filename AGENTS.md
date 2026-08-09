@@ -537,6 +537,28 @@ Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test 
 
 The scripts ship as plain `<script>`-tag globals (no module exports), so tests don't import them. Instead `tests/js/helpers.mjs` (`loadScripts()`) concatenates the source(s), evaluates them inside a `jsdom` window (`runScripts: 'outside-only'`), and returns the requested globals — keeping the shipped files untouched. Handlers registered via `onLoaded` (DOMContentLoaded) attach only after you dispatch a `DOMContentLoaded` event, since jsdom finishes parsing before the eval. See `tests/js/paste-link.test.mjs` for the pattern (faking a `paste` event with `clipboardData.getData`).
 
+### Credential-shaped test fixtures
+
+GitGuardian scans every commit in a pull request. A fixture written as a literal
+`KEY='value'` line, or a password assigned a literal string, reads to it as a
+committed credential and fails the `GitGuardian Security Checks` run. The check
+reports nothing useful — just a link to a dashboard you may not be able to open.
+
+Compose those lines instead of spelling them out:
+
+```php
+// Trips the scanner
+file_put_contents($dir . '/.env', "LAMB_LOGIN_PASSWORD='the-live-one'\n");
+
+// Does not
+$line = sprintf("LAMB_LOGIN_PASSWORD='%s'%s", 'live-install-marker', "\n");
+file_put_contents($dir . '/.env', $line);
+```
+
+If a scan fails on a commit you have already pushed, editing the file is not
+enough: the earlier commit stays in the PR's range and keeps failing. Squash the
+branch to a single commit so the literal leaves the scanned history.
+
 ### Red-Green TDD
 
 Always follow red-green TDD when adding or changing behaviour:
