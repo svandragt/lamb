@@ -65,6 +65,18 @@ function redirect_login(): array
         return throttled_login_response($retry_after);
     }
 
+    // An install with no LAMB_LOGIN_PASSWORD can never authenticate anyone, and
+    // password_verify() against an empty hash fails exactly like a wrong
+    // password — so the operator goes looking for a forgotten password instead
+    // of an unset variable (php-fpm clears the environment; the pool config has
+    // to declare it). Say which it is, in the log and on the page, and do not
+    // record a failure: the server is at fault, and throttling the operator
+    // out of their own diagnosis makes it worse.
+    if (LOGIN_PASSWORD === '') {
+        error_log('LAMB_LOGIN_PASSWORD is not set; admin logins cannot succeed');
+        return login_page_data('Login is not configured on this site.');
+    }
+
     $user_pass = $_POST['password'] ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();

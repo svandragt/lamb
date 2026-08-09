@@ -134,25 +134,68 @@ class ResponseAuthTest extends TestCase
     }
 
     /**
-     * Wrong password re-renders the login page in place with the error rather
-     * than redirecting through a session flash (issue #462): the flash carrier
-     * is gone now that /login is sessionless, so the message must travel in the
-     * returned data. The visitor must remain anonymous (no session started).
+     * An install with no LAMB_LOGIN_PASSWORD cannot authenticate anyone, and
+     * saying "password is incorrect" sends the operator hunting for a password
+     * that was never the problem. The unit suite runs without the variable set,
+     * so LOGIN_PASSWORD is '' here — the misconfigured install itself.
+     *
+     * The visitor must still end up anonymous, and the reply must not hint at
+     * whether the submitted password was close to anything.
      */
-    public function testRedirectLoginWrongPasswordRendersErrorWithoutSession(): void
+    public function testRedirectLoginSaysSoWhenNoLoginPasswordIsConfigured(): void
     {
         $token = \Lamb\Response\issue_login_csrf();
         $_POST['submit']          = SUBMIT_LOGIN;
         $_POST[HIDDEN_CSRF_NAME]  = $token;
-        $_POST['password']        = 'definitely-the-wrong-password-xyz';
+        $_POST['password']        = 'anything-at-all';
 
         $result = redirect_login();
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('login_error', $result);
-        $this->assertSame('Password is incorrect, please try again.', $result['login_error']);
+        $this->assertStringContainsString('not configured', $result['login_error']);
         $this->assertArrayHasKey('login_csrf', $result);
         $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
+    }
+
+    /**
+     * The operator's copy of that message: named variable, and a statement that
+     * logins cannot succeed, so a search of the error log lands on it.
+     */
+    public function testRedirectLoginLogsTheMissingLoginPassword(): void
+    {
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']          = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME]  = $token;
+        $_POST['password']        = 'anything-at-all';
+
+        $log = $this->captureErrorLog(static fn() => redirect_login());
+
+        $this->assertStringContainsString('LAMB_LOGIN_PASSWORD', $log);
+        $this->assertStringContainsString('cannot succeed', $log);
+    }
+
+    /**
+     * The misconfiguration is the server's fault, not the visitor's, so it must
+     * not burn an attempt from the throttle budget (issue #443) — otherwise an
+     * operator testing their own fix locks themselves out of the diagnosis.
+     */
+    public function testRedirectLoginDoesNotRecordAFailureWhenUnconfigured(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+        // One short of the limit, so recording a single failure would trip it.
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES - 1; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.9', time());
+        }
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']          = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME]  = $token;
+        $_POST['password']        = 'anything-at-all';
+
+        redirect_login();
+
+        $this->assertSame(0, \Lamb\Response\login_throttle_retry_after('203.0.113.9', time()));
     }
 
     /**
