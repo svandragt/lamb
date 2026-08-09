@@ -34,7 +34,10 @@ foreach ($data['posts'] as $bean) {
     $item = [
         'id'             => $url,
         'url'            => $url,
-        'content_html'   => Lamb\absolute_urls($bean->transformed),
+        // Reply context inside content_html as well as _microblog below: the
+        // extension is a micro.blog convention, while the u-in-reply-to markup is
+        // what a plain reader shows and what mf2 consumers parse.
+        'content_html'   => Lamb\Theme\the_reply_context($bean) . Lamb\absolute_urls($bean->transformed),
         'date_published' => date(DATE_RFC3339, strtotime($bean->created)),
         'date_modified'  => date(DATE_RFC3339, strtotime($bean->updated)),
     ];

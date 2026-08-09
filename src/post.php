@@ -446,6 +446,65 @@ function set_matter(string $body, string $key, string $value, bool $quote = fals
 }
 
 /**
+ * Sets (or clears) the reply target in a body's leading YAML front-matter block.
+ *
+ * Surgical on purpose: every other front-matter key — including ones this
+ * codebase does not recognise — is carried over verbatim, because the Micropub
+ * update path that calls this must not silently drop a hand-written `slug:` or
+ * `draft:` while changing a reply target. A body with no front matter gains a
+ * block; a block left with nothing but the reply target loses its fence again.
+ *
+ * Both `in-reply-to` and `in_reply_to` spellings are removed before the new
+ * value is appended (parse_matter() normalises them onto one key, so two lines
+ * would race for it), and the value is dumped through the YAML writer rather
+ * than interpolated, so a newline in it cannot inject further keys.
+ *
+ * @param string $body The raw post body.
+ * @param string $value The reply target URL, or '' to remove it.
+ * @return string The body with its front-matter reply target set.
+ */
+function set_reply_to(string $body, string $value): string
+{
+    $body  = normalize_frontmatter_fence($body);
+    $value = trim($value);
+    [$yaml, $content] = split_frontmatter($body);
+
+    if ($yaml === '') {
+        return $value === '' ? $body : build_matter(['in-reply-to' => $value], $body);
+    }
+
+    $kept = [];
+    $dropping = false;
+    foreach (preg_split('/\R/', $yaml) ?: [] as $line) {
+        // Anchored to column zero: an indented `in-reply-to` belongs to whatever
+        // block encloses it, and claiming it here took that block's remaining
+        // lines with it as "continuations" of a key that was never ours.
+        if (preg_match('/^in[-_]reply[-_]to[ \t]*:/i', $line) === 1) {
+            $dropping = true;
+            continue;
+        }
+        // An indented line after the key is its YAML list/continuation: dropping
+        // the key but keeping `  - https://…` leaves the block unparseable.
+        if ($dropping && preg_match('/^[ \t]+\S/', $line) === 1) {
+            continue;
+        }
+        $dropping = false;
+        $kept[] = $line;
+    }
+
+    $new_yaml = rtrim(implode("\n", $kept), "\n");
+    if ($value !== '') {
+        $new_yaml = ($new_yaml === '' ? '' : $new_yaml . "\n") . trim(Yaml::dump(['in-reply-to' => $value]));
+    }
+
+    if (trim($new_yaml) === '') {
+        return $content;
+    }
+
+    return "---\n" . $new_yaml . "\n---\n" . $content;
+}
+
+/**
  * Rewrites the `slug` value inside a body's leading YAML front-matter block to
  * the given actual slug, leaving all other front matter intact.
  *

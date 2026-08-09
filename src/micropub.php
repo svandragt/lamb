@@ -27,6 +27,7 @@ use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\set_reply_to;
 use function Lamb\Post\split_frontmatter;
 
 class LambMicropubAdapter extends MicropubAdapter
@@ -103,6 +104,10 @@ class LambMicropubAdapter extends MicropubAdapter
         $tags = get_tags($body);
         if (!empty($tags)) {
             $props['category'] = $tags;
+        }
+
+        if (!empty($bean->in_reply_to)) {
+            $props['in-reply-to'] = [(string) $bean->in_reply_to];
         }
 
         if (!empty($bean->syndicated_to)) {
@@ -473,14 +478,21 @@ class LambMicropubAdapter extends MicropubAdapter
             if (!is_array($values) || !array_is_list($values)) {
                 return 'invalid_request';
             }
-            $this->applyReplace($bean, $property, $values);
+            if (!$this->applyReplace($bean, $property, $values)) {
+                return 'invalid_request';
+            }
         }
 
         foreach ($actions['add'] ?? [] as $property => $values) {
             if (!is_array($values) || !array_is_list($values)) {
                 return 'invalid_request';
             }
-            $this->applyAdd($bean, $property, $values);
+            // Nothing is stored until the end of this method, so refusing here
+            // leaves the post exactly as it was — which is the point: a 200 for
+            // an add the storage cannot hold reads to the client as "saved".
+            if (!$this->applyAdd($bean, $property, $values)) {
+                return 'invalid_request';
+            }
         }
 
         $delete = $actions['delete'] ?? [];
@@ -511,16 +523,41 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Apply an add operation for a single property to a post bean.
      *
-     * @param OODBBean     $bean
-     * @param string       $property
-     * @param list<string> $values
-     * @return void
+     * @param OODBBean    $bean
+     * @param string      $property
+     * @param list<mixed> $values
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
      */
-    private function applyAdd(OODBBean $bean, string $property, array $values): void
+    private function applyAdd(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = add_body_tags($bean->body ?? '', $values);
+            $bean->body = add_body_tags($bean->body ?? '', array_map('strval', $values));
+            return true;
         }
+
+        if ($property === 'in-reply-to') {
+            // Adding nothing is a no-op, not a failure.
+            if ($values === []) {
+                return true;
+            }
+            // But a value carrying no URL is an add that cannot be honoured, and
+            // reporting success for it reads to the client as "saved" — the same
+            // reason applyReplace() refuses it.
+            $target = $this->replyTargetUrl($values[0] ?? null);
+            if ($target === null) {
+                return false;
+            }
+            // A post stores a single reply target, so adding a second one would
+            // have to either overwrite the first or be dropped; both lie about
+            // what happened.
+            if ($this->currentReplyTo($bean) !== '') {
+                return false;
+            }
+            $bean->body = set_reply_to($bean->body ?? '', $target);
+        }
+
+        return true;
     }
 
     /**
@@ -535,20 +572,35 @@ class LambMicropubAdapter extends MicropubAdapter
         if ($property === 'category') {
             $bean->body = strip_trailing_body_tags($bean->body ?? '');
         }
+        if ($property === 'in-reply-to') {
+            $bean->body = set_reply_to($bean->body ?? '', '');
+        }
     }
 
     /**
      * Apply a delete-values operation for a single property to a post bean.
      *
-     * @param OODBBean     $bean
-     * @param string       $property
-     * @param list<string> $values
+     * @param OODBBean    $bean
+     * @param string      $property
+     * @param list<mixed> $values
      * @return void
      */
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
     {
         if ($property === 'category') {
-            $bean->body = remove_body_tags($bean->body ?? '', $values);
+            $bean->body = remove_body_tags($bean->body ?? '', array_map('strval', $values));
+        }
+
+        if ($property === 'in-reply-to') {
+            // Value-scoped delete: only the target the client named goes, so a
+            // stale value in a client's copy cannot clear the current reply.
+            $current = $this->currentReplyTo($bean);
+            foreach ($values as $value) {
+                if ($current !== '' && $this->replyTargetUrl($value) === $current) {
+                    $bean->body = set_reply_to($bean->body ?? '', '');
+                    return;
+                }
+            }
         }
     }
 
@@ -558,14 +610,76 @@ class LambMicropubAdapter extends MicropubAdapter
      * @param OODBBean    $bean
      * @param string      $property
      * @param list<mixed> $values
-     * @return void
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
      */
-    private function applyReplace(OODBBean $bean, string $property, array $values): void
+    private function applyReplace(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'content') {
             $newContent = (string) ($values[0] ?? '');
             $bean->body = $this->rebuildBody($bean, $newContent);
+            return true;
         }
+
+        if ($property === 'in-reply-to') {
+            // An empty value list is Micropub's "replace with nothing", i.e. the
+            // post stops being a reply.
+            if ($values === []) {
+                $bean->body = set_reply_to($bean->body ?? '', '');
+                return true;
+            }
+
+            $target = $this->replyTargetUrl($values[0] ?? null);
+            if ($target === null) {
+                return false;
+            }
+            $bean->body = set_reply_to($bean->body ?? '', $target);
+        }
+
+        return true;
+    }
+
+    /**
+     * The reply target currently recorded in a bean's front matter.
+     *
+     * Read from the body rather than $bean->in_reply_to: an update applies a
+     * sequence of operations to the body, and the column is only refreshed by
+     * the parse_bean() call at the end of updateCallback().
+     *
+     * @param OODBBean $bean
+     * @return string The target URL, or '' when the post is not a reply.
+     */
+    private function currentReplyTo(OODBBean $bean): string
+    {
+        $matter = parse_matter((string) ($bean->body ?? ''));
+
+        return trim(matter_string($matter['in-reply-to'] ?? null) ?? '');
+    }
+
+    /**
+     * Extract a reply target URL from a Micropub `in-reply-to` value.
+     *
+     * The value is a URL string in the simple case, but Micropub also allows an
+     * embedded h-cite object (`{type: [h-cite], properties: {url: [...]}}`), which
+     * is what a client sends when it has the parent's author and name to hand.
+     * Both shapes have to yield the URL — matter_string() alone returns null for
+     * the object, which silently turned an h-cite reply into a normal post.
+     *
+     * @param mixed $value A single value from the `in-reply-to` property.
+     * @return string|null The target URL, or null when the value carries none.
+     */
+    private function replyTargetUrl(mixed $value): ?string
+    {
+        if (is_array($value)) {
+            $nested = $value['properties']['url'] ?? $value['url'] ?? null;
+            if ($nested !== null) {
+                return $this->replyTargetUrl(is_array($nested) ? ($nested[0] ?? null) : $nested);
+            }
+        }
+
+        $url = matter_string($value);
+
+        return $url !== null && trim($url) !== '' ? trim($url) : null;
     }
 
     /**
@@ -711,7 +825,7 @@ class LambMicropubAdapter extends MicropubAdapter
         // `name`. Both reached the ?string parameters of assembleFrontMatter()
         // as arrays and 500ed the create.
         $title = matter_string($props['name'][0] ?? null);
-        $replyTo = matter_string($props['in-reply-to'][0] ?? null);
+        $replyTo = $this->replyTargetUrl($props['in-reply-to'][0] ?? null);
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -752,7 +866,13 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildExtraProperties(array $props): string
     {
-        $known = ['content', 'name', 'category', 'photo', 'published', 'post-status', 'mp-syndicate-to'];
+        // `in-reply-to` belongs here with the rest: buildBody() consumes it into
+        // front matter, so leaving it out dumped the reply target into the post
+        // body a second time as a JSON code block readers could see.
+        $known = [
+            'content', 'name', 'category', 'photo', 'published', 'post-status',
+            'mp-syndicate-to', 'in-reply-to',
+        ];
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {
