@@ -1943,6 +1943,44 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
+    public function testUpdateAddInReplyToRejectsValueCarryingNoUrl(): void
+    {
+        // Mirrors the replace path: an h-cite with no url is not a reply target,
+        // and returning 200 for an add that stored nothing tells the client its
+        // edit was saved.
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['name' => ['No url here']],
+            ]]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateAddInReplyToWithEmptyValueListIsANoOp(): void
+    {
+        // An empty value list asks for nothing to be added, which is not the same
+        // as asking for something impossible: it must not be an error.
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => []]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
     // --- has_micropub_scope ---
 
     public function testHasMicropubScopeTrueWhenScopePresent(): void

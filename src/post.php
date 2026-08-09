@@ -476,7 +476,10 @@ function set_reply_to(string $body, string $value): string
     $kept = [];
     $dropping = false;
     foreach (preg_split('/\R/', $yaml) ?: [] as $line) {
-        if (preg_match('/^[ \t]*in[-_]reply[-_]to[ \t]*:/i', $line) === 1) {
+        // Anchored to column zero: an indented `in-reply-to` belongs to whatever
+        // block encloses it, and claiming it here took that block's remaining
+        // lines with it as "continuations" of a key that was never ours.
+        if (preg_match('/^in[-_]reply[-_]to[ \t]*:/i', $line) === 1) {
             $dropping = true;
             continue;
         }

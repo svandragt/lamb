@@ -537,9 +537,16 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         if ($property === 'in-reply-to') {
+            // Adding nothing is a no-op, not a failure.
+            if ($values === []) {
+                return true;
+            }
+            // But a value carrying no URL is an add that cannot be honoured, and
+            // reporting success for it reads to the client as "saved" — the same
+            // reason applyReplace() refuses it.
             $target = $this->replyTargetUrl($values[0] ?? null);
             if ($target === null) {
-                return true;
+                return false;
             }
             // A post stores a single reply target, so adding a second one would
             // have to either overwrite the first or be dropped; both lie about

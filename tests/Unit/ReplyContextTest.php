@@ -175,6 +175,21 @@ class ReplyContextTest extends TestCase
         $this->assertSame(0, (int) $bean->draft);
     }
 
+    public function testSetReplyToLeavesNestedKeysAlone(): void
+    {
+        // Only a top-level `in-reply-to` is this function's business. An indented
+        // one belongs to whatever block encloses it, and treating it as the key
+        // took the rest of that block's lines with it as "continuations".
+        $body = set_reply_to(
+            "---\nmeta:\n  in-reply-to: https://old.example/x\n  other: keep-me\ntitle: T\n---\nHi",
+            'https://new.example/post'
+        );
+
+        $this->assertStringContainsString('other: keep-me', $body);
+        $this->assertStringContainsString('in-reply-to: https://old.example/x', $body);
+        $this->assertSame('https://new.example/post', populate_bean($body)->in_reply_to);
+    }
+
     // Atom feed -------------------------------------------------------------
 
     /**
