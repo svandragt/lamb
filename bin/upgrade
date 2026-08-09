@@ -10,6 +10,33 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# git refuses to work in a repository owned by another user ("detected dubious
+# ownership"), which is the normal shape of a deploy: the checkout owned by the
+# webserver user, the cron job running as a human. Every git command below then
+# fails under `set -e`, so the script exits having done nothing — every 15
+# minutes, with cron mail that reads like every other cron mail, while the site
+# quietly stops updating. Fail with something a reader can act on instead.
+if ! git_err=$(git rev-parse --is-inside-work-tree 2>&1); then
+    echo "bin/upgrade: cannot use the git checkout at $(pwd)" >&2
+    echo "${git_err}" >&2
+    if [[ "${git_err}" == *"dubious ownership"* ]]; then
+        cat >&2 <<EOF
+
+The user running this script must own the checkout, or be trusted for it.
+Either align ownership:
+
+    sudo chown -R \$(id -un) "$(pwd)"
+
+or, if the webserver must keep owning it, mark it safe for the deploying user:
+
+    git config --global --add safe.directory "$(pwd)"
+
+Run that as the user the cron job runs as, not as root.
+EOF
+    fi
+    exit 1
+fi
+
 git fetch origin
 
 if [ -n "${1:-}" ]; then
