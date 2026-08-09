@@ -1,9 +1,28 @@
 <?php
 
-if (empty($argv[1])) {
-    die('Usage: php make-password.php <password>');
+$args     = array_slice($argv, 1);
+$force    = in_array('--force', $args, true);
+$operands = array_values(array_filter($args, static fn(string $a): bool => !str_starts_with($a, '--')));
+
+if (empty($operands[0])) {
+    die('Usage: php make-password.php <password> [--force]');
 }
-$password = $argv[1];
+$password = $operands[0];
+
+// The docs tell a self-hoster to run this on their own server, and it writes
+// .env into whatever directory it is run from. A second run there — a test, a
+// forgotten password — used to overwrite the live file in place: that is how a
+// production checkout ended up holding a cleartext LAMB_TEST_PASSWORD and a
+// login hash the running site never read (issues #597, #598). Refuse by
+// default, so replacing a real .env has to be asked for.
+if (!$force && file_exists('.env')) {
+    fwrite(
+        STDERR,
+        '.env already exists in ' . getcwd() . PHP_EOL
+        . 'Refusing to overwrite it. Move it aside, or re-run with --force.' . PHP_EOL
+    );
+    exit(1);
+}
 
 // Highlight a weak password rather than refusing it: communicate, don't block
 // (a refusal would also break test fixtures that pass a short password). The
