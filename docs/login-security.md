@@ -59,6 +59,33 @@ per-visitor accuracy.
 weak. The throttle raises the cost of guessing, but a strong password is what
 actually makes guessing hopeless.
 
+## Changing the password later
+
+`make-password.php` writes `.env` in the directory you run it from, and refuses
+to overwrite one that already exists:
+
+```
+.env already exists in /var/www/example.com
+Refusing to overwrite it. Move it aside, or re-run with --force.
+```
+
+To replace the file, pass `--force`:
+
+```
+php make-password.php <your-new-password> --force
+```
+
+The refusal protects a live install. A `.env` on a server holds the hash your
+site runs on, and an accidental second run — a test, a forgotten password —
+used to replace it silently, leaving logins failing for a reason nothing
+reported.
+
+Under php-fpm, FrankenPHP, or Docker, Lamb does not read `.env` at all: it
+reads the environment, and the hash reaches it from your pool config or
+container settings. Regenerating `.env` on those setups changes nothing on its
+own — copy the printed hash into `LAMB_LOGIN_PASSWORD` where the server sets
+it. See [Nginx]({{ site.baseurl }}{% link nginx.md %}) for the php-fpm form.
+
 ## Related
 
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Settings are edited at `/settings`, behind this login.
