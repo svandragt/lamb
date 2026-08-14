@@ -452,7 +452,7 @@ XML;
         $this->assertStringContainsString("title: 'Turn that frown upside down'", (string) $bean->body);
     }
 
-    public function testImportItemLeavesTitleAndSlugEmptyForSyntheticStatusPost(): void
+    public function testImportItemKeepsSlugButDropsTitleForSyntheticStatusPost(): void
     {
         $items = $this->sampleItems();
         $downloader = fn(): ?string => null;
@@ -460,9 +460,8 @@ XML;
         $bean = import_item($items[2], $downloader, false);
 
         $this->assertNotNull($bean);
-        $this->assertSame('', (string) $bean->slug);
+        $this->assertSame('if-you-send-email-using-noreply-then', (string) $bean->slug);
         $this->assertStringNotContainsString('title:', (string) $bean->body);
-        $this->assertStringNotContainsString('slug:', (string) $bean->body);
     }
 
     public function testImportItemPrependsBookmarkLinkLineToBody(): void

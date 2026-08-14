@@ -338,9 +338,12 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
         static fn(string $tag): bool => !body_has_tag($tag, $markdown)
     ));
 
+    // A synthetic title is Known's own truncation of the body, so it isn't worth
+    // importing — but the slug from the same permalink is a real, readable URL.
+    // Keeping it preserves the original link instead of minting /status/<id>.
     $title_is_synthetic = (bool) ($item['title_is_synthetic'] ?? false);
     $title = $title_is_synthetic ? '' : (string) ($item['title'] ?? '');
-    $slug = $title_is_synthetic ? '' : (string) ($item['slug'] ?? '');
+    $slug = (string) ($item['slug'] ?? '');
 
     $bookmark_url = trim((string) ($item['bookmark_url'] ?? ''));
     if ($bookmark_url !== '') {
