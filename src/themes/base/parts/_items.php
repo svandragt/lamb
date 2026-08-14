@@ -23,8 +23,9 @@ if (empty($data['posts'])) :
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
-        // Menu pages stay out of listings; tag and search have no SQL-level
-        // exclusion (unlike home and the feeds, via public_posts_clause). The
+        // Menu pages stay out of listings. Public listings already exclude them
+        // in SQL (public_posts_clause), so this is the backstop for the owner-only
+        // views that deliberately query everything — drafts, trash, scheduled. The
         // `status` guard is load-bearing: on a permalink the menu page *is* the
         // requested post, so skipping it there renders an empty page.
         if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
