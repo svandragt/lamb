@@ -280,6 +280,16 @@ XML;
         $this->assertStringContainsString("non-published status 'draft'", (string) skip_reason($items[4]));
     }
 
+    public function testHtmlToMarkdownDropsWordBreakHints(): void
+    {
+        $markdown = html_to_markdown(
+            '<p><a href="https://vandragt.com">https://<wbr />vandragt.com</a> changelog</p>',
+        );
+
+        $this->assertStringNotContainsString('wbr', $markdown);
+        $this->assertStringContainsString('https://vandragt.com', $markdown);
+    }
+
     public function testNormalizeKnownHtmlRemovesUnfurlBlockEntirely(): void
     {
         $items = $this->sampleItems();
