@@ -184,6 +184,15 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
         $table->parentNode->replaceChild($dom->createTextNode("\n\n$key\n\n"), $table);
     }
 
+    // Known wraps long URLs in <wbr /> line-break hints. They carry no content
+    // and the Markdown converter would preserve them as visible tags.
+    $breaks = $xpath->query('//wbr') ?: [];
+    foreach ($breaks as $wbr) {
+        if ($wbr instanceof \DOMNode) {
+            $wbr->parentNode?->removeChild($wbr);
+        }
+    }
+
     $videos = $xpath->query('//video[@src]') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement || $video->parentNode === null) {

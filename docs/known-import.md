@@ -53,7 +53,7 @@ The importer writes directly to the same database your site uses, so the posts a
 
 A few things worth checking manually:
 
-- **Slugs and redirects.** Titled posts keep the slug from their original `<link>` path leaf, written into front matter as `slug:`. Status posts (synthetic-title detection above) get no `slug:`/`title:` front matter and fall through to their `/status/<id>` permalink instead. Either way, an automatic 301 redirect is created from **both** the old on-host `<link>` path (e.g. `/2020/old-slug`) and the old `<guid>` path (`/view/<hash>`) to the new local URL, so old links and any bookmarks to the `guid` permalink keep working.
+- **Slugs and redirects.** Every post keeps the slug from its original `<link>` path leaf, written into front matter as `slug:`, so imported posts stay on their old URL. Status posts (synthetic-title detection above) keep the slug but get no `title:`. A post whose `<link>` carries no usable slug — an offsite bookmark, for example — falls through to a `/status/<id>` permalink instead. Either way, an automatic 301 redirect is created from **both** the old on-host `<link>` path (e.g. `/2020/old-slug`) and the old `<guid>` path (`/view/<hash>`) to the new local URL, so old links and any bookmarks to the `guid` permalink keep working.
 - **Bookmarks.** The bookmarked page's title and URL appear as a markdown link line at the top of the post body — edit it if you'd rather present it differently.
 - **Media.** Run a quick `git status` on `src/assets/` to see what was downloaded.
 

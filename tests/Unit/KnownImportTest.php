@@ -280,6 +280,16 @@ XML;
         $this->assertStringContainsString("non-published status 'draft'", (string) skip_reason($items[4]));
     }
 
+    public function testHtmlToMarkdownDropsWordBreakHints(): void
+    {
+        $markdown = html_to_markdown(
+            '<p><a href="https://vandragt.com">https://<wbr />vandragt.com</a> changelog</p>',
+        );
+
+        $this->assertStringNotContainsString('wbr', $markdown);
+        $this->assertStringContainsString('https://vandragt.com', $markdown);
+    }
+
     public function testNormalizeKnownHtmlRemovesUnfurlBlockEntirely(): void
     {
         $items = $this->sampleItems();
@@ -442,7 +452,7 @@ XML;
         $this->assertStringContainsString("title: 'Turn that frown upside down'", (string) $bean->body);
     }
 
-    public function testImportItemLeavesTitleAndSlugEmptyForSyntheticStatusPost(): void
+    public function testImportItemKeepsSlugButDropsTitleForSyntheticStatusPost(): void
     {
         $items = $this->sampleItems();
         $downloader = fn(): ?string => null;
@@ -450,9 +460,8 @@ XML;
         $bean = import_item($items[2], $downloader, false);
 
         $this->assertNotNull($bean);
-        $this->assertSame('', (string) $bean->slug);
+        $this->assertSame('if-you-send-email-using-noreply-then', (string) $bean->slug);
         $this->assertStringNotContainsString('title:', (string) $bean->body);
-        $this->assertStringNotContainsString('slug:', (string) $bean->body);
     }
 
     public function testImportItemPrependsBookmarkLinkLineToBody(): void
