@@ -318,6 +318,48 @@ class ResponseHandlersTest extends TestCase
         $this->assertStringContainsString('hello', $result['title']);
     }
 
+    public function testRespondSearchExcludesMenuPagesFromResultsAndCount(): void
+    {
+        global $config;
+        $config['menu_items'] = ['About' => 'about'];
+
+        $ids = [];
+        foreach (['about', 'a-real-post'] as $slug) {
+            $post = R::dispense('post');
+            $post->body    = 'menuwordprobe in the body';
+            $post->slug    = $slug;
+            $post->created = '2020-01-01 00:00:00';
+            $ids[$slug] = R::store($post);
+        }
+
+        $result = respond_search(['menuwordprobe']);
+
+        $this->assertCount(1, $result['posts']);
+        $this->assertSame($ids['a-real-post'], (int) reset($result['posts'])->id);
+        $this->assertSame(1, (int) $result['pagination']['total_posts']);
+        $this->assertSame('1 result found.', $result['intro']);
+    }
+
+    public function testRespondTagExcludesMenuPages(): void
+    {
+        global $config;
+        $config['menu_items'] = ['About' => 'about'];
+
+        foreach (['about', 'a-real-post'] as $slug) {
+            $post = R::dispense('post');
+            $post->body    = 'tagged #menuprobe here';
+            $post->slug    = $slug;
+            $post->created = '2020-01-01 00:00:00';
+            R::store($post);
+        }
+
+        $result = respond_tag(['menuprobe']);
+
+        $this->assertCount(1, $result['posts']);
+        $this->assertSame('a-real-post', (string) $result['posts'][0]->slug);
+        $this->assertSame(1, (int) $result['pagination']['total_posts']);
+    }
+
     public function testRespondSearchFindsMatchingPost(): void
     {
         $post = R::dispense('post');

@@ -335,9 +335,9 @@ function respond_search(array $args): array
         $where_clauses[] = 'body LIKE ?';
         $params[] = "%$word%";
     }
-    $visible = \Lamb\visible_clause();
-    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $visible['sql'];
-    $params = array_merge($params, $visible['params']);
+    $public = public_posts_clause();
+    $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $public['sql'];
+    $params = array_merge($params, $public['params']);
 
     $paginated = paginate_posts('post', 'created DESC', $where_sql, $params);
 

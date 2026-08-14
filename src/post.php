@@ -664,11 +664,11 @@ function body_has_tag(string $tag, string $body): bool
 function posts_by_tag(string $tag): array
 {
     $conditions = get_tag_search_conditions($tag);
-    $visible = \Lamb\visible_clause();
+    $public = \Lamb\Response\public_posts_clause();
     $posts = R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND' . $visible['sql'] . 'ORDER BY created DESC',
-        array_merge($conditions['params'], $visible['params'])
+        '(' . $conditions['sql'] . ') AND' . $public['sql'] . 'ORDER BY created DESC',
+        array_merge($conditions['params'], $public['params'])
     );
 
     return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));
