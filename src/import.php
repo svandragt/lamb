@@ -145,6 +145,11 @@ function html_to_markdown(string $html, array $unwrap_class_prefixes = []): stri
     ]);
     $markdown = strtr(trim($converter->convert($html)), $placeholders);
     $markdown = html_entity_decode($markdown, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+    // The converter escapes a line-leading `#` so Markdown won't read it as a
+    // heading. In Lamb a `#word` is a hashtag, and `\#word` is neither: it
+    // renders with a stray backslash and hides the tag from body_has_tag(), so
+    // an importer appends the same tag a second time (issue: duplicate tags).
+    $markdown = preg_replace('/(^|\s)\\\\#(?=\S)/m', '$1#', $markdown) ?? $markdown;
     return separate_images_from_following_text($markdown);
 }
 

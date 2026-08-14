@@ -464,6 +464,38 @@ XML;
         $this->assertStringNotContainsString('title:', (string) $bean->body);
     }
 
+    public function testHtmlToMarkdownLeavesALineLeadingHashtagUnescaped(): void
+    {
+        $markdown = html_to_markdown('<p>Signed up.</p><p>#web</p>');
+
+        $this->assertStringNotContainsString('\#web', $markdown);
+        $this->assertStringEndsWith('#web', $markdown);
+    }
+
+    public function testImportItemDoesNotAppendATagAlreadyEndingTheBody(): void
+    {
+        $item = [
+            'title'              => 'How to sign up without a mobile number',
+            'guid'               => 'https://known.example/view/dddd4444',
+            'link'               => 'https://example.test/2016/how-to-sign-up',
+            'content'            => '<div class="e-content"><p>Signed up.</p>'
+                . '<p><a href="https://example.test/tag/web" class="p-category" rel="tag">#web</a></p></div>',
+            'post_type'          => 'post',
+            'status'             => 'publish',
+            'created'            => '2016-09-07 12:10:55',
+            'updated'            => '2016-09-07 12:10:55',
+            'tags'               => ['web'],
+            'slug'               => 'how-to-sign-up',
+            'bookmark_url'       => '',
+            'title_is_synthetic' => false,
+        ];
+
+        $bean = import_item($item, fn(): ?string => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame(1, substr_count((string) $bean->body, '#web'));
+    }
+
     public function testImportItemPrependsBookmarkLinkLineToBody(): void
     {
         $items = $this->sampleItems();
