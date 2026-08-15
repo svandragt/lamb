@@ -3,10 +3,10 @@
     <description>PHP Coding Standards for Lamb</description>
 
     <!-- Set the PHP version to use for PHP_CodeSniffer (and thus HM Linter) to PHP 8.0. -->
-    <config name="php_version" value="80200"/>
+    <config name="php_version" value="80400"/>
 
     <!-- Set the PHP version range for PHPCompatibility (matches composer.json require). -->
-    <config name="testVersion" value="8.2-8.5"/>
+    <config name="testVersion" value="8.4-8.5"/>
 
     <!-- Show sniff codes in all reports. -->
     <arg value="s"/>
