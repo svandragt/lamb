@@ -16,6 +16,13 @@ LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 # gd powers WebP upload conversion
 RUN install-php-extensions gettext pdo_mysql gd
 
+# The base image ships a C/C++ toolchain so install-php-extensions can compile;
+# nothing needs it once the extensions are built. Dropping it also drops
+# linux-libc-dev, whose kernel CVEs blocked every release scan — the container
+# runs the host's kernel, so those headers were never the thing at risk.
+RUN apt-get purge -y --auto-remove linux-libc-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 
 # Images are converted to WebP and resized server-side, so large photo

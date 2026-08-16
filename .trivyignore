@@ -1,0 +1,23 @@
+# Advisories the release image scan (.github/workflows/release-artifacts.yml)
+# should not block on. Keep this list short and dated: every entry is a CVE
+# nobody has fixed for us yet, not a CVE that stopped mattering.
+#
+# Both entries below are Go modules linked into the FrankenPHP binary that ships
+# in the base image. Lamb cannot patch them — they go away when FrankenPHP
+# rebuilds against newer dependencies. Neither is reachable through the Caddyfile
+# Lamb ships (.docker/Caddyfile.release): it serves static files and PHP, and
+# turns on no OpenAPI validation, no gRPC, and no xDS.
+#
+# Re-check on each release: drop the line, re-run the scan, and if it passes the
+# base image has caught up.
+
+# ponytail: suppression, not a fix — remove once dunglas/frankenphp:php8.4 ships
+# kin-openapi >= 0.144.0 and grpc >= 1.82.1.
+
+# kin-openapi ValidationHandler.Load() fail-open authentication bypass.
+# Added 2026-08-16, seen in frankenphp's kin-openapi v0.140.0.
+GHSA-r277-6w6q-xmqw
+
+# gRPC-Go xDS RBAC and HTTP/2 vulnerabilities.
+# Added 2026-08-16, seen in frankenphp's grpc v1.81.1.
+GHSA-hrxh-6v49-42gf
