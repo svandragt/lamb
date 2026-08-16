@@ -157,6 +157,18 @@ You can also set it outside the settings page with the `LAMB_SITE_URL` environme
 variable, which takes precedence over the INI value — handy when the same
 configuration is deployed to more than one hostname.
 
+### Serve from the root of a domain
+
+Give `site_url` the domain on its own, with no path. Lamb does not support an
+install under a subdirectory, so `https://example.com/blog` cannot work: Lamb
+reads the domain and drops the path, while your IndieAuth identity is the whole
+address. Micropub then refuses every token, because the identity it compares
+against is not the one your tokens were issued for.
+
+The settings page warns you if you save a `site_url` with a path. To run Lamb at
+`example.com/blog` today, give it its own subdomain — `blog.example.com` — and
+point `site_url` at that.
+
 ## Related
 
 * [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.

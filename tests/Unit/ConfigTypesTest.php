@@ -219,6 +219,35 @@ class ConfigTypesTest extends TestCase
         $this->assertStringContainsString('ignored', $warnings[0]);
     }
 
+    public function testShapeWarningsNamesAPathInTheSiteUrl(): void
+    {
+        // Issue #580: Lamb serves from the domain root only. A path in site_url
+        // is dropped on read, which leaves Micropub comparing the author's
+        // identity against the wrong URL and refusing every token, with the
+        // settings page reporting a clean save.
+        $warnings = shape_warnings("site_url = https://example.com/blog\n");
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('site_url', $warnings[0]);
+        $this->assertStringContainsString('/blog', $warnings[0]);
+        $this->assertStringContainsString('Micropub', $warnings[0]);
+    }
+
+    public function testShapeWarningsAcceptsARootSiteUrl(): void
+    {
+        $this->assertSame([], shape_warnings("site_url = https://example.com\n"));
+        $this->assertSame([], shape_warnings("site_url = https://example.com/\n"));
+        $this->assertSame([], shape_warnings("site_url = http://example.com:8747\n"));
+    }
+
+    public function testShapeWarningsIgnoresASiteUrlItCannotRead(): void
+    {
+        // canonical_site_url() already refuses these and Micropub already says so;
+        // a second, differently-worded complaint here would just be noise.
+        $this->assertSame([], shape_warnings("site_url = not-a-url\n"));
+        $this->assertSame([], shape_warnings("site_url =\n"));
+    }
+
     public function testShapeWarningsNamesASectionWrittenAsAScalar(): void
     {
         $warnings = shape_warnings("feeds = https://example.com/rss\n");
