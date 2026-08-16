@@ -38,6 +38,9 @@ jobs:
               - 'pnpm-lock.yaml'
             docker:
               - '.docker/**'
+              # Editing what the scan ignores has to re-run the scan, or a
+              # broken suppression is only found when it blocks a release.
+              - '.trivyignore.yaml'
 
   quality:
     runs-on: ubuntu-latest
@@ -158,6 +161,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '0'
+          trivyignores: .trivyignore.yaml
 
   # Browser end-to-end suite. Only runs when e2e-relevant files change
   # (see the `changes` job); otherwise it is skipped and the gate below
