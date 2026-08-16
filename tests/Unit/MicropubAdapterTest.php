@@ -1981,6 +1981,183 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('', (string) $updated->in_reply_to);
     }
 
+    // --- update: front matter the adapter does not own ---
+
+    public function testUpdateReplaceContentPreservesUnrelatedFrontMatter(): void
+    {
+        // Regression: a content-only edit rebuilt the front matter from the three
+        // keys this adapter knows, so a hand-written `draft:` was dropped and the
+        // post published itself, and an unpinned `slug:` moved the URL.
+        $bean = $this->storeReply("---\nslug: keep-me\ndraft: true\nsummary: A summary\n---\nOriginal");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Rewritten']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringContainsString('Rewritten', $updated->body);
+        $this->assertStringContainsString('slug: keep-me', $updated->body);
+        $this->assertStringContainsString('draft: true', $updated->body);
+        $this->assertStringContainsString('summary: A summary', $updated->body);
+        $this->assertSame(1, (int) $updated->draft);
+        $this->assertSame('keep-me', $updated->slug);
+    }
+
+    // --- update: name / syndication / unsupported properties ---
+
+    public function testUpdateReplaceNameSetsTitle(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['name' => ['New Title']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('New Title', $updated->title);
+        $this->assertStringContainsString('Body text', $updated->body);
+    }
+
+    public function testUpdateReplaceNameKeepsThePostUrl(): void
+    {
+        // The slug is derived from the title, so renaming would move the very URL
+        // the client used to address the post unless the old slug is pinned first.
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+        $this->assertSame('old-title', $bean->slug);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['name' => ['New Title']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('old-title', $updated->slug);
+    }
+
+    public function testUpdateDeleteNameRemovesTitleWithoutMovingTheUrl(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+        $this->assertSame('old-title', $bean->slug);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['name']]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->title);
+        $this->assertStringContainsString('Body text', $updated->body);
+        // Dropping the title drops what the slug was derived from, so the slug
+        // has to have been pinned before it went.
+        $this->assertSame('old-title', $updated->slug);
+    }
+
+    public function testUpdateReplaceSyndicationSetsSyndicatedTo(): void
+    {
+        $bean = $this->storeReply("---\nsyndicated-to: https://old.example/me\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['syndication' => ['https://bsky.app/profile/me']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://bsky.app/profile/me', $updated->syndicated_to);
+    }
+
+    public function testUpdateReplaceCategoryReplacesTheWholeSet(): void
+    {
+        // Replace is not add: the categories the client names become the whole
+        // set, where before the operation was silently ignored.
+        $bean = $this->storeReply('A post #old');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['category' => ['new']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('#old', $updated->body);
+        $this->assertStringContainsString('#new', $updated->body);
+    }
+
+    public function testUpdateReplaceUnsupportedPropertyIsRejected(): void
+    {
+        // Micropub requires invalid_request for an operation the server cannot
+        // honour: a 200 for a published date that was never stored reads to the
+        // client as "saved".
+        $bean = $this->storeReply('Body text');
+        $created = (string) $bean->created;
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['published' => ['2024-01-02T03:04:05Z']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame($created, (string) $updated->created);
+    }
+
+    public function testUpdateAddNameIsRejected(): void
+    {
+        // A title is one front-matter line, so there is nothing for `add` to
+        // append to — replace is the operation that fits.
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['name' => ['Second Title']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Old Title', $updated->title);
+    }
+
+    public function testUpdateDeleteUnsupportedPropertyIsRejected(): void
+    {
+        $bean = $this->storeReply('Body text');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['photo']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $this->assertSame('Body text', R::load('post', $bean->id)->body);
+    }
+
+    public function testUpdateDeleteUnsupportedPropertyValuesIsRejected(): void
+    {
+        $bean = $this->storeReply('Body text');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['photo' => ['https://example.com/a.jpg']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $this->assertSame('Body text', R::load('post', $bean->id)->body);
+    }
+
     // --- has_micropub_scope ---
 
     public function testHasMicropubScopeTrueWhenScopePresent(): void
