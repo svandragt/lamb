@@ -29,6 +29,10 @@ Do not derive it from the request — that is exactly what this setting exists t
 avoid. You can also supply it as the `LAMB_SITE_URL` environment variable, which
 takes precedence over the setting.
 
+Give the domain on its own, with no path. Lamb serves from the root of a domain,
+so a value like `https://example.com/blog` cannot work — see
+[Troubleshooting](#troubleshooting).
+
 ### 2. Add `rel="me"` identity links
 
 IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add a `[me]` section to your site configuration at `/settings`:
@@ -75,6 +79,8 @@ Posts created with `post-status: draft` or a future `published` date are not pub
 If a client can't connect — for example it reports "something went wrong setting up your Micropub endpoint" — you can turn on diagnostic logging to see exactly what the client sent and why Lamb responded as it did.
 
 The first thing to check is that `site_url` is set (see [Set your site URL](#1-set-your-site-url)); without it every token is refused, with a `no_site_url` reason in the log below.
+
+The second is that your site is served from the root of a domain. Lamb does not support an install under a subdirectory such as `https://example.com/blog`: it reads `site_url` as the domain alone, while your IndieAuth identity is the whole address including the path, so no token can ever match and every request is refused with a `me_mismatch` reason. The settings page warns you if you save a `site_url` with a path in it. Serve the site from its own domain or subdomain instead.
 
 Add this to your site configuration at `/settings`:
 

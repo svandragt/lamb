@@ -581,6 +581,11 @@ function validate_ini(string $ini_text): array
  * Only shape is reported. Whether a value is a usable timezone, URL or theme
  * name is each reader's business and each already has its own fallback.
  *
+ * The one exception is a path in `site_url` (see site_url_warning), because that
+ * value has no fallback the author can observe — it is silently narrowed and the
+ * damage surfaces somewhere else entirely, as a Micropub endpoint refusing every
+ * token.
+ *
  * @param string $ini_text The raw INI text as the author submitted it.
  * @return list<string> Human-readable warnings, empty when every value fits.
  */
@@ -588,6 +593,15 @@ function shape_warnings(string $ini_text): array
 {
     $defaults = parse_ini_safe(get_default_ini_text());
     $warnings = [];
+
+    $parsed = parse_ini_safe($ini_text);
+    $site_url = $parsed['site_url'] ?? null;
+    if (is_scalar($site_url)) {
+        $site_url_warning = site_url_warning((string) $site_url);
+        if ($site_url_warning !== null) {
+            $warnings[] = $site_url_warning;
+        }
+    }
 
     foreach (parse_ini_safe($ini_text) as $key => $value) {
         $expects_section = is_config_section((string) $key, $defaults);
@@ -617,6 +631,40 @@ function shape_warnings(string $ini_text): array
     }
 
     return $warnings;
+}
+
+/**
+ * Warns when a configured site URL carries a path, or null when it is fine.
+ *
+ * Lamb serves from the root of a domain. canonical_site_url() narrows the
+ * configured value to `scheme://host[:port]`, so a path is dropped — and because
+ * that value is the author's IndieAuth identity, an install at
+ * `https://example.com/blog` ends up comparing `https://example.com` against a
+ * token issued for `https://example.com/blog`. Every Micropub token is refused
+ * with `me_mismatch`, and nothing on the settings page suggests why (issue #580).
+ *
+ * A value canonical_site_url() cannot read at all is left alone: it already has
+ * its own handling and its own message, and a second one here is noise.
+ *
+ * @param string $site_url The `site_url` value as the author wrote it.
+ * @return string|null The warning, or null when the value has no path.
+ */
+function site_url_warning(string $site_url): ?string
+{
+    $site_url = trim($site_url);
+    if ($site_url === '' || canonical_site_url(['site_url' => $site_url]) === null) {
+        return null;
+    }
+
+    $path = trim((string) (parse_url($site_url, PHP_URL_PATH) ?? ''), '/');
+    if ($path === '') {
+        return null;
+    }
+
+    return "`site_url` has a path (`/{$path}`), and Lamb serves from the root of a domain. "
+        . 'The path is ignored, so Micropub refuses every token: your identity is the whole '
+        . "address including `/{$path}`, and Lamb compares tokens against the domain alone. "
+        . 'Serve the site from its own domain or subdomain.';
 }
 
 /**
