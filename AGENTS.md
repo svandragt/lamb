@@ -69,10 +69,16 @@ Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
 composer, npm, github-actions, docker, devcontainers — and
 `dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
 Vulnerabilities are caught by `composer audit` (quality job), `pnpm audit`
-(js-test job), and a Trivy scan of the release image before it is pushed. An
-advisory in the base image that Lamb cannot patch goes in `.trivyignore.yaml`
-with an `expired_at` date, so the suppression lapses on its own and the scan
-asks again — see the file for what to do when one expires.
+(js-test job), and a Trivy scan of the release image before it is pushed.
+
+An advisory in the base image that Lamb cannot patch goes in
+`.trivyignore.yaml` with an `expired_at` date, so the suppression lapses on its
+own and the scan asks again. When one expires, rebuild the release image and
+scan it with the entry removed. If the scan passes, the base image has caught
+up — delete the entry. If it still fails, push the date out and say in the
+`statement` what is still blocking it. Both scans have to name the file in the
+action's `trivyignores` input: Trivy auto-discovers only a plain-text
+`.trivyignore`, so an entry it is not pointed at does nothing.
 
 Two things that automation deliberately does **not** handle, so they need a
 human:

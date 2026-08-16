@@ -161,6 +161,8 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '0'
+          # Trivy auto-discovers only a plain .trivyignore, so drop this line
+          # and every suppression in the YAML file silently stops applying.
           trivyignores: .trivyignore.yaml
 
   # Browser end-to-end suite. Only runs when e2e-relevant files change

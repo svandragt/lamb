@@ -1,38 +1,19 @@
-# Advisories the image scans should not block on, with the date each
-# suppression stops applying. Trivy drops an entry once `expired_at` passes, so
-# the scan fails again and someone has to look — a parked CVE cannot quietly
-# become permanent.
-#
-# Read by both scans via the action's `trivyignores` input:
-#   .github/workflows/ci.yml              (advisory, does not block a PR)
-#   .github/workflows/release-artifacts.yml  (blocks the image push)
-#
-# Trivy only auto-discovers the plain-text `.trivyignore`, never this file, so
-# an entry added here without the `trivyignores` input does nothing.
-#
-# When an entry expires: rebuild the image and re-run the scan without the
-# entry. If it passes, the base image has caught up — delete the lines. If not,
-# push the date out and say what still blocks it.
+# Advisories the image scans must not block on, each with the date its
+# suppression lapses. Trivy reads this file only when a scan names it in
+# `trivyignores`; see AGENTS.md for what to do when an entry expires.
 
 vulnerabilities:
-  # Both are Go modules linked into the FrankenPHP binary that ships in
-  # dunglas/frankenphp:php8.4. Lamb cannot patch them; they clear when
-  # FrankenPHP rebuilds against newer dependencies. Neither is reachable
-  # through .docker/Caddyfile.release, which serves static files and PHP and
-  # turns on no OpenAPI validation, no gRPC and no xDS.
-
-  # ponytail: suppression, not a fix — drop once the base image ships
-  # kin-openapi >= 0.144.0 and grpc >= 1.82.1.
-
   - id: GHSA-r277-6w6q-xmqw
     statement: >-
-      kin-openapi ValidationHandler.Load() fail-open authentication bypass,
-      in frankenphp's kin-openapi v0.140.0. Lamb's Caddyfile enables no
-      OpenAPI validation, so the handler is never constructed.
+      kin-openapi ValidationHandler.Load() fail-open authentication bypass, in
+      frankenphp's kin-openapi v0.140.0. Lamb's Caddyfile enables no OpenAPI
+      validation, so the handler is never constructed. Clears when the base
+      image ships kin-openapi 0.144.0 or newer.
     expired_at: 2026-10-15
 
   - id: GHSA-hrxh-6v49-42gf
     statement: >-
       gRPC-Go xDS RBAC and HTTP/2 vulnerabilities, in frankenphp's grpc
-      v1.81.1. Lamb's Caddyfile enables no gRPC or xDS listeners.
+      v1.81.1. Lamb's Caddyfile enables no gRPC or xDS listeners. Clears when
+      the base image ships grpc 1.82.1 or newer.
     expired_at: 2026-10-15
