@@ -47,7 +47,7 @@ function redirect_login(): array
         // valid marker the next request treats the visitor as anonymous.
         session_regenerate_id(true);
         set_login_marker();
-        redirect_uri('/');
+        redirect_uri(\Lamb\Http\app_path('/'));
     }
     if (!isset($_POST['submit']) || $_POST['submit'] !== SUBMIT_LOGIN) {
         // Show login page (no session started for the anonymous visitor).
@@ -481,11 +481,13 @@ function set_login_marker(): void
  */
 function local_redirect_target(?string $value): string
 {
+    // The rejections fall back to one of the app's own paths, so they take the
+    // base. A value that survives came from the browser and already has one.
     if ($value === null || $value === '' || $value[0] !== '/') {
-        return '/';
+        return \Lamb\Http\app_path('/');
     }
     if (str_starts_with($value, '//') || str_starts_with($value, '/\\')) {
-        return '/';
+        return \Lamb\Http\app_path('/');
     }
 
     return $value;
@@ -518,7 +520,7 @@ function redirect_logout(): void
     if (session_status() === PHP_SESSION_ACTIVE) {
         session_destroy();
     }
-    redirect_uri('/');
+    redirect_uri(\Lamb\Http\app_path('/'));
 }
 
 /**
@@ -544,7 +546,7 @@ function respond_settings(): array
             $default_ini = Config\get_default_ini_text();
             Config\save_ini_text($default_ini);
             $_SESSION['flash'][] = "Settings reset to defaults.";
-            redirect_uri('/settings');
+            redirect_uri(\Lamb\Http\app_path('/settings'));
         }
 
         $submitted_ini = $_POST['ini_text'] ?? '';
@@ -560,7 +562,7 @@ function respond_settings(): array
             foreach (Config\shape_warnings($submitted_ini) as $warning) {
                 $_SESSION['flash'][] = $warning;
             }
-            redirect_uri('/settings');
+            redirect_uri(\Lamb\Http\app_path('/settings'));
         } else {
             $_SESSION['flash'][] = "Invalid INI syntax. Your changes were not saved.";
             if ($validation['error']) {

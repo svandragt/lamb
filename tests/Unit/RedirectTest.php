@@ -64,6 +64,26 @@ class RedirectTest extends TestCase
         $config = $original;
     }
 
+    public function testFindRedirectKeepsTargetsInsideASubdirectoryInstall(): void
+    {
+        // Issue #580: the return value goes straight into a Location: header, so
+        // a bare `/new-post` sends the visitor to the domain root. External
+        // targets are somebody else's URL and must not be touched.
+        global $config;
+        $original = $config;
+        $config['redirections'] = [
+            'old-post'     => '/new-post',
+            'old-slug'     => 'new-slug',
+            'old-external' => 'https://example.com/new',
+        ];
+
+        $this->assertSame('/blog/new-post', find_redirect('old-post', '/blog'));
+        $this->assertSame('/blog/new-slug', find_redirect('old-slug', '/blog'));
+        $this->assertSame('https://example.com/new', find_redirect('old-external', '/blog'));
+
+        $config = $original;
+    }
+
     // find_redirect — DB-based
 
     public function testFindRedirectReturnsUrlFromDatabase(): void

@@ -318,6 +318,16 @@ class ResponsePostsTest extends TestCase
         $this->assertSame('/', safe_referer_path('https://evil.example/phish'));
     }
 
+    public function testSafeRefererPathHomeFallbackStaysInsideASubdirectoryInstall(): void
+    {
+        // Issue #580: every fallback here becomes a Location: header. Without the
+        // base they send the author to the domain root — off the install — after
+        // saving an edit opened directly, or deleting with no Referer.
+        $this->assertSame('/blog/', safe_referer_path(null, '/blog'));
+        $this->assertSame('/blog/', safe_referer_path('', '/blog'));
+        $this->assertSame('/blog/', safe_referer_path('https://evil.example/phish', '/blog'));
+    }
+
     public function testSafeRefererPathKeepsHostlessRelativeReferer(): void
     {
         $this->assertSame('/drafts', safe_referer_path('/drafts'));

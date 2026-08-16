@@ -1,5 +1,6 @@
 <?php
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\page_intro;
 use function Lamb\Theme\page_title;
@@ -16,5 +17,5 @@ $requested = (string) ($data['requested'] ?? '');
 </section>
 
 <?php if ($requested !== '') : ?>
-<p>Why not try <a href="/search/<?= escape(rawurlencode($requested)) ?>">searching for <?= escape($requested) ?></a></p>
+<p>Why not try <a href="<?= escape(app_path('/search/' . rawurlencode($requested))) ?>">searching for <?= escape($requested) ?></a></p>
 <?php endif; ?>

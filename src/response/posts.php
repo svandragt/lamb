@@ -55,7 +55,7 @@ function redirect_created(): void
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
     }
     notify_post_subscribers($bean);
-    redirect_uri('/');
+    redirect_uri(\Lamb\Http\app_path('/'));
 }
 
 /**
@@ -121,21 +121,25 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
  * @param string|null $referer The request Referer header (may be null).
  * @return string A same-origin path (with query), or '/'.
  */
-function safe_referer_path(?string $referer): string
+function safe_referer_path(?string $referer, ?string $base = null): string
 {
+    // Every fallback here ends up in a Location: header, so it takes the
+    // install's base. A path that survives came from the browser and has one.
+    $home = \Lamb\Http\app_path('/', $base);
+
     if ($referer === null || $referer === '') {
-        return '/';
+        return $home;
     }
     $parts = parse_url($referer);
     if ($parts === false) {
-        return '/';
+        return $home;
     }
     if (isset($parts['host']) && $parts['host'] !== parse_url(ROOT_URL, PHP_URL_HOST)) {
-        return '/';
+        return $home;
     }
     $path = $parts['path'] ?? '/';
     if ($path === '') {
-        return '/';
+        return $home;
     }
     if (isset($parts['query']) && $parts['query'] !== '') {
         $path .= '?' . $parts['query'];
@@ -160,7 +164,9 @@ function delete_return_path(?string $referer, string $own_path): string
 {
     $target = safe_referer_path($referer);
     if (explode('?', $target, 2)[0] === $own_path) {
-        return '/';
+        // The home fallback is one of the app's own paths, so it needs the base.
+        // $target is not: it came from the browser and already carries one.
+        return \Lamb\Http\app_path('/');
     }
     return $target;
 }
@@ -175,7 +181,7 @@ function delete_return_path(?string $referer, string $own_path): string
 function redirect_deleted(mixed $args): void
 {
     if (empty($_POST)) {
-        redirect_uri('/');
+        redirect_uri(\Lamb\Http\app_path('/'));
     }
     Security\require_login();
     Security\require_csrf();
@@ -199,7 +205,7 @@ function redirect_deleted(mixed $args): void
 function redirect_restored(mixed $args): void
 {
     if (empty($_POST)) {
-        redirect_uri('/trash');
+        redirect_uri(\Lamb\Http\app_path('/trash'));
     }
     Security\require_login();
     Security\require_csrf();
@@ -209,7 +215,7 @@ function redirect_restored(mixed $args): void
     if ($post->id) {
         restore_post($post);
     }
-    redirect_uri('/trash');
+    redirect_uri(\Lamb\Http\app_path('/trash'));
 }
 
 /**

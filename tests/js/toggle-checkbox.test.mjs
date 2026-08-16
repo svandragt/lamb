@@ -34,6 +34,26 @@ test('saveCheckbox posts id, index and checked state to /checkbox', async () => 
   assert.equal(box.disabled, false)
 })
 
+test('saveCheckbox posts to the install base path on a subdirectory install', async () => {
+  // Issue #580: a bare /checkbox leaves a subdirectory install entirely, so the
+  // POST lands outside the app and the toggle silently reverts. the_scripts()
+  // publishes the base as window.LAMB_BASE.
+  const { window, document, api } = load()
+  window.LAMB_BASE = '/blog'
+  const box = document.querySelector('input')
+
+  let captured
+  window.fetch = (url) => {
+    captured = url
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) })
+  }
+
+  api.saveCheckbox(box)
+  await flush()
+
+  assert.equal(captured, '/blog/checkbox')
+})
+
 test('saveCheckbox reverts the checkbox on an HTTP error', async () => {
   const { window, document, api } = load()
   const box = document.querySelector('input')

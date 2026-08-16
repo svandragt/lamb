@@ -5,6 +5,7 @@ global $template;
 
 use function Lamb\Theme\date_created;
 use function Lamb\Theme\escape;
+use function Lamb\Theme\the_content;
 use function Lamb\Theme\related_posts;
 
 if ($template !== 'status') {
@@ -32,7 +33,7 @@ if (!empty($related_posts['posts'])) :
                         <?php endif; ?>
                         <p><?= date_created($bean) ?>
                         <?php if (!empty($bean->transformed)) : ?>
-                            <?= $bean->transformed ?>
+                            <?= the_content($bean) ?>
                         <?php endif; ?>
                         </p>
                     </li>

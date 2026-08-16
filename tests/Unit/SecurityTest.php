@@ -43,6 +43,16 @@ class SecurityTest extends TestCase
         $this->assertSame('/login?redirect_to=%2Ftag%2Ffoo+bar', get_login_url('/tag/foo bar'));
     }
 
+    public function testLoginUrlStaysInsideASubdirectoryInstall(): void
+    {
+        // Issue #580: a bare `/login` on an install served from /blog points at
+        // the domain root, outside the install, so the visitor never reaches the
+        // login page. The redirect_to value keeps its base — it is the browser's
+        // own path, not one of the app's.
+        $this->assertSame('/blog/login', get_login_url('', '/blog'));
+        $this->assertSame('/blog/login?redirect_to=%2Fblog%2Fdrafts', get_login_url('/blog/drafts', '/blog'));
+    }
+
     // require_csrf
 
     public function testRequireCsrfPassesWhenTokensMatch(): void

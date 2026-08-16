@@ -2,6 +2,7 @@
 
 global $data;
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
@@ -99,7 +100,7 @@ $redirects     = $data['redirects'] ?? [];
             Refer to the <a href="https://svandragt.github.io/lamb/site-configuration" target="_blank">documentation</a> for available keys and examples.
         </p>
 
-        <form method="post" action="/settings" id="settingsform">
+        <form method="post" action="<?= escape(app_path('/settings')) ?>" id="settingsform">
             <label for="ini_text">Configuration (INI format)</label>
             <textarea name="ini_text" id="ini_text" rows="20" style="width: 100%; font-family: monospace;"
             ><?= escape($data['ini_text']) ?></textarea>
@@ -154,7 +155,7 @@ $redirects     = $data['redirects'] ?? [];
             for the format.
         </p>
         <p>
-            <a href="/export" class="button">Download export</a>
+            <a href="<?= escape(app_path('/export')) ?>" class="button">Download export</a>
         </p>
     </section>
 

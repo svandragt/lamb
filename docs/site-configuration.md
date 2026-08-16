@@ -157,6 +157,29 @@ You can also set it outside the settings page with the `LAMB_SITE_URL` environme
 variable, which takes precedence over the INI value — handy when the same
 configuration is deployed to more than one hostname.
 
+### Installing under a subdirectory
+
+To serve Lamb from a subdirectory, include the path in `site_url`:
+
+```ini
+site_url = https://example.com/blog
+```
+
+Lamb reads the path as the install's base. Links, forms, redirects and uploads
+all go through it, and the base comes back off an incoming request before the
+router looks at it. Point your web server's rewrite at the same prefix.
+
+Set `site_url` before you use a subdirectory install. It is the only place Lamb
+learns its own base — without it, an install under a path behaves as though it
+sits at the domain root.
+
+Keep the value simple, because Lamb compares it against the identity in your
+Micropub tokens and both spellings have to match. Use letters, digits, dots,
+dashes, underscores and tildes in the path. Lamb drops a trailing slash, collapses
+repeated slashes, and ignores any query or fragment. It refuses a path holding
+anything else — a space, a percent-encoded character, or a `.` or `..` segment —
+and falls back to behaving as though no site URL is set.
+
 ## Related
 
 * [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.

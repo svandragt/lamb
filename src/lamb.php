@@ -769,11 +769,21 @@ function post_has_slug(string $lookup): string|null
  * Webmention endpoints, which both map externally supplied URLs back to posts
  * (each applies its own host policy before/after calling this).
  *
+ * The path arrives out of a permalink, so on a subdirectory install it carries
+ * the install's base (`/blog/status/12`) while the shapes matched below are the
+ * app's own, which do not. The base comes off first — without that, a Micropub
+ * client cannot update or delete the post it was handed at creation, and every
+ * inbound webmention is rejected as pointing at an unknown target.
+ *
  * @param string $path The URL path (e.g. from parse_url(..., PHP_URL_PATH)).
+ * @param string|null $base The install's base path; defaults to Http\base_path().
+ *                          Passed explicitly by tests, which cannot redefine a constant.
  * @return OODBBean|null The matching post bean, or null when none exists.
  */
-function find_post_by_path(string $path): ?OODBBean
+function find_post_by_path(string $path, ?string $base = null): ?OODBBean
 {
+    $path = \Lamb\Http\strip_base_path($path, $base ?? \Lamb\Http\base_path());
+
     if (preg_match('#^/status/(\d+)$#', $path, $matches)) {
         $bean = R::load('post', (int) $matches[1]);
         return $bean->id ? $bean : null;
@@ -824,25 +834,32 @@ function delete_redirect_for_slug(string $slug): void
  *
  * Checks manual redirections from config first, then automatic redirects stored in the DB.
  *
+ * The destination goes straight into a Location: header, so a target inside this
+ * site takes the install's base — a bare `/new-post` would send the visitor to
+ * the domain root on a subdirectory install. An external target belongs to
+ * somebody else and is returned untouched.
+ *
  * @param string $slug The URL path segment to look up.
+ * @param string|null $base The install's base path; defaults to Http\base_path().
+ *                          Passed explicitly by tests, which cannot redefine a constant.
  * @return string|null The destination URL, or null if no redirect is configured.
  */
-function find_redirect(string $slug): ?string
+function find_redirect(string $slug, ?string $base = null): ?string
 {
     global $config;
 
+    $local = static fn(string $dest): string => str_starts_with($dest, 'http')
+        ? $dest
+        : \Lamb\Http\app_path(str_starts_with($dest, '/') ? $dest : '/' . $dest, $base);
+
     $redirections = $config['redirections'] ?? [];
     if (isset($redirections[$slug])) {
-        $dest = $redirections[$slug];
-        if (str_starts_with($dest, 'http') || str_starts_with($dest, '/')) {
-            return $dest;
-        }
-        return '/' . $dest;
+        return $local((string) $redirections[$slug]);
     }
 
     $redirect = R::findOne('redirect', ' from_slug = ? ', [$slug]);
     if ($redirect !== null) {
-        return $redirect->to_url;
+        return $local((string) $redirect->to_url);
     }
 
     return null;

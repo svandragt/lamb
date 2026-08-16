@@ -60,7 +60,7 @@ function handleFiles(files, textarea) {
     }
     const text = textarea.value
     const cursor = textarea.selectionStart
-    fetch('/upload', {
+    fetch(appPath('/upload'), {
         method: 'POST', body: formData
     })
         // A refusal carries a JSON *string* message, not markdown — hence the

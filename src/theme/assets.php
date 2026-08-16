@@ -112,6 +112,11 @@ function the_scripts(): void
         'logged_in' => ['growing-input.js', 'confirm-delete.js', 'link-edit-buttons.js', 'upload-image.js', 'paste-link.js', 'toggle-checkbox.js'],
         'search' => ['search-highlight.js'],
     ];
+    // Published before the scripts that read it: appPath() in shorthand.js turns
+    // the app's own paths into ones that stay inside a subdirectory install.
+    // json_encode() rather than interpolation — this lands inside a <script>.
+    printf('<script>window.LAMB_BASE=%s</script>', json_encode(\Lamb\Http\base_path()));
+
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
         printf('<script id="%1$s" defer src="%2$s?ver=%1$s"></script>', $id, $href);

@@ -55,6 +55,34 @@ class LambHelpersTest extends TestCase
         $this->assertEquals($bean->id, $found->id);
     }
 
+    public function testFindPostByPathResolvesAPermalinkFromASubdirectoryInstall(): void
+    {
+        // Issue #580. Callers hand this the path out of a permalink, and on a
+        // subdirectory install that carries the base: `/blog/status/12`. The
+        // routes matched here are the app's own, which do not. Left unstripped,
+        // Micropub update and delete cannot find the post they were given at
+        // creation, and every inbound webmention is rejected as an unknown target.
+        $bean = R::dispense('post');
+        $bean->body = 'A status post';
+        R::store($bean);
+
+        $found = find_post_by_path('/blog/status/' . $bean->id, '/blog');
+        $this->assertNotNull($found);
+        $this->assertEquals($bean->id, $found->id);
+    }
+
+    public function testFindPostByPathResolvesASluggedPermalinkFromASubdirectoryInstall(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'A slugged post';
+        $bean->slug = 'my-post';
+        R::store($bean);
+
+        $found = find_post_by_path('/blog/my-post', '/blog');
+        $this->assertNotNull($found);
+        $this->assertEquals($bean->id, $found->id);
+    }
+
     public function testFindPostByPathResolvesSlugPath(): void
     {
         $bean = R::dispense('post');

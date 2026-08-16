@@ -2,6 +2,7 @@
 
 global $data;
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
@@ -17,7 +18,7 @@ if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
     ?>
     <h2><?= $heading ?></h2>
 
-    <form method="post" action="/edit" id="editform">
+    <form method="post" action="<?= escape(app_path('/edit')) ?>" id="editform">
         <label for="contents">Contents</label><textarea placeholder="What's happening?" name="contents" required
                                                         id="contents"
         ><?= $body ?></textarea>

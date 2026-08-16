@@ -3,6 +3,7 @@
 global $data;
 global $template;
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\related_posts;
@@ -44,7 +45,7 @@ $primary_tag = $tags[0] ?? null;
     <ul class="related-list">
         <?php foreach ($shown as $bean) : ?>
             <?php
-            $permalink = '/' . ltrim(!empty($bean->slug) ? $bean->slug : "status/{$bean->id}", '/');
+            $permalink = app_path('/' . ltrim(!empty($bean->slug) ? $bean->slug : "status/{$bean->id}", '/'));
             $title = trim(strip_tags($bean->title ?? ''));
             $excerpt = trim(strip_tags($bean->description ?? ''));
             // If the post has no title, promote a short excerpt to the title slot.
@@ -67,6 +68,6 @@ $primary_tag = $tags[0] ?? null;
         <?php endforeach; ?>
     </ul>
     <?php if ($overflow && $primary_tag !== null) : ?>
-        <p class="related-more"><a href="/tag/<?= escape(strtolower($primary_tag)) ?>">More in #<?= escape($primary_tag) ?> →</a></p>
+        <p class="related-more"><a href="<?= escape(app_path('/tag/' . strtolower($primary_tag))) ?>">More in #<?= escape($primary_tag) ?> →</a></p>
     <?php endif; ?>
 </article>

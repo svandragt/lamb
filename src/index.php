@@ -27,6 +27,11 @@ if ($root_url === null) {
     die('Bad Request');
 }
 define('ROOT_URL', $root_url);
+// The subdirectory an install is served under, '' at a domain root. Every
+// absolute URL is built by concatenating onto ROOT_URL, so those follow the base
+// on their own; this is for the other direction — taking the base back off an
+// incoming REQUEST_URI before the router segments it (Http\strip_base_path()).
+define('ROOT_PATH', (string) (parse_url($root_url, PHP_URL_PATH) ?? ''));
 // Config\ensure_explicit_theme() guarantees a renderable theme value on read,
 // so no runtime fallback/alias is needed here (see #291). The value still
 // comes verbatim from the admin-editable config INI, though, and is used
@@ -84,8 +89,6 @@ if (in_array($method, ['GET', 'HEAD'], true)) {
 $action = strtok($request_uri, '/');
 $lookup = strtok('/');
 $sublookup = strtok('/');
-
-$request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 
 $redirect_path = trim((string) $request_uri, '/');
 if (str_contains($redirect_path, '/')) {

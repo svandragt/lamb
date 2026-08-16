@@ -1,5 +1,6 @@
 <?php
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\redirect_to;
 
@@ -17,7 +18,7 @@ if ($login_error !== '') : ?>
 <?php elseif ($redirect !== '') : ?>
     <div class="flash">⚠️ Please login</div>
 <?php endif; ?>
-<form method="post" action="/login">
+<form method="post" action="<?= escape(app_path('/login')) ?>">
     <p style="text-align: center">
         <label> Password:
             <input type="password" name="password" autofocus/>

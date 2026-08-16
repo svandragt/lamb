@@ -41,6 +41,21 @@ const onLoaded = func => {
 };
 
 /**
+ * Builds a URL for one of the app's own endpoints.
+ *
+ * An install served from a subdirectory answers on /blog/upload, not /upload, so
+ * a bare path would post outside the app entirely. the_scripts() publishes the
+ * install's base as window.LAMB_BASE; it is absent (and empty) at a domain root.
+ *
+ * @param {string} path - A root-relative app path, with its leading slash.
+ * @returns {string} The path with the install's base prefixed.
+ */
+function appPath(path)
+{
+    return (window.LAMB_BASE || '') + path
+}
+
+/**
  * Cancels the default behavior and propagation of an event.
  *
  * @param {Event} ev - The event object to be cancelled.

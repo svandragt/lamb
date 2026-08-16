@@ -29,6 +29,17 @@ Do not derive it from the request — that is exactly what this setting exists t
 avoid. You can also supply it as the `LAMB_SITE_URL` environment variable, which
 takes precedence over the setting.
 
+If your site is served from a subdirectory, include the path:
+
+```ini
+site_url = https://example.com/blog
+```
+
+Your IndieAuth identity is the whole address, path and all, so a host-only value
+here never matches the identity in your token and every request is refused. See
+[Installing under a subdirectory](site-configuration.md#installing-under-a-subdirectory)
+for what a base path may contain.
+
 ### 2. Add `rel="me"` identity links
 
 IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add a `[me]` section to your site configuration at `/settings`:

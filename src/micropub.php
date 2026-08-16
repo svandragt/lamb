@@ -1189,7 +1189,10 @@ function respond_micropub(): void
 
     $request = new ServerRequest(
         $_SERVER['REQUEST_METHOD'] ?? 'GET',
-        ROOT_URL . ($_SERVER['REQUEST_URI'] ?? '/micropub'),
+        // ROOT_URL already carries the install's base path, and REQUEST_URI
+        // carries it again — concatenating both spelled it twice on a
+        // subdirectory install (`https://example.com/blog/blog/micropub`).
+        ROOT_URL . \Lamb\Http\strip_base_path((string) ($_SERVER['REQUEST_URI'] ?? '/micropub'), \Lamb\Http\base_path()),
         $headers,
         $rawBody,
         '1.1',

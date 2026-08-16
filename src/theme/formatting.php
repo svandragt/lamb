@@ -4,6 +4,8 @@
 
 namespace Lamb\Theme;
 
+use RedBeanPHP\OODBBean;
+
 /**
  * Escapes a string for safe HTML5 output using htmlspecialchars.
  *
@@ -55,6 +57,38 @@ function anchor_headings(string $html, int $top): string
         },
         $html
     ) ?? $html;
+}
+
+/**
+ * Renders a post's body HTML for on-site display.
+ *
+ * The one seam every theme puts a post body through, so anything that has to
+ * happen to stored content on its way to the page happens once. Today that is
+ * two things: the heading re-levelling a theme asks for, and prefixing the
+ * install's base path onto root-relative links.
+ *
+ * Post bodies store asset links root-relative (`/assets/…` from asset_url()) so
+ * the content survives a domain change and works from the CLI importer. That
+ * resolves against the domain root, which is outside an install served from a
+ * subdirectory (issue #580) — so the base goes on at render time and what is
+ * stored stays portable. Feeds do their own, absolute, version of this via
+ * Lamb\absolute_urls() with ROOT_URL.
+ *
+ * @param OODBBean    $bean The post being rendered.
+ * @param int|null    $top  The level the body's highest heading should occupy,
+ *                          or null to leave headings alone.
+ * @param string|null $base The install's base path; defaults to Http\base_path().
+ *                          Passed explicitly by tests, which cannot redefine a constant.
+ * @return string The body HTML, ready to echo.
+ */
+function the_content(OODBBean $bean, ?int $top = null, ?string $base = null): string
+{
+    $html = (string) ($bean->transformed ?? '');
+    if ($top !== null) {
+        $html = anchor_headings($html, $top);
+    }
+
+    return \Lamb\absolute_urls($html, $base ?? \Lamb\Http\base_path());
 }
 
 

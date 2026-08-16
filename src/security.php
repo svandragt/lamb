@@ -24,12 +24,17 @@ use    Lamb\Response;
  *
  * If the user is not logged in, a flash message "Please login" is added to the session and the user is redirected to the login page.
  */
-function get_login_url(string $current_uri): string
+function get_login_url(string $current_uri, ?string $base = null): string
 {
+    // app_path(), not a bare '/login': on a subdirectory install the bare path
+    // leaves the install entirely and the visitor never reaches the login page
+    // (issue #580). $current_uri is the browser's own path and already carries
+    // the base, so it is encoded as-is.
+    $login = \Lamb\Http\app_path('/login', $base);
     if (empty($current_uri)) {
-        return '/login';
+        return $login;
     }
-    return '/login?redirect_to=' . urlencode($current_uri);
+    return $login . '?redirect_to=' . urlencode($current_uri);
 }
 
 function require_login(): void

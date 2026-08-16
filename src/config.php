@@ -29,6 +29,8 @@ theme = 2026
 site_title = My Microblog
 
 ;; The canonical URL of your site, e.g. https://example.com (no trailing slash).
+;; Serving from a subdirectory? Include the path: https://example.com/blog — it is
+;; how Lamb learns its own base, and part of the identity your tokens are issued for.
 ;; Set this if you use Micropub: it is how Lamb tells that an IndieAuth token was
 ;; issued for your identity rather than someone else's, so the endpoint refuses
 ;; every token while it is unset. It also pins the absolute URLs in feeds and
@@ -359,8 +361,15 @@ function normalize_config_section(mixed $section): array
  *
  * Read from LAMB_SITE_URL in the environment first (so a deployment can pin it
  * without touching the database), then the `site_url` key in the settings INI.
- * The value is normalised to `scheme://host[:port]` with no trailing slash, and
- * rejected unless it is an absolute http(s) URL with a host.
+ * The value is normalised to `scheme://host[:port][/base-path]` with no trailing
+ * slash, and rejected unless it is an absolute http(s) URL with a host.
+ *
+ * A base path is kept, so an install served under a subdirectory can state its
+ * real identity: the IndieAuth `me` of `https://example.com/blog` is that whole
+ * string, and comparing it against a host-only value refused every Micropub
+ * token (issue #580). See normalize_base_path() for what a path has to look like
+ * to survive — this value feeds a security comparison, so every spelling of a
+ * base must reduce to one form.
  *
  * @param array<string, mixed> $config The loaded configuration.
  * @return string|null The canonical site URL, or null when not configured or unusable.
@@ -382,9 +391,60 @@ function canonical_site_url(array $config): ?string
         return null;
     }
 
+    // parse_url() has already split the query and fragment off, so the path is
+    // all that is left to normalise.
+    $path = normalize_base_path((string) ($parts['path'] ?? ''));
+    if ($path === null) {
+        return null;
+    }
+
     $port = isset($parts['port']) ? ':' . $parts['port'] : '';
 
-    return $scheme . '://' . strtolower($parts['host']) . $port;
+    return $scheme . '://' . strtolower($parts['host']) . $port . $path;
+}
+
+/**
+ * Normalises the base path of a configured site URL, or rejects it.
+ *
+ * Returns '' for a site at the domain root, or '/segment[/segment…]' with no
+ * trailing slash. The accepted charset is deliberately narrow — letters, digits,
+ * dot, dash, underscore, tilde and the separating slashes — and anything else is
+ * refused rather than decoded or escaped. That keeps percent-encoding out of the
+ * comparison entirely, so `%2e%2e` and `..` cannot reach different answers when
+ * neither is allowed through. Dot segments go for the same reason.
+ *
+ * Only the host is case-folded by the caller; a path segment is case-sensitive,
+ * so folding it here would invent an identity the author never configured.
+ *
+ * @param string $path The path portion of the configured URL.
+ * @return string|null The normalised base path, or null when it cannot be used.
+ */
+function normalize_base_path(string $path): ?string
+{
+    $path = trim($path);
+    if ($path === '' || $path === '/') {
+        return '';
+    }
+
+    if (preg_match('#^[A-Za-z0-9._~/-]+$#', $path) !== 1) {
+        return null;
+    }
+
+    $segments = [];
+    foreach (explode('/', $path) as $segment) {
+        // An empty segment is one of the duplicate slashes in `//blog//`;
+        // skipping it is the collapse. A dot segment is a traversal spelling
+        // rather than a directory name.
+        if ($segment === '') {
+            continue;
+        }
+        if ($segment === '.' || $segment === '..') {
+            return null;
+        }
+        $segments[] = $segment;
+    }
+
+    return $segments === [] ? '' : '/' . implode('/', $segments);
 }
 
 /**

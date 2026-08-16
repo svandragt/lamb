@@ -3,19 +3,88 @@
 namespace Lamb\Http;
 
 /**
- * Retrieves the current request URI.
+ * The base path the site is served under, as a routing prefix.
+ *
+ * '' for a site at the domain root, or '/blog' for one installed in a
+ * subdirectory. Taken from ROOT_PATH, which index.php derives from the author's
+ * configured canonical URL; a subpath install that has not configured one has no
+ * trustworthy way to know its own base, so it is treated as living at the root.
+ *
+ * @return string The base path, without a trailing slash.
+ */
+function base_path(): string
+{
+    return defined('ROOT_PATH') ? (string) ROOT_PATH : '';
+}
+
+/**
+ * Turns one of the app's own root-relative paths into one a browser can follow.
+ *
+ * Links, form actions and redirects are written throughout the app as the paths
+ * the router knows — `/login`, `/tag/php`. On a subdirectory install those would
+ * point at the domain root, outside the install entirely, so the base goes back
+ * on here. The inverse of {@see strip_base_path}.
+ *
+ * @param string $path A root-relative app path, with its leading slash.
+ * @param string|null $base The site's base path; defaults to {@see base_path}.
+ *                          Passed explicitly by tests, which cannot redefine a constant.
+ * @return string The path with the site's base prefixed.
+ */
+function app_path(string $path, ?string $base = null): string
+{
+    return ($base ?? base_path()) . $path;
+}
+
+/**
+ * Removes the site's base path from a request path.
+ *
+ * A subdirectory install still receives the full `/blog/tag/php` in REQUEST_URI,
+ * so the base has to come off before anything segments the path — the router
+ * would otherwise read the base as the action.
+ *
+ * Only whole segments match: `/blogger` is not inside `/blog`, and cutting on
+ * the raw string prefix would route it as the action `ger`. A path outside the
+ * base is returned whole, so the normal 404 handles it instead of a route being
+ * invented for it.
+ *
+ * @param string $uri The request path, without its query string.
+ * @param string $base The site's base path, without a trailing slash.
+ * @return string The path relative to the base, with its leading slash.
+ */
+function strip_base_path(string $uri, string $base): string
+{
+    if ($base === '') {
+        return $uri;
+    }
+
+    if ($uri === $base || $uri === $base . '/') {
+        return '/';
+    }
+
+    return str_starts_with($uri, $base . '/') ? substr($uri, strlen($base)) : $uri;
+}
+
+/**
+ * Retrieves the current request URI, relative to the site's base path.
  *
  * This method uses the PHP superglobal variable $_SERVER to retrieve the request URI.
  * The request URI is the string representation of the current URL path.
  * The URI does not include any query parameters that may be present in the URL.
  *
- * @return string|false The current request URI as a string. If the URI is '/',
- *                     the method returns the string '/home'. If the URI cannot be determined,
- *                     the method returns false.
+ * @param string|null $base The site's base path; defaults to {@see base_path}.
+ *                          Passed explicitly by tests, which cannot redefine a constant.
+ * @return string|false The current request URI as a string. If the URI is the site
+ *                     root, the method returns the string '/home'. If the URI cannot
+ *                     be determined, the method returns false.
  */
-function get_request_uri(): string|false
+function get_request_uri(?string $base = null): string|false
 {
     $request_uri = strtok($_SERVER['REQUEST_URI'], '?');
+    if ($request_uri === false) {
+        return false;
+    }
+
+    $request_uri = strip_base_path($request_uri, $base ?? base_path());
     if ($request_uri === '/') {
         return '/home';
     }
@@ -34,13 +103,18 @@ function get_request_uri(): string|false
  * Returns '' when there is no usable path, so callers can drop the UI that
  * depends on it rather than render an empty one.
  *
+ * @param string|null $base The site's base path; defaults to {@see base_path}.
+ *                          Passed explicitly by tests, which cannot redefine a constant.
  * @return string The path, e.g. `tag/php` for `/tag/php?utm=1`.
  */
-function requested_path(): string
+function requested_path(?string $base = null): string
 {
     $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+    if (!is_string($path)) {
+        return '';
+    }
 
-    return is_string($path) ? trim($path, '/') : '';
+    return trim(strip_base_path($path, $base ?? base_path()), '/');
 }
 
 /**
@@ -137,13 +211,17 @@ function request_root_url(array $server): ?string
  * surrounding `header()`/`die()` shell.
  *
  * @param string $location The proposed redirect target.
- * @return string The CR/LF-stripped target, or '/' when empty.
+ * @param string|null $base The site's base path; defaults to {@see base_path}.
+ *                          Passed explicitly by tests, which cannot redefine a constant.
+ * @return string The CR/LF-stripped target, or the site root when empty.
  */
-function sanitize_location(string $location): string
+function sanitize_location(string $location, ?string $base = null): string
 {
     $location = str_replace(["\r", "\n", "\0"], '', $location);
 
-    return $location === '' ? '/' : $location;
+    // The fallback is the app's own root, so it takes the base; a surviving
+    // target was built by a caller that already applied one.
+    return $location === '' ? app_path('/', $base) : $location;
 }
 
 /**

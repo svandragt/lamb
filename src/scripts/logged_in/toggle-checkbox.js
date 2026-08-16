@@ -25,7 +25,7 @@ function saveCheckbox(box) {
     body.append('checked', checked ? '1' : '0')
 
     box.disabled = true
-    fetch('/checkbox', { method: 'POST', body })
+    fetch(appPath('/checkbox'), { method: 'POST', body })
         .then(response => response.ok ? response.json() : Promise.reject(response.status))
         .then(data => {
             if (!data.ok) return Promise.reject('save failed')

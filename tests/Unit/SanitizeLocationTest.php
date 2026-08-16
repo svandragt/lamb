@@ -51,4 +51,14 @@ class SanitizeLocationTest extends TestCase
         // A value that is nothing but CR/LF collapses to empty, then to root.
         $this->assertSame('/', sanitize_location("\r\n"));
     }
+
+    public function testRootFallbackStaysInsideASubdirectoryInstall(): void
+    {
+        // Issue #580: this is the last thing a redirect target passes through, so
+        // the fallback has to land inside the install rather than at the domain
+        // root. A target that survives is already base-carrying and is untouched.
+        $this->assertSame('/blog/', sanitize_location('', '/blog'));
+        $this->assertSame('/blog/', sanitize_location("\r\n", '/blog'));
+        $this->assertSame('/blog/drafts', sanitize_location('/blog/drafts', '/blog'));
+    }
 }

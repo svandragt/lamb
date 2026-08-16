@@ -1,5 +1,6 @@
 <?php
 
+use function Lamb\Http\app_path;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\li_footer_items;
 use function Lamb\Theme\li_menu_items;
@@ -58,13 +59,13 @@ global $template;
     <ul>
         <?php echo li_menu_items(); ?>
         <li class="right">
-            <form action="/search" method="get" class="form-search">
+            <form action="<?= escape(app_path('/search')) ?>" method="get" class="form-search">
                 <label for="s"><span class="screen-reader-text">Search</span></label>
                 <input type="text" name="s" id="s" placeholder="search" value="<?= escape($data['query'] ?? '') ?>" required>
                 <input type="submit" value="↵" aria-label="Search">
             </form>
             <?php if (!isset($_SESSION[SESSION_LOGIN])) : ?>
-                <a href="/login">Login</a>
+                <a href="<?= escape(app_path('/login')) ?>">Login</a>
             <?php endif; ?>
         </li>
     </ul>

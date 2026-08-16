@@ -45,8 +45,8 @@ function action_delete(OODBBean $bean): string
         return '';
     }
 
-    return sprintf('<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
-</form>', $bean->id, $bean->id, csrf_token());
+    return sprintf('<form data-id="%s" class="form-delete" action="%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
+</form>', $bean->id, \Lamb\Http\app_path('/delete/' . $bean->id), csrf_token());
 }
 
 /**
@@ -62,7 +62,7 @@ function action_restore(OODBBean $bean): string
     }
 
     return sprintf(
-        '<form class="form-restore" action="/restore/%s" method="post">'
+        '<form class="form-restore" action="' . \Lamb\Http\app_path('/restore') . '/%s" method="post">'
         . '<input type="submit" value="Restore post"/>'
         . '<input type="hidden" name="csrf" value="%s"/>'
         . '</form>',
@@ -143,8 +143,8 @@ function date_created(OODBBean $bean): string
     }
 
     return sprintf(
-        '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
-        escape(ltrim($slug, '/')),
+        '<a href="%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
+        escape(\Lamb\Http\app_path('/' . ltrim($slug, '/'))),
         escape((string) $bean->created),
         $human_created
     );
@@ -416,8 +416,12 @@ function li_items(array $nav_items): string
     $format = '<li><a href="%s">%s</a></li>';
     $items = [];
     foreach ($nav_items as $label => $url) {
-        if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
+        if (str_starts_with($url, 'http')) {
             $items[] = sprintf($format, escape($url), escape($label));
+        } elseif (str_starts_with($url, '/')) {
+            // A configured root-relative item (`Feed = /feed`) names one of the
+            // app's own paths, so it takes the install's base.
+            $items[] = sprintf($format, escape(\Lamb\Http\app_path($url)), escape($label));
         } else {
             $items[] = sprintf($format, ROOT_URL . '/' . escape($url), escape($label));
         }
@@ -472,7 +476,7 @@ function the_entry_form(): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) : ?>
         <section class="entry-form">
-            <form id="entry" method="post" action="/" enctype="multipart/form-data">
+            <form id="entry" method="post" action="<?= escape(\Lamb\Http\app_path('/')) ?>" enctype="multipart/form-data">
                 <label>
                     <textarea placeholder="What's happening?" name="contents" required><?= preload_text() ?></textarea>
                 </label>
@@ -500,16 +504,17 @@ function admin_toolbar_html(): string
     $scheduledLabel = 'Scheduled' . ($scheduled > 0 ? " ($scheduled)" : '');
     $trashLabel     = 'Trash'     . ($trash  > 0 ? " ($trash)"  : '');
 
-    $scheduledLink = $scheduled > 0
-        ? '<a href="/scheduled">' . escape($scheduledLabel) . '</a>'
-        : '';
+    $link = static fn(string $path, string $label): string
+        => '<a href="' . escape(\Lamb\Http\app_path($path)) . '">' . escape($label) . '</a>';
+
+    $scheduledLink = $scheduled > 0 ? $link('/scheduled', $scheduledLabel) : '';
 
     return '<div id="admin-toolbar">'
-        . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
+        . $link('/drafts', $draftsLabel)
         . $scheduledLink
-        . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
-        . '<a href="/settings">Settings</a>'
-        . '<a href="/logout">Logout</a>'
+        . $link('/trash', $trashLabel)
+        . $link('/settings', 'Settings')
+        . $link('/logout', 'Logout')
         . '</div>'
         . '<style>'
         . '#admin-toolbar{'
