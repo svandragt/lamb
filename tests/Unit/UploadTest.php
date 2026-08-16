@@ -4,10 +4,13 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\asset_dimensions;
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\convert_to_webp_from_bytes;
 use function Lamb\Response\get_upload_dir;
+use function Lamb\Response\image_decoder_for_type;
+use function Lamb\Response\max_upload_pixels;
 use function Lamb\Response\normalize_uploaded_files;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
@@ -35,6 +38,7 @@ class UploadTest extends TestCase
     {
         // Clean up any directories created under tempRootDir
         $this->removeDirectory($this->tempRootDir);
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
     }
 
     private function removeDirectory(string $path): void
@@ -342,6 +346,47 @@ class UploadTest extends TestCase
         $this->assertFileDoesNotExist($dest);
     }
 
+    // image_decoder_for_type — this dispatch table is what lets convert_to_webp()
+    // decode straight from $src_path (GD's own file-reading decoders) instead of
+    // file_get_contents() + imagecreatefromstring(), so the encoded file is never
+    // also held as a second full PHP string alongside GD's decoded pixel buffer.
+    // A wrong or missing mapping here would silently reintroduce that double-buffering
+    // for the affected format.
+
+    public function testImageDecoderForTypeMapsPng(): void
+    {
+        $decoder = image_decoder_for_type(IMAGETYPE_PNG);
+        $src = $this->makePng(10, 10);
+
+        $this->assertNotNull($decoder);
+        $this->assertInstanceOf(\GdImage::class, $decoder($src));
+    }
+
+    public function testImageDecoderForTypeMapsJpeg(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_JPEG));
+    }
+
+    public function testImageDecoderForTypeMapsGif(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_GIF));
+    }
+
+    public function testImageDecoderForTypeMapsWebp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_WEBP));
+    }
+
+    public function testImageDecoderForTypeMapsBmp(): void
+    {
+        $this->assertNotNull(image_decoder_for_type(IMAGETYPE_BMP));
+    }
+
+    public function testImageDecoderForTypeReturnsNullForUnmappedType(): void
+    {
+        $this->assertNull(image_decoder_for_type(IMAGETYPE_TIFF_II));
+    }
+
     public function testConvertRejectsDeclaredDimensionsOverPixelCap(): void
     {
         // Decompression-bomb guard: a PNG whose IHDR declares an enormous
@@ -366,6 +411,51 @@ class UploadTest extends TestCase
 
         $this->assertTrue(convert_to_webp_from_bytes((string) file_get_contents($src), $dest));
         $this->assertFileExists($dest);
+    }
+
+    // max_upload_pixels — LAMB_MAX_UPLOAD_PIXELS lets a self-hoster lower the
+    // pixel cap if conversions are getting OOM-killed on a memory-constrained host.
+
+    public function testMaxUploadPixelsDefaultsWhenEnvUnset(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsUsesValidEnvOverride(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=8000000');
+
+        $this->assertSame(8_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnNonNumericEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=lots');
+
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testMaxUploadPixelsFallsBackOnZeroOrNegativeEnv(): void
+    {
+        putenv('LAMB_MAX_UPLOAD_PIXELS=0');
+        $this->assertSame(40_000_000, max_upload_pixels());
+
+        putenv('LAMB_MAX_UPLOAD_PIXELS=-5');
+        $this->assertSame(40_000_000, max_upload_pixels());
+    }
+
+    public function testConvertRejectsUnderLoweredEnvPixelCap(): void
+    {
+        // A 40x30 image (1,200px) is well within the 40MP default but exceeds
+        // a self-hoster's lowered cap.
+        putenv('LAMB_MAX_UPLOAD_PIXELS=1000');
+        $src = $this->makePng(40, 30);
+        $dest = $this->tempRootDir . '/out.webp';
+
+        $this->assertFalse(convert_to_webp($src, $dest));
+        $this->assertFileDoesNotExist($dest);
     }
 
     /**
@@ -469,6 +559,80 @@ class UploadTest extends TestCase
 
         $this->assertNull($result);
         $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+    }
+
+    // asset_dimensions — pixel size of a locally stored asset, for intrinsic
+    // width/height attributes on rendered <img> tags.
+
+    public function testAssetDimensionsReturnsStoredImageSize(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'dims_' . uniqid() . '.png';
+        $this->writePng("$dir/$filename", 640, 480);
+
+        $this->assertSame([640, 480], asset_dimensions(asset_url($sub_path, $filename)));
+
+        unlink("$dir/$filename");
+    }
+
+    public function testAssetDimensionsIgnoresAQueryString(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'dimsq_' . uniqid() . '.png';
+        $this->writePng("$dir/$filename", 12, 34);
+
+        $url = asset_url($sub_path, $filename) . '?ver=abc123';
+        $this->assertSame([12, 34], asset_dimensions($url));
+
+        unlink("$dir/$filename");
+    }
+
+    public function testAssetDimensionsReturnsNullForAMissingFile(): void
+    {
+        $this->assertNull(asset_dimensions(asset_url(upload_subpath(), 'nope_' . uniqid() . '.webp')));
+    }
+
+    public function testAssetDimensionsReturnsNullForARemoteUrl(): void
+    {
+        // A remote URL whose path happens to start with /assets/ must not be
+        // resolved against the local asset tree.
+        $this->assertNull(asset_dimensions('https://example.com/assets/2026/07/photo.webp'));
+        $this->assertNull(asset_dimensions('//example.com/assets/2026/07/photo.webp'));
+    }
+
+    public function testAssetDimensionsReturnsNullForANonAssetPath(): void
+    {
+        $this->assertNull(asset_dimensions('/themes/base/styles/styles.css'));
+        $this->assertNull(asset_dimensions('photo.png'));
+    }
+
+    public function testAssetDimensionsReturnsNullForPathTraversal(): void
+    {
+        // The URL comes from post Markdown, which the author types by hand.
+        $this->assertNull(asset_dimensions('/assets/../../../etc/passwd'));
+        $this->assertNull(asset_dimensions('/assets/%2e%2e/%2e%2e/etc/passwd'));
+    }
+
+    public function testAssetDimensionsReturnsNullForANonImageFile(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'clip_' . uniqid() . '.mp4';
+        file_put_contents("$dir/$filename", 'not really a video');
+
+        $this->assertNull(asset_dimensions(asset_url($sub_path, $filename)));
+
+        unlink("$dir/$filename");
+    }
+
+    private function writePng(string $path, int $w, int $h): void
+    {
+        $im = imagecreatetruecolor($w, $h);
+        imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
+        imagepng($im, $path);
+        imagedestroy($im);
     }
 
     private function makePng(int $w, int $h): string

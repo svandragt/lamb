@@ -1,21 +1,25 @@
 #!/bin/bash
 # Runs once as root against the base image (cwd /).
 # Installs lamb's OS-level toolchain, mirroring devbox.json packages.
-# Ubuntu 24.04 ships PHP 8.3 via apt (lamb requires >=8.2).
+# Ubuntu 24.04 ships PHP 8.3 via apt (lamb requires >=8.4), so add the
+# ondrej/php PPA to get php8.4-*.
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
+apt-get install -y --no-install-recommends software-properties-common
+add-apt-repository -y ppa:ondrej/php
+apt-get update
 apt-get install -y --no-install-recommends \
-  php8.3-cli \
-  php8.3-sqlite3 \
-  php8.3-mysql \
-  php8.3-xml \
-  php8.3-mbstring \
-  php8.3-curl \
-  php8.3-zip \
-  php8.3-gd \
-  php8.3-xdebug \
+  php8.4-cli \
+  php8.4-sqlite3 \
+  php8.4-mysql \
+  php8.4-xml \
+  php8.4-mbstring \
+  php8.4-curl \
+  php8.4-zip \
+  php8.4-gd \
+  php8.4-xdebug \
   composer \
   ruby-full \
   openssl \

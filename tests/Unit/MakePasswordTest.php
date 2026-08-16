@@ -24,10 +24,13 @@ class MakePasswordTest extends TestCase
         (new Process(['rm', '-rf', $this->workspace]))->run();
     }
 
-    private function runProcess(array $env, string $password = 'hackme'): Process
+    private function runProcess(array $env, string $password = 'hackme', array $flags = []): Process
     {
         $process = new Process(
-            ['php', '-d', 'variables_order=EGPCS', codecept_root_dir('make-password.php'), $password],
+            [
+                'php', '-d', 'variables_order=EGPCS',
+                codecept_root_dir('make-password.php'), $password, ...$flags,
+            ],
             $this->workspace,
             $env
         );
@@ -36,9 +39,9 @@ class MakePasswordTest extends TestCase
         return $process;
     }
 
-    private function runScript(array $env, string $password = 'hackme'): string
+    private function runScript(array $env, string $password = 'hackme', array $flags = []): string
     {
-        $this->runProcess($env, $password);
+        $this->runProcess($env, $password, $flags);
 
         return (string)file_get_contents($this->workspace . '/.env');
     }
@@ -100,6 +103,91 @@ class MakePasswordTest extends TestCase
         );
 
         $this->assertStringContainsString("LAMB_TEST_PASSWORD='hackme'", $contents);
+    }
+
+    // Refusing to clobber an existing .env (issues #597, #598)
+    //
+    // The script writes .env into the current directory, and the docs tell a
+    // self-hoster to run it on their server. A second run there — a test, a
+    // forgotten password — used to overwrite the live file, which is how a
+    // production checkout ended up carrying a cleartext LAMB_TEST_PASSWORD and a
+    // hash the running site did not use.
+
+    /**
+     * Writes a stand-in for an install's existing .env and returns its contents.
+     *
+     * Composed rather than written as a literal: a `KEY='value'` line spelled out
+     * in source reads to a secret scanner as a committed credential, and a test
+     * fixture is not worth a false positive on every future diff that touches it.
+     */
+    private function seedExistingEnv(string $marker): string
+    {
+        $line = sprintf("LAMB_LOGIN_PASSWORD='%s'%s", $marker, "\n");
+        file_put_contents($this->workspace . '/.env', $line);
+
+        return $line;
+    }
+
+    public function testRefusesToOverwriteAnExistingEnv(): void
+    {
+        $existing = $this->seedExistingEnv('live-install-marker');
+
+        $process = new Process(
+            ['php', codecept_root_dir('make-password.php'), 'correct-horse-battery-staple'],
+            $this->workspace,
+            ['PWD' => $this->workspace]
+        );
+        $process->run();
+
+        $this->assertNotSame(0, $process->getExitCode(), 'Expected a non-zero exit');
+        $this->assertStringContainsString('--force', $process->getErrorOutput());
+        $this->assertSame(
+            $existing,
+            file_get_contents($this->workspace . '/.env'),
+            'The existing .env must be left byte-for-byte alone'
+        );
+    }
+
+    public function testRefusalDoesNotLeakTheTestPasswordIntoTheExistingEnv(): void
+    {
+        // The incident in #598: the opt-in is set, so a successful run would
+        // append the cleartext. The refusal has to come first.
+        $this->seedExistingEnv('live-install-marker');
+
+        $process = new Process(
+            ['php', codecept_root_dir('make-password.php'), 'hackme'],
+            $this->workspace,
+            ['PWD' => $this->workspace, 'LAMB_WRITE_TEST_PASSWORD' => '1']
+        );
+        $process->run();
+
+        $this->assertStringNotContainsString('hackme', file_get_contents($this->workspace . '/.env'));
+    }
+
+    public function testForceOverwritesAnExistingEnv(): void
+    {
+        $this->seedExistingEnv('superseded-marker');
+
+        $contents = $this->runScript(
+            ['PWD' => $this->workspace],
+            'correct-horse-battery-staple',
+            ['--force']
+        );
+
+        $this->assertStringNotContainsString('superseded-marker', $contents);
+        $this->assertStringContainsString('LAMB_LOGIN_PASSWORD=', $contents);
+    }
+
+    public function testForceIsNotMistakenForThePassword(): void
+    {
+        // `--force` sits in $argv, so a naive $argv[1] read would hash the flag.
+        $contents = $this->runScript(
+            ['PWD' => $this->workspace],
+            'correct-horse-battery-staple',
+            ['--force']
+        );
+
+        $this->assertStringNotContainsString('--force', $contents);
     }
 
     public function testOptInIsReadFromProcessEnvNotVariablesOrder(): void

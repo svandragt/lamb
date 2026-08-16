@@ -24,6 +24,26 @@ function get_request_uri(): string|false
 }
 
 /**
+ * The current request's path, without its leading or trailing slashes — the
+ * request as the visitor typed it, for showing back to them.
+ *
+ * Not {@see get_request_uri}, which is the router's view: it keeps the leading
+ * slash and rewrites `/` to `/home`, so a 404 at the site root would suggest
+ * searching for "home".
+ *
+ * Returns '' when there is no usable path, so callers can drop the UI that
+ * depends on it rather than render an empty one.
+ *
+ * @return string The path, e.g. `tag/php` for `/tag/php?utm=1`.
+ */
+function requested_path(): string
+{
+    $path = parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+
+    return is_string($path) ? trim($path, '/') : '';
+}
+
+/**
  * Splits a trailing `/page/<N>` pagination segment off a request path.
  *
  * Clean pagination URLs append `/page/N` to whatever list path they paginate
@@ -251,32 +271,26 @@ function resolve_host_ips(string $host): array
 }
 
 /**
- * Whether a URL is safe to fetch: an absolute http(s) URL whose host resolves
- * only to public, routable addresses.
+ * Resolve a host to the single public IP a connection should be pinned to,
+ * or false when it has no safe address.
  *
- * This closes an SSRF hole in {@see is_valid_http_url}, which only checks
- * that a URL is well-formed http(s) — it accepts `http://127.0.0.1/`,
- * `http://169.254.169.254/`, `http://10.0.0.1/`, etc. Anywhere a URL is
- * attacker-influenced and this server will make a request to it on the
- * attacker's behalf (webmention source verification, discovered webmention
- * endpoints, feed fetches), the resolved destination — not just the URL's
- * syntax — must be checked, since it's the destination that reaches internal
- * services. Must be re-checked after every redirect hop for the same reason.
+ * A host is only accepted when *every* address it resolves to is public —
+ * a DNS-rebinding host that answers with a mix of public and private
+ * addresses is rejected outright, since accepting it would mean the caller
+ * picked one of possibly-several answers without knowing which one a second,
+ * independent resolution (the TOCTOU this guards against) might return
+ * instead. When accepted, the first resolved address is returned so the
+ * caller can pin its connection to the exact address that was validated,
+ * rather than trusting whatever a later, separate DNS lookup returns.
  *
- * @param string        $url
+ * @param string        $host
  * @param callable|null $resolver fn(string $host): string[] — defaults to {@see resolve_host_ips}.
- * @return bool
+ * @return string|false
  */
-function is_public_http_url(string $url, ?callable $resolver = null): bool
+function resolve_validated_ip(string $host, ?callable $resolver = null): string|false
 {
-    if (!is_valid_http_url($url)) {
-        return false;
-    }
-
-    $host = (string) parse_url($url, PHP_URL_HOST);
-
     if (filter_var($host, FILTER_VALIDATE_IP) !== false) {
-        return !is_private_ip($host);
+        return is_private_ip($host) ? false : $host;
     }
 
     $resolver ??= __NAMESPACE__ . '\\resolve_host_ips';
@@ -291,7 +305,41 @@ function is_public_http_url(string $url, ?callable $resolver = null): bool
         }
     }
 
-    return true;
+    return $ips[0];
+}
+
+/**
+ * Whether a URL is safe to fetch: an absolute http(s) URL whose host resolves
+ * only to public, routable addresses.
+ *
+ * This closes an SSRF hole in {@see is_valid_http_url}, which only checks
+ * that a URL is well-formed http(s) — it accepts `http://127.0.0.1/`,
+ * `http://169.254.169.254/`, `http://10.0.0.1/`, etc. Anywhere a URL is
+ * attacker-influenced and this server will make a request to it on the
+ * attacker's behalf (webmention source verification, discovered webmention
+ * endpoints, feed fetches), the resolved destination — not just the URL's
+ * syntax — must be checked, since it's the destination that reaches internal
+ * services. Must be re-checked after every redirect hop for the same reason.
+ *
+ * This only answers "is it safe" — it does not pin a connection to the
+ * address it checked, so a second, independent resolution (as `file_get_contents()`
+ * or curl would perform) can still return a different, private address. See
+ * {@see resolve_validated_ip}, which returns the address to connect to, and
+ * {@see fetch_guarded}, which pins the connection to it.
+ *
+ * @param string        $url
+ * @param callable|null $resolver fn(string $host): string[] — defaults to {@see resolve_host_ips}.
+ * @return bool
+ */
+function is_public_http_url(string $url, ?callable $resolver = null): bool
+{
+    if (!is_valid_http_url($url)) {
+        return false;
+    }
+
+    $host = (string) parse_url($url, PHP_URL_HOST);
+
+    return resolve_validated_ip($host, $resolver) !== false;
 }
 
 /**
@@ -341,12 +389,117 @@ function post_form(string $url, array $fields, int $timeout, string $user_agent)
 }
 
 /**
+ * Perform a single HTTP request pinned to a specific IP via curl, so the
+ * connection reaches the exact address {@see resolve_validated_ip} validated
+ * instead of letting the transport re-resolve the host itself (the
+ * DNS-rebinding TOCTOU {@see fetch_guarded} closes).
+ *
+ * `CURLOPT_RESOLVE` is used rather than rewriting the URL to the IP: it
+ * makes curl connect to the given address for the given host:port while
+ * still sending the original hostname in the `Host:` header, SNI, and
+ * certificate verification — a plain URL rewrite would break all three.
+ *
+ * Response headers/status are collected via `CURLOPT_HEADERFUNCTION` (curl
+ * does not populate `$http_response_header` the way streams do), and
+ * `max_bytes` is enforced via `CURLOPT_WRITEFUNCTION` aborting the transfer
+ * once the cap is exceeded, so an oversized body is never fully downloaded.
+ *
+ * @param string               $url
+ * @param array<string, mixed> $opts Same keys as {@see fetch}.
+ * @param array{host: string, ip: string} $pin
+ * @return array{status:int, headers:string[], body:string}|null
+ *               Null on transport failure or when the body exceeds `max_bytes`.
+ */
+function fetch_pinned(string $url, array $opts, array $pin): ?array
+{
+    if ($url === '') {
+        return null;
+    }
+
+    $ch = curl_init();
+    if ($ch === false) {
+        return null;
+    }
+
+    $port = parse_url($url, PHP_URL_PORT);
+    if ($port === null) {
+        $port = strtolower((string) parse_url($url, PHP_URL_SCHEME)) === 'https' ? 443 : 80;
+    }
+
+    $headers = $opts['headers'] ?? [];
+    $hasUserAgent = false;
+    foreach ($headers as $line) {
+        if (stripos((string) $line, 'user-agent:') === 0) {
+            $hasUserAgent = true;
+            break;
+        }
+    }
+    if (!$hasUserAgent) {
+        $headers[] = 'User-Agent: ' . DEFAULT_USER_AGENT;
+    }
+
+    $max_bytes = isset($opts['max_bytes']) ? max(0, (int) $opts['max_bytes']) : null;
+    $body = '';
+    $truncated = false;
+    $responseHeaders = [];
+
+    $method = $opts['method'] ?? 'GET';
+    if (!is_string($method) || $method === '') {
+        $method = 'GET';
+    }
+
+    $options = [
+        CURLOPT_URL => $url,
+        CURLOPT_RESOLVE => ["{$pin['host']}:$port:{$pin['ip']}"],
+        CURLOPT_CUSTOMREQUEST => $method,
+        CURLOPT_HTTPHEADER => $headers,
+        CURLOPT_FOLLOWLOCATION => false,
+        CURLOPT_HEADERFUNCTION => function ($ch, string $line) use (&$responseHeaders): int {
+            $trimmed = rtrim($line, "\r\n");
+            if ($trimmed !== '') {
+                $responseHeaders[] = $trimmed;
+            }
+            return strlen($line);
+        },
+        CURLOPT_WRITEFUNCTION => function ($ch, string $chunk) use (&$body, &$truncated, $max_bytes): int {
+            $body .= $chunk;
+            if ($max_bytes !== null && strlen($body) > $max_bytes) {
+                $truncated = true;
+                return 0;
+            }
+            return strlen($chunk);
+        },
+    ];
+    if (array_key_exists('timeout', $opts)) {
+        $options[CURLOPT_TIMEOUT] = (int) $opts['timeout'];
+    }
+    if (array_key_exists('content', $opts)) {
+        $options[CURLOPT_POSTFIELDS] = $opts['content'];
+    }
+
+    curl_setopt_array($ch, $options);
+    $ok = curl_exec($ch);
+    $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+    curl_close($ch);
+
+    if ($ok === false || $truncated) {
+        return null;
+    }
+
+    return ['status' => $status, 'headers' => $responseHeaders, 'body' => $body];
+}
+
+/**
  * Perform a single HTTP request via the streams wrapper.
  *
  * This is the shared low-level fetch used by webmention discovery/verification
  * and Micropub token introspection. It owns stream-context construction so the
  * timeout / redirect / ignore_errors / User-Agent conventions live in one
  * place. See {@see build_http_context_options} for the recognised `$opts`.
+ *
+ * Pass `pin => ['host' => string, 'ip' => string]` to route the request
+ * through {@see fetch_pinned} instead — see its docblock for why. Every
+ * other caller (`post_form()`, Micropub's `introspectToken`) is unaffected.
  *
  * @param string               $url
  * @param array<string, mixed> $opts
@@ -355,6 +508,10 @@ function post_form(string $url, array $fields, int $timeout, string $user_agent)
  */
 function fetch(string $url, array $opts = []): ?array
 {
+    if (isset($opts['pin'])) {
+        return fetch_pinned($url, $opts, $opts['pin']);
+    }
+
     $context = stream_context_create(['http' => build_http_context_options($opts)]);
 
     $max_bytes = isset($opts['max_bytes']) ? max(0, (int) $opts['max_bytes']) : null;
@@ -427,8 +584,9 @@ function resolve_redirect_location(string $base, string $location): string
 
 /**
  * Fetch a URL like {@see fetch}, but only from public, non-internal addresses
- * (see {@see is_public_http_url}), re-validating the destination on every
- * redirect hop instead of trusting PHP's automatic `follow_location`.
+ * (see {@see resolve_validated_ip}), re-resolving and pinning the connection
+ * to the validated address on every redirect hop instead of trusting PHP's
+ * automatic `follow_location`.
  *
  * A remote server that responds fine on the first request but redirects to
  * a loopback/private address is exactly the SSRF bypass this closes: without
@@ -438,23 +596,44 @@ function resolve_redirect_location(string $base, string $location): string
  * attacker's behalf (webmention source verification, discovered webmention
  * endpoints, feed sources).
  *
+ * Resolving and then fetching are two separate operations, so a naive
+ * "check the URL, then fetch the URL" would let the transport's own,
+ * independent DNS lookup return a different (private) address than the one
+ * just validated — a DNS-rebinding TOCTOU. Each hop resolves the host once
+ * via {@see resolve_validated_ip} and passes that exact address to
+ * {@see fetch} as `pin`, so the connection cannot land anywhere except the
+ * address that was checked.
+ *
  * @param string               $url
  * @param array<string, mixed> $opts         Same as {@see fetch}; `follow_location`/`max_redirects` are ignored.
  * @param int                  $max_redirects
- * @param callable|null        $resolver     Passed through to {@see is_public_http_url}.
+ * @param callable|null        $resolver     Passed through to {@see resolve_validated_ip}.
+ * @param callable|null        $fetcher      fn(string $url, array $opts): array|null — defaults to {@see fetch}. Overridable for testing.
  * @return array{status:int, headers:string[], body:string}|null Null when the URL (or any redirect hop) is unsafe or unreachable.
  */
-function fetch_guarded(string $url, array $opts = [], int $max_redirects = 5, ?callable $resolver = null): ?array
-{
+function fetch_guarded(
+    string $url,
+    array $opts = [],
+    int $max_redirects = 5,
+    ?callable $resolver = null,
+    ?callable $fetcher = null
+): ?array {
     $opts['follow_location'] = 0;
     $opts['max_redirects'] = null;
+    $fetcher ??= __NAMESPACE__ . '\\fetch';
 
     for ($hop = 0; $hop <= $max_redirects; $hop++) {
-        if (!is_public_http_url($url, $resolver)) {
+        if (!is_valid_http_url($url)) {
             return null;
         }
 
-        $result = fetch($url, $opts);
+        $host = (string) parse_url($url, PHP_URL_HOST);
+        $ip = resolve_validated_ip($host, $resolver);
+        if ($ip === false) {
+            return null;
+        }
+
+        $result = $fetcher($url, $opts + ['pin' => ['host' => $host, 'ip' => $ip]]);
         if ($result === null) {
             return null;
         }

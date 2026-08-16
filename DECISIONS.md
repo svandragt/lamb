@@ -6,6 +6,68 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-07-26 — Export format is front-matter Markdown plus a JSON manifest
+
+**Status:** Accepted
+**Context:** Issue #440 asked for an own-your-data export and left the format open: WXR, JSON, or a Markdown bundle. The original objection to an export at all — "SQLite is already browsable, and Lamb has no lock-in" — had weakened: Lamb had gained two importers (WordPress, Known) and still no way out, and the only backup path was copying the binary `data/lamb.db` and hoping the RedBean schema still matched on restore.
+
+A "convert everything to a Lamb-specific JSON first, then into the system" intermediate representation was considered. The code turned out to already have an answer: neither importer builds a JSON IR. Both converge on `Import\build_post_body()`, which emits Markdown with YAML front matter — precisely what `Post\parse_matter()` reads back, and precisely what the `post.body` column stores.
+
+**Decision:** The export is a zip of `posts/YYYY/MM/<slug>.md` (each post's stored body, byte-for-byte), `assets/YYYY/MM/…` (only files the posts reference), and a `manifest.json`. Post bodies are written verbatim rather than re-serialised, so the export cannot drift from what an import produces. The Markdown files carry only what `parse_matter()` understands; everything Lamb-internal (id, timestamps, draft/deleted state, feed provenance) lives in the manifest, and the manifest's field list is an explicit allowlist so preview tokens — credentials for unpublished posts — can never travel with an archive. Drafts and trashed posts are exported and flagged.
+
+WXR was rejected: it is WordPress's schema, has no clean home for Lamb's draft/deleted/feed state, and the Known importer had already shown that real-world "WXR" is a partial veneer, so emitting it means choosing which dialect to be wrong in. Conversion to WXR/Hugo/Jekyll belongs in a separate converter that consumes this format. A second flat-JSON export variant was also rejected for now: a programmatic consumer reads `manifest.json` for metadata and the `.md` files for content, and two formats would mean two things to keep in sync.
+
+`ext-zip` is checked at runtime rather than added to `composer.json` require, so an existing install upgrading into this feature cannot fail `composer install` over an extension it never needed.
+
+**Consequences:** The format both importers already emit is now documented (`docs/export.md`) and versioned (`lamb-export/1`) rather than being an internal detail. A future lamb→lamb importer — the actually-missing piece for backup/restore — has a specified input to read. Additive manifest fields stay within version 1; consumers must ignore unknown fields.
+
+---
+
+## 2026-07-29 — Imported posts are your own content, not feed items
+
+**Status:** Accepted
+**Context:** The WordPress and Known importers stamped every migrated post with `feed_name = 'wordpress'`/`'known'` and a `feeditem_uuid`, borrowing the feed-ingest columns to get re-run dedup for free. Neither importer sets `source_url`, so `Theme\link_source()` took its plain-text branch and every migrated post publicly read "Via wordpress" / "Via known". Worse, `Webmention\enqueue_for_post()` and `WebSub\ping_for_post()` both bail on a non-empty `feed_name`, and the WebSub ping query excludes those rows — so a migrated post could never send a webmention or a WebSub ping, not even when edited years later. `lock_if_feed_sourced()` would also feed-lock them on first edit: exactly the trap the lamb-export importer had already refused to walk into.
+
+**Decision:** Both importers now write their dedup key to `import_uuid` — the column the lamb-export importer added — and set no feed identity at all. The `'wordpress-'`/`'known-'` prefixes stay, so the three importers keep separate dedup namespaces. Suppressing outbound notifications during an import run is still correct, and still happens the same way: `import_item()` stops at `finalize_and_store_post()`, which never calls `notify_post_subscribers()`. What is no longer true is that the suppression is permanent.
+
+With all three importers supplying their own lookup, `run_import()`'s `$find_existing` parameter became required and its `feeditem_uuid` fallback was deleted — one dedup concept instead of two.
+
+Installs that already ran an import are migrated on boot by `Bootstrap\backfill_imported_post_identity()`. It only touches rows with `source_url IS NULL`, because a user may legitimately subscribe to a feed literally named `wordpress` or `known`: feed ingestion always records the item permalink in `source_url` (`src/post.php`), the importers never did. `bootstrap_db()` runs before `Config\load()`, so the configured feed names cannot be consulted there — the `source_url` guard is the only discriminator available, and mangling someone's real feed posts would be far worse than leaving a cosmetic attribution line in place.
+
+**Consequences:** Migrated posts render without attribution and participate in webmentions and WebSub like any other post. The backfill is idempotent and skips a row whose uuid another post already claims, so it is safe to run on every boot, matching the existing `UPDATE post SET version = 1 WHERE version IS NULL` precedent.
+
+---
+
+## 2026-07-29 — Lamb export import identity via a separate `import_uuid` column
+
+**Status:** Accepted
+
+**Context:** Issue #554 asked for a Lamb-to-Lamb importer that restores a `/export` archive back into the database, idempotently. The two existing importers, for WordPress and Known, dedupe re-runs through `feeditem_uuid`, and reusing that column for restored posts was the obvious first idea — one less column.
+
+We rejected it. `lock_if_feed_sourced()` (`src/response/posts.php:329`) sets `feed_locked` on any post with a non-empty `feeditem_uuid` when you edit it, to stop you hand-editing content a feed will overwrite on the next cron run. A restored local post isn't feed-sourced, and nothing will overwrite it, so giving it a `feeditem_uuid` for free dedupe would also silently feed-lock it. That changes edit behaviour for a post that never subscribed to anything.
+
+**Decision:** Add a dedicated `import_uuid` column through `Bootstrap\ensure_post_columns()` in `src/bootstrap.php`, computed as `md5('lamb-' . $origin . '#' . $source_id)`. `$origin` is the exporting site's URL, taken from the manifest's `site.url` or from `--site-url` when given, rather than `ROOT_URL`. `ROOT_URL` is host-derived, so the same install reached on two hostnames would otherwise mint two origins for one site's posts.
+
+**Consequences:** Restored posts carry an empty `feeditem_uuid` and a populated `import_uuid`, so you can edit them without tripping feed-lock. `run_import()` in `src/import.php` gained an optional `$find_existing` callable, so its shared counter and summary machinery can dedupe on either column without duplicating the loop. (Superseded above: the parameter is now required and the `feeditem_uuid` fallback is gone.)
+
+---
+
+## 2026-08-03 — Private pages and preview links carry their own noindex hint
+
+**Status:** Accepted
+
+**Context:** `robots.txt` was the only thing keeping unlisted pages out of search indexes, and it has two gaps. It disallows by *path*, so it cannot describe a preview link — an ordinary permalink plus `?preview=<token>` (`src/lamb.php: preview_token_valid()`). And it is only consulted by crawlers that fetch it first: a preview link is meant to be handed to someone who is not logged in, which is exactly how an unpublished post gets pasted into a page a crawler already follows.
+
+**Decision:** Keep `robots.txt` as the polite-crawler hint (it gains a `Disallow: /*?preview=` wildcard) and add a per-response one that travels with the page. `Response\should_noindex($action, $_GET)` is true for a route registered via `register_private_route()` or for any request carrying a `preview` parameter; `index.php` calls it before dispatching and `Response\mark_noindex()` sends `X-Robots-Tag: noindex, nofollow`. `Theme\the_robots()` emits the matching `<meta name="robots">` in each theme's `<head>`, because a page saved to disk or re-served by a proxy keeps its markup but loses its headers.
+
+The decision runs on the request's action rather than inside the preview-token check, so a handler that dies with its own body (feeds, the export download) is still covered — by the time `preview_token_valid()` runs, the header may already be too late.
+
+The `preview` parameter counts even when empty or wrong. A bad token never grants access, but the URL is still a duplicate of the canonical permalink and has no business being indexed on its own.
+
+**Consequences:** Private routes are noindexed by registration, not by a second hand-kept list — the same registry `robots.txt` is derived from. A new theme that omits `the_robots()` still gets the header, which is the layer that matters for a live crawl. Public pages emit no robots meta at all, so the default stays "index this".
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted
@@ -78,11 +140,11 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
-## [deduced] PHP 8.2+ with PSR-12
+## [deduced] PHP 8.4+ with PSR-12
 
 **Status:** Accepted
 **Context:** Lamb targets modern PHP for type safety and performance. PSR-12 provides a widely understood coding standard.
-**Decision:** Require PHP 8.2+; enforce PSR-12 via PHP_CodeSniffer with PHPCompatibility checks.
+**Decision:** Require PHP 8.4+; enforce PSR-12 via PHP_CodeSniffer with PHPCompatibility checks.
 **Consequences:** Cannot run on older PHP versions; contributors must run `composer lint` before committing.
 
 ---

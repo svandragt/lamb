@@ -41,7 +41,9 @@ function respond_upload(array $_args): void
     $out = '';
     foreach ($files as $f) {
         if ($f['error'] !== UPLOAD_ERR_OK) {
-            // File upload failed
+            // The status is load-bearing: upload-image.js keys on response.ok to
+            // tell markdown-to-insert from error-to-report.
+            header('HTTP/1.1 400 Bad Request');
             echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
             die();
         }
@@ -73,6 +75,7 @@ function respond_upload(array $_args): void
             $new_fn = "$seed.$ext";
             $new_fp = sprintf("%s/%s", $dir, $new_fn);
             if (!move_uploaded_file($temp_fp, $new_fp)) {
+                header('HTTP/1.1 500 Internal Server Error');
                 echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
                 die();
             }
@@ -314,12 +317,65 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
 }
 
 /**
+ * Upper bound on a source image's declared width*height before WebP conversion
+ * decodes it. GD allocates the full pixel buffer as soon as it decodes an
+ * image's header, before any of this app's own downscaling runs — a small
+ * file can declare an enormous width/height ("decompression bomb") and force
+ * a multi-gigabyte allocation. 40 megapixels comfortably covers any real
+ * photo (including high-resolution phone modes) while capping the worst case.
+ *
+ * GD's pixel buffers are allocated outside PHP's memory manager, so they
+ * neither count against memory_limit nor are limited by it — the real
+ * ceiling is the host's actual free RAM. LAMB_MAX_UPLOAD_PIXELS lets a
+ * self-hoster on a memory-constrained box lower the cap if conversions are
+ * getting OOM-killed, without a code change.
+ *
+ * @return int The pixel cap: LAMB_MAX_UPLOAD_PIXELS if set to a positive
+ *             integer, otherwise the 40-megapixel default.
+ */
+function max_upload_pixels(): int
+{
+    $env = getenv('LAMB_MAX_UPLOAD_PIXELS');
+    if ($env !== false && ctype_digit($env) && (int) $env > 0) {
+        return (int) $env;
+    }
+
+    return 40_000_000;
+}
+
+/**
+ * Maps an IMAGETYPE_* constant to the GD function that decodes that format
+ * directly from a file path, so the encoded bytes never have to be read into
+ * a PHP string first — GD's per-format decoders stream the file themselves.
+ *
+ * @param int $image_type One of the IMAGETYPE_* constants from getimagesize().
+ * @return (callable(string): (\GdImage|false))|null
+ */
+function image_decoder_for_type(int $image_type): ?callable
+{
+    return match ($image_type) {
+        IMAGETYPE_JPEG => imagecreatefromjpeg(...),
+        IMAGETYPE_PNG => imagecreatefrompng(...),
+        IMAGETYPE_GIF => imagecreatefromgif(...),
+        IMAGETYPE_WEBP => imagecreatefromwebp(...),
+        IMAGETYPE_BMP => imagecreatefrombmp(...),
+        default => null,
+    };
+}
+
+/**
  * Re-encodes an image file as WebP, writing the result to $dest_path.
  *
  * Reads $src_path with GD, preserves alpha transparency, downscales anything wider
  * or taller than $max_dimension (so phone-sized screenshots are not served at their
  * full resolution), and writes a WebP. Returns false (writing nothing) when the
  * source cannot be decoded, so callers can fall back to storing the original bytes.
+ *
+ * Decodes straight from $src_path with a format-specific GD function
+ * (image_decoder_for_type()) rather than file_get_contents() +
+ * imagecreatefromstring(), so the encoded file is never also held as a full
+ * PHP string alongside the decoded pixel buffer. Formats GD can't be told
+ * apart in advance fall back to the string-based decode.
  *
  * @param string $src_path      Path to the source image (e.g. an uploaded temp file).
  * @param string $dest_path     Path the WebP should be written to.
@@ -329,11 +385,30 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
  */
 function convert_to_webp(string $src_path, string $dest_path, int $quality = 82, int $max_dimension = 1600): bool
 {
-    $data = @file_get_contents($src_path);
-    if ($data === false) {
+    $size = @getimagesize($src_path);
+    if (is_array($size) && $size[0] > 0 && $size[1] > 0 && $size[0] * $size[1] > max_upload_pixels()) {
         return false;
     }
-    return convert_to_webp_from_bytes($data, $dest_path, $quality, $max_dimension);
+
+    $decoder = is_array($size) ? image_decoder_for_type($size[2]) : null;
+    $image = $decoder !== null ? @$decoder($src_path) : false;
+
+    if ($image === false) {
+        // Unknown/undetected format: fall back to the old string-based decode,
+        // which auto-detects from the bytes themselves.
+        $data = @file_get_contents($src_path);
+        if ($data === false) {
+            return false;
+        }
+        $image = @imagecreatefromstring($data);
+        unset($data);
+    }
+
+    if ($image === false) {
+        return false;
+    }
+
+    return finish_webp_from_image($image, $dest_path, $quality, $max_dimension);
 }
 
 /**
@@ -362,15 +437,35 @@ function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quali
     // getimagesizefromstring() can't parse is left to imagecreatefromstring()
     // itself, unchanged from prior behaviour.
     $size = @getimagesizefromstring($bytes);
-    if (is_array($size) && $size[0] > 0 && $size[1] > 0 && $size[0] * $size[1] > MAX_UPLOAD_PIXELS) {
+    if (is_array($size) && $size[0] > 0 && $size[1] > 0 && $size[0] * $size[1] > max_upload_pixels()) {
         return false;
     }
 
     $image = @imagecreatefromstring($bytes);
+    // The decoded pixel buffer (below) and the resize's own buffer are both
+    // still to come; drop the encoded-bytes buffer now instead of waiting for
+    // $bytes to go out of scope, so it isn't resident during those.
+    unset($bytes);
     if ($image === false) {
         return false;
     }
 
+    return finish_webp_from_image($image, $dest_path, $quality, $max_dimension);
+}
+
+/**
+ * Preserves alpha, downscales to $max_dimension, and writes the WebP —
+ * the tail shared by convert_to_webp() and convert_to_webp_from_bytes()
+ * once each has its own decoded $image.
+ *
+ * @param \GdImage $image         Decoded source image; consumed and destroyed.
+ * @param string   $dest_path     Path the WebP should be written to.
+ * @param int      $quality       WebP quality (0-100).
+ * @param int      $max_dimension Longest edge to keep; larger images are scaled down.
+ * @return bool True when a WebP was written, false on failure.
+ */
+function finish_webp_from_image(\GdImage $image, string $dest_path, int $quality, int $max_dimension): bool
+{
     // Preserve transparency from PNG sources.
     imagepalettetotruecolor($image);
     imagealphablending($image, false);
@@ -465,4 +560,60 @@ function get_upload_dir(?string $sub_path = null): string
 function asset_url(string $sub_path, string $filename): string
 {
     return "/assets/$sub_path/$filename";
+}
+
+/**
+ * The pixel dimensions of a locally stored asset, given the URL a post body
+ * points at, or null when they cannot be determined.
+ *
+ * The inverse of asset_url(): it maps a root-relative `/assets/…` URL back to
+ * the file under ROOT_DIR so the renderer can emit intrinsic `width`/`height`
+ * on `<img>` (see LambDown::setImageSizeResolver()). Kept here rather than in
+ * the parser because this file already owns the URL ↔ disk-path mapping.
+ *
+ * Everything that isn't provably a file inside src/assets/ returns null, so
+ * the caller renders exactly as it did before rather than with wrong numbers:
+ *
+ * - A URL with a scheme or host, including protocol-relative `//host/assets/…`:
+ *   a remote path that merely starts with /assets/ must not be resolved
+ *   against the local tree.
+ * - Anything that escapes src/assets/ once resolved. Post bodies are
+ *   hand-written Markdown, so `/assets/../../etc/passwd` (percent-encoded or
+ *   not) is reachable input; realpath() containment rejects it, and covers
+ *   symlinks out of the tree too.
+ * - Files getimagesize() can't measure — a video, a truncated upload, or an
+ *   asset that has since been deleted.
+ *
+ * @param string $url The `src` from a post body's Markdown image.
+ * @return array{0:int,1:int}|null The [width, height] in pixels, or null.
+ */
+function asset_dimensions(string $url): ?array
+{
+    if (!defined('ROOT_DIR')) {
+        return null;
+    }
+    $parts = parse_url($url);
+    if ($parts === false || isset($parts['scheme']) || isset($parts['host'])) {
+        return null;
+    }
+    $path = $parts['path'] ?? '';
+    if (!str_starts_with($path, '/assets/')) {
+        return null;
+    }
+
+    $assets_root = realpath(ROOT_DIR . '/assets');
+    $file = realpath(ROOT_DIR . rawurldecode($path));
+    if ($assets_root === false || $file === false) {
+        return null;
+    }
+    if (!str_starts_with($file, $assets_root . DIRECTORY_SEPARATOR)) {
+        return null;
+    }
+
+    $size = @getimagesize($file);
+    if (!is_array($size) || (int) $size[0] <= 0 || (int) $size[1] <= 0) {
+        return null;
+    }
+
+    return [(int) $size[0], (int) $size[1]];
 }

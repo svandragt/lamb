@@ -291,6 +291,11 @@ function render_body(string $body): string
     [, $content] = split_frontmatter($body);
     $parser = new LambDown();
     $parser->setSafeMode(true);
+    // Stamp intrinsic width/height on images stored under src/assets/, so the
+    // browser can reserve their box instead of reflowing the post around each
+    // lazily-loaded image. Resolved once here, at parse time, and cached in
+    // `transformed` — not per request.
+    $parser->setImageSizeResolver(Response\asset_dimensions(...));
 
     return $parser->text(trim($content));
 }

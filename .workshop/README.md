@@ -48,7 +48,7 @@ workshop stop dev / workshop start dev
 
 | Hook | Runs as | Does |
 |------|---------|------|
-| `setup-base` | root, once on install | `apt-get install` PHP 8.3 + extensions, Composer, Ruby, openssl, pkg-config |
+| `setup-base` | root, once on install | `apt-get install` PHP 8.4 + extensions, Composer, Ruby, openssl, pkg-config |
 | `setup-project` | workshop user, every launch/refresh | `composer install` + `pnpm install` (mirrors `devbox.json` `init_hook`) |
 | `check-health` | workshop user, after setup | verifies php/composer/node/ruby + required extensions, reports health |
 
@@ -71,12 +71,11 @@ the host. The server binds `0.0.0.0:8747`, so:
 
 - **Shared project mount.** Workshop bind-mounts your host checkout at
   `/project`, so `composer install` / `pnpm install` write to the *same*
-  `vendor/` and `node_modules/` that Devbox uses. They are not isolated; the
-  trees are built for slightly different PHP/Node versions (8.2 vs 8.3) but are
-  compatible in practice.
+  `vendor/` and `node_modules/` that Devbox uses. They are not isolated, but
+  both environments install matching PHP/Node versions so this is fine.
 - **`ext-pdo_mysql` is required** even though lamb uses SQLite — RedBeanPHP
   references a MySQL PDO constant at load time and fatals without it. It's
-  declared in `composer.json`; `setup-base` installs `php8.3-mysql`.
+  declared in `composer.json`; `setup-base` installs `php8.4-mysql`.
 - **`workshopctl set-health`** statuses are lowercase (`okay` / `waiting` /
   `error` / `unknown`).
 

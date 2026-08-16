@@ -51,6 +51,7 @@ $redirects     = $data['redirects'] ?? [];
     }
     #settings-tab-config:checked ~ .settings-tabs__nav label[for="settings-tab-config"],
     #settings-tab-redirects:checked ~ .settings-tabs__nav label[for="settings-tab-redirects"],
+    #settings-tab-export:checked ~ .settings-tabs__nav label[for="settings-tab-export"],
     #settings-tab-logs:checked ~ .settings-tabs__nav label[for="settings-tab-logs"] {
         opacity: 1;
         border-color: currentColor;
@@ -59,6 +60,7 @@ $redirects     = $data['redirects'] ?? [];
     }
     #settings-tab-config:checked ~ #settings-panel-config,
     #settings-tab-redirects:checked ~ #settings-panel-redirects,
+    #settings-tab-export:checked ~ #settings-panel-export,
     #settings-tab-logs:checked ~ #settings-panel-logs {
         display: block;
     }
@@ -81,11 +83,13 @@ $redirects     = $data['redirects'] ?? [];
 <div class="settings-tabs">
     <input type="radio" name="settings-tab" id="settings-tab-config" checked>
     <input type="radio" name="settings-tab" id="settings-tab-redirects">
+    <input type="radio" name="settings-tab" id="settings-tab-export">
     <input type="radio" name="settings-tab" id="settings-tab-logs">
 
     <nav class="settings-tabs__nav">
         <label for="settings-tab-config">Configuration</label>
         <label for="settings-tab-redirects">Redirections</label>
+        <label for="settings-tab-export">Export</label>
         <label for="settings-tab-logs">Logs</label>
     </nav>
 
@@ -133,6 +137,25 @@ $redirects     = $data['redirects'] ?? [];
                 </tbody>
             </table>
         <?php endif; ?>
+    </section>
+
+    <section class="settings-tabs__panel" id="settings-panel-export">
+        <p>
+            Download every post as a zip archive: one Markdown file per post with its
+            front matter intact, the images and videos those posts reference, and a
+            <code>manifest.json</code> describing each post's dates, draft/trash state and
+            origin. Drafts and trashed posts are included and flagged, so this is a
+            complete backup of your writing rather than a copy of the public site.
+        </p>
+        <p>
+            The Markdown files are the same shape Lamb stores internally, so they can be
+            read by any editor and re-imported later. See the
+            <a href="https://svandragt.github.io/lamb/export" target="_blank">export documentation</a>
+            for the format.
+        </p>
+        <p>
+            <a href="/export" class="button">Download export</a>
+        </p>
     </section>
 
     <section class="settings-tabs__panel settings-logs" id="settings-panel-logs">

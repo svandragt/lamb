@@ -42,8 +42,8 @@ function the_opengraph(): void
     }
     $og_tags += [
         'og:locale' => 'en_GB',
-        'og:modified_time' => $bean->created,
-        'og:published_time' => $bean->updated,
+        'og:modified_time' => $bean->updated,
+        'og:published_time' => $bean->created,
         'og:publisher' => ROOT_URL,
         'og:site_name' => $config['site_title'],
         'og:type' => 'article',
@@ -168,6 +168,27 @@ function og_local_path(string $url): ?string
         return ROOT_DIR . $url;
     }
     return null;
+}
+
+/**
+ * Emits <meta name="robots" content="noindex, nofollow"> when the current
+ * response has been marked private (see Lamb\Response\should_noindex()):
+ * admin pages, and the ?preview= link that opens an unpublished post without
+ * a login. Outputs nothing on ordinary public pages, so the default stays
+ * "index this".
+ *
+ * index.php already sends the same hint as an X-Robots-Tag header. This tag is
+ * the copy that travels with the HTML — a preview page saved to disk, re-served
+ * by a proxy, or scraped through an embed keeps it.
+ *
+ * @return void
+ */
+function the_robots(): void
+{
+    if (!\Lamb\Response\is_noindex()) {
+        return;
+    }
+    printf('<meta name="robots" content="%s">' . PHP_EOL, \Lamb\Response\NOINDEX);
 }
 
 /**

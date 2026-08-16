@@ -51,4 +51,67 @@ class SafeFileTest extends TestCase
 
         $this->assertFalse($file->success);
     }
+
+    public function testBlocksForceFsockopenSinceItBypassesPinning(): void
+    {
+        // force_fsockopen would route the request through fsockopen instead
+        // of curl, which has no CURLOPT_RESOLVE equivalent — the DNS-rebinding
+        // TOCTOU this class exists to close would reopen. Fails closed before
+        // any network access, so this is safe to exercise directly.
+        $file = new SafeFile('http://93.184.216.34/', force_fsockopen: true);
+
+        $this->assertFalse($file->success);
+    }
+
+    // buildPinnedCurlOptions() -----------------------------------------------
+    // Pure logic extracted so the CURLOPT_RESOLVE pin can be verified without
+    // making a real request (SafeFile's constructor fetches immediately).
+
+    public function testBuildPinnedCurlOptionsMergesResolveEntryForLiteralIp(): void
+    {
+        $options = SafeFile::buildPinnedCurlOptions('http://93.184.216.34/', [], false);
+
+        $this->assertSame(['93.184.216.34:80:93.184.216.34'], $options[CURLOPT_RESOLVE]);
+    }
+
+    public function testBuildPinnedCurlOptionsUsesHttpsDefaultPort(): void
+    {
+        $options = SafeFile::buildPinnedCurlOptions('https://93.184.216.34/', [], false);
+
+        $this->assertSame(['93.184.216.34:443:93.184.216.34'], $options[CURLOPT_RESOLVE]);
+    }
+
+    public function testBuildPinnedCurlOptionsUsesInjectedResolverForHostnames(): void
+    {
+        $resolver = fn (string $host) => ['93.184.216.34'];
+
+        $options = SafeFile::buildPinnedCurlOptions('http://good.example/', [], false, $resolver);
+
+        $this->assertSame(['good.example:80:93.184.216.34'], $options[CURLOPT_RESOLVE]);
+    }
+
+    public function testBuildPinnedCurlOptionsPreservesExistingCurlOptions(): void
+    {
+        $options = SafeFile::buildPinnedCurlOptions('http://93.184.216.34/', [CURLOPT_TIMEOUT => 10], false);
+
+        $this->assertSame(10, $options[CURLOPT_TIMEOUT]);
+        $this->assertArrayHasKey(CURLOPT_RESOLVE, $options);
+    }
+
+    public function testBuildPinnedCurlOptionsReturnsFalseForPrivateResolvedIp(): void
+    {
+        $resolver = fn (string $host) => ['127.0.0.1'];
+
+        $this->assertFalse(SafeFile::buildPinnedCurlOptions('http://evil.example/', [], false, $resolver));
+    }
+
+    public function testBuildPinnedCurlOptionsReturnsFalseForMalformedUrl(): void
+    {
+        $this->assertFalse(SafeFile::buildPinnedCurlOptions('not a url', [], false));
+    }
+
+    public function testBuildPinnedCurlOptionsReturnsFalseWhenForceFsockopenRequested(): void
+    {
+        $this->assertFalse(SafeFile::buildPinnedCurlOptions('http://93.184.216.34/', [], true));
+    }
 }

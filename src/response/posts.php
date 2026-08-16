@@ -277,7 +277,9 @@ function redirect_edited(): void
 
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
-    $bean->version = 1;
+    // Must match the format parse_bean() above just rendered, or upgrade_posts()
+    // re-parses and re-stores the post on the next read.
+    $bean->version = POST_VERSION;
     $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {

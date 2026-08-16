@@ -52,6 +52,22 @@ function private_routes(): array
 }
 
 /**
+ * Returns true when the action was registered via register_private_route().
+ *
+ * The same registry robots.txt is derived from also drives the per-response
+ * `noindex` hint (see Lamb\Response\should_noindex()), so a private route is
+ * covered by both without being listed twice.
+ *
+ * @param bool|string $action The route action to inspect.
+ * @return bool
+ */
+function is_private_route(bool|string $action): bool
+{
+    global $private_routes;
+    return isset($private_routes[$action]);
+}
+
+/**
  * Registers every application route into the global registry.
  *
  * Extracted from index.php so the route table (and which routes are private)
@@ -78,6 +94,7 @@ function register_app_routes(
     register_private_route('scheduled', 'Lamb\\Response\\respond_scheduled');
     register_private_route('trash', 'Lamb\\Response\\respond_trash');
     register_private_route('edit', 'Lamb\\Response\\respond_edit', $lookup);
+    register_private_route('export', 'Lamb\\Response\\respond_export');
     register_route('feed', 'Lamb\\Response\\respond_feed');
     register_route('feed.json', 'Lamb\\Response\\respond_feed_json');
     register_route('sitemap.xml', 'Lamb\\Response\\respond_sitemap');

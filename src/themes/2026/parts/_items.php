@@ -26,7 +26,8 @@ else :
     endif;
     foreach ($data['posts'] as $bean) :
         if ($template !== 'status' && is_menu_item($bean->slug ?? $bean->id)) :
-            # Hide from timeline
+            # Backstop for the owner-only views that query everything (drafts,
+            # trash, scheduled); public listings exclude menu pages in SQL.
             continue;
         endif;
         if (count($data['posts']) > 1) :

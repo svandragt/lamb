@@ -10,6 +10,8 @@ Barrier free super simple blogging, self-hosted.
 - Runs on SQLite, so your entire blog is one file – easy to back up, easy to move.
 - Drafts and scheduled posts built in, with one-click trash and restore.
 - A [Micropub](https://indieweb.org/Micropub) endpoint lets you post from iA Writer, Ulysses, or any IndieWeb-compatible app.
+- One-click export of every post as plain Markdown files plus their images, so your writing is never locked in.
+- Import from WordPress, Known, or a previous Lamb export, straight into the same post pipeline.
 
 # Getting started
 

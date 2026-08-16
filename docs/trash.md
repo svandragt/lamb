@@ -23,3 +23,4 @@ Posts in the trash are permanently deleted once they have been there for 30 days
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): The types of posts that can be deleted.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Drafts are separate from the trash.
 * [Cron / Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): Runs the 30-day trash purge.
+* [Export]({{ site.baseurl }}{% link export.md %}): Trashed posts are included in an export and flagged in the manifest.

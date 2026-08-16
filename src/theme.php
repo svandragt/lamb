@@ -209,21 +209,6 @@ function site_title($type = 'html'): string
 }
 
 /**
- * Returns the page title if set, otherwise falls back to the site title.
- *
- * @param string $type Output format: 'html' (default) wraps in <h1>, anything else returns plain text.
- * @return string HTML or plain-text page or site title.
- */
-function site_or_page_title($type = 'html'): string
-{
-    $page_title = page_title($type);
-    if (empty($page_title)) {
-        return site_title($type);
-    }
-    return $page_title;
-}
-
-/**
  * Returns the current page title (from $data['title']) as an <h1>, or plain text when $type !== 'html'.
  * Falls back to the site title when no page title is set.
  *

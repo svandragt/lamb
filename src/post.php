@@ -446,6 +446,86 @@ function set_matter(string $body, string $key, string $value, bool $quote = fals
 }
 
 /**
+ * Sets (or clears) a single key in a body's leading YAML front-matter block.
+ *
+ * Surgical on purpose: every other front-matter key — including ones this
+ * codebase does not recognise — is carried over verbatim, because the Micropub
+ * update path that calls this must not silently drop a hand-written `slug:` or
+ * `draft:` while changing one value. A body with no front matter gains a block;
+ * a block left with nothing but this key loses its fence again.
+ *
+ * Both the hyphen and underscore spellings of the key are removed before the
+ * new value is appended (parse_matter() normalises them onto one key, so two
+ * lines would race for it), and the value is dumped through the YAML writer
+ * rather than interpolated, so a newline in it cannot inject further keys.
+ *
+ * Unlike set_matter(), which rewrites a value in place, this replaces the key
+ * outright — so it can also remove one, and cannot leave a stale YAML list
+ * behind under a key whose new value is a scalar.
+ *
+ * @param string $body The raw post body.
+ * @param string $key The front-matter key to set, in its hyphenated spelling.
+ * @param string $value The value to write, or '' to remove the key.
+ * @return string The body with its front-matter key set.
+ */
+function set_frontmatter_key(string $body, string $key, string $value): string
+{
+    $body  = normalize_frontmatter_fence($body);
+    $value = trim($value);
+    [$yaml, $content] = split_frontmatter($body);
+
+    if ($yaml === '') {
+        return $value === '' ? $body : build_matter([$key => $value], $body);
+    }
+
+    // Matches whichever spelling the author used, the way normalize_matter_keys()
+    // folds them together.
+    $pattern = '/^' . str_replace('\-', '[-_]', preg_quote($key, '/')) . '[ \t]*:/i';
+
+    $kept = [];
+    $dropping = false;
+    foreach (preg_split('/\R/', $yaml) ?: [] as $line) {
+        // Anchored to column zero: an indented key belongs to whatever block
+        // encloses it, and claiming it here took that block's remaining lines
+        // with it as "continuations" of a key that was never ours.
+        if (preg_match($pattern, $line) === 1) {
+            $dropping = true;
+            continue;
+        }
+        // An indented line after the key is its YAML list/continuation: dropping
+        // the key but keeping `  - https://…` leaves the block unparseable.
+        if ($dropping && preg_match('/^[ \t]+\S/', $line) === 1) {
+            continue;
+        }
+        $dropping = false;
+        $kept[] = $line;
+    }
+
+    $new_yaml = rtrim(implode("\n", $kept), "\n");
+    if ($value !== '') {
+        $new_yaml = ($new_yaml === '' ? '' : $new_yaml . "\n") . trim(Yaml::dump([$key => $value]));
+    }
+
+    if (trim($new_yaml) === '') {
+        return $content;
+    }
+
+    return "---\n" . $new_yaml . "\n---\n" . $content;
+}
+
+/**
+ * Sets (or clears) the reply target in a body's leading YAML front-matter block.
+ *
+ * @param string $body The raw post body.
+ * @param string $value The reply target URL, or '' to remove it.
+ * @return string The body with its front-matter reply target set.
+ */
+function set_reply_to(string $body, string $value): string
+{
+    return set_frontmatter_key($body, 'in-reply-to', $value);
+}
+
+/**
  * Rewrites the `slug` value inside a body's leading YAML front-matter block to
  * the given actual slug, leaving all other front matter intact.
  *
@@ -605,11 +685,11 @@ function body_has_tag(string $tag, string $body): bool
 function posts_by_tag(string $tag): array
 {
     $conditions = get_tag_search_conditions($tag);
-    $visible = \Lamb\visible_clause();
+    $public = \Lamb\Response\public_posts_clause();
     $posts = R::find(
         'post',
-        '(' . $conditions['sql'] . ') AND' . $visible['sql'] . 'ORDER BY created DESC',
-        array_merge($conditions['params'], $visible['params'])
+        '(' . $conditions['sql'] . ') AND' . $public['sql'] . 'ORDER BY created DESC',
+        array_merge($conditions['params'], $public['params'])
     );
 
     return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));

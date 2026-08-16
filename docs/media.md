@@ -48,6 +48,14 @@ To keep stored files small, **JPEG and PNG uploads are automatically re-encoded 
 
 If conversion ever fails (for example on a server whose PHP GD extension lacks WebP support), Lamb falls back to storing the original file unchanged, so uploads never break.
 
+## Image dimensions and layout shift
+
+Images in a post are rendered with their real pixel `width` and `height` on the `<img>` tag. Because images also load lazily, without those attributes the browser has no idea how tall an image will be until it arrives — so the text below it jumps down as you scroll. With them, the space is reserved up front and the page stays still.
+
+The dimensions are read from the stored file when the post is rendered, so they cost nothing on each page view, and they apply to older posts too: an existing post picks them up the next time Lamb re-renders it. Images hosted elsewhere (a plain `https://…` link in your Markdown) are left alone — Lamb won't fetch a remote file to measure it.
+
+This only sets the image's *intrinsic* size; how large it actually appears is still up to your theme's CSS. If you write your own theme, see [Themes]({{ site.baseurl }}{% link themes.md %}).
+
 ## Micropub uploads
 
 Images and video sent via Micropub — both inline `photo` files on a post and files sent to the media endpoint — go through the same storage (and, for images, WebP conversion) as editor uploads.
@@ -64,6 +72,20 @@ Images are converted to WebP and resized server-side, so the original file size 
 - **NGINX** additionally caps the request body with `client_max_body_size` (default **1m**). The shipped `.nginx/snippets/lamb.conf` sets it to `100m`.
 
 If an upload over the limit fails, it fails silently from the editor's point of view — check the server limits first when a large image or video won't upload.
+
+### Pixel cap and memory
+
+Before decoding a JPEG/PNG for WebP conversion, Lamb rejects anything whose declared width × height exceeds `MAX_UPLOAD_PIXELS` (40 megapixels by default) — a guard against a small file declaring an enormous size ("decompression bomb"). 40 megapixels comfortably covers real photos, including high-resolution phone camera modes.
+
+The pixel cap does **not** protect against memory exhaustion the way PHP's `memory_limit` might suggest: GD allocates its decoded pixel buffer outside PHP's memory manager, so it neither counts against `memory_limit` nor is limited by it. The real ceiling is the host's actual free RAM — roughly 4 bytes per pixel for the decode, plus a second buffer of similar size while resizing. A 40&nbsp;MP image can transiently use several hundred megabytes of real memory during conversion.
+
+If you're running Lamb on a memory-constrained host and see conversions crash or the process get killed on large uploads, lower the cap with the `LAMB_MAX_UPLOAD_PIXELS` environment variable:
+
+```shell
+-e LAMB_MAX_UPLOAD_PIXELS=12000000   # ~12 megapixels
+```
+
+Any positive integer is accepted; an unset, non-numeric, zero, or negative value falls back to the 40-megapixel default. Uploads whose declared pixel count exceeds the cap are stored in their original format, unconverted, the same as when WebP support itself is missing.
 
 WebP conversion relies on PHP's [GD extension](https://www.php.net/manual/en/book.image.php) being built **with WebP support**. This is the common default, but it isn't guaranteed on every host. WebP support is the only thing the conversion needs — if it's missing, nothing breaks: Lamb stores each upload in its original format instead, so JPEG and PNG files are saved as-is rather than being converted. You simply don't get the smaller WebP files.
 
@@ -94,3 +116,4 @@ If WebP support is missing and you want it, install or enable the WebP-capable G
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A post's first image becomes its social preview card; video-only posts fall back to the default card.
 * [Themes]({{ site.baseurl }}{% link themes.md %}): Uploaded files live in `src/assets/`, not in theme directories.
 * [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}): The importer downloads referenced images into `src/assets/` too.
+* [Export]({{ site.baseurl }}{% link export.md %}): Referenced assets are bundled into the export archive.

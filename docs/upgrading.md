@@ -26,6 +26,30 @@ To upgrade automatically every night, add it to cron:
 
 Cron will email you the output if the health check fails (when your system is set up to deliver mail).
 
+### The deploying user must own the checkout
+
+Run the script as a user that owns the checkout. If the webserver user owns it and your cron job runs as someone else, git refuses to touch the repository at all:
+
+```
+fatal: detected dubious ownership in repository at '/var/www/example.com/html'
+```
+
+The script stops there and tells you how to fix it. You have two options. Align ownership:
+
+```
+sudo chown -R $(id -un) /var/www/example.com/html
+```
+
+Or, if the webserver must keep owning the files, mark the checkout as trusted for the deploying user:
+
+```
+git config --global --add safe.directory /var/www/example.com/html
+```
+
+Run that command as the user the cron job runs as, not as root — `--global` writes to that user's own git config.
+
+Watch for this after moving to a new server, where ownership often differs from the old one. Nothing else reports it: the upgrade simply stops running, and the site keeps serving the version it already has.
+
 ## Tarball install
 
 Download the latest `lamb-<version>.tar.gz` from the [releases page](https://github.com/svandragt/lamb/releases) and extract it over your existing installation:

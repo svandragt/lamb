@@ -18,13 +18,6 @@ define('IMAGE_FILES', 'imageFiles');
 define('IMAGE_UPLOAD_EXTENSIONS', ['jpg', 'jpeg', 'png', 'gif', 'webp', 'avif']);
 // Video extensions accepted for upload; browsers decode these containers natively.
 define('VIDEO_UPLOAD_EXTENSIONS', ['mp4', 'webm', 'mov']);
-// Upper bound on a source image's declared width*height before WebP conversion
-// decodes it. GD allocates the full pixel buffer as soon as it decodes an
-// image's header, before any of this app's own downscaling runs — a small
-// file can declare an enormous width/height ("decompression bomb") and force
-// a multi-gigabyte allocation. 40 megapixels comfortably covers any real
-// photo or screenshot while capping the worst case.
-define('MAX_UPLOAD_PIXELS', 40_000_000);
 // Seconds before a single feed fetch is abandoned during /_cron ingestion.
 define('FEED_FETCH_TIMEOUT', 15);
 // Largest feed body kept during /_cron ingestion. /_cron is unauthenticated, so an
@@ -32,9 +25,13 @@ define('FEED_FETCH_TIMEOUT', 15);
 // an endless body into the worker's memory until it fatals.
 define('FEED_FETCH_MAX_BYTES', 5_000_000);
 define('MINUTE_IN_SECONDS', 60);
+// How often /_cron re-fetches an individual feed. Also caps how long SimplePie may
+// serve a feed from its own cache: a cache outliving this window would make every
+// other crawl read a stale copy of the feed while still counting as a success.
+define('FEED_FETCH_INTERVAL', 30 * MINUTE_IN_SECONDS);
 // Current post render-format version. Bump when `transformed` output changes
 // (e.g. new syntax highlighting); older posts are re-parsed on read by upgrade_posts().
-define('POST_VERSION', 3);
+define('POST_VERSION', 4);
 // How long a login is remembered. The session cookie and the server-side session
 // both persist this long, so logins survive a browser restart and idle time.
 define('REMEMBER_LIFETIME', 7 * 24 * 60 * MINUTE_IN_SECONDS); // one week
@@ -42,6 +39,17 @@ define('REMEMBER_LIFETIME', 7 * 24 * 60 * MINUTE_IN_SECONDS); // one week
 // page is never cached (no-store), so a visitor always gets a fresh token, and
 // an expired one just means reloading /login.
 define('LOGIN_CSRF_LIFETIME', 60 * MINUTE_IN_SECONDS); // one hour
+// Failed /login attempts tolerated from one client address before further
+// attempts are refused without running bcrypt (issue #443). Ten per window is
+// ~40 guesses an hour — hopeless against any real password — while leaving room
+// for a typo-prone author (and for the browser suites, which submit several
+// wrong passwords from one address in a single run).
+define('LOGIN_THROTTLE_MAX_FAILURES', 10);
+// How long failures accumulate, and how long a refusal lasts once the limit is
+// met. Also the lifetime of a throttle row before it is pruned.
+define('LOGIN_THROTTLE_WINDOW', 15 * MINUTE_IN_SECONDS);
+// Prefix for the per-client throttle rows in the `option` table.
+define('LOGIN_THROTTLE_PREFIX', 'login_fail_');
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');

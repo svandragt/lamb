@@ -37,9 +37,16 @@ It is your responsibility to [call the `_cron` endpoint]({{ site.baseurl }}{% li
 
 The first cron run after adding a feed imports every item currently present in the feed itself — typically the publisher's most recent 10–20 entries, depending on how many they include. It does not reach back through the publisher's full archive.
 
-After that first run, only items published or updated since the previous run are imported.
+After that first run, an item is imported when it is newer than the newest entry the feed has offered before, and an
+already-imported post is re-synced when the publisher has changed the item since Lamb last copied it.
 
 An item is matched to its existing post by a stable identifier, so a later crawl never creates a duplicate of something it has already imported — even if the publisher restamps the item's date.
+
+Both of those comparisons use dates the *feed* supplies, never the time of the crawl. Earlier versions compared an
+item's date against the clock time of the last successful crawl, which quietly dropped items: if a crawl succeeded
+against a cached or lagging copy of the feed that did not yet list the item, the item's own date was by then older than
+that crawl and it was never imported at all. Upgrading fixes this, and the first crawl after upgrading imports anything
+still in the feed window that was lost this way.
 
 ## Editing an imported post
 

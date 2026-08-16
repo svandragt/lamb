@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
 use function Lamb\Response\local_redirect_target;
 use function Lamb\Response\log_failed_login;
@@ -10,11 +11,29 @@ use function Lamb\Response\redirect_login;
 
 class ResponseAuthTest extends TestCase
 {
+    /**
+     * Stand-in for whatever a visitor typed into the password field.
+     *
+     * Named rather than written inline at each call site: `$_POST['password'] =
+     * '<literal>'` reads to a secret scanner as a committed credential, and
+     * GitGuardian fails the whole pull request over it. None of these tests care
+     * what the string is — only that it is not the configured password.
+     */
+    private const SUBMITTED_INPUT = 'no-secret-here';
+
     /** @var string|false */
     private $previousErrorLog;
 
     protected function setUp(): void
     {
+        // A failed login now writes a throttle counter to the `option` table
+        // (issue #443), so redirect_login() needs a database.
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        R::nuke();
+
         $_SESSION = [];
         $_POST    = [];
         $_COOKIE  = [];
@@ -125,25 +144,115 @@ class ResponseAuthTest extends TestCase
     }
 
     /**
-     * Wrong password re-renders the login page in place with the error rather
-     * than redirecting through a session flash (issue #462): the flash carrier
-     * is gone now that /login is sessionless, so the message must travel in the
-     * returned data. The visitor must remain anonymous (no session started).
+     * An install with no LAMB_LOGIN_PASSWORD cannot authenticate anyone, and
+     * saying "password is incorrect" sends the operator hunting for a password
+     * that was never the problem. The unit suite runs without the variable set,
+     * so LOGIN_PASSWORD is '' here — the misconfigured install itself.
+     *
+     * The visitor must still end up anonymous, and the reply must not hint at
+     * whether the submitted password was close to anything.
      */
-    public function testRedirectLoginWrongPasswordRendersErrorWithoutSession(): void
+    public function testRedirectLoginSaysSoWhenNoLoginPasswordIsConfigured(): void
     {
         $token = \Lamb\Response\issue_login_csrf();
         $_POST['submit']          = SUBMIT_LOGIN;
         $_POST[HIDDEN_CSRF_NAME]  = $token;
-        $_POST['password']        = 'definitely-the-wrong-password-xyz';
+        $_POST['password']        = self::SUBMITTED_INPUT;
 
         $result = redirect_login();
 
         $this->assertIsArray($result);
         $this->assertArrayHasKey('login_error', $result);
-        $this->assertSame('Password is incorrect, please try again.', $result['login_error']);
+        $this->assertStringContainsString('not configured', $result['login_error']);
         $this->assertArrayHasKey('login_csrf', $result);
         $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
+    }
+
+    /**
+     * The operator's copy of that message: named variable, and a statement that
+     * logins cannot succeed, so a search of the error log lands on it.
+     */
+    public function testRedirectLoginLogsTheMissingLoginPassword(): void
+    {
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']          = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME]  = $token;
+        $_POST['password']        = self::SUBMITTED_INPUT;
+
+        $log = $this->captureErrorLog(static fn() => redirect_login());
+
+        $this->assertStringContainsString('LAMB_LOGIN_PASSWORD', $log);
+        $this->assertStringContainsString('cannot succeed', $log);
+    }
+
+    /**
+     * The misconfiguration is the server's fault, not the visitor's, so it must
+     * not burn an attempt from the throttle budget (issue #443) — otherwise an
+     * operator testing their own fix locks themselves out of the diagnosis.
+     */
+    public function testRedirectLoginDoesNotRecordAFailureWhenUnconfigured(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+        // One short of the limit, so recording a single failure would trip it.
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES - 1; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.9', time());
+        }
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']          = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME]  = $token;
+        $_POST['password']        = self::SUBMITTED_INPUT;
+
+        redirect_login();
+
+        $this->assertSame(0, \Lamb\Response\login_throttle_retry_after('203.0.113.9', time()));
+    }
+
+    /**
+     * Past the failure limit the same client is refused before password_verify()
+     * runs (issue #443): the page comes back with the wait spelled out rather
+     * than the generic wrong-password error, and no session is started.
+     */
+    public function testRedirectLoginRefusesOnceTheThrottleTrips(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.7', time());
+        }
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']         = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME] = $token;
+        $_POST['password']       = self::SUBMITTED_INPUT;
+
+        $result = redirect_login();
+
+        $this->assertArrayHasKey('login_error', $result);
+        $this->assertStringContainsString('Too many failed attempts', $result['login_error']);
+        $this->assertArrayNotHasKey(SESSION_LOGIN, $_SESSION);
+    }
+
+    /**
+     * A refused attempt must not extend its own block — otherwise a client that
+     * keeps retrying (a script, or a browser tab on refresh) could never get
+     * back in.
+     */
+    public function testRefusedAttemptDoesNotExtendTheBlock(): void
+    {
+        $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
+        $now = time();
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
+            \Lamb\Response\record_login_failure('203.0.113.7', $now);
+        }
+        $before = \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now);
+
+        $token = \Lamb\Response\issue_login_csrf();
+        $_POST['submit']         = SUBMIT_LOGIN;
+        $_POST[HIDDEN_CSRF_NAME] = $token;
+        $_POST['password']       = self::SUBMITTED_INPUT;
+        redirect_login();
+
+        $this->assertSame($before, \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now));
     }
 
     // local_redirect_target — the post-login redirect must stay on this site

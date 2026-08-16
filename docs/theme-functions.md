@@ -45,7 +45,6 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 |----------|---------|-------------|
 | `site_title($type = 'html')` | `string` | The site title. Wrapped in `<h1>` for HTML output, or plain text when `$type` is not `'html'`. |
 | `page_title($type = 'html')` | `string` | The current page title (`$data['title']`), falling back to the site title. |
-| `site_or_page_title($type = 'html')` | `string` | The page title when one is set, otherwise the site title. |
 | `page_intro()` | `string` | A `<p>` wrapping `$data['intro']` (used on tag and search pages), or `''`. |
 
 ## Posts and content
@@ -90,6 +89,7 @@ logged in.
 | `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`; logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
 | `the_opengraph()` | `void` | Emits OpenGraph/Twitter `<meta>` tags (status pages only). |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` tags for the origins in `$config['preconnect']`. |
+| `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` on admin pages and `?preview=` links; nothing on public pages. Call it in your theme's `<head>` so previews stay out of search results. |
 | `the_reply_context($bean)` | `string` | See "Posts and content" above. |
 
 ## Parts and includes

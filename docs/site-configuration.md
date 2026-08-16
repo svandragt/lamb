@@ -51,6 +51,13 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Separate multiple hubs with commas.
 ;websub_hubs = https://hub.example.com/
 
+;; Gates features still gathering real-world testing before general release
+;; (currently: the WordPress, Known, and Lamb-export import CLI scripts — see
+;; wordpress-import.md, known-import.md, lamb-import.md). Off by default, and
+;; reset to false automatically whenever an upgrade changes what this gates,
+;; so check the docs for what's currently covered before turning it back on.
+experimental_features = false
+
 [menu_items]
 ;; Add <label>=<url> entries. URL can be:
 ;;   - A post slug, which hides the post from the feed and timeline
@@ -149,6 +156,18 @@ optional for a plain blog, but worth setting:
 You can also set it outside the settings page with the `LAMB_SITE_URL` environment
 variable, which takes precedence over the INI value — handy when the same
 configuration is deployed to more than one hostname.
+
+### Serve from the root of a domain
+
+Give `site_url` the domain on its own, with no path. Lamb does not support an
+install under a subdirectory, so `https://example.com/blog` cannot work: Lamb
+reads the domain and drops the path, while your IndieAuth identity is the whole
+address. Micropub then refuses every token, because the identity it compares
+against is not the one your tokens were issued for.
+
+The settings page warns you if you save a `site_url` with a path. To run Lamb at
+`example.com/blog` today, give it its own subdomain — `blog.example.com` — and
+point `site_url` at that.
 
 ## Related
 

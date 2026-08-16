@@ -6,6 +6,8 @@ title: WordPress import
 
 Lamb ships a CLI script that reads a [WordPress WXR export](https://wordpress.com/support/export/) and feeds each published post and page through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
+**Experimental.** This importer is still gathering real-world testing. Enable it by setting `experimental_features = true` in [Settings](site-configuration.md) before running the script — it refuses to run otherwise.
+
 ## What you get
 
 The first-pass scope is intentionally small:
@@ -32,7 +34,17 @@ php import-wordpress.php /path/to/wordpress.WordPress.xml --dry-run
 php import-wordpress.php /path/to/wordpress.WordPress.xml
 ```
 
-The script prints one line per item (`imported:` or `would import:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `feeditem_uuid` (md5 of `'wordpress-' + guid`) and left alone.
+The script prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'wordpress-' + guid`) and left alone.
+
+### `--replace`
+
+By default, an item that was already imported is left alone on a second run — the importer counts it as `existed` and moves on. Pass `--replace` to re-apply it instead: body, title, slug, `created`/`updated` and draft state are all set back to what the WXR describes. The post keeps its id and its `import_uuid`, so its permalink and every redirect pointing at it still work.
+
+This is deliberately total, not a merge. Local edits made to an imported post since the import are lost when you `--replace` it — that is what "replace" means. The case it exists for is re-running an export after fixing something in the conversion, where the freshly converted version is the one you want.
+
+Images already downloaded by an earlier run are not fetched again: the downloader names each file after `sha1(<source url>)` and returns the existing file when it is already on disk.
+
+Imported posts are treated as **your own content**, not as syndicated feed items: they carry no "Via …" attribution line, and they take part in webmentions and WebSub exactly like a post you wrote in Lamb. The import run itself stays silent — nothing is pinged for content that was published years ago — but editing an imported post later notifies the way any other edit does.
 
 ## After the import
 
@@ -46,6 +58,9 @@ A few things worth checking manually:
 
 ## Related
 
+- [Known import](known-import.md) — the sibling importer this one shares its image-download and Markdown-conversion pipeline with.
+- [Lamb import](lamb-import.md): Restore a Lamb export, rather than converting from another platform.
 - [Cross-posting](cross-posting.md) — outbound syndication, the opposite direction.
 - [Feeds](feeds.md) — how Lamb publishes content for other readers to ingest.
 - [Media](media.md) — how uploaded images are stored and converted.
+- [Export](export.md) — the same Markdown format, in the opposite direction.

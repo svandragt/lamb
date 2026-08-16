@@ -9,7 +9,7 @@ RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-a
 COPY src/ src/
 RUN composer dump-autoload --no-dev --optimize --ignore-platform-reqs
 
-FROM dunglas/frankenphp:php8.2
+FROM dunglas/frankenphp:php8.4
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 
@@ -25,6 +25,9 @@ RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
 # exact PHP version in X-Powered-By on every response.
 RUN printf 'upload_max_filesize = 100M\npost_max_size = 100M\nexpose_php = Off\n' > "$PHP_INI_DIR/conf.d/uploads.ini"
 
+# Allow FrankenPHP to bind :80 after dropping to www-data.
+RUN setcap CAP_NET_BIND_SERVICE=+eip /usr/local/bin/frankenphp
+
 COPY .docker/Caddyfile.release /etc/frankenphp/Caddyfile
 
 WORKDIR /app
@@ -35,6 +38,11 @@ COPY --from=vendor /app/vendor/ vendor/
 # SQLite database and uploads live outside the image.
 RUN mkdir -p data src/assets
 VOLUME ["/app/data", "/app/src/assets"]
+
+COPY .docker/entrypoint.release.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["frankenphp", "run", "--config", "/etc/frankenphp/Caddyfile"]
 
 EXPOSE 80
 HEALTHCHECK --interval=30s --timeout=5s CMD curl -fsS -o /dev/null http://localhost/ || exit 1

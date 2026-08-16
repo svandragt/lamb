@@ -9,6 +9,7 @@ use function Lamb\Config\config_modified_timestamp;
 use function Lamb\Config\get_ini_text;
 use function Lamb\Config\load;
 use function Lamb\Config\parse_ini_safe;
+use function Lamb\Config\reset_stale_experimental_flag;
 use function Lamb\Config\save_ini_text;
 
 class ConfigLoadTest extends TestCase
@@ -21,6 +22,7 @@ class ConfigLoadTest extends TestCase
         R::freeze(false);
         // Remove any cached config option so each test starts fresh
         R::exec("DELETE FROM option WHERE name = 'site_config_ini'");
+        R::exec("DELETE FROM option WHERE name = 'experimental_gate_version'");
     }
 
     // parse_ini_safe
@@ -80,6 +82,55 @@ class ConfigLoadTest extends TestCase
         $this->assertSame('base', $parsed['theme']);
         // ...and the migration is persisted, so a second read is stable.
         $this->assertSame($text, get_ini_text());
+    }
+
+    public function testGetIniTextResetsStaleExperimentalFlagOnRead(): void
+    {
+        save_ini_text("experimental_features = true\n");
+
+        $text = get_ini_text();
+        $parsed = parse_ini_string($text, true, INI_SCANNER_RAW);
+
+        $this->assertSame('false', $parsed['experimental_features']);
+        // Persisted, so a second read is stable.
+        $this->assertSame($text, get_ini_text());
+    }
+
+    // reset_stale_experimental_flag
+
+    public function testResetStaleExperimentalFlagRewritesTrueToFalseWhenStampBehind(): void
+    {
+        $migrated = reset_stale_experimental_flag("experimental_features = true\n");
+        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
+
+        $this->assertSame('false', $parsed['experimental_features']);
+    }
+
+    public function testResetStaleExperimentalFlagLeavesFalseUntouched(): void
+    {
+        $ini = "experimental_features = false\nsite_title = Example\n";
+
+        $this->assertSame($ini, reset_stale_experimental_flag($ini));
+    }
+
+    public function testResetStaleExperimentalFlagIsNoOpOnceStampCaughtUp(): void
+    {
+        $once = reset_stale_experimental_flag("experimental_features = true\n");
+        $twice = reset_stale_experimental_flag($once);
+
+        $this->assertSame($once, $twice);
+    }
+
+    public function testResetStaleExperimentalFlagPreservesOtherContent(): void
+    {
+        $ini = "site_title = Example\nexperimental_features = true\n[menu_items]\nAbout = about\n";
+
+        $migrated = reset_stale_experimental_flag($ini);
+        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
+
+        $this->assertSame('Example', $parsed['site_title']);
+        $this->assertSame('about', $parsed['menu_items']['About']);
+        $this->assertSame('false', $parsed['experimental_features']);
     }
 
     // save_ini_text

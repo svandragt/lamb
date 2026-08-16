@@ -105,6 +105,31 @@ class ResponseHandlersTest extends TestCase
         $this->assertStringContainsString('not found', strtolower($result['intro']));
     }
 
+    public function testRespond404TitleIsHumanReadableNotTheStatusLine(): void
+    {
+        // The title is rendered as the page's <title> and <h1>, so the raw
+        // status line ("HTTP/1.0 404 Not Found") must never reach it.
+        $result = respond_404();
+        $this->assertStringNotContainsString('HTTP/', $result['title']);
+        $this->assertStringContainsString('not found', strtolower($result['title']));
+    }
+
+    public function testRespond404ReportsTheRequestedPath(): void
+    {
+        // The template offers to search for what the visitor asked for; it used
+        // to read $data['action'], which is always the literal '404' by then.
+        $_SERVER['REQUEST_URI'] = '/no-such-page?utm=1';
+        $result = respond_404();
+        $this->assertSame('no-such-page', $result['requested']);
+    }
+
+    public function testRespond404RequestedPathIsEmptyForTheRoot(): void
+    {
+        $_SERVER['REQUEST_URI'] = '/';
+        $result = respond_404();
+        $this->assertSame('', $result['requested']);
+    }
+
     // respond_home
 
     public function testRespondHomeReturnsArray(): void
@@ -291,6 +316,48 @@ class ResponseHandlersTest extends TestCase
     {
         $result = respond_search(['hello']);
         $this->assertStringContainsString('hello', $result['title']);
+    }
+
+    public function testRespondSearchExcludesMenuPagesFromResultsAndCount(): void
+    {
+        global $config;
+        $config['menu_items'] = ['About' => 'about'];
+
+        $ids = [];
+        foreach (['about', 'a-real-post'] as $slug) {
+            $post = R::dispense('post');
+            $post->body    = 'menuwordprobe in the body';
+            $post->slug    = $slug;
+            $post->created = '2020-01-01 00:00:00';
+            $ids[$slug] = R::store($post);
+        }
+
+        $result = respond_search(['menuwordprobe']);
+
+        $this->assertCount(1, $result['posts']);
+        $this->assertSame($ids['a-real-post'], (int) reset($result['posts'])->id);
+        $this->assertSame(1, (int) $result['pagination']['total_posts']);
+        $this->assertSame('1 result found.', $result['intro']);
+    }
+
+    public function testRespondTagExcludesMenuPages(): void
+    {
+        global $config;
+        $config['menu_items'] = ['About' => 'about'];
+
+        foreach (['about', 'a-real-post'] as $slug) {
+            $post = R::dispense('post');
+            $post->body    = 'tagged #menuprobe here';
+            $post->slug    = $slug;
+            $post->created = '2020-01-01 00:00:00';
+            R::store($post);
+        }
+
+        $result = respond_tag(['menuprobe']);
+
+        $this->assertCount(1, $result['posts']);
+        $this->assertSame('a-real-post', (string) $result['posts'][0]->slug);
+        $this->assertSame(1, (int) $result['pagination']['total_posts']);
     }
 
     public function testRespondSearchFindsMatchingPost(): void

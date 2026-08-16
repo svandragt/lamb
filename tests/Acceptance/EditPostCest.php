@@ -12,6 +12,10 @@ use Tests\Support\AcceptanceTester;
  */
 class EditPostCest
 {
+    /** Unique text present in the created post, used to locate it on the page. */
+    private string $marker = '';
+
+    /** The full body the post was created with (marker plus any extra content). */
     private string $original = '';
 
     private function login(AcceptanceTester $I): void
@@ -21,9 +25,17 @@ class EditPostCest
         $I->click('Log in');
     }
 
-    private function createPost(AcceptanceTester $I): void
+    /**
+     * Creates a post whose body is a unique marker followed by $extra.
+     *
+     * The marker is tracked separately because it is what editId() matches on:
+     * $extra may render to something other than its source (Markdown becomes
+     * HTML), so the full body is not reliably findable in the page text.
+     */
+    private function createPost(AcceptanceTester $I, string $extra = ''): void
     {
-        $this->original = 'edit-test-original-' . uniqid();
+        $this->marker   = 'edit-test-' . uniqid();
+        $this->original = $this->marker . $extra;
         $I->amOnPage('/');
         $I->fillField('contents', $this->original);
         $I->click('Create post');
@@ -34,7 +46,7 @@ class EditPostCest
         // The edit control is a <button class="button-edit" data-id="N"> that JS
         // upgrades into an /edit/N link; read the post id straight off data-id.
         return (string) $I->grabAttributeFrom(
-            '//article[contains(., "' . $this->original . '")]//button[contains(@class, "button-edit")]',
+            '//article[contains(., "' . $this->marker . '")]//button[contains(@class, "button-edit")]',
             'data-id'
         );
     }
@@ -71,6 +83,46 @@ class EditPostCest
         $I->dontSee('Fatal error');
         $I->dontSee('Warning:');
         $I->seeResponseCodeIs(200);
+    }
+
+    public function testEditFormKeepsAngleBracketsInTheBody(AcceptanceTester $I): void
+    {
+        // The edit form used to run the body through strip_tags(), which deleted
+        // every `<…>` run in the Markdown source — an autolink, an HTML snippet
+        // in a code fence — and the mangled text was what the form posted back,
+        // so opening the editor and saving destroyed content.
+        $this->login($I);
+        $this->createPost($I, ' see <https://example.com> and `<div class="x">`');
+
+        $id = $this->editId($I);
+        $I->amOnPage('/edit/' . $id);
+        $I->seeInField('contents', $this->original);
+
+        // Saving the untouched form must round-trip the body unchanged.
+        $I->click('Update post');
+        $I->amOnPage('/edit/' . $id);
+        $I->seeInField('contents', $this->original);
+    }
+
+    public function testEditStampsTheCurrentRenderVersion(AcceptanceTester $I): void
+    {
+        // An edit re-renders `transformed`, so the row must record the current
+        // format version. Stamping a stale one marked every edited post as
+        // needing an upgrade, so the next read re-parsed and re-stored it.
+        $this->login($I);
+        $this->createPost($I);
+
+        $id = (int) $this->editId($I);
+        $I->amOnPage('/edit/' . $id);
+        $I->fillField('contents', 'edit-test-version-' . uniqid());
+
+        // Check the row as the save left it: any page load after the redirect
+        // runs upgrade_posts(), which would repair a stale version behind our
+        // back — the very extra write this guards against.
+        $I->stopFollowingRedirects();
+        $I->click('Update post');
+        $I->seePostColumnEquals($id, 'version', POST_VERSION);
+        $I->startFollowingRedirects();
     }
 
     public function testEditPageRequiresLogin(AcceptanceTester $I): void

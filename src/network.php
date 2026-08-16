@@ -46,7 +46,7 @@ function cron_run_due(int $last_run, int $now): bool
  */
 function feed_fetch_due(int $last_attempt, int $now): bool
 {
-    return ($now - $last_attempt) >= MINUTE_IN_SECONDS * 30;
+    return ($now - $last_attempt) >= FEED_FETCH_INTERVAL;
 }
 
 /**

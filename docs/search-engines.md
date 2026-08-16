@@ -45,6 +45,27 @@ endpoints. The list is derived automatically from the routes themselves, so it
 stays complete as the app grows. Those routes already require a login (or are
 internal), so this is a hint to crawlers rather than a security control.
 
+It also disallows `/*?preview=`, the
+[preview links]({{ site.baseurl }}{% link drafts.md %}) that open an
+unpublished post without a login.
+
+## Pages that ask not to be indexed
+
+`robots.txt` is only read by crawlers that look for it first, and it cannot
+cover a link someone else has published. So the pages that are not meant to be
+found say so on the page itself as well — every private page and every preview
+link is served with both a `X-Robots-Tag: noindex, nofollow` header and a
+matching `<meta name="robots">` tag:
+
+* the admin pages and actions listed above;
+* any URL carrying a `?preview=` token.
+
+Ordinary posts and pages carry neither, so nothing public changes.
+
+This matters most for preview links: they are meant to be shared with someone
+who is not logged in, which is exactly the way an unpublished post ends up in
+a search index. A preview link also expires after 24 hours.
+
 ### Overriding robots.txt
 
 If you want full control, drop your own `robots.txt` into the web root (the

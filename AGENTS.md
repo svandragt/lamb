@@ -1,6 +1,6 @@
 # AGENTS.md — Lamb Codebase Guide
 
-Lamb is a self-hosted, single-author microblog. It uses PHP 8.2+, SQLite (via RedBeanPHP ORM), and a procedural-with-namespaces architecture. There is no MVC framework — routing, responses, and views are handled by small namespaced PHP files.
+Lamb is a self-hosted, single-author microblog. It uses PHP 8.4+, SQLite (via RedBeanPHP ORM), and a procedural-with-namespaces architecture. There is no MVC framework — routing, responses, and views are handled by small namespaced PHP files.
 
 ## Documentation (End-User)
 
@@ -63,6 +63,35 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 - Chromium executable: `~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome` (note `chrome-linux64`; version dir may differ per machine — check `ls ~/.cache/ms-playwright/`)
 - Script: `scripts/screenshot.mjs [path] [outdir]`
 
+## Dependencies
+
+Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
+composer, npm, github-actions, docker, devcontainers — and
+`dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
+Vulnerabilities are caught by `composer audit` (quality job), `pnpm audit`
+(js-test job), and a Trivy scan of the release image before it is pushed.
+
+Two things that automation deliberately does **not** handle, so they need a
+human:
+
+- **Major bumps never auto-merge.** They arrive as individual PRs and will sit
+  until someone reviews them, which is how a project quietly ends up on an
+  unsupported branch. Check for outstanding majors when cutting a release —
+  it's a checklist item in `RELEASING.md` step 1. `composer show --locked
+  --outdated --direct` and `pnpm outdated` list them without needing an install.
+- **Hand-written pins and overrides are invisible to Dependabot.** It does not
+  update pnpm `overrides`, so a pin added to dodge an advisory becomes a
+  permanent *ceiling* that silently holds a package below what its parent
+  declares. This already bit us once: an `undici: ^7.28.0` override kept
+  resolving undici 7.x after jsdom 30 moved to `^8.7.0`. If you must add one,
+  say in a comment why it exists and what would let it go — then remove it as
+  soon as the upstream range covers the fix.
+
+New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
+`dependabot.yml`, `min-release-age` in `.npmrc`). To pull something newer by
+hand — e.g. a same-day security patch — use
+`pnpm install --config.minimum-release-age=0`.
+
 ## Project Structure
 
 ```
@@ -72,12 +101,15 @@ lamb/
 │   ├── bootstrap.php     # DB init (SQLite via RedBean) + session setup
 │   ├── config.php        # INI-based config stored in DB; load/save/validate
 │   ├── constants.php     # Static app-wide constants (POST_VERSION, SESSION_LOGIN, …)
+│   ├── export.php        # Site export: archive layout, manifest, zip assembly
 │   ├── routes.php        # register_route() / call_route() helpers
 │   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, visibility clauses, redirects
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify, finalize_slug
+│   ├── restore.php       # Lamb export importer: archive reader, manifest validation, post/asset restore
 │   ├── response.php      # Response helpers: pagination, conditional GET/304, 404, upgrade_posts
 │   ├── response/         # Route handlers (respond_*, redirect_*), split by area
 │   │   ├── auth.php      # Login/logout/settings
+│   │   ├── export.php    # /export download (login required)
 │   │   ├── feeds.php     # Home, drafts/trash/scheduled, search, tag, Atom + JSON feeds
 │   │   ├── posts.php     # Status/slug pages, create/edit/delete/restore
 │   │   └── upload.php    # Image upload + WebP conversion
@@ -107,6 +139,7 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
+├── import-lamb.php       # CLI: restore a Lamb export archive (src/restore.php) into the DB
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
@@ -133,6 +166,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 |------|-----------|
 | `bootstrap.php` | `Lamb\Bootstrap` |
 | `config.php` | `Lamb\Config` |
+| `export.php` | `Lamb\Export` |
 | `highlight.php` | `Lamb\Highlight` |
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
@@ -140,6 +174,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
 | `response.php` + `response/*.php` | `Lamb\Response` |
+| `restore.php` | `Lamb\Restore` |
 | `routes.php` | `Lamb\Route` |
 | `security.php` | `Lamb\Security` |
 | `theme.php` + `theme/*.php` | `Lamb\Theme` |
@@ -153,8 +188,8 @@ Each file declares a namespace; functions are called with the namespace prefix:
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
 
 **Tables used:**
-- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `source_url`
-- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`)
+- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`
+- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
 - `webmentionoutbox` — outbound webmention queue processed by `/_cron`; columns: `post_id`, `source`, `target`, `endpoint`, `status`, `attempts`, `created`, `processed_at`
@@ -286,6 +321,7 @@ index.php
 | `$bean->updated` | Datetime string |
 | `$bean->feed_name` | Source feed name (only present for ingested feed items) |
 | `$bean->feeditem_uuid` | MD5 dedup key (only for feed items) |
+| `$bean->import_uuid` | MD5 dedup key for posts brought in by an importer (WordPress, Known, lamb export) |
 | `$bean->source_url` | Permalink of the original feed item (only for feed items; used by `link_source()`) |
 | `$bean->is_menu_item` | Truthy if the post is pinned as a menu item |
 
@@ -312,7 +348,6 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `escape($str)` | `string` | `htmlspecialchars` for HTML5 output — use on every user-supplied value |
 | `site_title($type='html')` | `string` | `<h1>` wrapping `$config['site_title']`, or plain text if `$type !== 'html'` |
 | `page_title($type='html')` | `string` | `<h1>` wrapping `$data['title']` (falls back to `site_title`) |
-| `site_or_page_title($type)` | `string` | Page title if set, otherwise site title |
 | `page_intro()` | `string` | `<p>` wrapping `$data['intro']`, or `''` |
 | `li_menu_items()` | `string` | `<li><a>` tags from `$config['menu_items']` |
 | `date_created($bean)` | `string` | `<a><time>` linking to the post permalink with human-readable timestamp |
@@ -323,6 +358,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `the_styles()` | `void` | Emits `<link rel="stylesheet">` for `styles/styles.css` in the active theme |
 | `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
+| `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` when the response is marked noindex (private routes, `?preview=` links); nothing otherwise |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` for `$config['preconnect']` origins |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
 | `csrf_token()` | `string` | Returns (and creates if needed) the current session CSRF token |
@@ -423,6 +459,8 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 ### Security
 
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
+- `respond_upload()` (`src/response/upload.php`) and `respond_checkbox()` (`src/response/posts.php`) call `Security\require_login()` but deliberately skip `require_csrf()` — both fire mid-composition/mid-edit, and consuming the single-use token there would break the subsequent form submit's own CSRF check. Their protection rests entirely on `LAMBSESSID`/`lamb_logged_in` being `SameSite=Strict` (a cross-site POST carries neither cookie, so no session, so `require_login()` redirects). That invariant is pinned by `testSessionCookieIsSameSiteStrict()` / `testGetCookieOptionsSameSiteIsStrict()` rather than assumed — see #536
+- Login brute-force throttle (#443): after `LOGIN_THROTTLE_MAX_FAILURES` failed `/login` attempts from one client address, further attempts are refused for `LOGIN_THROTTLE_WINDOW` with `429` + `Retry-After`, checked *before* `password_verify()` so a blocked client costs no bcrypt. The counter is a `login_fail_<hmac(ip)>` row in the `option` table (no session exists on `/login` — see #462), cleared on a successful login and lazily pruned on the failure write path. Refused attempts are not counted, so retrying can't extend a block. `client_ip()` reads `REMOTE_ADDR` only — `X-Forwarded-For` is attacker-controlled on a directly-exposed install and would hand out a fresh bucket per request
 - Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
 - Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
@@ -447,11 +485,41 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ## Coding Standards
 
-- **PSR-12** with PHPCompatibility checks for PHP 8.2+
+- **PSR-12** with PHPCompatibility checks for PHP 8.4+
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests
 - Run `composer lint` before committing
+
+### Comments
+
+**Comment the constraint, not the changelog.**
+
+An inline comment earns its place when reverting the line would look *reasonable*
+to a future editor: a coupling across files, a counter-intuitive choice, a guard
+whose removal breaks something distant. Write what breaks if the line changes.
+
+Do not narrate the bug a line used to have. That belongs in the commit message,
+where `git blame` will find it. Once the code reads correctly on its own, the
+comment is noise:
+
+```php
+// Noise — archaeology. The line already states this.
+// `created` is when the post was published and `updated` when it was last
+// changed; the two were wired to the opposite properties, so every scraper
+// read a post's edit time as its publication date.
+'og:published_time' => $bean->created,
+
+// Earns its place — a coupling the next editor cannot see from here.
+// The status is load-bearing: upload-image.js keys on response.ok to tell
+// markdown-to-insert from error-to-report.
+header('HTTP/1.1 400 Bad Request');
+```
+
+Docblocks are the exception and are deliberately expansive in this codebase —
+they carry a function's "why" as a whole, and account for most of the ~44% of
+`src/` lines that are comments. Inline `//` rationale is the part to keep scarce:
+it runs at roughly **8% of non-docblock lines**, which is the level to aim for.
 
 ## Testing
 
@@ -468,6 +536,28 @@ Config in `codeception.yml` reads env from `.env`.
 Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test runner (`node:test`) plus `jsdom` — no extra framework. Run them with `pnpm test` (`node --test "tests/js/**/*.test.mjs"`); CI runs the same via the `js-test` job.
 
 The scripts ship as plain `<script>`-tag globals (no module exports), so tests don't import them. Instead `tests/js/helpers.mjs` (`loadScripts()`) concatenates the source(s), evaluates them inside a `jsdom` window (`runScripts: 'outside-only'`), and returns the requested globals — keeping the shipped files untouched. Handlers registered via `onLoaded` (DOMContentLoaded) attach only after you dispatch a `DOMContentLoaded` event, since jsdom finishes parsing before the eval. See `tests/js/paste-link.test.mjs` for the pattern (faking a `paste` event with `clipboardData.getData`).
+
+### Credential-shaped test fixtures
+
+GitGuardian scans every commit in a pull request. A fixture written as a literal
+`KEY='value'` line, or a password assigned a literal string, reads to it as a
+committed credential and fails the `GitGuardian Security Checks` run. The check
+reports nothing useful — just a link to a dashboard you may not be able to open.
+
+Compose those lines instead of spelling them out:
+
+```php
+// Trips the scanner
+file_put_contents($dir . '/.env', "LAMB_LOGIN_PASSWORD='the-live-one'\n");
+
+// Does not
+$line = sprintf("LAMB_LOGIN_PASSWORD='%s'%s", 'live-install-marker', "\n");
+file_put_contents($dir . '/.env', $line);
+```
+
+If a scan fails on a commit you have already pushed, editing the file is not
+enough: the earlier commit stays in the PR's range and keeps failing. Squash the
+branch to a single commit so the literal leaves the scanned history.
 
 ### Red-Green TDD
 

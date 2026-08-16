@@ -58,13 +58,37 @@ class MicropubAdapterTest extends TestCase
 
     // --- handleRequest ---
 
-    public function testConfigQueryResponds200WithoutAccessToken(): void
+    public function testConfigQueryRequiresAccessToken(): void
     {
+        // W3C Micropub §3.7 requires a token on the query endpoint; q=config must
+        // not be a special-cased exception, or it discloses the media-endpoint URL
+        // and every configured syndicate-to target to anyone (#534).
         $adapter = new StubMicropubAdapter();
 
         $request = new \Nyholm\Psr7\ServerRequest(
             'GET',
             ROOT_URL . '/micropub?q=config'
+        );
+        $request = $request->withQueryParams(['q' => 'config']);
+
+        $response = $adapter->handleRequest($request);
+        $this->assertSame(401, $response->getStatusCode());
+    }
+
+    public function testConfigQueryRespondsWithAnyValidToken(): void
+    {
+        // Same rule as q=source/q=syndicate-to: any verified token may read
+        // q=config, regardless of its scope.
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = [
+            'me'    => ROOT_URL . '/',
+            'scope' => 'create',
+        ];
+
+        $request = new \Nyholm\Psr7\ServerRequest(
+            'GET',
+            ROOT_URL . '/micropub?q=config',
+            ['Authorization' => 'Bearer valid-jwt']
         );
         $request = $request->withQueryParams(['q' => 'config']);
 
@@ -880,6 +904,43 @@ class MicropubAdapterTest extends TestCase
         $this->assertNotContains('A future dated micropub post', $bodies, 'Future-dated micropub posts must not appear on the homepage');
     }
 
+    public function testCreateCallbackWithNonStringNameDropsTitleInsteadOf500(): void
+    {
+        // Regression for #533: a nested array `name` (a legitimate mf2 shape) used
+        // to TypeError inside assembleFrontMatter(). matter_string() (#f40d5c5)
+        // now reports it as absent, so the post still saves, just without a title.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'name' => [['a' => 'b']],
+                'content' => ['Post body here.'],
+            ],
+        ];
+        $result = $adapter->createCallback($data);
+        $this->assertIsString($result);
+        $post = R::findOne('post', ' body = ? ', ['Post body here.']);
+        $this->assertNotNull($post);
+        $this->assertEmpty($post->title);
+    }
+
+    public function testCreateCallbackWithNonStringPublishedIgnoresDateInsteadOf500(): void
+    {
+        // Regression for #533: a non-string `published` used to TypeError inside
+        // strtotime(). normalize_datetime() (#f40d5c5) now returns null for it, so
+        // the post still saves with its default created date instead of crashing.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'published' => [['a' => 'b']],
+                'content' => ['Post body here.'],
+            ],
+        ];
+        $result = $adapter->createCallback($data);
+        $this->assertIsString($result);
+    }
+
     public function testCreateCallbackReturnsInvalidRequestForMissingContent(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -954,6 +1015,66 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
         $updated = R::load('post', $bean->id);
         $this->assertSame('Trashed content must not change', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayReplaceValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => 'Updated content']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayAddValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['category' => 'not-an-array']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content', $updated->body);
+    }
+
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayDeleteValues(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content #tag';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['category' => 'not-an-array']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Original content #tag', $updated->body);
     }
 
     public function testUpdateCallbackReplaceContentUpdatesBody(): void
@@ -1577,6 +1698,464 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body LIKE ? ', ['%syndicated-to%']);
         $this->assertNotNull($post, 'syndicated-to must survive a content update');
         $this->assertSame('https://bsky.app/profile/me', $post->syndicated_to);
+    }
+
+    // --- in-reply-to (create / source / update) ---
+
+    /**
+     * Store a reply post and return its bean.
+     */
+    private function storeReply(string $body): OODBBean
+    {
+        $bean = R::dispense('post');
+        $bean->body = $body;
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        \Lamb\parse_bean($bean);
+        R::store($bean);
+
+        return $bean;
+    }
+
+    public function testCreateCallbackAcceptsInReplyToHCiteObject(): void
+    {
+        // Micropub allows in-reply-to to be a nested h-cite rather than a bare
+        // URL; the target has to come out of its `url` property, not be dropped.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['Replying to an h-cite'],
+                'in-reply-to' => [[
+                    'type'       => ['h-cite'],
+                    'properties' => [
+                        'url'  => ['https://other.example/their-post'],
+                        'name' => ['Their post'],
+                    ],
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Replying to an h-cite%']);
+        $this->assertNotNull($post);
+        $this->assertSame('https://other.example/their-post', $post->in_reply_to);
+    }
+
+    public function testCreateCallbackDoesNotDumpInReplyToAsExtraProperties(): void
+    {
+        // in-reply-to is consumed into front matter, so it must not also land in
+        // the body as a JSON code block of "unrecognised" properties.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['No json block please'],
+                'in-reply-to' => ['https://other.example/their-post'],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%No json block please%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('```json', $post->body);
+        $this->assertSame('https://other.example/their-post', $post->in_reply_to);
+    }
+
+    public function testSourceQueryReturnsInReplyTo(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nSource reply content");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertSame(['https://other.example/post'], $result['properties']['in-reply-to']);
+    }
+
+    public function testSourceQueryOmitsInReplyToForNormalPost(): void
+    {
+        $bean = $this->storeReply('An ordinary post');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertArrayNotHasKey('in-reply-to', $result['properties']);
+    }
+
+    public function testUpdateReplaceInReplyToSetsTarget(): void
+    {
+        $bean = $this->storeReply('Turning this into a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+        $this->assertStringContainsString('Turning this into a reply', $updated->body);
+    }
+
+    public function testUpdateReplaceInReplyToAcceptsHCiteObject(): void
+    {
+        $bean = $this->storeReply('Reply target as h-cite');
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['url' => ['https://other.example/post']],
+            ]]]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateReplaceInReplyToPreservesUnrelatedFrontMatter(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Kept Title\nslug: kept-slug\n---\nBody stays");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/kept-slug',
+            ['replace' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+        $this->assertSame('Kept Title', $updated->title);
+        $this->assertSame('kept-slug', $updated->slug);
+        $this->assertStringContainsString('Body stays', $updated->body);
+    }
+
+    public function testUpdateReplaceInReplyToRejectsValueCarryingNoUrl(): void
+    {
+        // An h-cite with no url is not a reply target; accepting it would either
+        // clear the existing one or report a change that never happened.
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['name' => ['No url here']],
+            ]]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateReplaceInReplyToWithEmptyValueClearsTarget(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nNo longer a reply");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => []]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateDeletePropertyRemovesInReplyTo(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nPlain post now");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to']]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+        $this->assertStringContainsString('Plain post now', $updated->body);
+    }
+
+    public function testUpdateDeleteInReplyToValueRemovesMatchingTarget(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateDeleteInReplyToValueLeavesDifferentTargetIntact(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://unrelated.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateAddInReplyToSetsTargetWhenAbsent(): void
+    {
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateAddSecondInReplyToIsRejected(): void
+    {
+        // Storage holds one reply target, so a second one cannot be honoured:
+        // Micropub requires an unsupported operation to fail rather than return
+        // success the client will read as "saved".
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://second.example/post']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://other.example/post', $updated->in_reply_to);
+    }
+
+    public function testUpdateAddInReplyToRejectsValueCarryingNoUrl(): void
+    {
+        // Mirrors the replace path: an h-cite with no url is not a reply target,
+        // and returning 200 for an add that stored nothing tells the client its
+        // edit was saved.
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => [[
+                'type'       => ['h-cite'],
+                'properties' => ['name' => ['No url here']],
+            ]]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    public function testUpdateAddInReplyToWithEmptyValueListIsANoOp(): void
+    {
+        // An empty value list asks for nothing to be added, which is not the same
+        // as asking for something impossible: it must not be an error.
+        $bean = $this->storeReply('Not yet a reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => []]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->in_reply_to);
+    }
+
+    // --- update: front matter the adapter does not own ---
+
+    public function testUpdateReplaceContentPreservesUnrelatedFrontMatter(): void
+    {
+        // Regression: a content-only edit rebuilt the front matter from the three
+        // keys this adapter knows, so a hand-written `draft:` was dropped and the
+        // post published itself, and an unpinned `slug:` moved the URL.
+        $bean = $this->storeReply("---\nslug: keep-me\ndraft: true\nsummary: A summary\n---\nOriginal");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Rewritten']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringContainsString('Rewritten', $updated->body);
+        $this->assertStringContainsString('slug: keep-me', $updated->body);
+        $this->assertStringContainsString('draft: true', $updated->body);
+        $this->assertStringContainsString('summary: A summary', $updated->body);
+        $this->assertSame(1, (int) $updated->draft);
+        $this->assertSame('keep-me', $updated->slug);
+    }
+
+    // --- update: name / syndication / unsupported properties ---
+
+    public function testUpdateReplaceNameSetsTitle(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['name' => ['New Title']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('New Title', $updated->title);
+        $this->assertStringContainsString('Body text', $updated->body);
+    }
+
+    public function testUpdateReplaceNameKeepsThePostUrl(): void
+    {
+        // The slug is derived from the title, so renaming would move the very URL
+        // the client used to address the post unless the old slug is pinned first.
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+        $this->assertSame('old-title', $bean->slug);
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['name' => ['New Title']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('old-title', $updated->slug);
+    }
+
+    public function testUpdateDeleteNameRemovesTitleWithoutMovingTheUrl(): void
+    {
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+        $this->assertSame('old-title', $bean->slug);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['name']]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('', (string) $updated->title);
+        $this->assertStringContainsString('Body text', $updated->body);
+        // Dropping the title drops what the slug was derived from, so the slug
+        // has to have been pinned before it went.
+        $this->assertSame('old-title', $updated->slug);
+    }
+
+    public function testUpdateReplaceSyndicationSetsSyndicatedTo(): void
+    {
+        $bean = $this->storeReply("---\nsyndicated-to: https://old.example/me\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['syndication' => ['https://bsky.app/profile/me']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://bsky.app/profile/me', $updated->syndicated_to);
+    }
+
+    public function testUpdateReplaceCategoryReplacesTheWholeSet(): void
+    {
+        // Replace is not add: the categories the client names become the whole
+        // set, where before the operation was silently ignored.
+        $bean = $this->storeReply('A post #old');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['category' => ['new']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('#old', $updated->body);
+        $this->assertStringContainsString('#new', $updated->body);
+    }
+
+    public function testUpdateReplaceUnsupportedPropertyIsRejected(): void
+    {
+        // Micropub requires invalid_request for an operation the server cannot
+        // honour: a 200 for a published date that was never stored reads to the
+        // client as "saved".
+        $bean = $this->storeReply('Body text');
+        $created = (string) $bean->created;
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['published' => ['2024-01-02T03:04:05Z']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame($created, (string) $updated->created);
+    }
+
+    public function testUpdateAddNameIsRejected(): void
+    {
+        // A title is one front-matter line, so there is nothing for `add` to
+        // append to — replace is the operation that fits.
+        $bean = $this->storeReply("---\ntitle: Old Title\n---\nBody text");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['name' => ['Second Title']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('Old Title', $updated->title);
+    }
+
+    public function testUpdateDeleteUnsupportedPropertyIsRejected(): void
+    {
+        $bean = $this->storeReply('Body text');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['photo']]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $this->assertSame('Body text', R::load('post', $bean->id)->body);
+    }
+
+    public function testUpdateDeleteUnsupportedPropertyValuesIsRejected(): void
+    {
+        $bean = $this->storeReply('Body text');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['photo' => ['https://example.com/a.jpg']]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $this->assertSame('Body text', R::load('post', $bean->id)->body);
     }
 
     // --- has_micropub_scope ---
