@@ -25,13 +25,27 @@ use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\matter_string;
+use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\set_frontmatter_key;
 use function Lamb\Post\set_reply_to;
 use function Lamb\Post\split_frontmatter;
 
 class LambMicropubAdapter extends MicropubAdapter
 {
+    /**
+     * Micropub properties an update writes to a single front-matter key.
+     *
+     * `in-reply-to` is deliberately absent: it needs h-cite unwrapping and its
+     * own single-target rules, so it keeps its own branch in each apply method.
+     */
+    private const MATTER_PROPERTIES = [
+        'name'            => 'title',
+        'syndication'     => 'syndicated-to',
+        'mp-syndicate-to' => 'syndicated-to',
+    ];
+
     /**
      * Return the source properties of a post identified by URL.
      *
@@ -499,7 +513,9 @@ class LambMicropubAdapter extends MicropubAdapter
         if (array_is_list($delete)) {
             // Indexed array: delete entire properties.
             foreach ($delete as $property) {
-                $this->applyDeleteProperty($bean, $property);
+                if (!$this->applyDeleteProperty($bean, (string) $property)) {
+                    return 'invalid_request';
+                }
             }
         } else {
             // Associative array: delete specific values from each property.
@@ -507,7 +523,9 @@ class LambMicropubAdapter extends MicropubAdapter
                 if (!is_array($values) || !array_is_list($values)) {
                     return 'invalid_request';
                 }
-                $this->applyDeleteValues($bean, $property, $values);
+                if (!$this->applyDeleteValues($bean, $property, $values)) {
+                    return 'invalid_request';
+                }
             }
         }
 
@@ -536,6 +554,14 @@ class LambMicropubAdapter extends MicropubAdapter
             return true;
         }
 
+        if (isset(self::MATTER_PROPERTIES[$property])) {
+            // Micropub's `add` appends to a multi-valued property, and these are
+            // one front-matter line each: there is nothing to append to. Replace
+            // is the operation that fits, so say so rather than report a success
+            // the storage did not have.
+            return false;
+        }
+
         if ($property === 'in-reply-to') {
             // Adding nothing is a no-op, not a failure.
             if ($values === []) {
@@ -555,9 +581,10 @@ class LambMicropubAdapter extends MicropubAdapter
                 return false;
             }
             $bean->body = set_reply_to($bean->body ?? '', $target);
+            return true;
         }
 
-        return true;
+        return false;
     }
 
     /**
@@ -565,16 +592,28 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param OODBBean $bean
      * @param string   $property
-     * @return void
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
      */
-    private function applyDeleteProperty(OODBBean $bean, string $property): void
+    private function applyDeleteProperty(OODBBean $bean, string $property): bool
     {
         if ($property === 'category') {
             $bean->body = strip_trailing_body_tags($bean->body ?? '');
+            return true;
         }
+
         if ($property === 'in-reply-to') {
             $bean->body = set_reply_to($bean->body ?? '', '');
+            return true;
         }
+
+        if (isset(self::MATTER_PROPERTIES[$property])) {
+            $this->pinSlug($bean, self::MATTER_PROPERTIES[$property]);
+            $bean->body = set_frontmatter_key($bean->body ?? '', self::MATTER_PROPERTIES[$property], '');
+            return true;
+        }
+
+        return false;
     }
 
     /**
@@ -583,12 +622,14 @@ class LambMicropubAdapter extends MicropubAdapter
      * @param OODBBean    $bean
      * @param string      $property
      * @param list<mixed> $values
-     * @return void
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
      */
-    private function applyDeleteValues(OODBBean $bean, string $property, array $values): void
+    private function applyDeleteValues(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
             $bean->body = remove_body_tags($bean->body ?? '', array_map('strval', $values));
+            return true;
         }
 
         if ($property === 'in-reply-to') {
@@ -598,10 +639,13 @@ class LambMicropubAdapter extends MicropubAdapter
             foreach ($values as $value) {
                 if ($current !== '' && $this->replyTargetUrl($value) === $current) {
                     $bean->body = set_reply_to($bean->body ?? '', '');
-                    return;
+                    return true;
                 }
             }
+            return true;
         }
+
+        return false;
     }
 
     /**
@@ -621,6 +665,16 @@ class LambMicropubAdapter extends MicropubAdapter
             return true;
         }
 
+        if ($property === 'category') {
+            // Replace, not add: the categories the client names become the whole
+            // set, so the hashtags already on the body go first.
+            $bean->body = add_body_tags(
+                strip_trailing_body_tags($bean->body ?? ''),
+                array_map('strval', $values)
+            );
+            return true;
+        }
+
         if ($property === 'in-reply-to') {
             // An empty value list is Micropub's "replace with nothing", i.e. the
             // post stops being a reply.
@@ -634,9 +688,71 @@ class LambMicropubAdapter extends MicropubAdapter
                 return false;
             }
             $bean->body = set_reply_to($bean->body ?? '', $target);
+            return true;
         }
 
-        return true;
+        if (isset(self::MATTER_PROPERTIES[$property])) {
+            $value = $this->matterValue($property, $values);
+            if ($value === null) {
+                return false;
+            }
+            $this->pinSlug($bean, self::MATTER_PROPERTIES[$property]);
+            $bean->body = set_frontmatter_key($bean->body ?? '', self::MATTER_PROPERTIES[$property], $value);
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Pin the slug a post is already served under before its title changes.
+     *
+     * parse_matter() derives the slug from the title when the front matter has
+     * no explicit one, so a rename would move the permalink — the very URL the
+     * Micropub client used to address the post.
+     *
+     * @param OODBBean $bean
+     * @param string   $key The front-matter key about to be written.
+     * @return void
+     */
+    private function pinSlug(OODBBean $bean, string $key): void
+    {
+        $slug = (string) ($bean->slug ?? '');
+        if ($key !== 'title' || $slug === '') {
+            return;
+        }
+
+        $bean->body = set_frontmatter_key($bean->body ?? '', 'slug', $slug);
+    }
+
+    /**
+     * The front-matter text a replace of a single-valued property writes.
+     *
+     * Mirrors buildBody(): syndication targets join into one line, everything
+     * else takes the first value. An empty value list is Micropub's "replace
+     * with nothing", so it clears the key.
+     *
+     * @param string      $property
+     * @param list<mixed> $values
+     * @return string|null Null when the value carries no faithful text, which is
+     *                     a replace that cannot be honoured.
+     */
+    private function matterValue(string $property, array $values): ?string
+    {
+        if ($values === []) {
+            return '';
+        }
+
+        if ($property === 'name') {
+            return matter_string($values[0] ?? null);
+        }
+
+        $targets = array_filter(
+            array_map(matter_string(...), $values),
+            fn(?string $target) => $target !== null && trim($target) !== ''
+        );
+
+        return implode(' ', $targets);
     }
 
     /**
@@ -685,38 +801,33 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Rebuild the post body with new content, preserving existing front matter and hashtags.
      *
+     * The front-matter block is carried over verbatim rather than re-assembled:
+     * assembly can only reproduce the keys this class knows about, and an update
+     * is the one Micropub call that re-reads front matter the author wrote by
+     * hand — including load-bearing keys like `draft:` and a pinned `slug:`.
+     *
      * @param OODBBean $bean
      * @param string   $newContent
      * @return string
      */
     private function rebuildBody(OODBBean $bean, string $newContent): string
     {
-        $currentBody  = $bean->body ?? '';
-        $matter       = parse_matter($currentBody);
-        // matter_string(), not a bare read: parse_matter() normalises these
-        // keys, but the ?string parameters below turn any survivor into a fatal
-        // TypeError, and an update is the one Micropub call that re-reads front
-        // matter the author wrote by hand.
-        $title        = matter_string($matter['title'] ?? null);
-        $replyTo      = matter_string($matter['in-reply-to'] ?? null);
-        $syndicatedTo = matter_string($matter['syndicated-to'] ?? null);
+        $currentBody = (string) ($bean->body ?? '');
+        [$yaml] = split_frontmatter(normalize_frontmatter_fence($currentBody));
 
         $tags       = get_tags($currentBody);
         $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
 
         $content = $newContent . $hashtagStr;
 
-        return build_matter(
-            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
-            $content
-        );
+        return $yaml === '' ? $content : "---\n" . $yaml . "\n---\n" . $content;
     }
 
     /**
      * Assemble the post front-matter array from individual fields.
      *
-     * Central point for front-matter assembly so buildBody() and rebuildBody()
-     * stay in sync when new fields are added.
+     * Create-path only: an update edits the stored block in place instead, so
+     * that keys this class does not know about survive.
      *
      * @param string|null $title
      * @param string|null $replyTo
