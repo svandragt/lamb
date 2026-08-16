@@ -3,7 +3,7 @@
   "devDependencies": {
     "@mozilla/readability": "^0.6.0",
     "@playwright/test": "^1.62.1",
-    "@types/jsdom": "^28.0.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^26.2.0",
     "jsdom": "^30.0.1"
   },
