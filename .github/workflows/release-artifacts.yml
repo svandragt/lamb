@@ -93,6 +93,7 @@ jobs:
           image-ref: ghcr.io/${{ github.repository }}:${{ env.TAG }}
           severity: HIGH,CRITICAL
           ignore-unfixed: true
+          trivyignores: .trivyignore.yaml
           exit-code: '1'
 
       - name: Push image
