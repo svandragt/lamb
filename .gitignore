@@ -43,3 +43,9 @@ node_modules/
 
 # Local runtime data (db is covered by *.db above)
 /data/sessions/
+
+# Local agent tooling and scratch
+/.agents/
+/.calibrate/
+/.workshop.lock
+/tmp/
