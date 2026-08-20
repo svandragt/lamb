@@ -1376,7 +1376,7 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'File upload failed.');
     }
 
-    $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
+    $ext = \Lamb\Response\safe_upload_extension(\Lamb\Http\request_string($file['name'] ?? null) ?? '');
     if ($ext === null) {
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
@@ -1389,7 +1389,7 @@ function respond_micropub_media(): void
 
     $sub_path  = \Lamb\Response\upload_subpath();
     $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-    $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
+    $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
     $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);

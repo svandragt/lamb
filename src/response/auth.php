@@ -77,7 +77,7 @@ function redirect_login(): array
         return login_page_data('Login is not configured on this site.');
     }
 
-    $user_pass = $_POST['password'] ?? '';
+    $user_pass = \Lamb\Http\request_string($_POST['password'] ?? null) ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();
         record_login_failure($ip, $now);
@@ -540,14 +540,14 @@ function respond_settings(): array
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Security\require_csrf();
 
-        if (isset($_POST['action']) && $_POST['action'] === 'reset') {
+        if (\Lamb\Http\request_string($_POST['action'] ?? null) === 'reset') {
             $default_ini = Config\get_default_ini_text();
             Config\save_ini_text($default_ini);
             $_SESSION['flash'][] = "Settings reset to defaults.";
             redirect_uri('/settings');
         }
 
-        $submitted_ini = $_POST['ini_text'] ?? '';
+        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null) ?? '';
         $validation = Config\validate_ini($submitted_ini);
 
         if ($validation['valid']) {

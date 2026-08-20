@@ -54,7 +54,10 @@ function respond_webmention(array $_args): void
         die();
     }
 
-    $result = verify_and_store((string) ($_POST['source'] ?? ''), (string) ($_POST['target'] ?? ''));
+    $result = verify_and_store(
+        \Lamb\Http\request_string($_POST['source'] ?? null) ?? '',
+        \Lamb\Http\request_string($_POST['target'] ?? null) ?? ''
+    );
 
     http_response_code($result['status']);
     header('Content-Type: text/plain; charset=utf-8');

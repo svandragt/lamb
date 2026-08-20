@@ -9,6 +9,7 @@ use Lamb\Config;
 use Lamb\Security;
 use RedBeanPHP\R;
 
+use function Lamb\Http\request_string;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Theme\part;
 
@@ -315,9 +316,9 @@ function respond_tag_feed_json(array $args): void
  */
 function respond_search(array $args): array
 {
-    $query = urldecode($args[0] ?? '');
+    $query = urldecode((string) ($args[0] ?? ''));
     if (empty($query)) {
-        $query = $_GET['s'] ?? '';
+        $query = request_string($_GET['s'] ?? null) ?? '';
         if (empty($query)) {
             return [];
         }

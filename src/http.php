@@ -124,6 +124,35 @@ function request_root_url(array $server): ?string
 }
 
 /**
+ * Reads a request value as a string, or null when it carries none.
+ *
+ * Every superglobal is attacker-shaped: `?s=x` arrives as a string, `?s[]=x` as
+ * an array, and the same is true of every POST field and cookie. PHP 8 turns
+ * that mismatch into an uncaught TypeError at the first string-typed sink, so a
+ * single bracket in a query string was a 500 any visitor could ask for —
+ * including one that told them a hidden post exists, since the crash only
+ * happened on the branch that checks a preview token.
+ *
+ * An array or object is reported as absent rather than coerced: "Array" is not
+ * a search term, a password, or a preview token, and every caller already has a
+ * sensible answer for "not supplied".
+ *
+ * @param mixed $value The raw superglobal value (e.g. `$_GET['s'] ?? null`).
+ * @return string|null The value as text, or null when it has none.
+ */
+function request_string(mixed $value): ?string
+{
+    if (is_string($value)) {
+        return $value;
+    }
+    if (is_int($value) || is_float($value)) {
+        return (string) $value;
+    }
+
+    return null;
+}
+
+/**
  * Sanitises a value bound for a `Location:` header.
  *
  * Any request-derived value interpolated into a redirect target (the request

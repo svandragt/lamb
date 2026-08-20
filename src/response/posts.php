@@ -12,6 +12,7 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
+use function Lamb\Http\request_string;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
@@ -34,10 +35,10 @@ function redirect_created(): void
 {
     Security\require_login();
     Security\require_csrf();
-    if ($_POST['submit'] !== SUBMIT_CREATE) {
+    if (request_string($_POST['submit'] ?? null) !== SUBMIT_CREATE) {
         return;
     }
-    $contents = trim($_POST['contents'] ?? '');
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     if (empty($contents)) {
         return;
     }
@@ -81,8 +82,10 @@ function warn_if_manual_redirect(string $slug): void
         return;
     }
 
-    $_SESSION['flash'][] = 'A manual redirect for <code>' . $slug
-        . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+    // Plain text: the themes escape a flash before printing it, so markup here
+    // reaches the author as literal tags.
+    $_SESSION['flash'][] = 'A manual redirect for "' . $slug
+        . '" still exists in Settings → [redirections]. You may want to remove it.';
 }
 
 /**
@@ -264,11 +267,11 @@ function redirect_edited(): void
     Security\require_login();
     Security\require_csrf();
     $validSubmits = [SUBMIT_EDIT];
-    if (!in_array($_POST['submit'], $validSubmits, true)) {
+    if (!in_array(request_string($_POST['submit'] ?? null), $validSubmits, true)) {
         return;
     }
 
-    $contents = trim(($_POST['contents']));
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
     if (empty($contents) || empty($id)) {
         return;
@@ -287,7 +290,7 @@ function redirect_edited(): void
     $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
+        $_SESSION['flash'][] = 'Failed to save, slug is in use: "' . $bean->slug . '"';
 
         return;
     }
@@ -441,7 +444,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, $_GET['preview'] ?? null)) {
+    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, request_string($_GET['preview'] ?? null))) {
         return respond_404([], true);
     }
 
@@ -485,7 +488,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, $_GET['preview'] ?? null))) {
+    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, request_string($_GET['preview'] ?? null)))) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

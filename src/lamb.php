@@ -805,7 +805,7 @@ function post_has_slug(string $lookup): string|null
     if ($post === null || $post->id === 0) {
         return null;
     }
-    if (!is_viewable($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
+    if (!is_viewable($post) && !preview_token_valid($post, Http\request_string($_GET['preview'] ?? null))) {
         return null;
     }
 
