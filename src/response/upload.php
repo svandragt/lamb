@@ -281,6 +281,14 @@ function persist_image_bytes(string $bytes, string $ext, string $dest_dir, strin
         @unlink($tmp);
         return null;
     }
+    // tempnam() creates its file 0600, and rename() carries that mode to the
+    // published asset — every other upload path (move_uploaded_file(),
+    // imagewebp(), the restore's file_put_contents()) lands on the usual
+    // 0666 & ~umask. A 0600 asset is readable by the PHP user alone, so a
+    // separate static-file server user, a backup, or the author's own account
+    // cannot read an image the site is serving.
+    @chmod("$dest_dir/$filename", 0666 & ~umask());
+
     return $filename;
 }
 

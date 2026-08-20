@@ -1050,6 +1050,25 @@ XML;
         }
     }
 
+    public function testPersistImageBytesWritesAReadableAsset(): void
+    {
+        // tempnam() creates 0600 and rename() carries that mode to the
+        // published file, leaving an asset the site serves that a separate
+        // static-file user (or the author's own account) cannot read. Every
+        // other upload path lands on the usual 0666 & ~umask.
+        $dir = sys_get_temp_dir() . '/lamb_persist_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        try {
+            $filename = persist_image_bytes('GIF89a' . str_repeat("\0", 32), 'gif', $dir, 'seed');
+
+            $this->assertNotNull($filename);
+            $this->assertSame(0666 & ~umask(), fileperms("$dir/$filename") & 0777);
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
+    }
+
     public function testPersistImageBytesReturnsNullWhenDirMissing(): void
     {
         $filename = persist_image_bytes('xx', 'gif', '/does/not/exist', 'seed');
