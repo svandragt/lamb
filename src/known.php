@@ -132,7 +132,10 @@ function extract_items(SimpleXMLElement $rss): array
             $path = parse_url($link, PHP_URL_PATH);
             if (is_string($path) && trim($path, '/') !== '') {
                 $segments = explode('/', trim($path, '/'));
-                $slug = (string) end($segments);
+                // Decoded: the slug column holds the text, and permalink_path()
+                // re-encodes it for the URL. Keeping the encoded form would
+                // double-encode the imported post's permalink.
+                $slug = rawurldecode((string) end($segments));
             }
         } else {
             $bookmark_url = $link;
