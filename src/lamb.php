@@ -158,6 +158,36 @@ function remove_body_tags(string $body, array $tags): string
 }
 
 /**
+ * Repairs a body that is not valid UTF-8.
+ *
+ * Everything downstream assumes UTF-8, and the failure is silent rather than
+ * loud: htmlspecialchars() (inside Parsedown, and inside escape()) returns an
+ * empty string for input it cannot decode, so one stray byte rendered the whole
+ * paragraph containing it as `<p></p>` — the text was still in the `body`
+ * column, but the post, its description, its feed entry and its search text
+ * were blank. Symfony's YAML parser refuses such a block outright, so the front
+ * matter went with it.
+ *
+ * A body that is already valid UTF-8 is returned untouched. Otherwise it is
+ * read as Windows-1252, which is where a stray byte almost always comes from
+ * (a Latin-1 feed, a smart quote pasted from a word processor) and which maps
+ * every byte value, so the result is always valid UTF-8. That turns a blank
+ * post into a readable one, and a genuinely different encoding into visible
+ * mojibake the author can see and fix rather than silent emptiness.
+ *
+ * @param string $text The raw post body.
+ * @return string The body as valid UTF-8.
+ */
+function normalize_utf8(string $text): string
+{
+    if ($text === '' || mb_check_encoding($text, 'UTF-8')) {
+        return $text;
+    }
+
+    return mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+}
+
+/**
  * Escapes the wildcards in a value that is about to be embedded in a SQL `LIKE`
  * pattern. The query that uses it must say `ESCAPE '\'`.
  *
@@ -308,6 +338,11 @@ function absolute_url(string $url, ?string $base = null): string
  */
 function parse_bean(OODBBean $bean): void
 {
+    // Repair a body that is not valid UTF-8 first: every step below (the YAML
+    // parser, Parsedown's escaping) treats such a body as empty rather than
+    // reporting it.
+    $bean->body = normalize_utf8((string) $bean->body);
+
     // Restore an iOS Smart-Punctuation front-matter fence (e.g. a single em
     // dash for a typed `---`) before parsing, and persist the normalised body.
     // This is the single choke point every save path runs through — web
