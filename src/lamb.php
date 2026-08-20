@@ -916,7 +916,8 @@ function redirect_target_slug(string $to_url): ?string
     if (!str_starts_with($to_url, '/')) {
         return null;
     }
-    $slug = ltrim($to_url, '/');
+    // Stored encoded (permalink_path()); slugs and from_slug values are not.
+    $slug = rawurldecode(ltrim($to_url, '/'));
     if ($slug === '' || str_contains($slug, '/')) {
         return null;
     }

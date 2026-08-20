@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\find_redirect;
 use function Lamb\get_all_redirects;
+use function Lamb\redirect_target_slug;
 
 class RedirectTest extends TestCase
 {
@@ -24,6 +25,26 @@ class RedirectTest extends TestCase
 
         // Clean redirect table before each test
         R::exec('DELETE FROM redirect WHERE 1');
+    }
+
+    // Redirect keys live in the decoded space the router looks them up in,
+    // while the targets they point at are encoded like any other permalink.
+
+    public function testRedirectTargetSlugDecodesItsTarget(): void
+    {
+        $this->assertSame('my post', redirect_target_slug('/my%20post'));
+        $this->assertSame('café', redirect_target_slug('/caf%C3%A9'));
+        $this->assertSame('plain', redirect_target_slug('/plain'));
+        $this->assertNull(redirect_target_slug('https://example.com/x'));
+        $this->assertNull(redirect_target_slug('/a/b'));
+    }
+
+    public function testStoreRedirectKeysOnTheDecodedPath(): void
+    {
+        \Lamb\Import\store_redirect('2020/caf%C3%A9', '/caf%C3%A9');
+
+        // Looked up the way the router looks it up: with the decoded path.
+        $this->assertSame('/caf%C3%A9', find_redirect('2020/café'));
     }
 
     // find_redirect — config-based

@@ -107,7 +107,10 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
 
     $auto_redirect = R::dispense('redirect');
     $auto_redirect->from_slug = $old_slug;
-    $auto_redirect->to_url    = '/' . sanitize_explicit_slug($new_slug);
+    // Encoded the same way permalink_path() encodes it, so the 301 lands on a
+    // URL the router can read back (a slug may carry a space or a non-ASCII
+    // character).
+    $auto_redirect->to_url    = '/' . \Lamb\encode_path_segment(sanitize_explicit_slug($new_slug));
     R::store($auto_redirect);
 }
 
