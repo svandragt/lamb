@@ -299,9 +299,14 @@ function build_export_archive(
     sort($assets);
 
     $manifest = build_manifest($entries, $assets, $exported_at, $site);
+    // JSON_INVALID_UTF8_SUBSTITUTE: one stray byte in a slug or the site title
+    // used to abort the whole export with "Malformed UTF-8 characters", leaving
+    // the author unable to back up at all. Post bodies are stored as raw files
+    // in the archive, so they are unaffected either way.
     $json = json_encode(
         $manifest,
-        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR
+        JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR
     );
     $zip->addFromString('manifest.json', $json . "\n");
 

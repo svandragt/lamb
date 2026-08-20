@@ -83,7 +83,10 @@ function respond_upload(array $_args): void
         $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
-    echo json_encode($out, JSON_THROW_ON_ERROR);
+    // The markdown carries the client's filename, which need not be valid
+    // UTF-8; without substitution json_encode() throws and the upload 500s
+    // after the file has already been stored.
+    echo json_encode($out, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     die();
 }
 
