@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\encode_path_segment;
 use function Lamb\find_post_by_path;
 use function Lamb\get_option;
+use function Lamb\like_escape;
 use function Lamb\now;
 use function Lamb\permalink;
 use function Lamb\permalink_path;
@@ -168,6 +169,23 @@ class LambHelpersTest extends TestCase
         $found = find_post_by_path('/my%20post');
         $this->assertNotNull($found);
         $this->assertSame((int) $bean->id, (int) $found->id);
+    }
+
+    // like_escape — a visitor's literal text must stay literal inside a LIKE.
+
+    public function testLikeEscapeEscapesWildcards(): void
+    {
+        $this->assertSame('100\\%', like_escape('100%'));
+        $this->assertSame('a\\_b', like_escape('a_b'));
+        $this->assertSame('plain', like_escape('plain'));
+    }
+
+    public function testLikeEscapeEscapesTheEscapeCharacterFirst(): void
+    {
+        // Otherwise a trailing backslash in the term escapes the pattern's own
+        // closing wildcard instead of itself.
+        $this->assertSame('back\\\\slash', like_escape('back\\slash'));
+        $this->assertSame('\\\\\\%', like_escape('\\%'));
     }
 
     // get_option

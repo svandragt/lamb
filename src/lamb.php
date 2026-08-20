@@ -158,6 +158,23 @@ function remove_body_tags(string $body, array $tags): string
 }
 
 /**
+ * Escapes the wildcards in a value that is about to be embedded in a SQL `LIKE`
+ * pattern. The query that uses it must say `ESCAPE '\'`.
+ *
+ * `%` and `_` are wildcards, so a search for "100%" matched every post and one
+ * for "a_pha" matched "alpha" — the visitor's literal text has to stay literal.
+ * The escape character itself is escaped first, or a trailing backslash in the
+ * search term would escape the closing wildcard instead of itself.
+ *
+ * @param string $value The literal text to match.
+ * @return string The text with LIKE wildcards escaped.
+ */
+function like_escape(string $value): string
+{
+    return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+}
+
+/**
  * The root-relative URL path a post is served at: `/<slug>`, or `/status/<id>`
  * for a slug-less status post.
  *

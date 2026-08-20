@@ -813,8 +813,8 @@ function toggle_checkbox(string $body, int $index, bool $checked): string
 function get_tag_search_conditions(string $tag): array
 {
     return [
-        'sql'    => 'body LIKE ?',
-        'params' => ["%#$tag%"],
+        'sql'    => "body LIKE ? ESCAPE '\\'",
+        'params' => ['%#' . \Lamb\like_escape($tag) . '%'],
     ];
 }
 

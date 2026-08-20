@@ -333,8 +333,10 @@ function respond_search(array $args): array
     $where_clauses = [];
     $params = [];
     foreach ($words as $word) {
-        $where_clauses[] = 'body LIKE ?';
-        $params[] = "%$word%";
+        // The search term is literal text: without escaping, a `%` in it matched
+        // every post and an `_` matched any character.
+        $where_clauses[] = "body LIKE ? ESCAPE '\\'";
+        $params[] = '%' . \Lamb\like_escape($word) . '%';
     }
     $public = public_posts_clause();
     $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $public['sql'];
