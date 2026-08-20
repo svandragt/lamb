@@ -745,7 +745,7 @@ function checkbox_marker_offsets(string $body): array
         $blank = false;
 
         if (preg_match(TASK_MARKER_PATTERN, $line, $m, PREG_OFFSET_CAPTURE) === 1) {
-            $offsets[] = $position + $m[2][1];
+            $offsets[] = $position + (int) $m[2][1];
         }
 
         $position += $advance;

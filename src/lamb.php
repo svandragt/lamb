@@ -184,7 +184,9 @@ function normalize_utf8(string $text): string
         return $text;
     }
 
-    return mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+    $converted = mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+
+    return is_string($converted) ? $converted : $text;
 }
 
 /**

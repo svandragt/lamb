@@ -76,7 +76,10 @@ foreach ($data['posts'] as $bean) {
         Lamb\Theme\the_reply_context($bean) . Lamb\absolute_urls($bean->transformed)
     );
     $content_node = dom_import_simplexml($Content);
-    $content_node->appendChild($content_node->ownerDocument->createTextNode($content_html));
+    $content_document = $content_node->ownerDocument;
+    if ($content_document !== null) {
+        $content_node->appendChild($content_document->createTextNode($content_html));
+    }
     if (!empty($bean->in_reply_to)) {
         // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping
         // would double-encode any query-string ampersands.
