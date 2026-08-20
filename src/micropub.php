@@ -1063,7 +1063,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * the same rule front matter already uses: a list collapses to its first
      * entry, and anything else with no text is absent.
      *
-     * @param list<mixed> $values
+     * @param array<array-key, mixed> $values
      * @return list<string>
      */
     private static function textValues(array $values): array
