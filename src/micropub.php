@@ -1097,7 +1097,7 @@ function mp_log_path(): string
     if (!empty($GLOBALS['lamb_mp_log_path'])) {
         return (string) $GLOBALS['lamb_mp_log_path'];
     }
-    return ROOT_DIR . '/../data/micropub.log';
+    return \Lamb\Bootstrap\data_dir() . '/micropub.log';
 }
 
 /**

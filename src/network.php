@@ -114,6 +114,10 @@ function webmention_line(array $sent): string
     // webmention sends (no atomic claim on a queued row). Acquiring a
     // non-blocking exclusive lock first serializes overlapping runs instead.
     $lock = acquire_cron_lock();
+    if ($lock === false) {
+        http_response_code(500);
+        die('Cannot open the cron lock at ' . cron_lock_path() . ' — is the data directory writable?');
+    }
     if ($lock === null) {
         die('Already running, try again later.');
     }
@@ -152,6 +156,15 @@ function webmention_line(array $sent): string
 }
 
 /**
+ * The path of the lock file serializing /_cron runs. Lives in the install's
+ * data directory, wherever that is — see Bootstrap\data_dir().
+ */
+function cron_lock_path(): string
+{
+    return \Lamb\Bootstrap\data_dir() . '/cron.lock';
+}
+
+/**
  * Acquires an exclusive, non-blocking lock serializing /_cron runs.
  *
  * The returned handle must be kept referenced for the remainder of the
@@ -160,16 +173,22 @@ function webmention_line(array $sent): string
  * needed as long as the caller never returns normally before then (every
  * process_feeds() exit path terminates the request via die()/exit()).
  *
- * @param string $path Lock file path; created if absent.
- * @return resource|null The open lock-file handle, or null when the lock is
- *                        already held (another run is in progress) or the
- *                        lock file itself couldn't be opened.
+ * The two ways this can fail are kept apart. A lock file that cannot be opened
+ * at all is not another run in progress — it is a broken install, and reporting
+ * it as contention is what let a mislocated lock file silently stop every cron
+ * run (feeds, the webmention queue, the purge) while the endpoint kept
+ * answering "Already running, try again later."
+ *
+ * @param string|null $path Lock file path; defaults to cron_lock_path().
+ * @return resource|false|null The open lock-file handle; null when another run
+ *                             holds the lock; false when the lock file cannot
+ *                             be opened.
  */
-function acquire_cron_lock(string $path = '../data/cron.lock')
+function acquire_cron_lock(?string $path = null)
 {
-    $handle = @fopen($path, 'c');
+    $handle = @fopen($path ?? cron_lock_path(), 'c');
     if ($handle === false) {
-        return null;
+        return false;
     }
     if (!flock($handle, LOCK_EX | LOCK_NB)) {
         fclose($handle);
