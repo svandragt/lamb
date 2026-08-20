@@ -63,6 +63,8 @@ Editing the `slug:` line (or the title, when no explicit slug is set) reslugs th
 
 Slugs are unique. If a slug is already taken by another post (or matches a built-in route like `/search`), Lamb appends the post's id to keep the URL distinct, and writes the final slug back into the post's front-matter so you can see — and edit — the slug the post is actually served under.
 
+A slug is a single URL segment: Lamb serves posts at `/<slug>`, so a slash in a slug is turned into a hyphen (`archive/2024` becomes `archive-2024`). Spaces and non-ASCII characters are fine — `slug: café` is served at `/café`, which your browser sends (and Lamb reads) percent-encoded.
+
 You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 
 By default Lamb derives a post's description from its first line. Set a `summary:` in the front-matter to write that description yourself — it is used for the post's [social-embed]({{ site.baseurl }}{% link social-embeds.md %}) description (the OpenGraph/Twitter `description` tag) and its feed summary. `description:` works as an alias.

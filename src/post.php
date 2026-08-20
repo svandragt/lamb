@@ -253,24 +253,33 @@ function normalize_matter_values(array $matter): array
 }
 
 /**
- * Strips leading slashes/backslashes from an explicit front-matter `slug:`
- * value.
+ * Reduces an explicit front-matter `slug:` value to the single URL path
+ * segment a post is served under.
  *
- * An explicit slug (unlike a title-derived one, which goes through
- * slugify()) is stored verbatim and later feeds an automatic redirect's
- * `to_url` on a subsequent slug change (`'/' . $slug`, in redirect_edited()).
- * A slug beginning with `/` (or `\`, which some browsers normalise to `/` in
- * a URL) would make that concatenation a protocol-relative `//host/...` (or
- * `/\host/...`) URL — an open redirect off the site. Stripped rather than
- * rejected outright so a legitimate custom slug that merely has redundant
- * leading slashes still saves.
+ * An explicit slug (unlike a title-derived one, which goes through slugify())
+ * is stored close to verbatim, and two things then read it as a path:
+ *
+ * - It feeds an automatic redirect's `to_url` on a subsequent slug change
+ *   (`'/' . $slug`, in redirect_edited()). A slug beginning with `/` (or `\`,
+ *   which some browsers normalise to `/` in a URL) would make that
+ *   concatenation a protocol-relative `//host/...` (or `/\host/...`) URL — an
+ *   open redirect off the site. Hence the leading separators go first.
+ * - permalink() serves the post at `/<slug>`, and the router matches a post
+ *   against the request's *first* path segment. A slug with a separator inside
+ *   it (`archive/2024`) therefore names a URL that can never route back to the
+ *   post: it saves, every link on the site points at it, and it 404s. The
+ *   remaining separators become hyphens so the stored slug is the URL the post
+ *   actually answers on.
+ *
+ * Sanitised rather than rejected outright so a post with a stray slash in its
+ * slug still saves.
  *
  * @param string $slug
  * @return string
  */
 function sanitize_explicit_slug(string $slug): string
 {
-    return ltrim($slug, "/\\");
+    return str_replace(['/', '\\'], '-', ltrim($slug, "/\\"));
 }
 
 /**

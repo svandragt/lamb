@@ -44,7 +44,7 @@ $primary_tag = $tags[0] ?? null;
     <ul class="related-list">
         <?php foreach ($shown as $bean) : ?>
             <?php
-            $permalink = '/' . ltrim(!empty($bean->slug) ? $bean->slug : "status/{$bean->id}", '/');
+            $permalink = \Lamb\permalink_path($bean);
             $title = trim(strip_tags($bean->title ?? ''));
             $excerpt = trim(strip_tags($bean->description ?? ''));
             // If the post has no title, promote a short excerpt to the title slot.

@@ -87,7 +87,12 @@ $sublookup = strtok('/');
 
 $request_uri_with_query = $_SERVER['REQUEST_URI'] ?? '';
 
-$redirect_path = trim((string) $request_uri, '/');
+# Lookups against stored slugs and redirect keys run on the decoded path: the
+# request arrives percent-encoded, while a slug is stored as the author wrote it
+# (`café`, `my post`). Matching the two without decoding meant such a post 404ed
+# at the very permalink every link on the site — and its own feed entry — points
+# at. Route names are matched on the raw segment, as before.
+$redirect_path = rawurldecode(trim((string) $request_uri, '/'));
 if (str_contains($redirect_path, '/')) {
     $redirect_url = find_redirect($redirect_path);
     if ($redirect_url !== null) {
@@ -105,11 +110,14 @@ if (Response\should_noindex($action, $_GET)) {
 }
 
 $template = $action;
-if (post_has_slug($action) === $action) {
-    Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $action);
+# Empty when the request has no first segment at all (e.g. `//`), which must not
+# be looked up: every status post has an empty slug, so it would match one.
+$slug_lookup = is_string($action) ? rawurldecode($action) : '';
+if ($slug_lookup !== '' && post_has_slug($slug_lookup) !== null) {
+    Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $slug_lookup);
     $template = 'status';
 } elseif ($action !== false && !Route\is_reserved_route($action)) {
-    $redirect_url = find_redirect($action);
+    $redirect_url = find_redirect($slug_lookup);
     if ($redirect_url !== null) {
         header('Location: ' . Http\sanitize_location($redirect_url), true, 301);
         exit;

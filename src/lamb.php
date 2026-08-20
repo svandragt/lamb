@@ -158,6 +158,61 @@ function remove_body_tags(string $body, array $tags): string
 }
 
 /**
+ * The root-relative URL path a post is served at: `/<slug>`, or `/status/<id>`
+ * for a slug-less status post.
+ *
+ * The slug is percent-encoded where a path needs it (see
+ * encode_path_segment()). It is stored as the author wrote it — an explicit
+ * front-matter `slug:` can carry a space or a non-ASCII character — and a path
+ * is not a place to put those raw: the router decodes the request before
+ * matching a slug, so the encoded form is the one that round-trips.
+ *
+ * @param OODBBean $bean The post. It should have the 'slug' and 'id' properties.
+ * @return string The post's URL path.
+ */
+function permalink_path(OODBBean $bean): string
+{
+    if ($bean->slug) {
+        return '/' . encode_path_segment((string) $bean->slug);
+    }
+
+    return '/status/' . $bean->id;
+}
+
+/**
+ * Percent-encodes a string for use as a single URL path segment.
+ *
+ * rawurlencode() over-encodes for this: RFC 3986 lets a path segment carry the
+ * sub-delimiters (`&`, `+`, `,`, `=`, …) plus `:` and `@` verbatim, and those
+ * already resolve today. A post's permalink is also its Atom entry id, so
+ * re-encoding a character that never needed it would show every subscriber the
+ * post again as new. They are put back, leaving exactly what a path cannot hold
+ * encoded: whitespace, `?`, `#`, `%`, the brackets, the slashes, and anything
+ * non-ASCII.
+ *
+ * @param string $segment The raw segment text (e.g. a slug).
+ * @return string The segment, safe to place in a URL path.
+ */
+function encode_path_segment(string $segment): string
+{
+    return strtr(rawurlencode($segment), [
+        '%21' => '!',
+        '%24' => '$',
+        '%26' => '&',
+        '%27' => "'",
+        '%28' => '(',
+        '%29' => ')',
+        '%2A' => '*',
+        '%2B' => '+',
+        '%2C' => ',',
+        '%3A' => ':',
+        '%3B' => ';',
+        '%3D' => '=',
+        '%40' => '@',
+    ]);
+}
+
+/**
  * Generates a permalink for the given item.
  *
  * This method creates a permalink for the given item based on its slug or ID.
@@ -171,11 +226,7 @@ function remove_body_tags(string $body, array $tags): string
  */
 function permalink(OODBBean $bean): string
 {
-    if ($bean->slug) {
-        return ROOT_URL . "/$bean->slug";
-    }
-
-    return ROOT_URL . '/status/' . $bean->id;
+    return ROOT_URL . permalink_path($bean);
 }
 
 /**
@@ -779,7 +830,9 @@ function find_post_by_path(string $path): ?OODBBean
         return $bean->id ? $bean : null;
     }
 
-    $slug = trim($path, '/');
+    // The path comes from a URL, so its slug is percent-encoded (permalink_path()
+    // encodes it); the column holds the decoded text.
+    $slug = rawurldecode(trim($path, '/'));
     if ($slug !== '') {
         return R::findOne('post', ' slug = ? ', [$slug]);
     }

@@ -18,6 +18,7 @@ use function Lamb\get_tags;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\permalink_path;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\visible_clause;
@@ -137,14 +138,9 @@ function date_created(OODBBean $bean): string
 
     $human_created = human_time(strtotime($bean->created));
 
-    $slug = "/status/$bean->id";
-    if (!empty($bean->slug)) {
-        $slug = $bean->slug;
-    }
-
     return sprintf(
-        '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
-        escape(ltrim($slug, '/')),
+        '<a href="%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
+        escape(permalink_path($bean)),
         escape((string) $bean->created),
         $human_created
     );
