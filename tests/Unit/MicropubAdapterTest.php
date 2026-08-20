@@ -2275,4 +2275,51 @@ class MicropubAdapterTest extends TestCase
         ));
         $this->assertSame('again #php', R::load('post', $post->id)->body);
     }
+    public function testNamingAStatusPostMintsAUniqueSlug(): void
+    {
+        // Naming a titleless status post derives a slug from the title. That
+        // slug used to skip the uniqueness check every other save path
+        // applies, so two posts could end up sharing a URL — one of them
+        // unreachable at its own permalink.
+        $taken = R::dispense('post');
+        $taken->body = "---\ntitle: Shared Name\nslug: shared-name\n---\n\ntaken";
+        $taken->slug = 'shared-name';
+        $taken->created = date('Y-m-d H:i:s');
+        R::store($taken);
+
+        $post = R::dispense('post');
+        $post->body = 'a status post';
+        $post->slug = '';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/status/' . $post->id,
+            ['replace' => ['name' => ['Shared Name']]]
+        ));
+
+        $renamed = R::load('post', $post->id);
+        $this->assertNotSame('shared-name', $renamed->slug);
+        $this->assertSame(1, R::count('post', ' slug = ? ', ['shared-name']));
+    }
+
+    public function testRenamingAPostKeepsItsExistingSlug(): void
+    {
+        $post = R::dispense('post');
+        $post->body = "---\ntitle: Original\n---\n\nbody";
+        $post->slug = 'original';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/original',
+            ['replace' => ['name' => ['Renamed Entirely']]]
+        ));
+
+        $renamed = R::load('post', $post->id);
+        $this->assertSame('original', $renamed->slug);
+        $this->assertSame('Renamed Entirely', $renamed->title);
+    }
 }

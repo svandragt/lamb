@@ -24,6 +24,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
@@ -488,6 +489,10 @@ class LambMicropubAdapter extends MicropubAdapter
             return $rejection;
         }
 
+        // Captured before any operation runs: whether this update *mints* a
+        // slug decides whether it is finalised below.
+        $slug_before = (string) ($bean->slug ?? '');
+
         foreach ($actions['replace'] ?? [] as $property => $values) {
             if (!is_array($values) || !array_is_list($values)) {
                 return 'invalid_request';
@@ -531,6 +536,20 @@ class LambMicropubAdapter extends MicropubAdapter
 
         parse_bean($bean);
         $bean->updated = \Lamb\now();
+        // An update can mint a slug where there was none: naming a titleless
+        // status post derives one from the title. Without finalize_slug() that
+        // slug skipped the uniqueness and reserved-route checks every other
+        // save path applies, so two posts could end up sharing a URL — one of
+        // them unreachable at its own permalink, with its feed entry pointing
+        // at the other's content.
+        //
+        // Only a freshly minted slug is finalised. A post that already had one
+        // keeps it untouched (pinSlug() writes it into the front matter before
+        // a rename): moving a live permalink — the URL the client just used to
+        // address the post — is worse than leaving a pre-existing duplicate be.
+        if ($slug_before === '') {
+            finalize_slug($bean);
+        }
         R::store($bean);
 
         notify_post_subscribers($bean);
