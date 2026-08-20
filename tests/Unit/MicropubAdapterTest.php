@@ -2184,4 +2184,70 @@ class MicropubAdapterTest extends TestCase
     {
         $this->assertFalse(has_micropub_scope(false, 'create'));
     }
+    // Microformats values are not necessarily strings, and casting one stored
+    // the literal "Array" (with an "Array to string conversion" warning).
+
+    public function testCreateCallbackDropsCategoriesWithNoText(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'  => ['Categories of every shape'],
+                // A nested list collapses to its first entry, as front matter
+                // does; a boolean and an empty list carry no text at all.
+                'category' => ['ok', ['nested'], true, []],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Categories of every shape%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('#ok', $post->body);
+        $this->assertStringContainsString('#nested', $post->body);
+        $this->assertStringNotContainsString('#Array', $post->body);
+        $this->assertStringNotContainsString('#1', $post->body);
+    }
+
+    public function testCreateCallbackDropsAPhotoWithNoUsableUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content' => ['Photos of every shape'],
+                'photo'   => [
+                    ['value' => ['/one.jpg'], 'alt' => 'first'],
+                    ['value' => [], 'alt' => 'nothing'],
+                    '/two.jpg',
+                ],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Photos of every shape%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('![first](/one.jpg)', $post->body);
+        $this->assertStringContainsString('![](/two.jpg)', $post->body);
+        $this->assertStringNotContainsString('(Array)', $post->body);
+        $this->assertStringNotContainsString('nothing', $post->body);
+    }
+
+    public function testUpdateCallbackDropsCategoriesWithNoText(): void
+    {
+        $post = R::dispense('post');
+        $post->body = "Tagged post\n";
+        $post->slug = 'tagged-post';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback('http://localhost/tagged-post', [
+            'add' => ['category' => ['real', ['nested'], false]],
+        ]);
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $post->id);
+        $this->assertStringContainsString('#real', $updated->body);
+        $this->assertStringContainsString('#nested', $updated->body);
+        $this->assertStringNotContainsString('#Array', $updated->body);
+    }
 }

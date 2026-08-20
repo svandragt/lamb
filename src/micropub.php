@@ -550,7 +550,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyAdd(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = add_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = add_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -628,7 +628,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = remove_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = remove_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -670,7 +670,7 @@ class LambMicropubAdapter extends MicropubAdapter
             // set, so the hashtags already on the body go first.
             $bean->body = add_body_tags(
                 strip_trailing_body_tags($bean->body ?? ''),
-                array_map('strval', $values)
+                self::textValues($values)
             );
             return true;
         }
@@ -1018,20 +1018,25 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildPhotos(array $photos): string
     {
-        if (empty($photos)) {
-            return '';
-        }
-
-        return implode("\n", array_map(function ($photo) {
+        $markdown = [];
+        foreach ($photos as $photo) {
             if (is_array($photo)) {
-                $url = $photo['value'] ?? '';
-                $alt = $photo['alt'] ?? '';
+                $url = matter_string($photo['value'] ?? null);
+                $alt = matter_string($photo['alt'] ?? null) ?? '';
             } else {
-                $url = $photo;
+                $url = matter_string($photo);
                 $alt = '';
             }
-            return '![' . $alt . '](' . $url . ')';
-        }, $photos));
+            // A photo with no usable URL is dropped rather than written as
+            // `![](Array)`: the value has no faithful text, and an image link
+            // to it is worse than no image link.
+            if ($url === null || trim($url) === '') {
+                continue;
+            }
+            $markdown[] = '![' . $alt . '](' . $url . ')';
+        }
+
+        return implode("\n", $markdown);
     }
 
     /**
@@ -1042,11 +1047,36 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildTags(array $categories): string
     {
-        if (empty($categories)) {
-            return '';
+        $tags = self::textValues($categories);
+
+        return $tags === [] ? '' : implode(' ', array_map(fn(string $c) => '#' . $c, $tags));
+    }
+
+    /**
+     * The text values of a Micropub property, dropping anything with no
+     * faithful textual form.
+     *
+     * Microformats properties are arrays of values, and a value is not
+     * necessarily a string. Casting one with (string) or strval() stored the
+     * literal "Array" — as a hashtag, as an image URL — and raised an
+     * "Array to string conversion" warning on the way. matter_string() applies
+     * the same rule front matter already uses: a list collapses to its first
+     * entry, and anything else with no text is absent.
+     *
+     * @param list<mixed> $values
+     * @return list<string>
+     */
+    private static function textValues(array $values): array
+    {
+        $texts = [];
+        foreach ($values as $value) {
+            $text = matter_string($value);
+            if ($text !== null && trim($text) !== '') {
+                $texts[] = $text;
+            }
         }
 
-        return implode(' ', array_map(fn($c) => '#' . $c, $categories));
+        return $texts;
     }
 }
 
