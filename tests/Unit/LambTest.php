@@ -152,6 +152,16 @@ class LambTest extends TestCase
         $this->assertStringContainsString('<a href="/tag/🐑">#🐑</a>', $result);
     }
 
+    public function testParseTagsLinksATagContainingAPlus()
+    {
+        // `+` is a legal tag character and a legal path character, so the link
+        // carries it verbatim — the tag route reads the path with
+        // rawurldecode(), which leaves it alone. urldecode() turned it into a
+        // space, so a post's own tag link 404ed.
+        $result = parse_tags('<p>Learning #c++ today</p>');
+        $this->assertStringContainsString('<a href="/tag/c++">#c++</a>', $result);
+    }
+
     public function testParseTagsDoesNotAlterTextWithNoTags()
     {
         $input = '<p>No tags here.</p>';

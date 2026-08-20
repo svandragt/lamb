@@ -60,4 +60,20 @@ class SearchRedirectCest
         $I->amOnPage('/search/alpha');
         $I->see('1 result found.');
     }
+    public function testSearchingForAHashtagFromTheBoxFindsIt(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/login');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
+        $I->click('Log in');
+        $I->amOnPage('/');
+        $I->fillField('contents', 'Deploying with #ansible today');
+        $I->click('Create post');
+        $I->amOnPage('/logout');
+
+        // Unencoded, the `#` made the browser read the rest of the redirect as
+        // a fragment, so the search ran with no term at all.
+        $I->amOnPage('/search?s=%23ansible');
+        $I->seeCurrentUrlMatches('~/search/%23ansible~');
+        $I->see('1 result found.');
+    }
 }
