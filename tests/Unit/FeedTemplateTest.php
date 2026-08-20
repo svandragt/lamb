@@ -286,6 +286,37 @@ class FeedTemplateTest extends TestCase
      * @param array $conventionFiles Names of web-root convention files to create (e.g. favicon.png).
      * @param array $extraConfig   Extra config keys merged into $config.
      */
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedContentKeepsTheEscapingTheStoredHtmlHas(): void
+    {
+        // addChild() escapes `<` but not `&`, which strips exactly one layer
+        // off the stored HTML: `&lt;script&gt;` — text the author typed, and
+        // what Parsedown's safe mode produces for an ingested feed item —
+        // reached subscribers as live markup in a type="html" element.
+        $stored = '<p>Escaping demo &lt;script&gt;alert(1)&lt;/script&gt; &amp; more</p>';
+
+        $xml = $this->renderFeedWithPost(['transformed' => $stored]);
+
+        $this->assertSame($stored, (string) $xml->entry[0]->content);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedContentStillCarriesRealMarkup(): void
+    {
+        $stored = '<p>Hello <a href="http://localhost/tag/php">#php</a></p>';
+
+        $xml = $this->renderFeedWithPost(['transformed' => $stored]);
+
+        $this->assertSame($stored, (string) $xml->entry[0]->content);
+        $this->assertSame('html', (string) $xml->entry[0]->content['type']);
+    }
+
     private function renderFeedWithPost(array $fields, array $conventionFiles = [], array $extraConfig = []): \SimpleXMLElement
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
