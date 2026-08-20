@@ -112,17 +112,31 @@ function parse_tags(string $html): string
  * Counterpart of get_tags(): used by Micropub category `add` updates, where
  * categories live in the body as hashtags rather than in a column.
  *
+ * "Already carries" is case-insensitive, and a tag repeated in $tags is added
+ * once: `#PHP` and `#php` are one tag everywhere else (the link parse_tags()
+ * writes, the lookup posts_by_tag() runs), so appending the other spelling
+ * just prints the same tag twice.
+ *
  * @param string       $body The raw post body.
  * @param list<string> $tags Tag names (without `#`).
  * @return string The body with missing tags appended.
  */
 function add_body_tags(string $body, array $tags): string
 {
-    $to_add = array_diff($tags, get_tags($body));
-    if (empty($to_add)) {
+    $present = array_map('mb_strtolower', get_tags($body));
+    $to_add = [];
+    foreach ($tags as $tag) {
+        $key = mb_strtolower($tag);
+        if ($tag === '' || in_array($key, $present, true)) {
+            continue;
+        }
+        $present[] = $key;
+        $to_add[] = $tag;
+    }
+    if ($to_add === []) {
         return $body;
     }
-    $hashtags = implode(' ', array_map(fn($tag) => '#' . $tag, $to_add));
+    $hashtags = implode(' ', array_map(fn(string $tag): string => '#' . $tag, $to_add));
 
     return rtrim($body) . ' ' . $hashtags;
 }

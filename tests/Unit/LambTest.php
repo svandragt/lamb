@@ -36,6 +36,18 @@ class LambTest extends TestCase
         $this->assertSame('Hello #new', add_body_tags("Hello \n", ['new']));
     }
 
+    public function testAddBodyTagsSkipsATagPresentInAnotherCase()
+    {
+        // `#PHP` and `#php` are one tag everywhere else — the link parse_tags()
+        // writes and the lookup posts_by_tag() runs are both case-insensitive.
+        $this->assertSame('Hello #PHP', add_body_tags('Hello #PHP', ['php']));
+    }
+
+    public function testAddBodyTagsAddsARepeatedTagOnce()
+    {
+        $this->assertSame('Hello #foo', add_body_tags('Hello', ['foo', 'foo', 'FOO']));
+    }
+
     // strip_trailing_body_tags
 
     public function testStripTrailingBodyTagsRemovesTrailingRun()

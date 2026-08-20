@@ -815,10 +815,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = (string) ($bean->body ?? '');
         [$yaml] = split_frontmatter(normalize_frontmatter_fence($currentBody));
 
-        $tags       = get_tags($currentBody);
-        $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
-
-        $content = $newContent . $hashtagStr;
+        // add_body_tags() rather than appending the old body's tags outright:
+        // a tag the replacement content already carries must not be appended a
+        // second time, or every content update grows the trailing run
+        // (`goodbye #php #php`).
+        $content = add_body_tags($newContent, get_tags($currentBody));
 
         return $yaml === '' ? $content : "---\n" . $yaml . "\n---\n" . $content;
     }

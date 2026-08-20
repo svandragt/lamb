@@ -2250,4 +2250,29 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#nested', $updated->body);
         $this->assertStringNotContainsString('#Array', $updated->body);
     }
+    public function testContentReplaceKeepsEachTagOnce(): void
+    {
+        // The old body's tags are carried across a content replace so
+        // categories survive it — but a tag the new content already carries
+        // must not be appended again, or every update grows the trailing run.
+        $post = R::dispense('post');
+        $post->body = 'hello #php world';
+        $post->slug = 'replace-tags';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/replace-tags',
+            ['replace' => ['content' => ['goodbye #php']]]
+        ));
+        $this->assertSame('goodbye #php', R::load('post', $post->id)->body);
+
+        // And a replacement that drops the tag from its text keeps it.
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/replace-tags',
+            ['replace' => ['content' => ['again']]]
+        ));
+        $this->assertSame('again #php', R::load('post', $post->id)->body);
+    }
 }
