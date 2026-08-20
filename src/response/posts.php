@@ -17,6 +17,7 @@ use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\rendered_checkbox_states;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\toggle_checkbox;
 use function Lamb\Route\is_reserved_route;
@@ -394,7 +395,26 @@ function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
         return false;
     }
 
-    $bean->body = toggle_checkbox((string) $bean->body, $index, $checked);
+    // The index names a *rendered* checkbox, so the rewrite is checked against
+    // the renderer rather than trusted: no such checkbox, or a rewrite that
+    // moves any other box, is refused. The client then reverts the tick instead
+    // of the author silently finding a different task crossed off — which is
+    // what a document the source scan reads differently from the renderer
+    // (see Post\checkbox_marker_offsets) used to do.
+    $body   = (string) $bean->body;
+    $before = rendered_checkbox_states($body);
+    if (!isset($before[$index])) {
+        return false;
+    }
+
+    $toggled  = toggle_checkbox($body, $index, $checked);
+    $expected = $before;
+    $expected[$index] = $checked;
+    if (rendered_checkbox_states($toggled) !== $expected) {
+        return false;
+    }
+
+    $bean->body = $toggled;
     parse_bean($bean);
     $bean->updated = \Lamb\now();
 

@@ -29,6 +29,8 @@ Write GitHub-style task lists with `- [ ]` for an open item and `- [x]` for a do
 - [x] walk the dog
 ```
 
+A numbered list (`1. [ ] …`) works too, as does a marker with no list bullet at all (`[ ] buy milk` on its own line). A marker inside a code block stays code, so you can write about task lists without turning them into checkboxes.
+
 These render as real checkboxes. When you are logged in the checkboxes are interactive: tick or untick one straight on the page and Lamb saves it as an edit, rewriting the `[ ]`/`[x]` in the post source for you. Visitors see the checkboxes as read-only.
 
 ## Page
