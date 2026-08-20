@@ -547,7 +547,15 @@ function respond_settings(): array
             redirect_uri('/settings');
         }
 
-        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null) ?? '';
+        // A submission carrying no configuration text at all is not an author
+        // clearing the box (that posts an empty string) — it is a malformed
+        // request, and saving '' for it would wipe every setting.
+        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null);
+        if ($submitted_ini === null) {
+            $_SESSION['flash'][] = 'Settings not saved: the form did not include the configuration text.';
+            redirect_uri('/settings');
+        }
+
         $validation = Config\validate_ini($submitted_ini);
 
         if ($validation['valid']) {

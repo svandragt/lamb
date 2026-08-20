@@ -82,4 +82,18 @@ class MalformedParamsCest
         $I->seeResponseCodeIs(200);
         $I->dontSee('Fatal error');
     }
+    public function aMissingSettingsFieldDoesNotWipeTheConfiguration(AcceptanceTester $I)
+    {
+        $this->login($I);
+        $I->amOnPage('/settings');
+        $token = $I->grabAttributeFrom('input[name=csrf]', 'value');
+
+        // An array is not "the author cleared the box" (that posts an empty
+        // string) — saving '' for it would drop every setting.
+        $I->sendAjaxPostRequest('/settings', ['csrf' => $token, 'ini_text' => ['x']]);
+
+        $I->amOnPage('/settings');
+        $I->seeResponseCodeIs(200);
+        $I->see('site_title');
+    }
 }
