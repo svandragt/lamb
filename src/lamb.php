@@ -121,7 +121,7 @@ function parse_tags(string $html): string
  *
  * "Already carries" is case-insensitive, and a tag repeated in $tags is added
  * once: `#PHP` and `#php` are one tag everywhere else (the link parse_tags()
- * writes, the lookup posts_by_tag() runs), so appending the other spelling
+ * writes, the lookup post_ids_by_tag() runs), so appending the other spelling
  * just prints the same tag twice.
  *
  * @param string       $body The raw post body.

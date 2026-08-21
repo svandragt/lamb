@@ -13,6 +13,7 @@ use function Lamb\Export\export_filename_stem;
 use function Lamb\Export\manifest_post_entry;
 use function Lamb\Export\post_export_path;
 use function Lamb\Export\referenced_assets;
+use function Lamb\Restore\safe_entry_path;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\split_frontmatter;
 
@@ -133,6 +134,42 @@ class ExportTest extends TestCase
 
         $this->assertSame('posts/2026/07/etc-passwd.md', $path);
         $this->assertStringNotContainsString('..', $path);
+    }
+
+    /**
+     * The layout is not decoration: Restore\safe_entry_path() anchors
+     * `posts/\d{4}/\d{2}/…`, so a path the exporter writes outside that shape is
+     * one the importer refuses — the post does not come back from its own
+     * backup. A `created` of `0000-00-00`, which an older install or a
+     * MySQL-era row hands you, parses to year -1 and used to produce
+     * `posts/-0001/11/…`.
+     *
+     * @dataProvider awkwardCreatedDateProvider
+     */
+    public function testEveryExportPathIsOneTheImporterAccepts(string $created): void
+    {
+        $taken = [];
+        $path = post_export_path($this->post(['created' => $created]), $taken);
+
+        $this->assertSame($path, safe_entry_path($path), $created . ' produced ' . $path);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function awkwardCreatedDateProvider(): array
+    {
+        return [
+            'ordinary'          => ['2026-07-14 09:30:00'],
+            'empty'             => [''],
+            'unparseable'       => ['not a date'],
+            'a zero date'       => ['0000-00-00'],
+            'a negative year'   => ['-0001-11-30 00:00:00'],
+            'year 0'            => ['0000-01-01 00:00:00'],
+            'a five-digit year' => ['10000-01-01 00:00:00'],
+            'last century'      => ['1900-01-01 00:00:00'],
+            'past 2038'         => ['2038-02-01 00:00:00'],
+        ];
     }
 
     public function testReferencedAssetsFindsRootRelativeAndAbsoluteUrls(): void

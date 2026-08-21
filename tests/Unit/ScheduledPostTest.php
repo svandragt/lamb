@@ -7,7 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\post_has_slug;
 use function Lamb\Post\populate_bean;
-use function Lamb\Post\posts_by_tag;
+use function Lamb\Post\post_ids_by_tag;
 use function Lamb\Response\count_scheduled;
 use function Lamb\Response\respond_home;
 use function Lamb\Response\respond_post;
@@ -99,7 +99,7 @@ class ScheduledPostTest extends TestCase
     {
         $this->makePost('A scheduled post #php', $this->future());
 
-        $this->assertEmpty(posts_by_tag('php'), 'Future-dated posts must not appear on tag pages');
+        $this->assertEmpty(post_ids_by_tag('php'), 'Future-dated posts must not appear on tag pages');
     }
 
     public function testFutureCreatedPostIsHiddenFromSearch(): void

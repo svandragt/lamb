@@ -17,18 +17,10 @@ function escape(string $html): string
 
 /**
  * Re-levels a post body's headings so its highest heading sits at $top, keeping
- * the levels relative to each other.
- *
- * Post bodies are stored at the author's literal heading levels (theme-neutral),
- * so each theme fits them into its own outline at render time. A theme that
- * renders the post title at h2 passes $top = 3, so the body's highest heading
- * becomes h3 (directly under the title) and the rest shift by the same amount —
- * the level the author actually typed is immaterial, and no level is skipped at
- * the top of the body, which keeps the document outline in order for screen
- * readers (WCAG heading-order). The shift is signed: a body written deeper than
- * $top is pulled up just as one written shallower is pushed down. Results clamp
- * at h6. Open and close tags shift identically, attributes are preserved, and a
- * body with no headings is returned unchanged.
+ * the levels relative to each other. Open and close tags shift identically,
+ * attributes are preserved, and a body with no headings is returned unchanged.
+ * See theme/README.md ("Heading re-levelling") for why the shift is signed and
+ * why no level is skipped at the top of the body.
  *
  * @param string $html The post body HTML, at the author's literal levels.
  * @param int    $top  The level the body's highest heading should occupy.
@@ -59,21 +51,16 @@ function anchor_headings(string $html, int $top): string
 
 
 /**
- * Render the reply-context line for a post that is a reply to another URL.
+ * Renders the reply-context line for a post that is a reply to another URL,
+ * or '' when the post has no `in_reply_to` target. The link carries the
+ * `u-in-reply-to` microformats2 class so Webmention receivers categorise the
+ * mention as a reply.
  *
- * Returns an empty string when the post has no `in_reply_to` target. The link
- * carries the `u-in-reply-to` microformats2 class so Webmention receivers
- * categorise the mention as a reply.
- *
- * The same guard link_source() and syndication_links() already apply: escape()
- * encodes HTML metacharacters, not URL schemes, so a `javascript:` target went
- * into the href untouched. `in_reply_to` is not author-only — a Micropub client
- * holding just `create` scope sets it, and replyTargetUrl() only unwraps the
- * value, it does not validate it — and this markup is served on every page
- * listing the post *and* inside the Atom and JSON feeds' content_html. A target
- * that is not a real http(s) URL is shown as text instead of being linked: it
- * cannot be a webmention target either (enqueue_outbound() filters on the same
- * predicate), so there is nothing for the anchor to mean.
+ * `in_reply_to` is not author-only (a Micropub client holding just `create`
+ * scope can set it) and this markup is also served inside the Atom/JSON
+ * feeds' content_html, so a target that isn't a genuine http(s) URL is shown
+ * as text rather than linked. See theme/README.md ("Escaping is per-context,
+ * not per-file").
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return string

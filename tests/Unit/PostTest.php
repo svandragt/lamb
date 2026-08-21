@@ -8,11 +8,14 @@ use RedBeanPHP\R;
 use function Lamb\get_tags;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
+use function Lamb\Post\load_posts_in_order;
 use function Lamb\Post\parse_matter;
-use function Lamb\Post\posts_by_tag;
+use function Lamb\Post\post_ids_by_tag;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\slugify;
 use function Lamb\render_body;
+
+use const Lamb\Post\TAG_SCAN_PAGE;
 
 class PostTest extends TestCase
 {
@@ -389,7 +392,7 @@ class PostTest extends TestCase
         $this->assertTrue((bool) $result['draft']);
     }
 
-    // posts_by_tag
+    // post_ids_by_tag
 
     protected function setUpDb(): void
     {
@@ -405,6 +408,69 @@ class PostTest extends TestCase
         R::exec('DELETE FROM post');
     }
 
+    /**
+     * The scan reads a page at a time and keeps only ids, because holding a
+     * bean per match killed both tag endpoints on a tag covering a large
+     * archive: at 20,000 posts under one tag, "Allowed memory size of
+     * 134217728 bytes exhausted" on /tag/<tag> and on /tag/<tag>/feed alike.
+     * Paging is only safe if a real match sitting past a page boundary is
+     * still found, so that is what this pins — with a page and a bit of
+     * LIKE-only decoys in front of it, which is also why a plain SQL LIMIT
+     * cannot replace the scan.
+     */
+    public function testPostIdsByTagFindsAMatchBeyondTheFirstScanPage(): void
+    {
+        $this->setUpDb();
+
+        for ($i = 1; $i <= TAG_SCAN_PAGE + 20; $i++) {
+            $this->tagPost("decoy $i #phplover", date('Y-m-d H:i:s'));
+        }
+        // Oldest, so it sorts last and the scan has to reach the second page.
+        $this->tagPost('the real one #php', '2020-01-01 00:00:00');
+
+        $this->assertCount(1, post_ids_by_tag('php'));
+    }
+
+    public function testPostIdsByTagStopsAtTheRequestedLimit(): void
+    {
+        $this->setUpDb();
+
+        for ($i = 1; $i <= 5; $i++) {
+            $this->tagPost("post $i #php", date('Y-m-d H:i:s', time() - $i * 60));
+        }
+
+        $this->assertCount(2, post_ids_by_tag('php', false, 2));
+        $this->assertCount(5, post_ids_by_tag('php'));
+    }
+
+    public function testLoadPostsInOrderKeepsTheGivenOrder(): void
+    {
+        $this->setUpDb();
+
+        $ids = [];
+        foreach (['a', 'b', 'c'] as $letter) {
+            $ids[] = $this->tagPost("post $letter #php", date('Y-m-d H:i:s'));
+        }
+        $reversed = array_reverse($ids);
+
+        $loaded = load_posts_in_order($reversed);
+
+        $this->assertSame($reversed, array_map(static fn($p): int => (int) $p->id, $loaded));
+        $this->assertSame([], load_posts_in_order([]));
+    }
+
+    private function tagPost(string $body, string $created): int
+    {
+        $post = R::dispense('post');
+        $post->body    = $body;
+        $post->version = 1;
+        $post->draft   = null;
+        $post->created = $created;
+        $post->updated = $created;
+
+        return (int) R::store($post);
+    }
+
     public function testPostsByTagReturnsMatchingPost(): void
     {
         $this->setUpDb();
@@ -416,7 +482,7 @@ class PostTest extends TestCase
         $post->created = date('Y-m-d H:i:s');
         R::store($post);
 
-        $result = posts_by_tag('php');
+        $result = post_ids_by_tag('php');
         $this->assertCount(1, $result);
     }
 
@@ -431,7 +497,7 @@ class PostTest extends TestCase
         $draft->created = date('Y-m-d H:i:s');
         R::store($draft);
 
-        $result = posts_by_tag('php');
+        $result = post_ids_by_tag('php');
         $this->assertCount(0, $result);
     }
 
@@ -439,7 +505,7 @@ class PostTest extends TestCase
     {
         $this->setUpDb();
 
-        $result = posts_by_tag('nonexistenttag999');
+        $result = post_ids_by_tag('nonexistenttag999');
         $this->assertIsArray($result);
         $this->assertCount(0, $result);
     }
@@ -455,7 +521,7 @@ class PostTest extends TestCase
         $post->created = date('Y-m-d H:i:s');
         R::store($post);
 
-        $result = posts_by_tag('endtag');
+        $result = post_ids_by_tag('endtag');
         $this->assertCount(1, $result);
     }
 
@@ -470,7 +536,7 @@ class PostTest extends TestCase
         $post->created = date('Y-m-d H:i:s');
         R::store($post);
 
-        $result = posts_by_tag('til');
+        $result = post_ids_by_tag('til');
         $this->assertCount(1, $result);
     }
 
@@ -485,7 +551,7 @@ class PostTest extends TestCase
         $post->created = date('Y-m-d H:i:s');
         R::store($post);
 
-        $result = posts_by_tag('til');
+        $result = post_ids_by_tag('til');
         $this->assertCount(0, $result);
     }
 
@@ -502,7 +568,7 @@ class PostTest extends TestCase
             R::store($post);
         }
 
-        $result = posts_by_tag('multitag');
+        $result = post_ids_by_tag('multitag');
         $this->assertCount(3, $result);
     }
 }

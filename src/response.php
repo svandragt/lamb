@@ -62,10 +62,9 @@ function latest_content_timestamp(): int
  *
  * No-ops when there is no content timestamp. Callers must only use this for
  * cacheable (anonymous, non-error) GET/HEAD responses, before any output.
- *
- * Last-Modified is the second-resolution max() of the two timestamps (the only
- * resolution HTTP-date supports), while the ETag keeps them distinct so a config
- * edit in the same second as the latest post still invalidates caches (#279).
+ * Validator model (why the ETag and Last-Modified diverge, #279): see
+ * response/README.md ("Conditional GET, ETag, and 304 caching") and
+ * AGENTS.md's Security section.
  *
  * @param int $contentTs Unix timestamp of the most recent content change.
  * @param int $configTs  Unix timestamp of the last config edit.
