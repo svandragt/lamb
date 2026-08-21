@@ -53,6 +53,21 @@ class RouteTest extends TestCase
         $this->assertSame(['y', 'x'], $result);
     }
 
+    public function testIsReservedRouteKnowsTheAppRoutesWithoutARequest(): void
+    {
+        // setUp() emptied $routes, which is the state a CLI importer runs in:
+        // it bootstraps the database and the config but never the router. The
+        // guard used to answer "free" for every name there, so an imported
+        // post could take `login` and shadow the login page.
+        global $routes;
+        $this->assertSame([], $routes);
+
+        $this->assertTrue(is_reserved_route('login'));
+        $this->assertTrue(is_reserved_route('feed'));
+        $this->assertTrue(is_reserved_route('_cron'));
+        $this->assertFalse(is_reserved_route('an-ordinary-slug'));
+    }
+
     public function testCallRouteReturns404ArrayForUnregisteredRoute(): void
     {
         global $config;
