@@ -664,9 +664,12 @@ function finalize_and_store_post(OODBBean $bean): void
 }
 
 /**
- * Matches a task-list marker the renderer turns into a checkbox: optional
- * blockquote markers, an optional bullet or ordered list marker, then
- * `[ ]`/`[x]`/`[X]` followed by whitespace and a non-empty label.
+ * Matches a line that could carry a task-list marker: optional blockquote
+ * markers, an optional bullet or ordered list marker, then `[ ]`/`[x]`/`[X]`
+ * followed by whitespace and a non-empty label.
+ *
+ * Whether such a marker actually renders as a checkbox depends on the block it
+ * lands in, which only the renderer knows — see toggle_rendered_checkbox().
  *
  * Capture 2 is the state character, so its byte offset locates the single
  * character a toggle rewrites.
@@ -674,127 +677,30 @@ function finalize_and_store_post(OODBBean $bean): void
 const TASK_MARKER_PATTERN = '/^([ \t]*(?:>[ \t]?)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?\[)([ xX])(\][ \t]+\S)/';
 
 /**
- * Matches any list item line (task or not), used to track whether the scanner
- * is inside a list — where an indented line is nested content rather than an
- * indented code block.
- */
-const LIST_ITEM_PATTERN = '/^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/';
-
-/**
- * Matches the opening line of a fenced code block, capturing the fence itself
- * so a closing fence can be required to use the same character and be at least
- * as long — the rule Parsedown applies, so a longer fence can quote a shorter
- * one inside it.
- */
-const CODE_FENCE_PATTERN = '/^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})/';
-
-/**
- * The width of a line's leading indentation, with tabs expanded to the next
- * multiple of four (the tab stop Markdown's four-space code indent assumes).
+ * Every byte offset in $body that could be the state character of a rendered
+ * checkbox — a deliberately permissive superset.
  *
- * @param string $line A single source line.
- * @return int The indentation width in columns.
- */
-function indent_width(string $line): int
-{
-    $width = 0;
-    for ($i = 0, $len = strlen($line); $i < $len; $i++) {
-        if ($line[$i] === ' ') {
-            $width++;
-        } elseif ($line[$i] === "\t") {
-            $width += 4 - ($width % 4);
-        } else {
-            break;
-        }
-    }
-
-    return $width;
-}
-
-/**
- * The byte offsets, within $body, of the state character of every task marker
- * the renderer turns into a checkbox — in the order the checkboxes appear.
- *
- * The toggle endpoint addresses a checkbox by its rendered position
- * (`data-checkbox-index`, numbered in document order by LambDown::text()), so
- * this has to recognise a marker exactly where the renderer does, or a click
- * flips somebody else's box. That means mirroring LambDown/Parsedown, not just
- * matching `- [ ] ` lines:
- *
- * - a marker needs no list bullet at all (`[ ] task` is a checkbox block on its
- *   own, which is why LambDown registers one), and an ordered bullet
- *   (`1. [ ] task`) counts as much as `-`/`*`/`+`;
- * - blockquoted markers render too, which every feed-ingested post is made of
- *   (Network\attributed_content() quotes the source with `> `);
- * - a marker inside a fenced or indented code block renders as code, not a
- *   checkbox, so it must not be counted;
- * - a marker with no label after it (`- [ ] `) is not a checkbox either;
- * - front matter is not rendered at all, so markers there are invisible.
+ * This is only a candidate list, not an answer: which markers actually become
+ * checkboxes is decided by Parsedown's block structure, and that is not
+ * something a line scanner can be trusted to reproduce. So this scan skips
+ * front matter (never rendered) and otherwise matches every task marker it
+ * sees, leaving toggle_rendered_checkbox() to identify the real one by asking
+ * the renderer.
  *
  * @param string $body The raw post body (front matter included).
- * @return list<int> Byte offsets of each rendered marker's state character.
+ * @return list<int> Byte offsets of each candidate marker's state character.
  */
-function checkbox_marker_offsets(string $body): array
+function candidate_marker_offsets(string $body): array
 {
     [, $content] = split_frontmatter($body);
     $position = strlen($body) - strlen($content);
 
     $offsets = [];
-    /** @var string|null $fence The opening fence (e.g. '```') while inside a code block. */
-    $fence   = null;
-    $in_list = false;
-    $blank   = true;
-
     foreach (preg_split('/(\R)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $index => $piece) {
-        // Odd indices are the captured line endings.
-        if ($index % 2 === 1) {
-            $position += strlen($piece);
-            continue;
-        }
-
-        $line = $piece;
-        $advance = strlen($line);
-
-        if ($fence !== null) {
-            $closing = '/^[ \t]*(?:>[ \t]?)*[ \t]*' . $fence[0] . '{' . strlen($fence) . ',}[ \t]*$/';
-            if (preg_match($closing, $line) === 1) {
-                $fence = null;
-            }
-            $position += $advance;
-            continue;
-        }
-        if (trim($line) === '') {
-            $blank = true;
-            $position += $advance;
-            continue;
-        }
-        // An indented code block, but only outside a list: inside one the same
-        // indentation marks nested list content, which does render checkboxes.
-        if (indent_width($line) >= 4 && !$in_list) {
-            $blank = false;
-            $position += $advance;
-            continue;
-        }
-        if (preg_match(CODE_FENCE_PATTERN, $line, $m) === 1) {
-            $fence = $m[1];
-            $blank = false;
-            $position += $advance;
-            continue;
-        }
-
-        if (preg_match(LIST_ITEM_PATTERN, $line) === 1) {
-            $in_list = true;
-        } elseif ($blank && indent_width($line) === 0) {
-            // A fresh, unindented block after a blank line closes the list.
-            $in_list = false;
-        }
-        $blank = false;
-
-        if (preg_match(TASK_MARKER_PATTERN, $line, $m, PREG_OFFSET_CAPTURE) === 1) {
+        if ($index % 2 === 0 && preg_match(TASK_MARKER_PATTERN, $piece, $m, PREG_OFFSET_CAPTURE) === 1) {
             $offsets[] = $position + (int) $m[2][1];
         }
-
-        $position += $advance;
+        $position += strlen($piece);
     }
 
     return $offsets;
@@ -805,8 +711,7 @@ function checkbox_marker_offsets(string $body): array
  * the order the toggle endpoint's `data-checkbox-index` counts them.
  *
  * The renderer is the authority on which markers become checkboxes, so this is
- * what checkbox_marker_offsets()'s reading of the source is checked against
- * before a toggle is stored (see Response\apply_checkbox_toggle).
+ * what toggle_rendered_checkbox() resolves a `data-checkbox-index` against.
  *
  * @param string $body The raw post body (front matter included).
  * @return list<bool> True for each checked box, in document order.
@@ -822,27 +727,56 @@ function rendered_checkbox_states(string $body): array
 }
 
 /**
- * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
+ * Rewrites the source marker behind the Nth *rendered* checkbox.
  *
- * Markers are counted exactly as the renderer numbers the checkboxes it emits
- * (see checkbox_marker_offsets()), so the Nth rendered checkbox maps to the Nth
- * source marker. Only the target marker's state character is rewritten; every
- * other marker and all surrounding text is preserved verbatim. An index past
- * the last marker returns the body unchanged.
+ * The toggle endpoint addresses a checkbox by its rendered position
+ * (`data-checkbox-index`, numbered in document order by LambDown::text()), so
+ * the marker to rewrite is the one whose flip moves that box and no other. That
+ * is a property of the renderer, not of the source text: `    - [ ] x` on the
+ * first line is a checkbox (render_body() trims the body, so the indent is
+ * gone), the same line inside a list item is a code block, and a scanner that
+ * guesses either way flips somebody else's box — or, when the requested state
+ * already holds, silently rewrites a `[ ]` inside a code block.
  *
- * @param string $body    The raw post body.
- * @param int    $index   Zero-based index of the marker to toggle.
- * @param bool   $checked True to check the marker, false to uncheck it.
- * @return string The body with the target marker toggled.
+ * So the renderer decides. Each candidate marker is rewritten in turn and the
+ * result re-rendered; the marker that produces exactly the requested change,
+ * with every other box untouched, is the right one. At most one candidate can
+ * satisfy that, because only the marker behind box $index can move it.
+ *
+ * @param string $body    The raw post body (front matter included).
+ * @param int    $index   Zero-based index of the rendered checkbox to toggle.
+ * @param bool   $checked True to check the box, false to uncheck it.
+ * @return string|null The body with that box toggled, or null when $index names
+ *                     no rendered checkbox or no marker accounts for it.
  */
-function toggle_checkbox(string $body, int $index, bool $checked): string
+function toggle_rendered_checkbox(string $body, int $index, bool $checked): ?string
 {
-    $offsets = checkbox_marker_offsets($body);
-    if ($index < 0 || !isset($offsets[$index])) {
+    if ($index < 0) {
+        return null;
+    }
+
+    $before = rendered_checkbox_states($body);
+    if (!isset($before[$index])) {
+        return null;
+    }
+    // Already in the requested state: nothing to rewrite. Skipping the search
+    // matters, because with no state change to look for every candidate would
+    // satisfy the check — including one inside a code block.
+    if ($before[$index] === $checked) {
         return $body;
     }
 
-    return substr_replace($body, $checked ? 'x' : ' ', $offsets[$index], 1);
+    $expected = $before;
+    $expected[$index] = $checked;
+
+    foreach (candidate_marker_offsets($body) as $offset) {
+        $candidate = substr_replace($body, $checked ? 'x' : ' ', $offset, 1);
+        if (rendered_checkbox_states($candidate) === $expected) {
+            return $candidate;
+        }
+    }
+
+    return null;
 }
 
 /**

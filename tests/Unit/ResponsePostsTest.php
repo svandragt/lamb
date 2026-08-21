@@ -633,19 +633,49 @@ class ResponsePostsTest extends TestCase
         $this->assertSame("- [ ] one\n", R::load('post', $post->id)->body);
     }
 
-    public function testApplyCheckboxToggleRefusesWhenRewriteWouldMoveAnotherBox(): void
+    public function testApplyCheckboxToggleHandlesABodyASourceScanReadsDifferently(): void
     {
-        // A body whose markers the source scan and the renderer read
-        // differently: the fence is swallowed by the preceding list item, so
-        // the renderer shows three checkboxes where the scan sees two.
+        // The unclosed fence is swallowed by the preceding list item, so the
+        // renderer shows three checkboxes where a line-by-line scan of the
+        // source sees two — and the third box used to be untickable.
         $post          = R::dispense('post');
         $post->body    = "- [ ] one\n+ [ ] two\n```\n- [ ] three\n";
         $post->version = 1;
         $post->created = date('Y-m-d H:i:s');
         R::store($post);
 
-        $this->assertFalse(apply_checkbox_toggle($post->id, 2, true));
-        $this->assertSame("- [ ] one\n+ [ ] two\n```\n- [ ] three\n", R::load('post', $post->id)->body);
+        $this->assertTrue(apply_checkbox_toggle($post->id, 2, true));
+        $this->assertSame("- [ ] one\n+ [ ] two\n```\n- [x] three\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleTicksABoxUnderALeadingIndent(): void
+    {
+        // parse_bean() renders the trimmed body, so the leading four spaces are
+        // gone by the time Parsedown sees the line: both markers are checkboxes.
+        $post          = R::dispense('post');
+        $post->body    = "    - [ ] indented\n\n- [ ] real\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, true));
+        $this->assertSame("    - [x] indented\n\n- [ ] real\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleLeavesAMarkerInIndentedCodeAlone(): void
+    {
+        // A blank line then a deep indent inside a list item is a code block, so
+        // the nested marker is not a checkbox and must never be rewritten — not
+        // even by a toggle whose requested state already holds.
+        $post          = R::dispense('post');
+        $post->body    = "- [x] parent\n\n      - [ ] nested\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertFalse(apply_checkbox_toggle($post->id, 1, true));
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, true));
+        $this->assertSame("- [x] parent\n\n      - [ ] nested\n", R::load('post', $post->id)->body);
     }
 
     // -------------------------------------------------------------------------
