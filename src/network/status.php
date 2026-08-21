@@ -48,8 +48,21 @@ function feed_status_bean(string $name, string $url): OODBBean
  *
  * Every source type records an *attempt* before it fetches, so a feed that keeps
  * failing is still rate-limited by /_cron's 30-minute per-feed window (that window
- * is gated on `last_attempt`, not `last_success`). The bean is returned unsaved —
- * record_crawl_success()/record_crawl_failure() persist it with the outcome.
+ * is gated on `last_attempt`, not `last_success`).
+ *
+ * The stamp is *persisted* here rather than left for
+ * record_crawl_success()/record_crawl_failure(), because those only run when the
+ * fetch returns. A fetch that never returns — the worker OOMs on a hostile feed
+ * body, hits max_execution_time, or fatals in the parser — left `last_attempt`
+ * untouched on disk, so the feed was still due on the next run and /_cron died at
+ * the same feed every time. Everything after it in process_feeds() is downstream
+ * of that loop: the remaining feeds, the WebSub pings for newly published
+ * scheduled posts, and the entire outbound webmention queue never ran again.
+ * Writing the attempt before the fetch costs one row write per crawl and turns
+ * that into one lost run per 30-minute window.
+ *
+ * The bean is returned so record_crawl_success()/record_crawl_failure() can store
+ * the outcome on it; they overwrite this row rather than insert a second one.
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -60,6 +73,7 @@ function begin_crawl(string $name, string $url): array
     $status = feed_status_bean($name, $url);
     $now    = (int)date('U');
     $status->last_attempt = $now;
+    R::store($status);
 
     return [$status, $now];
 }
