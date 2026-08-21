@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\get_tags;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\parse_matter;
@@ -81,6 +82,48 @@ class PostTest extends TestCase
     public function testBodyHasTagDoesNotMatchMidWordHash()
     {
         $this->assertFalse(body_has_tag('php', 'colour#php inline'));
+    }
+
+    /**
+     * body_has_tag() has to end a tag exactly where TAG_PATTERN does, because
+     * TAG_PATTERN decides which /tag/ link is rendered and body_has_tag()
+     * decides whether that page lists the post. It was missing `>`, `"`, `'`,
+     * a backtick, `=` and both slashes, so `#php/8` linked to /tag/php and the
+     * tag page then left the post out.
+     *
+     * @dataProvider terminatorProvider
+     */
+    public function testBodyHasTagAgreesWithTheRendererOnWhereATagEnds(string $body): void
+    {
+        $tags = get_tags($body);
+
+        $this->assertSame(['php'], $tags, $body);
+        $this->assertTrue(body_has_tag('php', $body), $body);
+    }
+
+    /**
+     * One body per character TAG_PATTERN treats as ending a tag name.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function terminatorProvider(): array
+    {
+        return [
+            'slash'       => ['Learn #php/8 today'],
+            'backslash'   => ['Path #php\\win'],
+            'double quote' => ['Read #php"quoted"'],
+            'single quote' => ["It is #php' s"],
+            'backtick'    => ['Tag #php`code`'],
+            'equals'      => ['Query #php=1 here'],
+            'gt'          => ['Markup #php> arrow'],
+            // Already agreed before, kept so a future narrowing is caught too.
+            'space'       => ['Plain #php here'],
+            'end'         => ['End of line #php'],
+            'full stop'   => ['Punctuated #php.'],
+            'ampersand'   => ['Amp #php&more'],
+            'colon'       => ['Colon #php: yes'],
+            'hash'        => ['Hash #php#two'],
+        ];
     }
 
     // slugify
