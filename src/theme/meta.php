@@ -150,11 +150,28 @@ function image_dimensions(string $url): array
 }
 
 /**
- * Maps a same-origin image URL to its filesystem path under ROOT_DIR, or null for remote
- * URLs (which can't be measured locally).
+ * Maps a same-origin image URL to a real file inside ROOT_DIR, or null for a
+ * remote URL (which can't be measured locally) and for anything that resolves
+ * outside the web root.
+ *
+ * The URL is the `src` of the first `<img>` in a post's rendered body, so it is
+ * whatever the Markdown said — and the body is not always the author's: a
+ * subscribed feed's item description reaches here (strip_tags() removes HTML
+ * tags but leaves Markdown `![](…)` for Parsedown to render), as does a
+ * Micropub client holding only `create` scope, and both importers. `![](/../..
+ * /etc/whatever.png)` therefore built a path straight out of the web root, and
+ * image_dimensions() published whether it exists — plus its pixel size and MIME
+ * type — into the page's og:image meta tags for anyone to read.
+ *
+ * Response\asset_dimensions() already resolves the same class of body-supplied
+ * `src` and documents why: "Post bodies are hand-written Markdown, so
+ * /assets/../../etc/passwd … is reachable input; realpath() containment rejects
+ * it, and covers symlinks out of the tree too." The containment here is against
+ * ROOT_DIR rather than src/assets/, because the site default (og-image.png) and
+ * the shipped card both legitimately live outside the uploads tree.
  *
  * @param string $url Image URL.
- * @return string|null
+ * @return string|null The resolved path inside ROOT_DIR, or null.
  */
 function og_local_path(string $url): ?string
 {
@@ -162,12 +179,20 @@ function og_local_path(string $url): ?string
         return null;
     }
     if (str_starts_with($url, ROOT_URL . '/')) {
-        return ROOT_DIR . substr($url, strlen(ROOT_URL));
+        $path = ROOT_DIR . substr($url, strlen(ROOT_URL));
+    } elseif (str_starts_with($url, '/')) {
+        $path = ROOT_DIR . $url;
+    } else {
+        return null;
     }
-    if (str_starts_with($url, '/')) {
-        return ROOT_DIR . $url;
+
+    $root = realpath(ROOT_DIR);
+    $real = realpath($path);
+    if ($root === false || $real === false) {
+        return null;
     }
-    return null;
+
+    return str_starts_with($real, $root . DIRECTORY_SEPARATOR) ? $real : null;
 }
 
 /**
