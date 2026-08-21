@@ -31,9 +31,12 @@ function respond_upload(array $_args): void
     header('Content-Type: application/json');
 
     if (empty($_FILES[IMAGE_FILES])) {
-        // invalid request http status code
+        // JSON like every other refusal on this endpoint: upload-image.js parses
+        // the body to find the message, so a bare string was thrown away and the
+        // author got the generic "Upload failed (400)" instead of the reason.
         header('HTTP/1.1 400 Bad Request');
-        die('No files uploaded!');
+        echo json_encode('No files uploaded.', JSON_THROW_ON_ERROR);
+        die();
     }
 
     $files = normalize_uploaded_files($_FILES[IMAGE_FILES]);
