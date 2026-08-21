@@ -32,6 +32,62 @@ class JsonFeedTest extends TestCase
         JSON;
     }
 
+    /**
+     * This is the function that decides whether an untrusted body is a JSON
+     * Feed, so it cannot assume the shapes it is testing for. Each of these
+     * used to raise a PHP warning on the type it read blindly, and an `items`
+     * that was not an array was accepted as a feed with no entries — which
+     * record_crawl_success() then stamped as a healthy zero-item crawl.
+     *
+     * @dataProvider notAJsonFeedProvider
+     */
+    public function testParseJsonFeedRefusesABodyOfTheWrongShape(string $json): void
+    {
+        $this->assertNull(parse_json_feed($json));
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function notAJsonFeedProvider(): array
+    {
+        $version = 'https://jsonfeed.org/version/1.1';
+
+        return [
+            'empty body'        => [''],
+            'not json'          => ['hello'],
+            'a json scalar'     => ['"x"'],
+            'a json list'       => ['[1,2,3]'],
+            'no version'        => ['{"title":"t","items":[]}'],
+            'a foreign version' => ['{"version":"https://example.com/v1","items":[]}'],
+            'version is a list' => ['{"version":["' . $version . '"],"items":[]}'],
+            'items is a string' => ['{"version":"' . $version . '","items":"oops"}'],
+            'items is a number' => ['{"version":"' . $version . '","items":7}'],
+        ];
+    }
+
+    public function testParseJsonFeedDropsATitleThatIsNotAString(): void
+    {
+        // Cast blindly, this stored the literal string "Array".
+        $json = '{"version":"https://jsonfeed.org/version/1.1","title":["a"],"items":[]}';
+
+        $feed = parse_json_feed($json);
+
+        $this->assertNotNull($feed);
+        $this->assertSame('', $feed['title']);
+    }
+
+    public function testParseJsonFeedReadsAnAbsentItemsListAsAnEmptyFeed(): void
+    {
+        // Absent and null are indistinguishable after the null-coalesce, and an
+        // empty feed is benign — unlike a body whose `items` is another type.
+        $feed = parse_json_feed('{"version":"https://jsonfeed.org/version/1.1","title":"t"}');
+
+        $this->assertNotNull($feed);
+        $this->assertSame([], $feed['items']);
+        $this->assertSame('t', $feed['title']);
+    }
+
     public function testIsJsonFeedUrlMatchesJsonSuffix(): void
     {
         $this->assertTrue(is_json_feed_url('https://example.com/feed.json'));
