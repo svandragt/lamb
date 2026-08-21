@@ -82,6 +82,51 @@ class LambTest extends TestCase
         $this->assertSame('Hello #foo', remove_body_tags('Hello #foo', ['bar']));
     }
 
+    public function testRemoveBodyTagsRemovesATagFollowedByPunctuation(): void
+    {
+        // The old pattern demanded whitespace or end-of-string after the tag,
+        // which is not how a tag ends anywhere else — so for most real bodies
+        // the tag stayed while Micropub's category delete reported success.
+        $this->assertSame('Hello.', remove_body_tags('Hello #php.', ['php']));
+        $this->assertSame('Hello, ok', remove_body_tags('Hello #php, ok', ['php']));
+        $this->assertSame('Hello!', remove_body_tags('Hello #php!', ['php']));
+    }
+
+    public function testRemoveBodyTagsRemovesATagAtTheStartOfTheBody(): void
+    {
+        // TAG_PATTERN accepts the start of the string as a tag boundary; the old
+        // pattern required preceding whitespace, so this tag was never removed.
+        $this->assertSame(' hello', remove_body_tags('#php hello', ['php']));
+    }
+
+    public function testRemoveBodyTagsIgnoresCaseLikeAddBodyTags(): void
+    {
+        // add_body_tags() treats `#PHP` and `#php` as one tag, so removing one
+        // has to find the other or add/remove are not inverses.
+        $this->assertSame('Hello', remove_body_tags('Hello #PHP', ['php']));
+    }
+
+    public function testRemoveBodyTagsLeavesALongerTagAlone(): void
+    {
+        $this->assertSame('Hello #phpstan', remove_body_tags('Hello #phpstan', ['php']));
+    }
+
+    public function testRemoveBodyTagsIgnoresAnEmptyTagName(): void
+    {
+        // An empty name would leave a pattern matching a bare `#`.
+        $this->assertSame('Hello # there', remove_body_tags('Hello # there', ['']));
+    }
+
+    public function testStripTrailingBodyTagsKeepsTextAfterATag(): void
+    {
+        // `&more` and `/8` are body text, not part of the tag name — the old
+        // token class swallowed them into one long "hashtag" and stripped both.
+        // With the tag ending where TAG_PATTERN ends it, neither run is
+        // trailing any more, so the inline tag is left alone as documented.
+        $this->assertSame('Hello #php&more', strip_trailing_body_tags('Hello #php&more'));
+        $this->assertSame('Hello #php/8', strip_trailing_body_tags('Hello #php/8'));
+    }
+
     // get_tags
 
     public function testGetTagsExtractsSingleTag()
