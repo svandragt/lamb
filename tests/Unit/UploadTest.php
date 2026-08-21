@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Response\accept_upload_batch;
 use function Lamb\Response\asset_dimensions;
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
@@ -633,6 +634,96 @@ class UploadTest extends TestCase
         imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
         imagepng($im, $path);
         imagedestroy($im);
+    }
+
+    // accept_upload_batch — the whole batch is judged before anything is stored
+
+    public function testAcceptUploadBatchResolvesTheExtensionOfEveryFile(): void
+    {
+        $one = $this->makePng(8, 8);
+        $two = $this->makePng(8, 8);
+
+        [$accepted, $refusal] = accept_upload_batch([
+            $this->uploadEntry('photo.PNG', $one),
+            $this->uploadEntry('other.png', $two),
+        ]);
+
+        $this->assertNull($refusal);
+        $this->assertCount(2, $accepted);
+        $this->assertSame('png', $accepted[0]['ext'], 'the extension is lower-cased');
+        $this->assertSame('photo.PNG', $accepted[0]['name']);
+        $this->assertSame($one, $accepted[0]['tmp_name']);
+    }
+
+    /**
+     * The regression this function exists for: respond_upload() used to check
+     * and store in the same loop, so a batch refused on its second file had
+     * already written the first into src/assets/ — orphaned, referenced by
+     * nothing, and never mentioned to the author.
+     *
+     * @dataProvider refusedSecondFileProvider
+     */
+    public function testAcceptUploadBatchRefusesTheWholeBatchWhateverTheFilePosition(
+        string $name,
+        string $contents,
+        int $error,
+        string $expected
+    ): void {
+        $good = $this->makePng(8, 8);
+        $bad  = $this->tempRootDir . '/' . $name;
+        file_put_contents($bad, $contents);
+
+        [$accepted, $refusal] = accept_upload_batch([
+            $this->uploadEntry('photo.png', $good),
+            $this->uploadEntry($name, $bad, $error),
+        ]);
+
+        $this->assertSame($expected, $refusal);
+        $this->assertSame([], $accepted, 'no file may be accepted out of a refused batch');
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string, 2: int, 3: string}>
+     */
+    public static function refusedSecondFileProvider(): array
+    {
+        return [
+            'disallowed extension' => ['notes.txt', "hello\n", UPLOAD_ERR_OK, 'Unsupported file type.'],
+            'markup behind an image extension' => [
+                'evil.png',
+                '<html><body><script>alert(1)</script></body></html>',
+                UPLOAD_ERR_OK,
+                'File contents do not match its type.',
+            ],
+            'upload error code' => [
+                'big.png',
+                'x',
+                UPLOAD_ERR_INI_SIZE,
+                'File upload error: ' . UPLOAD_ERR_INI_SIZE,
+            ],
+        ];
+    }
+
+    public function testAcceptUploadBatchAcceptsAnEmptyBatch(): void
+    {
+        [$accepted, $refusal] = accept_upload_batch([]);
+
+        $this->assertNull($refusal);
+        $this->assertSame([], $accepted);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function uploadEntry(string $name, string $path, int $error = UPLOAD_ERR_OK): array
+    {
+        return [
+            'name'     => $name,
+            'type'     => 'application/octet-stream',
+            'tmp_name' => $path,
+            'error'    => $error,
+            'size'     => (int) filesize($path),
+        ];
     }
 
     private function makePng(int $w, int $h): string
