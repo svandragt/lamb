@@ -49,6 +49,79 @@ class ImportIdentityBackfillTest extends TestCase
         return (int) R::getCell('SELECT last_insert_rowid()');
     }
 
+    /**
+     * The write statements a call to ensure_post_columns() issues.
+     *
+     * SQLite takes a write lock for an UPDATE even when no row matches it, and
+     * writers serialise — so a migration that runs unconditionally makes every
+     * request a writer and every read wait behind any concurrent write (up to
+     * PDO's 60-second busy timeout) instead of sharing a read lock. What
+     * matters is therefore not just the resulting rows but whether anything was
+     * written at all.
+     *
+     * @return list<string>
+     */
+    private function writesDuringEnsureColumns(): array
+    {
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        try {
+            ensure_post_columns();
+            $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        } finally {
+            R::debug(false);
+        }
+
+        return array_values(array_filter(
+            $logs,
+            fn ($line) => is_string($line) && preg_match('/^\s*(UPDATE|INSERT|DELETE|ALTER)\b/i', $line) === 1
+        ));
+    }
+
+    public function testNoWriteWhenThereIsNothingToMigrate(): void
+    {
+        // Steady state: the columns exist and no row needs either migration.
+        $this->insert('', '', null);
+        ensure_post_columns();
+
+        $this->assertSame([], $this->writesDuringEnsureColumns());
+    }
+
+    public function testTheIdentityBackfillWritesOnlyWhenARowMatches(): void
+    {
+        $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);
+        ensure_post_columns();
+
+        // First call migrated the row; a second has nothing left to do.
+        $this->assertSame([], $this->writesDuringEnsureColumns());
+    }
+
+    public function testTheVersionStampWritesOnlyWhenAPostNeedsIt(): void
+    {
+        // Settle the schema first: the ALTERs that add deleted/draft/import_uuid
+        // are writes too, and they are not what this measures.
+        ensure_post_columns();
+        R::exec('ALTER TABLE post ADD COLUMN version INTEGER');
+        R::exec("INSERT INTO post (body, version) VALUES ('body', NULL)");
+
+        $writes = $this->writesDuringEnsureColumns();
+        $this->assertCount(1, $writes);
+        $this->assertStringContainsString('version', $writes[0]);
+        $this->assertSame(1, (int) R::getCell('SELECT version FROM post LIMIT 1'));
+
+        // Stamped: nothing left to write.
+        $this->assertSame([], $this->writesDuringEnsureColumns());
+    }
+
+    public function testTheVersionStampIsSkippedWhenTheColumnDoesNotExist(): void
+    {
+        // A post table predating the version column has nothing to stamp, and
+        // naming a missing column in an UPDATE is an error rather than a no-op.
+        $this->insert('', '', null);
+        ensure_post_columns();
+
+        $this->assertSame([], $this->writesDuringEnsureColumns());
+    }
+
     public function testBackfillMovesLegacyImportedPostsOntoImportUuid(): void
     {
         $wp = $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);

@@ -78,11 +78,6 @@ function bootstrap_db(string $data_dir): void
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
     R::useWriterCache(true);
 
-    // One-time migration: mark pre-versioning posts as version 1.
-    // transformed is already populated for these posts (parse_bean ran at creation/edit time);
-    // we only need to stamp the version column so upgrade_posts() never writes them again.
-    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
-
     ensure_post_columns();
 }
 
@@ -109,7 +104,41 @@ function ensure_post_columns(): void
     if (!in_array('import_uuid', $columns, true)) {
         R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
     }
+    backfill_post_version($columns);
     backfill_imported_post_identity($columns);
+}
+
+/**
+ * One-time migration: mark pre-versioning posts as version 1.
+ *
+ * `transformed` is already populated for these posts (parse_bean() ran at
+ * creation/edit time); only the version column needs stamping so
+ * upgrade_posts() never writes them again.
+ *
+ * Probes with a SELECT before writing. SQLite takes a write lock for an UPDATE
+ * even when no row matches it, so running this unconditionally made every
+ * request — an anonymous page view included — a writer, and writers serialise:
+ * with another request or a /_cron run holding the lock, the read blocked
+ * behind it (up to PDO's 60-second busy timeout) instead of being served under
+ * a shared read lock. The probe is a read, so it does not.
+ *
+ * Also skipped when the column does not exist yet: a `post` table predating it
+ * has nothing to stamp, and naming it in an UPDATE is an error rather than a
+ * no-op. Runs from ensure_post_columns(), which has already established that
+ * the table exists and collected its columns.
+ *
+ * @param list<string> $columns Column names as they were before the ALTERs above.
+ */
+function backfill_post_version(array $columns): void
+{
+    if (!in_array('version', $columns, true)) {
+        return;
+    }
+    if (!R::getCell('SELECT 1 FROM post WHERE version IS NULL LIMIT 1')) {
+        return;
+    }
+
+    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
 }
 
 /**
@@ -124,7 +153,9 @@ function ensure_post_columns(): void
  * are not available here — the guard is the only discriminator there is.
  *
  * Rows whose uuid is already claimed by another post's import_uuid are left
- * alone rather than duplicated. Idempotent, so running it every boot is fine.
+ * alone rather than duplicated. Idempotent, so running it every boot is
+ * correct — but it probes with a SELECT first, because an UPDATE that matches
+ * nothing still takes a write lock (see backfill_post_version()).
  *
  * @param list<string> $columns Column names as they were before this call.
  */
@@ -134,11 +165,18 @@ function backfill_imported_post_identity(array $columns): void
         return;
     }
     $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
-    R::exec(
-        'UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL'
-        . " WHERE feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
-        . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)'
-    );
+    // One predicate, used by the probe and the update, so the two cannot
+    // disagree about which rows this migration is for.
+    $where = "feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
+        . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)';
+
+    // Probe first: see backfill_post_version() for why an unconditional UPDATE
+    // makes every request a writer even once there is nothing left to migrate.
+    if (!R::getCell('SELECT 1 FROM post WHERE ' . $where . ' LIMIT 1')) {
+        return;
+    }
+
+    R::exec('UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL WHERE ' . $where);
 }
 
 /**
