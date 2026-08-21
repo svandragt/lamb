@@ -368,6 +368,11 @@ function import_post(array $item, callable $_downloader, bool $dry_run = false, 
  * non-empty — a slugless status post keeps the empty slug and its
  * /status/<id> permalink.
  *
+ * `feed_locked` travels with `feeditem_uuid` for the same reason: the uuid is
+ * what a later crawl matches a post on, and `feed_locked` is what stops that
+ * crawl overwriting the author's own edits. Restoring one without the other
+ * hands the post back to the feed.
+ *
  * @param array<string, mixed> $item
  */
 function apply_manifest_state(OODBBean $bean, array $item): void
@@ -388,6 +393,10 @@ function apply_manifest_state(OODBBean $bean, array $item): void
 
     $bean->draft = empty($item['draft']) ? 0 : 1;
     $bean->deleted = empty($item['deleted']) ? 0 : 1;
+    // Absent from an archive written before the manifest carried it, which
+    // reads as 0 — the value such an install would have had for any post whose
+    // author never took it over.
+    $bean->feed_locked = empty($item['feed_locked']) ? 0 : 1;
     $bean->deleted_at = $item['deleted_at'] ?? null;
     $bean->feed_name = $item['feed_name'] ?? null;
     $bean->feeditem_uuid = $item['feeditem_uuid'] ?? null;
