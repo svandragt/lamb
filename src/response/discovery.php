@@ -133,10 +133,10 @@ const PREVIEW_DISALLOW = '/*?preview=';
  *
  * Preview links (src/lamb.php: preview_token_valid()) deliberately serve an
  * unpublished post to anyone holding the token, with no login — which is
- * exactly what makes them indexable if one is pasted into a page a crawler
- * already follows. Any `preview` parameter counts, even an empty or wrong one:
- * the token doesn't have to be valid for the URL to be a duplicate of the
- * canonical permalink that should not be indexed on its own.
+ * exactly what makes them indexable if pasted into a page a crawler already
+ * follows. Any `preview` parameter counts, even an empty or wrong one; see
+ * response/README.md ("Discovery: sitemap, robots.txt, and noindex") and
+ * DECISIONS.md ("2026-08-03") for the full model.
  *
  * @param bool|string          $action The current request action (first path segment).
  * @param array<string, mixed> $query  The request query parameters (i.e. $_GET).

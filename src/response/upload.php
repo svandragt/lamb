@@ -99,11 +99,8 @@ function respond_upload(array $_args): void
  * Returns the accepted files and null, or an empty list and the message for the
  * first file that cannot be stored. Every refusal here is a 400: the request
  * described something Lamb will not accept, and nothing has been written yet.
- *
- * Separated from respond_upload() because the responder stores as it validates
- * and dies on every exit path — which is both why the mixed order was a bug and
- * why it could not be tested. This half is pure: it reads the batch and the
- * files it names, and writes nothing.
+ * Why this validate-before-store split exists: see response/README.md
+ * ("Uploads: validate the whole batch, then store, then convert").
  *
  * @param array<int, array<string, mixed>> $files From normalize_uploaded_files().
  * @return array{0: list<array{name: string, tmp_name: string, ext: string}>, 1: string|null}
@@ -286,7 +283,9 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
  *
  * Owns the full "land bytes in src/assets/" pipeline for callers that already
  * have the image content in memory (WordPress import downloader, Micropub
- * inline photos). The temp file lives under $dest_dir rather than
+ * inline photos) — see response/README.md ("Uploads: validate the whole
+ * batch, then store, then convert") for why this and store_webp_copy() share
+ * one conversion decision. The temp file lives under $dest_dir rather than
  * sys_get_temp_dir() so the final rename never crosses filesystems — a real
  * failure mode in containers where /tmp is tmpfs and the project root is a
  * bind-mount. respond_upload() keeps its own path because it must use
@@ -369,17 +368,11 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
 
 /**
  * Upper bound on a source image's declared width*height before WebP conversion
- * decodes it. GD allocates the full pixel buffer as soon as it decodes an
- * image's header, before any of this app's own downscaling runs — a small
- * file can declare an enormous width/height ("decompression bomb") and force
- * a multi-gigabyte allocation. 40 megapixels comfortably covers any real
- * photo (including high-resolution phone modes) while capping the worst case.
- *
- * GD's pixel buffers are allocated outside PHP's memory manager, so they
- * neither count against memory_limit nor are limited by it — the real
- * ceiling is the host's actual free RAM. LAMB_MAX_UPLOAD_PIXELS lets a
- * self-hoster on a memory-constrained box lower the cap if conversions are
- * getting OOM-killed, without a code change.
+ * decodes it, guarding against a "decompression bomb" — see response/README.md
+ * ("Uploads: validate the whole batch, then store, then convert") for why GD's
+ * pixel buffers bypass memory_limit and why this must be checked before decode.
+ * 40 megapixels comfortably covers any real photo; LAMB_MAX_UPLOAD_PIXELS lets
+ * a memory-constrained host lower the cap without a code change.
  *
  * @return int The pixel cap: LAMB_MAX_UPLOAD_PIXELS if set to a positive
  *             integer, otherwise the 40-megapixel default.

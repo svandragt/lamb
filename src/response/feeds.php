@@ -182,6 +182,7 @@ function get_feed_data(): array
  * Feeds are polled by readers rather than browsed, so they get a longer max-age
  * than regular pages, plus a conditional-GET 304 short-circuit keyed on the
  * feed's freshest item. No-op for logged-in users (their responses are private).
+ * See response/README.md ("Conditional GET, ETag, and 304 caching").
  *
  * @param string $updated The feed's latest-updated datetime string.
  * @return void

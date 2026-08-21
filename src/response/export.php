@@ -16,11 +16,11 @@ use const ROOT_URL;
 /**
  * Streams a full site export as a zip download.
  *
- * The archive is Lamb's own format (see docs/export.md): every post as the
- * front-matter Markdown it is stored as, the assets those posts reference, and
- * a manifest.json carrying the row state front matter cannot express. Drafts
- * and trashed posts are included and flagged in the manifest — this is a
- * backup, so leaving them out would make it a partial one.
+ * The archive is Lamb's own format, documented in docs/export.md and
+ * DECISIONS.md ("2026-07-26"); this function only owns the HTTP delivery —
+ * see response/README.md ("Export download"). Drafts and trashed posts are
+ * included and flagged in the manifest — this is a backup, so leaving them
+ * out would make it a partial one.
  *
  * @param array<int, string> $_args
  * @return void
