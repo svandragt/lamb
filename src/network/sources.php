@@ -8,7 +8,7 @@ use SimplePie\SimplePie;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Http\resolve_validated_ip;
 
-// FEED_FETCH_TIMEOUT is defined in constants.php
+// FEED_FETCH_TIMEOUT and FEED_FETCH_MAX_BYTES are defined in constants.php
 
 /**
  * @return array<array-key, mixed> Configured feed URLs keyed by feed name.
@@ -66,7 +66,73 @@ class SafeFile extends SimplePieFile
             return;
         }
 
-        parent::__construct($url, $timeout, $redirects, $headers, $useragent, false, $pinned);
+        parent::__construct(
+            $url,
+            $timeout,
+            $redirects,
+            $headers,
+            $useragent,
+            false,
+            self::capBodyCurlOptions($pinned, FEED_FETCH_MAX_BYTES)
+        );
+    }
+
+    /**
+     * Merges FEED_FETCH_MAX_BYTES enforcement into a feed fetch's curl options.
+     *
+     * FEED_FETCH_MAX_BYTES exists because /_cron is unauthenticated: without a
+     * cap, a configured feed's host (or anything it redirects to) can stream an
+     * endless body into the worker's memory until it fatals. The JSON Feed
+     * crawl passes the constant to fetch_guarded(), which enforces it in a
+     * CURLOPT_WRITEFUNCTION; the RSS/Atom crawl had no cap at all, and it is
+     * the default path — every feed URL that does not end in `.json` takes it.
+     *
+     * fetch_guarded()'s approach is not available here: SimplePie reads the
+     * response out of curl_exec()'s return value (CURLOPT_RETURNTRANSFER), and
+     * installing a write callback makes curl_exec() return `true` instead, so
+     * the body would be lost. These three options cap the transfer without
+     * touching how the body is delivered:
+     *
+     * - `CURLOPT_ENCODING: identity` asks for an uncompressed body. SimplePie
+     *   requests compression (`CURLOPT_ENCODING: ''`), and curl's byte counters
+     *   report on-the-wire bytes — so a cap over a compressed transfer bounds
+     *   the *compressed* size only, while curl expands the body into the
+     *   response string as it arrives. A few megabytes of gzipped zeros expand
+     *   to gigabytes there before any cap could see them. fetch_guarded() sends
+     *   no Accept-Encoding at all for the same reason, which is what makes its
+     *   cap exact; this matches it.
+     * - `CURLOPT_MAXFILESIZE` refuses a body whose declared Content-Length is
+     *   already over the cap, before any of it is transferred.
+     * - the progress callback covers what MAXFILESIZE cannot: a chunked
+     *   response declares no length, and an endless body is precisely one that
+     *   never says how long it is. Returning non-zero aborts the transfer with
+     *   CURLE_ABORTED_BY_CALLBACK, which SimplePie surfaces as a fetch error —
+     *   so record_feed_crawl() logs it and leaves the success watermark alone,
+     *   exactly as it does for a timeout.
+     *
+     * Applied on every hop for the same reason the SSRF pin is: SimplePie
+     * follows a redirect by re-entering this constructor (see the class
+     * docblock), and it hands the recursion these same options.
+     *
+     * @param array<int, mixed> $curl_options
+     * @return array<int, mixed>
+     */
+    public static function capBodyCurlOptions(array $curl_options, int $max_bytes): array
+    {
+        $curl_options[CURLOPT_ENCODING] = 'identity';
+        $curl_options[CURLOPT_MAXFILESIZE] = $max_bytes;
+        $curl_options[CURLOPT_NOPROGRESS] = false;
+        $curl_options[CURLOPT_PROGRESSFUNCTION] = static function (
+            mixed $ch,
+            int $download_size,
+            int $downloaded,
+            int $upload_size,
+            int $uploaded
+        ) use ($max_bytes): int {
+            return ($downloaded > $max_bytes || $download_size > $max_bytes) ? 1 : 0;
+        };
+
+        return $curl_options;
     }
 
     /**
