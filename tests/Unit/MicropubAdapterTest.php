@@ -1190,6 +1190,74 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('New body text', $updated->body);
     }
 
+    public function testUpdateCallbackReplaceContentAcceptsAnHtmlObject(): void
+    {
+        // A content value is legitimately `{"html": …}` — the shape
+        // createCallback() has always unwrapped, and the one a client that
+        // created the post with rich content sends back. Cast with (string),
+        // the object became the literal "Array" and overwrote the whole post.
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['html' => '<p>New <b>rich</b> body</p>']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('New rich body', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentAcceptsAValueObject(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['value' => 'Plain from an object']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('Plain from an object', $updated->body);
+    }
+
+    public function testUpdateCallbackRefusesContentWithNoText(): void
+    {
+        // An object carrying neither `html` nor `value` has no content to
+        // store; reporting success for it reads to the client as "saved".
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['alt' => 'no text here']]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        // Nothing is stored when an operation is refused.
+        $this->assertSame('Original content', R::load('post', $bean->id)->body);
+    }
+
     public function testUpdateCallbackReplaceContentPreservesHashtags(): void
     {
         $bean = R::dispense('post');

@@ -679,8 +679,29 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyReplace(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'content') {
-            $newContent = (string) ($values[0] ?? '');
-            $bean->body = $this->rebuildBody($bean, $newContent);
+            // An empty value list is Micropub's "replace with nothing".
+            if ($values === []) {
+                $bean->body = $this->rebuildBody($bean, '');
+                return true;
+            }
+            // extractContent(), not (string) $values[0]: a content value is
+            // legitimately `{"html": …}` or `{"value": …}`, which the create
+            // path has always unwrapped. Cast here instead, that object became
+            // the literal string "Array" (with an "Array to string conversion"
+            // warning) and rebuildBody() wrote it over the entire post — a
+            // spec-legal update from the same client that created the post
+            // destroyed its content.
+            ['content' => $newContent, 'is_html' => $isHtml] = $this->extractContent(['content' => $values]);
+            if ($newContent === null) {
+                // A value carrying no text at all (an object with neither key)
+                // is a replace the storage cannot honour; reporting success for
+                // it reads to the client as "saved", as applyAdd() notes.
+                return false;
+            }
+            // strip_tags() for the html shape, matching what createCallback()
+            // stores in the body. `transformed` is regenerated from the body by
+            // the parse_bean() at the end of updateCallback() either way.
+            $bean->body = $this->rebuildBody($bean, $isHtml ? strip_tags($newContent) : $newContent);
             return true;
         }
 
