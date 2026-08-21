@@ -1579,7 +1579,14 @@ function respond_micropub_media(): void
     $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);
     if ($filename === null) {
         $filename = $seed . ".$ext";
-        move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename);
+        // Checked, the way /upload checks it. Everything store_webp_copy()
+        // declines — gif, webp, avif and every video — lands here, so this is
+        // the ordinary path for a video upload, not a rare one. Answering 201
+        // with a Location for a file that was never written hands the client a
+        // URL it embeds in a published post, where it 404s forever.
+        if (!move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename)) {
+            micropub_error(500, 'server_error', 'Could not store the uploaded file.');
+        }
     }
 
     // The media endpoint hands this URL back to an external Micropub client, so
