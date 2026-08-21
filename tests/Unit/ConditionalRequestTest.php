@@ -82,4 +82,42 @@ class ConditionalRequestTest extends TestCase
         $server = ['HTTP_IF_MODIFIED_SINCE' => http_date($ts - 60)];
         $this->assertFalse(client_has_current_version($server, $etag, $ts));
     }
+
+    /**
+     * RFC 9110 §13.1.3: If-Modified-Since is ignored when If-None-Match is
+     * present. A browser revalidating sends both, and
+     * latest_content_timestamp() is the newest `updated` among published posts
+     * — so trashing the newest post moves it backwards, and the date test then
+     * passed for a client holding the pre-deletion page. Checking it after a
+     * non-matching ETag therefore answered 304 and left the deleted post in
+     * that cache.
+     */
+    public function testANonMatchingEtagWinsOverAStillCurrentDate(): void
+    {
+        $ts = 1234567890;
+        // What the client cached, then what the server holds after the newest
+        // post was trashed: an earlier timestamp, so a different ETag.
+        $cachedTs = $ts;
+        $nowTs    = $ts - 86400;
+        $server = [
+            'HTTP_IF_NONE_MATCH'     => content_etag($cachedTs, 0),
+            'HTTP_IF_MODIFIED_SINCE' => http_date($cachedTs),
+        ];
+
+        $this->assertFalse(client_has_current_version($server, content_etag($nowTs, 0), $nowTs));
+    }
+
+    public function testAMatchingEtagIsStillCurrentWhenADateIsAlsoSent(): void
+    {
+        // The other half of the precedence rule: sending both headers must not
+        // stop an unchanged response from being a 304.
+        $ts = 1234567890;
+        $etag = content_etag($ts, 0);
+        $server = [
+            'HTTP_IF_NONE_MATCH'     => $etag,
+            'HTTP_IF_MODIFIED_SINCE' => http_date($ts - 86400),
+        ];
+
+        $this->assertTrue(client_has_current_version($server, $etag, $ts));
+    }
 }
