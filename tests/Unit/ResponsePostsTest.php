@@ -228,6 +228,167 @@ class ResponsePostsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // redirect_edited — a failed save must have no side effects
+    // -------------------------------------------------------------------------
+
+    /**
+     * Seeds a post with a slug and returns its id, with the `redirect` and
+     * `webmentionoutbox` tables created so a count of them means "none were
+     * written" rather than "the table does not exist yet".
+     */
+    private function seedEditablePost(): int
+    {
+        $redirect = R::dispense('redirect');
+        $redirect->from_slug = '';
+        $redirect->to_url = '';
+        R::store($redirect);
+        R::exec('DELETE FROM redirect');
+
+        $outbox = R::dispense('webmentionoutbox');
+        $outbox->source = '';
+        $outbox->target = '';
+        $outbox->status = '';
+        R::store($outbox);
+        R::exec('DELETE FROM webmentionoutbox');
+
+        $post = R::dispense('post');
+        $post->body          = "# Original title\n\nsome text\n";
+        $post->transformed   = '<p>some text</p>';
+        $post->slug          = 'original-title';
+        $post->created       = date('Y-m-d H:i:s', time() - 3600);
+        $post->updated       = date('Y-m-d H:i:s', time() - 3600);
+        $post->version       = POST_VERSION;
+        $post->tags          = '';
+        $post->feeditem_uuid = '';
+        $post->feed_locked   = 0;
+        $post->in_reply_to   = '';
+
+        return (int) R::store($post);
+    }
+
+    /**
+     * Submits an edit that renames the post while every UPDATE on `post` fails.
+     *
+     * The trigger is how a write failure is made deterministic: SELECTs and
+     * INSERTs into other tables still succeed, which is exactly the shape of a
+     * locked SQLite file (RedBeanPHP surfaces it as RedException\SQL, the
+     * exception redirect_edited() already catches).
+     */
+    private function submitEditWithFailingWrite(int $id): void
+    {
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'failtok';
+        $_POST[HIDDEN_CSRF_NAME]    = 'failtok';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = (string) $id;
+        $_POST['contents']          = "# Renamed title\n\nsee [elsewhere](https://other.example/a)\n";
+
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+        try {
+            redirect_edited();
+        } finally {
+            R::exec('DROP TRIGGER IF EXISTS post_block_update');
+        }
+    }
+
+    public function testRedirectEditedFlashesAndStopsWhenTheSaveFails(): void
+    {
+        $id = $this->seedEditablePost();
+
+        $this->submitEditWithFailingWrite($id);
+
+        $this->assertNotEmpty(array_filter(
+            $_SESSION['flash'] ?? [],
+            fn ($m) => str_contains((string) $m, 'Failed to update')
+        ));
+        // Unchanged on disk — the whole point of the guard.
+        $this->assertSame('original-title', (string) R::load('post', $id)->slug);
+    }
+
+    public function testRedirectEditedDoesNotRedirectTheLiveSlugWhenTheSaveFails(): void
+    {
+        // The damaging one: the post keeps its old slug, so a redirect from that
+        // slug to the never-saved new one points the post's own live URL at a
+        // 404 and makes it unreachable.
+        $id = $this->seedEditablePost();
+
+        $this->submitEditWithFailingWrite($id);
+
+        $this->assertCount(0, R::findAll('redirect'));
+    }
+
+    public function testRedirectEditedDoesNotNotifySubscribersWhenTheSaveFails(): void
+    {
+        // Announcing an edit that was not stored: the queued mention carries a
+        // permalink built from the unsaved slug, so a receiver fetching it to
+        // verify the mention gets a 404.
+        $id = $this->seedEditablePost();
+
+        $this->submitEditWithFailingWrite($id);
+
+        $this->assertCount(0, R::findAll('webmentionoutbox'));
+    }
+
+    // -------------------------------------------------------------------------
+    // redirect_edited — the post id is read from $_POST
+    // -------------------------------------------------------------------------
+    // FILTER_SANITIZE_NUMBER_INT over $_POST, as filter_input(INPUT_POST, ...)
+    // applied to the SAPI request. These pin the sanitising semantics that read
+    // relied on, which is what the change to $_POST had to preserve.
+
+    public function testRedirectEditedReturnsEarlyWhenIdIsMissing(): void
+    {
+        $this->seedEditablePost();
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'idtok1';
+        $_POST[HIDDEN_CSRF_NAME]    = 'idtok1';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['contents']          = 'Updated content';
+
+        redirect_edited();
+
+        // No new post was created from id 0, and the seeded one is untouched.
+        $this->assertCount(1, R::findAll('post'));
+        $this->assertSame('original-title', (string) R::findOne('post')->slug);
+    }
+
+    public function testRedirectEditedReturnsEarlyWhenIdSanitisesToNothing(): void
+    {
+        // 'abc' has no digits, so it sanitises to '' and is refused rather than
+        // becoming post id 0 (which would create a new post instead of editing).
+        $this->seedEditablePost();
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'idtok2';
+        $_POST[HIDDEN_CSRF_NAME]    = 'idtok2';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = 'abc';
+        $_POST['contents']          = 'Updated content';
+
+        redirect_edited();
+
+        // No new post was created from id 0, and the seeded one is untouched.
+        $this->assertCount(1, R::findAll('post'));
+        $this->assertSame('original-title', (string) R::findOne('post')->slug);
+    }
+
+    public function testRedirectEditedReturnsEarlyWhenIdIsZero(): void
+    {
+        $this->seedEditablePost();
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'idtok3';
+        $_POST[HIDDEN_CSRF_NAME]    = 'idtok3';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = '0';
+        $_POST['contents']          = 'Updated content';
+
+        redirect_edited();
+
+        // No new post was created from id 0, and the seeded one is untouched.
+        $this->assertCount(1, R::findAll('post'));
+        $this->assertSame('original-title', (string) R::findOne('post')->slug);
+    }
+
+    // -------------------------------------------------------------------------
     // respond_edit
     // -------------------------------------------------------------------------
 
