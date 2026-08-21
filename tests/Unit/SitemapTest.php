@@ -124,6 +124,55 @@ class SitemapTest extends TestCase
         $this->assertSame(date('c', strtotime('2026-06-01 09:30:00')), $entry['lastmod']);
     }
 
+    /**
+     * /sitemap.xml is anonymous and unpaginated — the feeds cap at 20 rows, this
+     * lists every visible post — so reading whole beans put every body and every
+     * rendered `transformed` blob in memory at once. Measured: ~14 MB at 2,000
+     * posts, and at 20,000 a fatal "Allowed memory size of 134217728 bytes
+     * exhausted", which is a blank 500 for every crawler on the images' default
+     * 128M limit. The URL entries need three columns; nothing must widen that
+     * back to the whole row.
+     */
+    public function testSitemapNeverReadsAPostBody(): void
+    {
+        $this->makePost(['slug' => 'hello-world', 'body' => 'Body text']);
+        $this->makePost(['slug' => null]);
+
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        try {
+            sitemap_urls();
+            $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        } finally {
+            R::debug(false);
+        }
+
+        // RedBean quotes the table name in the SQL it builds but not in SQL it is
+        // handed, so the backticks come off before matching either form.
+        $logs = array_map(static fn(string $sql): string => str_replace('`', '', $sql), $logs);
+        $selects = array_values(array_filter(
+            $logs,
+            static fn(string $sql): bool => stripos($sql, 'SELECT') !== false
+                && stripos($sql, 'FROM post') !== false
+        ));
+
+        $this->assertNotSame([], $selects, 'the sitemap should have queried the post table');
+        foreach ($selects as $sql) {
+            // The column list, not the whole statement: a wildcard here is
+            // `post`.* as much as it is *, and either one drags the bodies in.
+            $columns = (string) preg_replace('/^.*?SELECT(.*?)FROM.*$/is', '$1', $sql);
+            $this->assertStringNotContainsString(
+                '*',
+                $columns,
+                'the sitemap must name its columns rather than select them all: ' . $sql
+            );
+            $this->assertStringNotContainsStringIgnoringCase(
+                'body',
+                $columns,
+                'the sitemap must not read post bodies: ' . $sql
+            );
+        }
+    }
+
     public function testRenderSitemapWrapsUrlsInUrlset(): void
     {
         $xml = render_sitemap([
