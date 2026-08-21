@@ -103,17 +103,15 @@ function webmention_line(array $sent): string
 {
     header('Content-Type: text/plain');
 
-    // /_cron is unauthenticated and meant to be hit by an external cron job
-    // (see docs/cron-scheduled-tasks.md), but nothing stops anyone from
-    // flooding it with concurrent requests. The rate-limit watermark below is
-    // only written after all work below completes, so without a lock, every
-    // request in such a burst reads the same stale watermark, passes the
-    // "too often" check, and proceeds in parallel — multiplying outbound
-    // feed/webmention HTTP calls and risking duplicate feed-item ingestion
-    // (no unique constraint on `feeditem_uuid`) and duplicate outbound
-    // webmention sends (no atomic claim on a queued row). Acquiring a
-    // non-blocking exclusive lock first serializes overlapping runs instead.
+    // Serialise overlapping runs before anything else: /_cron is unauthenticated
+    // and the rate-limit watermark is only written after all work finishes, so a
+    // concurrent burst without this lock would run in parallel on the same stale
+    // watermark. See network/README.md ("The run") for what that duplicates.
     $lock = acquire_cron_lock();
+    if ($lock === false) {
+        http_response_code(500);
+        die('Cannot open the cron lock at ' . cron_lock_path() . ' — is the data directory writable?');
+    }
     if ($lock === null) {
         die('Already running, try again later.');
     }
@@ -152,24 +150,36 @@ function webmention_line(array $sent): string
 }
 
 /**
- * Acquires an exclusive, non-blocking lock serializing /_cron runs.
- *
- * The returned handle must be kept referenced for the remainder of the
- * request: the lock releases automatically once it (and the underlying file
- * descriptor) is closed or the request ends, so an explicit unlock isn't
- * needed as long as the caller never returns normally before then (every
- * process_feeds() exit path terminates the request via die()/exit()).
- *
- * @param string $path Lock file path; created if absent.
- * @return resource|null The open lock-file handle, or null when the lock is
- *                        already held (another run is in progress) or the
- *                        lock file itself couldn't be opened.
+ * The path of the lock file serializing /_cron runs. Lives in the install's
+ * data directory, wherever that is — see Bootstrap\data_dir().
  */
-function acquire_cron_lock(string $path = '../data/cron.lock')
+function cron_lock_path(): string
 {
-    $handle = @fopen($path, 'c');
+    return \Lamb\Bootstrap\data_dir() . '/cron.lock';
+}
+
+/**
+ * Acquires an exclusive, non-blocking lock serialising /_cron runs.
+ *
+ * The handle must stay referenced until the request ends: the lock releases
+ * when it closes, so no explicit unlock is needed as long as every
+ * process_feeds() exit path terminates via die()/exit().
+ *
+ * The two failure modes are kept apart deliberately — a lock file that cannot
+ * be *opened* is a broken install (false), not another run in progress (null);
+ * collapsing them once silently stopped every cron run. See network/README.md
+ * ("The run").
+ *
+ * @param string|null $path Lock file path; defaults to cron_lock_path().
+ * @return resource|false|null The open lock-file handle; null when another run
+ *                             holds the lock; false when the lock file cannot
+ *                             be opened.
+ */
+function acquire_cron_lock(?string $path = null)
+{
+    $handle = @fopen($path ?? cron_lock_path(), 'c');
     if ($handle === false) {
-        return null;
+        return false;
     }
     if (!flock($handle, LOCK_EX | LOCK_NB)) {
         fclose($handle);

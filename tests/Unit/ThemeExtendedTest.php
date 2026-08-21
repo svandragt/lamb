@@ -211,6 +211,58 @@ class ThemeExtendedTest extends TestCase
         $this->assertCount(1, $result);
     }
 
+    /**
+     * The block shows ten links; it used to read every row the LIKE matched to
+     * find them. On a common tag that is the whole archive, on the most-visited
+     * anonymous page there is: 58 MB for one post page at 8,000 posts sharing a
+     * tag, and a fatal "Allowed memory size of 134217728 bytes exhausted" at
+     * 20,000 against the images' default 128M limit.
+     */
+    public function testGetPostsByTagsReadsInBoundedPages(): void
+    {
+        // More than one page, and interleaved with rows the LIKE matches but
+        // body_has_tag() rejects — the reason a plain LIMIT will not do.
+        for ($i = 1; $i <= 120; $i++) {
+            $this->taggedPost("Post $i about #photography", $i * 2);
+            $this->taggedPost("Post $i about #photographylover", $i * 2 + 1);
+        }
+
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        try {
+            $result = get_posts_by_tags(['photography']);
+            $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        } finally {
+            R::debug(false);
+        }
+
+        // The decoys must not stop it filling the block.
+        $this->assertCount(10, $result);
+
+        $selects = array_filter(
+            array_map(static fn(string $sql): string => str_replace('`', '', $sql), $logs),
+            static fn(string $sql): bool => stripos($sql, 'SELECT') !== false
+                && stripos($sql, 'FROM post') !== false
+        );
+        $this->assertNotSame([], $selects, 'the lookup should have queried the post table');
+        foreach ($selects as $sql) {
+            $this->assertStringContainsStringIgnoringCase(
+                'LIMIT',
+                $sql,
+                'a related-posts query must be bounded: ' . $sql
+            );
+        }
+    }
+
+    private function taggedPost(string $body, int $minutesOld): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = $body;
+        $bean->version = 1;
+        $bean->created = date('Y-m-d H:i:s', time() - $minutesOld * 60);
+        $bean->updated = $bean->created;
+        R::store($bean);
+    }
+
     // related_posts
 
     public function testRelatedPostsReturnsEmptyPostsArrayWhenBodyHasNoTags(): void
@@ -253,6 +305,96 @@ class ThemeExtendedTest extends TestCase
         $result = related_posts($bean->body, (int) $bean->id);
         $this->assertArrayHasKey('posts', $result);
         $this->assertCount(0, $result['posts']);
+    }
+
+    // _related.php title truncation ------------------------------------------
+
+    /**
+     * Renders the base theme's related-posts partial for one seeded post.
+     *
+     * The 2024 theme has no _related.php of its own and falls back to this one,
+     * so it renders identically; the 2026 theme overrides it.
+     */
+    private function renderRelated(string $relatedTitle): string
+    {
+        $related = R::dispense('post');
+        $related->title = $relatedTitle;
+        $related->body = 'Related post about #lamb end';
+        $related->transformed = '<p>Related post about #lamb end</p>';
+        $related->version = 1;
+        $related->created = date('Y-m-d H:i:s');
+        R::store($related);
+
+        $current = R::dispense('post');
+        $current->body = 'Current post about #lamb end';
+        $current->transformed = '<p>Current post about #lamb end</p>';
+        $current->version = 1;
+        $current->created = date('Y-m-d H:i:s');
+        R::store($current);
+
+        global $data, $template;
+        $data = ['posts' => [$current]];
+        $template = 'status';
+
+        ob_start();
+        include dirname(__DIR__, 2) . '/src/themes/base/parts/_related.php';
+        return (string) ob_get_clean();
+    }
+
+    public function testRelatedTitleIsNotCutMidCharacter(): void
+    {
+        // substr() cuts on bytes, so a title in any script whose characters are
+        // multi-byte was truncated mid-sequence; escape()'s ENT_SUBSTITUTE then
+        // rendered the broken byte as U+FFFD.
+        $html = $this->renderRelated('Заголовок статьи на русском языке для проверки длины');
+
+        $this->assertStringNotContainsString("\u{FFFD}", $html, 'title must not be cut mid-character');
+        $this->assertTrue(mb_check_encoding($html, 'UTF-8'), 'rendered markup must be valid UTF-8');
+    }
+
+    public function testRelatedTitleKeepsTheSameLengthAcrossScripts(): void
+    {
+        // Byte truncation gave a Cyrillic title half as many characters as a
+        // Latin one from the same limit.
+        $latin = $this->renderRelated(str_repeat('a', 80));
+        $cyrillic = $this->renderRelated(str_repeat('б', 80));
+
+        $this->assertSame(
+            mb_strlen((string) $this->relatedSpan($latin)),
+            mb_strlen((string) $this->relatedSpan($cyrillic)),
+            'the limit should count characters, not bytes'
+        );
+    }
+
+    public function testRelatedTitleThatFitsGetsNoEllipsis(): void
+    {
+        // The literal &hellip; sat outside the trim, so every related title got
+        // an ellipsis whether it had been shortened or not.
+        $html = $this->renderRelated('Short title');
+
+        $this->assertStringContainsString('Short title', $html);
+        $this->assertStringNotContainsString('…', $this->relatedSpan($html) ?? '');
+        $this->assertStringNotContainsString('&hellip;', $html);
+    }
+
+    public function testRelatedTitleThatIsTooLongIsTrimmedWithAnEllipsis(): void
+    {
+        $html = $this->renderRelated(str_repeat('a', 200));
+        $span = (string) $this->relatedSpan($html);
+
+        $this->assertStringContainsString('…', $span);
+        $this->assertLessThanOrEqual(42, mb_strwidth($span));
+    }
+
+    /**
+     * The text of the related item's title span, or null when none was rendered.
+     */
+    private function relatedSpan(string $html): ?string
+    {
+        if (preg_match('#<span>(.*?)</span>#s', $html, $m) !== 1) {
+            return null;
+        }
+        return html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5);
     }
 
     public function testGetPostsByTagsExcludesGivenId(): void

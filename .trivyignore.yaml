@@ -1,0 +1,19 @@
+# Advisories the image scans must not block on, each with the date its
+# suppression lapses. Trivy reads this file only when a scan names it in
+# `trivyignores`; see AGENTS.md for what to do when an entry expires.
+
+vulnerabilities:
+  - id: GHSA-r277-6w6q-xmqw
+    statement: >-
+      kin-openapi ValidationHandler.Load() fail-open authentication bypass, in
+      frankenphp's kin-openapi v0.140.0. Lamb's Caddyfile enables no OpenAPI
+      validation, so the handler is never constructed. Clears when the base
+      image ships kin-openapi 0.144.0 or newer.
+    expired_at: 2026-10-15
+
+  - id: GHSA-hrxh-6v49-42gf
+    statement: >-
+      gRPC-Go xDS RBAC and HTTP/2 vulnerabilities, in frankenphp's grpc
+      v1.81.1. Lamb's Caddyfile enables no gRPC or xDS listeners. Clears when
+      the base image ships grpc 1.82.1 or newer.
+    expired_at: 2026-10-15

@@ -31,35 +31,32 @@ function respond_upload(array $_args): void
     header('Content-Type: application/json');
 
     if (empty($_FILES[IMAGE_FILES])) {
-        // invalid request http status code
+        // JSON like every other refusal on this endpoint: upload-image.js parses
+        // the body to find the message, so a bare string was thrown away and the
+        // author got the generic "Upload failed (400)" instead of the reason.
         header('HTTP/1.1 400 Bad Request');
-        die('No files uploaded!');
+        echo json_encode('No files uploaded.', JSON_THROW_ON_ERROR);
+        die();
     }
 
     $files = normalize_uploaded_files($_FILES[IMAGE_FILES]);
 
+    // The whole batch is checked before any of it is stored. The client posts
+    // every dropped file in one request, so refusing file 2 mid-loop left
+    // file 1 already written into src/assets/ — stored, referenced by nothing,
+    // and invisible to the author, who saw only the refusal.
+    [$accepted, $refusal] = accept_upload_batch($files);
+    if ($refusal !== null) {
+        // The status is load-bearing: upload-image.js keys on response.ok to
+        // tell markdown-to-insert from error-to-report.
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode($refusal, JSON_THROW_ON_ERROR);
+        die();
+    }
+
     $out = '';
-    foreach ($files as $f) {
-        if ($f['error'] !== UPLOAD_ERR_OK) {
-            // The status is load-bearing: upload-image.js keys on response.ok to
-            // tell markdown-to-insert from error-to-report.
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
-            die();
-        }
-        // File upload successful
-        $ext = safe_upload_extension($f['name']);
-        if ($ext === null) {
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('Unsupported file type.', JSON_THROW_ON_ERROR);
-            die();
-        }
-        $temp_fp  = $f['tmp_name'];
-        if (!upload_content_allowed(sniff_file_content_type($temp_fp), $ext)) {
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('File contents do not match its type.', JSON_THROW_ON_ERROR);
-            die();
-        }
+    $stored = [];
+    foreach ($accepted as $f) {
         // Salt with uniqid() so two uploads with the same client-supplied
         // filename in the same month don't collide on disk — without this,
         // an attacker-controlled filename can silently overwrite an earlier,
@@ -70,21 +67,64 @@ function respond_upload(array $_args): void
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        $new_fn = store_webp_copy($temp_fp, $ext, $dir, $seed);
+        $new_fn = store_webp_copy($f['tmp_name'], $f['ext'], $dir, $seed);
         if ($new_fn === null) {
-            $new_fn = "$seed.$ext";
+            $new_fn = $seed . '.' . $f['ext'];
             $new_fp = sprintf("%s/%s", $dir, $new_fn);
-            if (!move_uploaded_file($temp_fp, $new_fp)) {
+            if (!move_uploaded_file($f['tmp_name'], $new_fp)) {
+                // Same reasoning as the batch check: the request is failing, so
+                // the files that did land are unreachable. Take them with it.
+                foreach ($stored as $orphan) {
+                    @unlink($orphan);
+                }
                 header('HTTP/1.1 500 Internal Server Error');
-                echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
+                echo json_encode('Move upload error: ' . $f['tmp_name'], JSON_THROW_ON_ERROR);
                 die();
             }
         }
+        $stored[] = $dir . '/' . $new_fn;
         $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
-    echo json_encode($out, JSON_THROW_ON_ERROR);
+    // The markdown carries the client's filename, which need not be valid
+    // UTF-8; without substitution json_encode() throws and the upload 500s
+    // after the file has already been stored.
+    echo json_encode($out, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     die();
+}
+
+/**
+ * Checks every file in an upload batch, resolving each one's extension.
+ *
+ * Returns the accepted files and null, or an empty list and the message for the
+ * first file that cannot be stored. Every refusal here is a 400: the request
+ * described something Lamb will not accept, and nothing has been written yet.
+ * Why this validate-before-store split exists: see response/README.md
+ * ("Uploads: validate the whole batch, then store, then convert").
+ *
+ * @param array<int, array<string, mixed>> $files From normalize_uploaded_files().
+ * @return array{0: list<array{name: string, tmp_name: string, ext: string}>, 1: string|null}
+ */
+function accept_upload_batch(array $files): array
+{
+    $accepted = [];
+    foreach ($files as $file) {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return [[], 'File upload error: ' . (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE)];
+        }
+        $name = (string) ($file['name'] ?? '');
+        $ext  = safe_upload_extension($name);
+        if ($ext === null) {
+            return [[], 'Unsupported file type.'];
+        }
+        $tmp_fp = (string) ($file['tmp_name'] ?? '');
+        if (!upload_content_allowed(sniff_file_content_type($tmp_fp), $ext)) {
+            return [[], 'File contents do not match its type.'];
+        }
+        $accepted[] = ['name' => $name, 'tmp_name' => $tmp_fp, 'ext' => $ext];
+    }
+
+    return [$accepted, null];
 }
 
 /**
@@ -243,7 +283,9 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
  *
  * Owns the full "land bytes in src/assets/" pipeline for callers that already
  * have the image content in memory (WordPress import downloader, Micropub
- * inline photos). The temp file lives under $dest_dir rather than
+ * inline photos) — see response/README.md ("Uploads: validate the whole
+ * batch, then store, then convert") for why this and store_webp_copy() share
+ * one conversion decision. The temp file lives under $dest_dir rather than
  * sys_get_temp_dir() so the final rename never crosses filesystems — a real
  * failure mode in containers where /tmp is tmpfs and the project root is a
  * bind-mount. respond_upload() keeps its own path because it must use
@@ -281,6 +323,14 @@ function persist_image_bytes(string $bytes, string $ext, string $dest_dir, strin
         @unlink($tmp);
         return null;
     }
+    // tempnam() creates its file 0600, and rename() carries that mode to the
+    // published asset — every other upload path (move_uploaded_file(),
+    // imagewebp(), the restore's file_put_contents()) lands on the usual
+    // 0666 & ~umask. A 0600 asset is readable by the PHP user alone, so a
+    // separate static-file server user, a backup, or the author's own account
+    // cannot read an image the site is serving.
+    @chmod("$dest_dir/$filename", 0666 & ~umask());
+
     return $filename;
 }
 
@@ -318,17 +368,11 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
 
 /**
  * Upper bound on a source image's declared width*height before WebP conversion
- * decodes it. GD allocates the full pixel buffer as soon as it decodes an
- * image's header, before any of this app's own downscaling runs — a small
- * file can declare an enormous width/height ("decompression bomb") and force
- * a multi-gigabyte allocation. 40 megapixels comfortably covers any real
- * photo (including high-resolution phone modes) while capping the worst case.
- *
- * GD's pixel buffers are allocated outside PHP's memory manager, so they
- * neither count against memory_limit nor are limited by it — the real
- * ceiling is the host's actual free RAM. LAMB_MAX_UPLOAD_PIXELS lets a
- * self-hoster on a memory-constrained box lower the cap if conversions are
- * getting OOM-killed, without a code change.
+ * decodes it, guarding against a "decompression bomb" — see response/README.md
+ * ("Uploads: validate the whole batch, then store, then convert") for why GD's
+ * pixel buffers bypass memory_limit and why this must be checked before decode.
+ * 40 megapixels comfortably covers any real photo; LAMB_MAX_UPLOAD_PIXELS lets
+ * a memory-constrained host lower the cap without a code change.
  *
  * @return int The pixel cap: LAMB_MAX_UPLOAD_PIXELS if set to a positive
  *             integer, otherwise the 40-megapixel default.

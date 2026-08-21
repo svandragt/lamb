@@ -40,7 +40,14 @@ function now(): string
 // parse_tags() builds around it — quotes, angle brackets, a backtick, `=`, and
 // the slashes — on top of the punctuation that merely ends a tag. Emoji and other
 // non-Latin scripts stay valid in a tag name.
-const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\]+)/u';
+// The character class itself, so the one other place that has to agree on where
+// a tag ends — Post\body_has_tag(), which decides whether a post belongs on the
+// /tag/ page the link below points at — can be built from it instead of
+// restating it. The two had drifted: body_has_tag() was missing `>`, `"`, `'`,
+// a backtick, `=` and the slashes, so `#php/8` rendered a link to /tag/php and
+// then the tag page left the post out.
+const TAG_TERMINATORS = '\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\';
+const TAG_PATTERN = '/(^|[\s>])#([^' . TAG_TERMINATORS . ']+)/u';
 
 // Bean fields front matter is allowed to set. Anything else in a front-matter
 // block is metadata for the author's own use, not a column to write; see the
@@ -112,17 +119,31 @@ function parse_tags(string $html): string
  * Counterpart of get_tags(): used by Micropub category `add` updates, where
  * categories live in the body as hashtags rather than in a column.
  *
+ * "Already carries" is case-insensitive, and a tag repeated in $tags is added
+ * once: `#PHP` and `#php` are one tag everywhere else (the link parse_tags()
+ * writes, the lookup post_ids_by_tag() runs), so appending the other spelling
+ * just prints the same tag twice.
+ *
  * @param string       $body The raw post body.
  * @param list<string> $tags Tag names (without `#`).
  * @return string The body with missing tags appended.
  */
 function add_body_tags(string $body, array $tags): string
 {
-    $to_add = array_diff($tags, get_tags($body));
-    if (empty($to_add)) {
+    $present = array_map('mb_strtolower', get_tags($body));
+    $to_add = [];
+    foreach ($tags as $tag) {
+        $key = mb_strtolower($tag);
+        if ($tag === '' || in_array($key, $present, true)) {
+            continue;
+        }
+        $present[] = $key;
+        $to_add[] = $tag;
+    }
+    if ($to_add === []) {
         return $body;
     }
-    $hashtags = implode(' ', array_map(fn($tag) => '#' . $tag, $to_add));
+    $hashtags = implode(' ', array_map(fn(string $tag): string => '#' . $tag, $to_add));
 
     return rtrim($body) . ' ' . $hashtags;
 }
@@ -137,7 +158,14 @@ function add_body_tags(string $body, array $tags): string
  */
 function strip_trailing_body_tags(string $body): string
 {
-    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body) ?? $body);
+    // TAG_TERMINATORS, not a third copy of the class: the copy here was missing
+    // `&`, `>`, `"`, `'`, a backtick, `=` and both slashes, so a token like
+    // `#php&more` counted as one long "hashtag" and the whole of it was
+    // stripped — taking `&more`, which is body text, with it. Ending the token
+    // where a tag actually ends means such a run is no longer trailing (there
+    // is text after the tag), so it is left alone, which is what this function
+    // says it does with an inline tag.
+    return rtrim(preg_replace('/(\s+#[^' . TAG_TERMINATORS . ']+)+$/u', '', $body) ?? $body);
 }
 
 /**
@@ -151,10 +179,131 @@ function strip_trailing_body_tags(string $body): string
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
-        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body) ?? $body;
+        // An empty name would leave a pattern that matches a bare `#`, deleting
+        // a literal one out of the body. add_body_tags() skips it the same way.
+        if ($tag === '') {
+            continue;
+        }
+        // Matched with the same boundaries as TAG_PATTERN, and case-insensitively
+        // like add_body_tags(), so this removes exactly the tags get_tags()
+        // reports. It used to demand whitespace on both sides, which left the
+        // tag in place for most real bodies — `Hello #php.`, `Hello #php, ok`,
+        // `#php at the start` — while Micropub's category delete-values still
+        // answered success, so the client was told the tag was gone.
+        //
+        // A callback rather than a replacement string: the leading whitespace
+        // goes with the tag (or two spaces close up where one belonged), but a
+        // `>` before it is the quote marker it was already part of and stays.
+        $body = preg_replace_callback(
+            '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[' . TAG_TERMINATORS . ']|$)/iu',
+            static fn(array $match): string => $match[1] === '>' ? '>' : '',
+            $body
+        ) ?? $body;
     }
 
     return $body;
+}
+
+/**
+ * Repairs a body that is not valid UTF-8.
+ *
+ * Everything downstream assumes UTF-8, and the failure is silent rather than
+ * loud: htmlspecialchars() (inside Parsedown, and inside escape()) returns an
+ * empty string for input it cannot decode, so one stray byte rendered the whole
+ * paragraph containing it as `<p></p>` — the text was still in the `body`
+ * column, but the post, its description, its feed entry and its search text
+ * were blank. Symfony's YAML parser refuses such a block outright, so the front
+ * matter went with it.
+ *
+ * A body that is already valid UTF-8 is returned untouched. Otherwise it is
+ * read as Windows-1252, which is where a stray byte almost always comes from
+ * (a Latin-1 feed, a smart quote pasted from a word processor) and which maps
+ * every byte value, so the result is always valid UTF-8. That turns a blank
+ * post into a readable one, and a genuinely different encoding into visible
+ * mojibake the author can see and fix rather than silent emptiness.
+ *
+ * @param string $text The raw post body.
+ * @return string The body as valid UTF-8.
+ */
+function normalize_utf8(string $text): string
+{
+    if ($text === '' || mb_check_encoding($text, 'UTF-8')) {
+        return $text;
+    }
+
+    return mb_convert_encoding($text, 'UTF-8', 'Windows-1252');
+}
+
+/**
+ * Escapes the wildcards in a value that is about to be embedded in a SQL `LIKE`
+ * pattern. The query that uses it must say `ESCAPE '\'`.
+ *
+ * `%` and `_` are wildcards, so a search for "100%" matched every post and one
+ * for "a_pha" matched "alpha" — the visitor's literal text has to stay literal.
+ * The escape character itself is escaped first, or a trailing backslash in the
+ * search term would escape the closing wildcard instead of itself.
+ *
+ * @param string $value The literal text to match.
+ * @return string The text with LIKE wildcards escaped.
+ */
+function like_escape(string $value): string
+{
+    return str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value);
+}
+
+/**
+ * The root-relative URL path a post is served at: `/<slug>`, or `/status/<id>`
+ * for a slug-less status post.
+ *
+ * The slug is percent-encoded where a path needs it (see
+ * encode_path_segment()). It is stored as the author wrote it — an explicit
+ * front-matter `slug:` can carry a space or a non-ASCII character — and a path
+ * is not a place to put those raw: the router decodes the request before
+ * matching a slug, so the encoded form is the one that round-trips.
+ *
+ * @param OODBBean $bean The post. It should have the 'slug' and 'id' properties.
+ * @return string The post's URL path.
+ */
+function permalink_path(OODBBean $bean): string
+{
+    if ($bean->slug) {
+        return '/' . encode_path_segment((string) $bean->slug);
+    }
+
+    return '/status/' . $bean->id;
+}
+
+/**
+ * Percent-encodes a string for use as a single URL path segment.
+ *
+ * rawurlencode() over-encodes for this: RFC 3986 lets a path segment carry the
+ * sub-delimiters (`&`, `+`, `,`, `=`, …) plus `:` and `@` verbatim, and those
+ * already resolve today. A post's permalink is also its Atom entry id, so
+ * re-encoding a character that never needed it would show every subscriber the
+ * post again as new. They are put back, leaving exactly what a path cannot hold
+ * encoded: whitespace, `?`, `#`, `%`, the brackets, the slashes, and anything
+ * non-ASCII.
+ *
+ * @param string $segment The raw segment text (e.g. a slug).
+ * @return string The segment, safe to place in a URL path.
+ */
+function encode_path_segment(string $segment): string
+{
+    return strtr(rawurlencode($segment), [
+        '%21' => '!',
+        '%24' => '$',
+        '%26' => '&',
+        '%27' => "'",
+        '%28' => '(',
+        '%29' => ')',
+        '%2A' => '*',
+        '%2B' => '+',
+        '%2C' => ',',
+        '%3A' => ':',
+        '%3B' => ';',
+        '%3D' => '=',
+        '%40' => '@',
+    ]);
 }
 
 /**
@@ -171,11 +320,7 @@ function remove_body_tags(string $body, array $tags): string
  */
 function permalink(OODBBean $bean): string
 {
-    if ($bean->slug) {
-        return ROOT_URL . "/$bean->slug";
-    }
-
-    return ROOT_URL . '/status/' . $bean->id;
+    return ROOT_URL . permalink_path($bean);
 }
 
 /**
@@ -240,6 +385,11 @@ function absolute_url(string $url, ?string $base = null): string
  */
 function parse_bean(OODBBean $bean): void
 {
+    // Repair a body that is not valid UTF-8 first: every step below (the YAML
+    // parser, Parsedown's escaping) treats such a body as empty rather than
+    // reporting it.
+    $bean->body = normalize_utf8((string) $bean->body);
+
     // Restore an iOS Smart-Punctuation front-matter fence (e.g. a single em
     // dash for a typed `---`) before parsing, and persist the normalised body.
     // This is the single choke point every save path runs through — web
@@ -584,7 +734,7 @@ function visible_clause(): array
  */
 function persist_resolved_created(string $body, string $resolved): string
 {
-    return set_matter($body, 'created', $resolved, quote: true, append: false);
+    return set_matter($body, 'created', $resolved, append: false);
 }
 
 /**
@@ -754,7 +904,7 @@ function post_has_slug(string $lookup): string|null
     if ($post === null || $post->id === 0) {
         return null;
     }
-    if (!is_viewable($post) && !preview_token_valid($post, $_GET['preview'] ?? null)) {
+    if (!is_viewable($post) && !preview_token_valid($post, Http\request_string($_GET['preview'] ?? null))) {
         return null;
     }
 
@@ -779,7 +929,9 @@ function find_post_by_path(string $path): ?OODBBean
         return $bean->id ? $bean : null;
     }
 
-    $slug = trim($path, '/');
+    // The path comes from a URL, so its slug is percent-encoded (permalink_path()
+    // encodes it); the column holds the decoded text.
+    $slug = rawurldecode(trim($path, '/'));
     if ($slug !== '') {
         return R::findOne('post', ' slug = ? ', [$slug]);
     }
@@ -863,7 +1015,8 @@ function redirect_target_slug(string $to_url): ?string
     if (!str_starts_with($to_url, '/')) {
         return null;
     }
-    $slug = ltrim($to_url, '/');
+    // Stored encoded (permalink_path()); slugs and from_slug values are not.
+    $slug = rawurldecode(ltrim($to_url, '/'));
     if ($slug === '' || str_contains($slug, '/')) {
         return null;
     }

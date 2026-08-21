@@ -12,13 +12,14 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
+use function Lamb\Http\request_string;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\sanitize_explicit_slug;
-use function Lamb\Post\toggle_checkbox;
+use function Lamb\Post\toggle_rendered_checkbox;
 use function Lamb\Route\is_reserved_route;
 
 /**
@@ -33,10 +34,10 @@ function redirect_created(): void
 {
     Security\require_login();
     Security\require_csrf();
-    if ($_POST['submit'] !== SUBMIT_CREATE) {
+    if (request_string($_POST['submit'] ?? null) !== SUBMIT_CREATE) {
         return;
     }
-    $contents = trim($_POST['contents'] ?? '');
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     if (empty($contents)) {
         return;
     }
@@ -80,8 +81,10 @@ function warn_if_manual_redirect(string $slug): void
         return;
     }
 
-    $_SESSION['flash'][] = 'A manual redirect for <code>' . $slug
-        . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+    // Plain text: the themes escape a flash before printing it, so markup here
+    // reaches the author as literal tags.
+    $_SESSION['flash'][] = 'A manual redirect for "' . $slug
+        . '" still exists in Settings → [redirections]. You may want to remove it.';
 }
 
 /**
@@ -106,7 +109,10 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
 
     $auto_redirect = R::dispense('redirect');
     $auto_redirect->from_slug = $old_slug;
-    $auto_redirect->to_url    = '/' . sanitize_explicit_slug($new_slug);
+    // Encoded the same way permalink_path() encodes it, so the 301 lands on a
+    // URL the router can read back (a slug may carry a space or a non-ASCII
+    // character).
+    $auto_redirect->to_url    = '/' . \Lamb\encode_path_segment(sanitize_explicit_slug($new_slug));
     R::store($auto_redirect);
 }
 
@@ -116,7 +122,10 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
  *
  * This is the open-redirect guard the redirect-after-action handlers share:
  * redirect_uri()/sanitize_location() only strip control characters and do not
- * check the host, so an off-site Referer would otherwise redirect off-site.
+ * check the host, so an off-site Referer would otherwise redirect off-site. The
+ * host check alone is not enough for that (a protocol-relative path trick
+ * survives it) — see response/README.md ("Referer-based redirect targets") for
+ * the shape and why the final answer is delegated to local_redirect_target().
  *
  * @param string|null $referer The request Referer header (may be null).
  * @return string A same-origin path (with query), or '/'.
@@ -140,7 +149,8 @@ function safe_referer_path(?string $referer): string
     if (isset($parts['query']) && $parts['query'] !== '') {
         $path .= '?' . $parts['query'];
     }
-    return $path;
+
+    return local_redirect_target($path);
 }
 
 /**
@@ -260,12 +270,20 @@ function redirect_edited(): void
     Security\require_login();
     Security\require_csrf();
     $validSubmits = [SUBMIT_EDIT];
-    if (!in_array($_POST['submit'], $validSubmits, true)) {
+    if (!in_array(request_string($_POST['submit'] ?? null), $validSubmits, true)) {
         return;
     }
 
-    $contents = trim(($_POST['contents']));
-    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
+    // filter_var() over $_POST rather than filter_input(INPUT_POST, ...): the
+    // same FILTER_SANITIZE_NUMBER_INT over the same value, but read where every
+    // other input in this function is read. filter_input() reads the SAPI's
+    // request data, which does not exist under the CLI SAPI the test suite runs
+    // on — it returns null there whatever $_POST holds, so everything below this
+    // line was unreachable from a unit test (hence the existing coverage
+    // stopping at "early-return paths"). Non-numeric input still sanitises to ''
+    // and returns here, exactly as before.
+    $id = trim((string) filter_var(request_string($_POST['id'] ?? null) ?? '', FILTER_SANITIZE_NUMBER_INT));
     if (empty($contents) || empty($id)) {
         return;
     }
@@ -283,7 +301,7 @@ function redirect_edited(): void
     $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
+        $_SESSION['flash'][] = 'Failed to save, slug is in use: "' . $bean->slug . '"';
 
         return;
     }
@@ -299,7 +317,15 @@ function redirect_edited(): void
     try {
         R::store($bean);
     } catch (SQL $e) {
+        // Return, like the reserved-slug check above: everything below this
+        // point is a consequence of the edit having been saved. Falling through
+        // on a failed write — a locked SQLite file while /_cron holds it is the
+        // realistic one — pointed the post's live URL at a slug that was never
+        // stored (a 301 to a 404), and announced the unsaved content to
+        // webmention receivers and the WebSub hub.
         $_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
+
+        return;
     }
 
     $new_slug = $bean->slug;
@@ -319,11 +345,10 @@ function redirect_edited(): void
 /**
  * Marks a feed-sourced post as author-owned so feed re-ingestion leaves it alone.
  *
- * Feed crawls dedupe on `feeditem_uuid` and re-sync source updates onto matching
- * posts. Once the author edits such a post through the edit form, that auto-sync
- * would clobber their changes, so set `feed_locked` to opt the post out of future
- * updates. Posts that did not originate from a feed (`feeditem_uuid` empty) are
- * left untouched.
+ * Posts that did not originate from a feed (`feeditem_uuid` empty) are left
+ * untouched. This is the response-side half of the `feed_locked` invariant; see
+ * ../network/README.md ("The watermark model") for why it exists and how the
+ * crawl side reads it.
  *
  * @param OODBBean $bean The post being saved.
  * @return void
@@ -338,13 +363,11 @@ function lock_if_feed_sourced(OODBBean $bean): void
 /**
  * Toggles a GitHub-style task-list checkbox and persists it as a post edit.
  *
- * AJAX endpoint for the logged-in author: flips the Nth `[ ]`/`[x]` marker in
- * the post body (the index supplied by the rendered checkbox's
- * `data-checkbox-index`), re-parses so `transformed` reflects the new state,
- * and bumps `updated`. Login-only, no CSRF — matching respond_upload() and the
- * SameSite=Strict session, which already blocks cross-site POSTs. Webmention
- * and WebSub are intentionally skipped: ticking a box is a minor edit and must
- * not re-notify subscribers.
+ * AJAX endpoint for the logged-in author. Login-only, no CSRF — see
+ * AGENTS.md's Security section for the SameSite=Strict invariant this and
+ * respond_upload() both rely on instead. Webmention and WebSub are
+ * intentionally skipped: ticking a box is a minor edit and must not re-notify
+ * subscribers.
  *
  * @param array<int, string> $_args Unused route arguments.
  * @return void
@@ -374,27 +397,34 @@ function respond_checkbox(array $_args): void
 /**
  * Toggles a task-list checkbox in a post and persists it as an edit.
  *
- * Loads the post, flips the Nth `[ ]`/`[x]` marker in its body, re-parses so
- * `transformed`/`description` reflect the new state, and bumps `updated`. The
+ * Loads the post, flips the marker behind its Nth rendered checkbox, re-parses
+ * so `transformed`/`description` reflect the new state, and bumps `updated`. The
  * testable core of respond_checkbox() (which adds auth and the JSON response).
  *
  * @param int  $id      The post id.
- * @param int  $index   Zero-based checkbox index.
+ * @param int  $index   Zero-based rendered checkbox index.
  * @param bool $checked The desired checked state.
- * @return bool True on success, false when the post is missing or the index invalid.
+ * @return bool True on success, false when the post is missing or the index
+ *              names no checkbox the renderer emits.
  */
 function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
 {
-    if ($index < 0) {
-        return false;
-    }
-
     $bean = R::load('post', $id);
     if (!$bean->id) {
         return false;
     }
 
-    $bean->body = toggle_checkbox((string) $bean->body, $index, $checked);
+    // The index names a *rendered* checkbox, and which source marker that is is
+    // the renderer's answer to give (see Post\toggle_rendered_checkbox): null
+    // means no such checkbox, or none whose flip leaves every other box alone.
+    // The client then reverts the tick instead of the author silently finding a
+    // different task crossed off.
+    $toggled = toggle_rendered_checkbox((string) $bean->body, $index, $checked);
+    if ($toggled === null) {
+        return false;
+    }
+
+    $bean->body = $toggled;
     parse_bean($bean);
     $bean->updated = \Lamb\now();
 
@@ -418,7 +448,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, $_GET['preview'] ?? null)) {
+    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, request_string($_GET['preview'] ?? null))) {
         return respond_404([], true);
     }
 
@@ -462,7 +492,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, $_GET['preview'] ?? null))) {
+    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, request_string($_GET['preview'] ?? null)))) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

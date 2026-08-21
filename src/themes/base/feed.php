@@ -62,13 +62,29 @@ foreach ($data['posts'] as $bean) {
     // The reply context travels inside <content>, not only in the theme: thr:
     // below is invisible to readers that ignore the extension, and services that
     // thread replies (micro.blog) look for the u-in-reply-to microformat in the
-    // item's HTML. Its markup is already escaped, so addChild() is safe here.
-    $Content = $Entry->addChild(
-        'content',
+    // item's HTML.
+    //
+    // Written through a DOM text node rather than addChild(): addChild() escapes
+    // `<` but not `&`, which strips exactly one layer of escaping off the post's
+    // HTML. Text the author (or an ingested feed) wrote as `<script>` is stored
+    // as `&lt;script&gt;` by Parsedown's safe mode, and the feed handed it to
+    // subscribers as live markup inside a type="html" element. A text node
+    // escapes `&` and `<` alike, so the content arrives exactly as stored.
+    $Content = $Entry->addChild('content');
+    $Content->addAttribute('type', 'html');
+    $content_html = Lamb\normalize_utf8(
         Lamb\Theme\the_reply_context($bean) . Lamb\absolute_urls($bean->transformed)
     );
-    $Content->addAttribute('type', 'html');
-    if (!empty($bean->in_reply_to)) {
+    $content_node = dom_import_simplexml($Content);
+    $content_document = $content_node->ownerDocument;
+    if ($content_document !== null) {
+        $content_node->appendChild($content_document->createTextNode($content_html));
+    }
+    // Guarded like the reply context in <content> above: `ref`/`href` are a URL a
+    // reader may turn into a link, and in_reply_to is not author-only (a Micropub
+    // client with `create` scope sets it, unvalidated), so a non-http(s) scheme
+    // must not be syndicated as one.
+    if (!empty($bean->in_reply_to) && Lamb\Http\is_valid_http_url((string) $bean->in_reply_to)) {
         // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping
         // would double-encode any query-string ampersands.
         $Thread = $Entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');

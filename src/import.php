@@ -368,7 +368,25 @@ function build_post_body(string $title, string $markdown_body, array $tags, stri
 
 /**
  * Returns the YYYY/MM subpath under src/assets/ for a post's created date.
- * Falls back to the current month when the date can't be parsed.
+ * Falls back to the current month when the date can't be used.
+ *
+ * `YYYY/MM` is not just a convention here — it is the shape both gates that
+ * read these paths match on. Restore\safe_entry_path() anchors `\d{4}/\d{2}`,
+ * and Export\referenced_assets() only picks up `/assets/\d{4}/\d{2}/…` out of a
+ * body. A year that does not render as four digits therefore produces a path
+ * the rest of the system cannot see:
+ *
+ * - `created: 0000-00-00` in front matter (what an older install, or a
+ *   MySQL-era row, hands you) parses to year -1, so a post exported to
+ *   `posts/-0001/11/<slug>.md` was refused by the importer as a "bad path" —
+ *   the post did not come back from its own backup.
+ * - Images for such a post downloaded into `src/assets/-0001/11/`, where
+ *   referenced_assets() cannot match them, so they were absent from every
+ *   export.
+ *
+ * Only the folder falls back; the date itself is untouched, and front matter
+ * and the manifest still carry it. That is the same trade this function
+ * already made for a date that does not parse at all.
  */
 function asset_dir_for_date(string $created): string
 {
@@ -376,7 +394,12 @@ function asset_dir_for_date(string $created): string
     if ($ts === false) {
         $ts = time();
     }
-    return date('Y/m', $ts);
+    $dir = date('Y/m', $ts);
+    if (preg_match('#^\d{4}/\d{2}$#D', $dir) !== 1) {
+        $dir = date('Y/m');
+    }
+
+    return $dir;
 }
 
 /**
@@ -608,6 +631,18 @@ function href_looks_like_image(string $href): bool
 const IMAGE_DOWNLOAD_MAX_BYTES = 20_000_000;
 
 /**
+ * Time limit for a single image download.
+ *
+ * The byte cap alone does not bound the download: a server that answers one
+ * byte at a time never reaches IMAGE_DOWNLOAD_MAX_BYTES and never finishes,
+ * and a WXR file names one image URL per attachment — so a single such URL
+ * stalls the whole import with nothing logged. Generous next to the other
+ * outbound timeouts because this transfers up to 20 MB, where the webmention
+ * and feed fetches read a document.
+ */
+const IMAGE_DOWNLOAD_TIMEOUT = 30;
+
+/**
  * Default downloader used by the CLI scripts: fetches $url over HTTP and
  * writes it under ROOT_DIR/assets/$sub_path with a content-hash filename.
  * JPEG/PNG are re-encoded to WebP via the shared persistence helper. Returns
@@ -644,7 +679,14 @@ function default_image_downloader(string $url, string $sub_path): ?string
     // attacker-influenced as a webmention source; use the same SSRF-safe
     // fetcher (rejects loopback/private/link-local destinations and
     // re-checks every redirect hop) rather than the unguarded fetch().
-    $response = fetch_guarded($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
+    // Both halves of the guard, not just the cap: request_options() bundles the
+    // timeout with the byte cap on every webmention call for exactly this
+    // reason, and this URL is no less attacker-influenced than a webmention
+    // source.
+    $response = fetch_guarded($url, [
+        'max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES,
+        'timeout' => IMAGE_DOWNLOAD_TIMEOUT,
+    ]);
     if ($response === null || $response['body'] === '') {
         return null;
     }
@@ -703,11 +745,27 @@ function prepare_imported_html(string $html, string $created, callable $download
 
 /**
  * Stores an automatic redirect from an imported source URL path to a local
- * Lamb path. Importers only create redirects for old paths that do not
- * naturally match Lamb's freshly minted permalink.
+ * Lamb path, unless the source path is the post's own new permalink.
+ *
+ * A row pointing a path at itself is not a redirect. While the post is live
+ * index.php prefers the post, so the row is invisible dead weight in the
+ * author's redirect list; once the post is trashed the router falls through to
+ * the redirect instead, and the old permalink 301s to itself until the next
+ * /_cron run reaches flatten_redirects(). The comparison lives here rather than
+ * in each importer because a source path that differs from the new permalink
+ * only by encoding is the same key once decoded — and because each importer
+ * having its own copy is how one of them (Known's <guid> branch) came to be
+ * missing it.
  */
 function store_redirect(string $from, string $to): void
 {
+    // The key is matched against the *decoded* request path (the router decodes
+    // before looking a redirect up), while an imported path arrives encoded as
+    // the source site wrote it.
+    $from = rawurldecode($from);
+    if ($from === '' || $from === rawurldecode(ltrim($to, '/'))) {
+        return;
+    }
     $redirect = R::findOneOrDispense('redirect', ' from_slug = ? ', [$from]);
     $redirect->from_slug = $from;
     $redirect->to_url = $to;

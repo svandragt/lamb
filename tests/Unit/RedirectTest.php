@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\find_redirect;
 use function Lamb\get_all_redirects;
+use function Lamb\redirect_target_slug;
 
 class RedirectTest extends TestCase
 {
@@ -24,6 +25,59 @@ class RedirectTest extends TestCase
 
         // Clean redirect table before each test
         R::exec('DELETE FROM redirect WHERE 1');
+    }
+
+    // Redirect keys live in the decoded space the router looks them up in,
+    // while the targets they point at are encoded like any other permalink.
+
+    public function testRedirectTargetSlugDecodesItsTarget(): void
+    {
+        $this->assertSame('my post', redirect_target_slug('/my%20post'));
+        $this->assertSame('café', redirect_target_slug('/caf%C3%A9'));
+        $this->assertSame('plain', redirect_target_slug('/plain'));
+        $this->assertNull(redirect_target_slug('https://example.com/x'));
+        $this->assertNull(redirect_target_slug('/a/b'));
+    }
+
+    public function testStoreRedirectKeysOnTheDecodedPath(): void
+    {
+        \Lamb\Import\store_redirect('2020/caf%C3%A9', '/caf%C3%A9');
+
+        // Looked up the way the router looks it up: with the decoded path.
+        $this->assertSame('/caf%C3%A9', find_redirect('2020/café'));
+    }
+
+    /**
+     * @dataProvider selfRedirectProvider
+     */
+    public function testStoreRedirectDropsAPathThatIsAlreadyItsTarget(string $from, string $to): void
+    {
+        \Lamb\Import\store_redirect($from, $to);
+
+        $this->assertCount(0, R::findAll('redirect'), $from . ' -> ' . $to . ' is a loop, not a redirect');
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function selfRedirectProvider(): array
+    {
+        return [
+            'identical path'      => ['hello-world', '/hello-world'],
+            'target encoded'      => ['café', '/caf%C3%A9'],
+            'source encoded'      => ['caf%C3%A9', '/café'],
+            'status permalink'    => ['status/12', '/status/12'],
+            'empty source'        => ['', '/hello-world'],
+        ];
+    }
+
+    public function testStoreRedirectKeepsAPathThatOnlyEndsWithItsTarget(): void
+    {
+        // The check is equality, not containment: a dated source path ending in
+        // the new slug is exactly the redirect an import exists to create.
+        \Lamb\Import\store_redirect('2020/hello-world', '/hello-world');
+
+        $this->assertSame('/hello-world', find_redirect('2020/hello-world'));
     }
 
     // find_redirect — config-based

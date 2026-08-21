@@ -67,16 +67,9 @@ function the_opengraph(): void
 }
 
 /**
- * Resolves the OpenGraph/Twitter card image for a status post.
- *
- * Selection order, most specific first:
- *   1. the first image embedded in the post body — so sharing a photo/screenshot post
- *      previews that image (twitter:card upgrades to summary_large_image);
- *   2. a site default dropped in the web root as og-image.<ext>, user-replaceable in the
- *      same spirit as the favicon.png / logo.png feed convention;
- *   3. the shipped Lamb card.
- *
- * Width/height/type are emitted only when the image maps to a readable local file.
+ * Resolves the OpenGraph/Twitter card image for a status post. See
+ * theme/README.md ("OpenGraph image selection") for the fallback order and
+ * why dimensions are only emitted for a locally-resolvable image.
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return array{url:string, card:string, width?:string, height?:string, type?:string}
@@ -150,11 +143,19 @@ function image_dimensions(string $url): array
 }
 
 /**
- * Maps a same-origin image URL to its filesystem path under ROOT_DIR, or null for remote
- * URLs (which can't be measured locally).
+ * Maps a same-origin image URL to a real file inside ROOT_DIR, or null for a
+ * remote URL (which can't be measured locally) and for anything that resolves
+ * outside the web root.
+ *
+ * The URL is body-supplied (post Markdown, including feed items and
+ * `create`-scope Micropub posts), so `realpath()` containment against
+ * ROOT_DIR — the same defence `Response\asset_dimensions()` applies — guards
+ * against a path built straight out of the web root. See theme/README.md
+ * ("OpenGraph image selection") for why the containment root is ROOT_DIR
+ * rather than the narrower uploads tree.
  *
  * @param string $url Image URL.
- * @return string|null
+ * @return string|null The resolved path inside ROOT_DIR, or null.
  */
 function og_local_path(string $url): ?string
 {
@@ -162,12 +163,20 @@ function og_local_path(string $url): ?string
         return null;
     }
     if (str_starts_with($url, ROOT_URL . '/')) {
-        return ROOT_DIR . substr($url, strlen(ROOT_URL));
+        $path = ROOT_DIR . substr($url, strlen(ROOT_URL));
+    } elseif (str_starts_with($url, '/')) {
+        $path = ROOT_DIR . $url;
+    } else {
+        return null;
     }
-    if (str_starts_with($url, '/')) {
-        return ROOT_DIR . $url;
+
+    $root = realpath(ROOT_DIR);
+    $real = realpath($path);
+    if ($root === false || $real === false) {
+        return null;
     }
-    return null;
+
+    return str_starts_with($real, $root . DIRECTORY_SEPARATOR) ? $real : null;
 }
 
 /**

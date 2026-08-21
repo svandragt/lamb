@@ -24,6 +24,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
@@ -238,8 +239,16 @@ class LambMicropubAdapter extends MicropubAdapter
             return null;
         }
 
+        // Http\parse_status_line(), not a substring test for ' 200 '. That test
+        // answered on the wrong thing in both directions: it read a status line
+        // with no reason phrase ("HTTP/1.1 200", "HTTP/2 200") as a failure, so a
+        // conforming token endpoint could take the whole Micropub endpoint down
+        // with no usable diagnosis; and it matched ' 200 ' anywhere in the line,
+        // so "HTTP/1.1 500 Error 200 x" read as a success — a fail-open answer on
+        // the request that establishes who the caller is.
         $statusLine = $result['headers'][0] ?? '';
-        if (!str_contains($statusLine, ' 200 ')) {
+        $status = \Lamb\Http\parse_status_line($statusLine);
+        if ($status !== 200) {
             mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'non_200', 'status' => trim($statusLine)]);
             return null;
         }
@@ -488,6 +497,10 @@ class LambMicropubAdapter extends MicropubAdapter
             return $rejection;
         }
 
+        // Captured before any operation runs: whether this update *mints* a
+        // slug decides whether it is finalised below.
+        $slug_before = (string) ($bean->slug ?? '');
+
         foreach ($actions['replace'] ?? [] as $property => $values) {
             if (!is_array($values) || !array_is_list($values)) {
                 return 'invalid_request';
@@ -531,6 +544,20 @@ class LambMicropubAdapter extends MicropubAdapter
 
         parse_bean($bean);
         $bean->updated = \Lamb\now();
+        // An update can mint a slug where there was none: naming a titleless
+        // status post derives one from the title. Without finalize_slug() that
+        // slug skipped the uniqueness and reserved-route checks every other
+        // save path applies, so two posts could end up sharing a URL — one of
+        // them unreachable at its own permalink, with its feed entry pointing
+        // at the other's content.
+        //
+        // Only a freshly minted slug is finalised. A post that already had one
+        // keeps it untouched (pinSlug() writes it into the front matter before
+        // a rename): moving a live permalink — the URL the client just used to
+        // address the post — is worse than leaving a pre-existing duplicate be.
+        if ($slug_before === '') {
+            finalize_slug($bean);
+        }
         R::store($bean);
 
         notify_post_subscribers($bean);
@@ -550,7 +577,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyAdd(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = add_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = add_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -628,7 +655,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = remove_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = remove_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -660,8 +687,29 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyReplace(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'content') {
-            $newContent = (string) ($values[0] ?? '');
-            $bean->body = $this->rebuildBody($bean, $newContent);
+            // An empty value list is Micropub's "replace with nothing".
+            if ($values === []) {
+                $bean->body = $this->rebuildBody($bean, '');
+                return true;
+            }
+            // extractContent(), not (string) $values[0]: a content value is
+            // legitimately `{"html": …}` or `{"value": …}`, which the create
+            // path has always unwrapped. Cast here instead, that object became
+            // the literal string "Array" (with an "Array to string conversion"
+            // warning) and rebuildBody() wrote it over the entire post — a
+            // spec-legal update from the same client that created the post
+            // destroyed its content.
+            ['content' => $newContent, 'is_html' => $isHtml] = $this->extractContent(['content' => $values]);
+            if ($newContent === null) {
+                // A value carrying no text at all (an object with neither key)
+                // is a replace the storage cannot honour; reporting success for
+                // it reads to the client as "saved", as applyAdd() notes.
+                return false;
+            }
+            // strip_tags() for the html shape, matching what createCallback()
+            // stores in the body. `transformed` is regenerated from the body by
+            // the parse_bean() at the end of updateCallback() either way.
+            $bean->body = $this->rebuildBody($bean, $isHtml ? strip_tags($newContent) : $newContent);
             return true;
         }
 
@@ -670,7 +718,7 @@ class LambMicropubAdapter extends MicropubAdapter
             // set, so the hashtags already on the body go first.
             $bean->body = add_body_tags(
                 strip_trailing_body_tags($bean->body ?? ''),
-                array_map('strval', $values)
+                self::textValues($values)
             );
             return true;
         }
@@ -815,10 +863,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = (string) ($bean->body ?? '');
         [$yaml] = split_frontmatter(normalize_frontmatter_fence($currentBody));
 
-        $tags       = get_tags($currentBody);
-        $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
-
-        $content = $newContent . $hashtagStr;
+        // add_body_tags() rather than appending the old body's tags outright:
+        // a tag the replacement content already carries must not be appended a
+        // second time, or every content update grows the trailing run
+        // (`goodbye #php #php`).
+        $content = add_body_tags($newContent, get_tags($currentBody));
 
         return $yaml === '' ? $content : "---\n" . $yaml . "\n---\n" . $content;
     }
@@ -994,20 +1043,109 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Strip disallowed tags from HTML content, keeping safe formatting elements.
+     * Tags kept in Micropub `content.html`. Everything else is unwrapped by
+     * strip_tags(), which keeps the text inside it.
+     */
+    private const HTML_TAGS = [
+        'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
+        'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
+        'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
+        'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
+        'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+    ];
+
+    /**
+     * Attributes kept on a surviving element, by lower-case tag name. `*`
+     * applies to every tag. An allowlist rather than a denylist of `on*`: a
+     * denylist has to keep pace with every attribute that can run script or
+     * reposition the page, and `style` alone is enough to cover the viewport.
+     */
+    private const HTML_ATTRIBUTES = [
+        '*'          => ['title'],
+        'a'          => ['href'],
+        'blockquote' => ['cite'],
+        'img'        => ['src', 'alt', 'width', 'height'],
+        'ol'         => ['start'],
+        'q'          => ['cite'],
+        'td'         => ['colspan', 'rowspan'],
+        'th'         => ['colspan', 'rowspan', 'scope'],
+    ];
+
+    /** Kept attributes whose value is a URL and must clear the scheme allowlist. */
+    private const HTML_URL_ATTRIBUTES = ['href', 'src', 'cite'];
+
+    /**
+     * Sanitise the HTML of a Micropub `content.html` create.
+     *
+     * The result is written straight to the post's `transformed` column, which
+     * every theme echoes raw into the page (`<?= anchor_headings($bean->transformed, …) ?>`)
+     * and which is syndicated verbatim inside the Atom `<content type="html">`
+     * and the JSON Feed's `content_html`. It never passes through Parsedown, so
+     * safe mode does not apply to it.
+     *
+     * strip_tags() alone was not a sanitiser for that: it drops disallowed
+     * *tags* and keeps every attribute of the ones it allows, so
+     * `<img src=x onerror=…>`, `<p onmouseover=…>` and `<a href="javascript:…">`
+     * all survived intact — stored XSS reachable by any token holding only
+     * `create` scope, running in the author's logged-in session. The codebase
+     * already treats that scope as a limited-trust principal (see
+     * apply_frontmatter()'s note on `id:`/`deleted:`, and syndication_links()).
+     *
+     * Import\sanitize_html_in_dom() scrubs `on*` off imported HTML for the same
+     * reason; this does the equivalent for the Micropub path, as an attribute
+     * allowlist, and hands every URL attribute to LambDown::filterContentUrl()
+     * so a link here is filtered exactly as the Markdown path filters one.
      *
      * @param string $html
      * @return string
      */
     private function sanitizeHtml(string $html): string
     {
-        return strip_tags($html, [
-            'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
-            'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
-            'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
-            'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
-            'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
-        ]);
+        $html = strip_tags($html, self::HTML_TAGS);
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $filter = new \Lamb\LambDown();
+        $dom = \Lamb\Import\load_html_fragment($html);
+        foreach ((new \DOMXPath($dom))->query('//*') ?: [] as $element) {
+            if (!$element instanceof \DOMElement) {
+                continue;
+            }
+            $this->sanitizeAttributes($element, $filter);
+        }
+
+        return \Lamb\Import\dump_html_fragment($dom);
+    }
+
+    /**
+     * Reduces one element's attributes to the allowlisted set, with any URL
+     * among them run through the same filter Parsedown's safe mode applies.
+     */
+    private function sanitizeAttributes(\DOMElement $element, \Lamb\LambDown $filter): void
+    {
+        $allowed = array_merge(
+            self::HTML_ATTRIBUTES['*'],
+            self::HTML_ATTRIBUTES[strtolower($element->tagName)] ?? []
+        );
+
+        // The names are snapshotted first: DOMNamedNodeMap is live, and removing
+        // while iterating it skips the entry that shuffles into the freed slot.
+        $names = [];
+        foreach ($element->attributes as $attribute) {
+            $names[] = $attribute->nodeName;
+        }
+
+        foreach ($names as $name) {
+            $lower = strtolower($name);
+            if (!in_array($lower, $allowed, true)) {
+                $element->removeAttribute($name);
+                continue;
+            }
+            if (in_array($lower, self::HTML_URL_ATTRIBUTES, true)) {
+                $element->setAttribute($name, $filter->filterContentUrl($element->getAttribute($name)));
+            }
+        }
     }
 
     /**
@@ -1018,20 +1156,25 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildPhotos(array $photos): string
     {
-        if (empty($photos)) {
-            return '';
-        }
-
-        return implode("\n", array_map(function ($photo) {
+        $markdown = [];
+        foreach ($photos as $photo) {
             if (is_array($photo)) {
-                $url = $photo['value'] ?? '';
-                $alt = $photo['alt'] ?? '';
+                $url = matter_string($photo['value'] ?? null);
+                $alt = matter_string($photo['alt'] ?? null) ?? '';
             } else {
-                $url = $photo;
+                $url = matter_string($photo);
                 $alt = '';
             }
-            return '![' . $alt . '](' . $url . ')';
-        }, $photos));
+            // A photo with no usable URL is dropped rather than written as
+            // `![](Array)`: the value has no faithful text, and an image link
+            // to it is worse than no image link.
+            if ($url === null || trim($url) === '') {
+                continue;
+            }
+            $markdown[] = '![' . $alt . '](' . $url . ')';
+        }
+
+        return implode("\n", $markdown);
     }
 
     /**
@@ -1042,11 +1185,36 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildTags(array $categories): string
     {
-        if (empty($categories)) {
-            return '';
+        $tags = self::textValues($categories);
+
+        return $tags === [] ? '' : implode(' ', array_map(fn(string $c) => '#' . $c, $tags));
+    }
+
+    /**
+     * The text values of a Micropub property, dropping anything with no
+     * faithful textual form.
+     *
+     * Microformats properties are arrays of values, and a value is not
+     * necessarily a string. Casting one with (string) or strval() stored the
+     * literal "Array" — as a hashtag, as an image URL — and raised an
+     * "Array to string conversion" warning on the way. matter_string() applies
+     * the same rule front matter already uses: a list collapses to its first
+     * entry, and anything else with no text is absent.
+     *
+     * @param array<array-key, mixed> $values
+     * @return list<string>
+     */
+    private static function textValues(array $values): array
+    {
+        $texts = [];
+        foreach ($values as $value) {
+            $text = matter_string($value);
+            if ($text !== null && trim($text) !== '') {
+                $texts[] = $text;
+            }
         }
 
-        return implode(' ', array_map(fn($c) => '#' . $c, $categories));
+        return $texts;
     }
 }
 
@@ -1097,7 +1265,7 @@ function mp_log_path(): string
     if (!empty($GLOBALS['lamb_mp_log_path'])) {
         return (string) $GLOBALS['lamb_mp_log_path'];
     }
-    return ROOT_DIR . '/../data/micropub.log';
+    return \Lamb\Bootstrap\data_dir() . '/micropub.log';
 }
 
 /**
@@ -1114,9 +1282,16 @@ function mp_log(string $event, array $context = []): void
         return;
     }
 
+    // JSON_INVALID_UTF8_SUBSTITUTE, as the export manifest, the JSON feed and
+    // the upload response all use: without it json_encode() returns false for
+    // the whole document over a single malformed byte, and `?: ''` then wrote a
+    // blank line — losing the event entirely. A logged value can carry one
+    // (a remote response body, a raw request body, a client-supplied filename),
+    // and a diagnostic log that drops the entry explaining a failure is worse
+    // than one that renders a byte as U+FFFD.
     $line = json_encode(
         ['ts' => \Lamb\now(), 'event' => $event] + $context,
-        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
     ) ?: '';
     @file_put_contents(mp_log_path(), $line . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
@@ -1272,7 +1447,10 @@ function respond_micropub(): void
     mp_log('response', [
         'status' => $status,
         // Only echo the body into the log on failures — it carries the error reason.
-        'body'   => $status >= 400 ? substr((string) $response->getBody(), 0, 300) : null,
+        // mb_substr(), not substr(): a response body is remote text, and cutting
+        // it mid-sequence at byte 300 produced the malformed byte above. 300
+        // characters is what "an excerpt" meant anyway.
+        'body'   => $status >= 400 ? mb_substr((string) $response->getBody(), 0, 300) : null,
     ]);
 
     http_response_code($status);
@@ -1305,7 +1483,13 @@ function micropub_error(int $status, string $error, string $description, ?string
     if ($wwwAuthenticate !== null) {
         header('WWW-Authenticate: ' . $wwwAuthenticate);
     }
-    echo json_encode(['error' => $error, 'error_description' => $description]);
+    // Same flag as mp_log() above: $description reaches here from a validation
+    // failure and can quote client input, and `echo false` would answer the
+    // error with an empty body.
+    echo json_encode(
+        ['error' => $error, 'error_description' => $description],
+        JSON_INVALID_UTF8_SUBSTITUTE
+    );
     exit;
 }
 
@@ -1376,7 +1560,7 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'File upload failed.');
     }
 
-    $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
+    $ext = \Lamb\Response\safe_upload_extension(\Lamb\Http\request_string($file['name'] ?? null) ?? '');
     if ($ext === null) {
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
@@ -1389,7 +1573,7 @@ function respond_micropub_media(): void
 
     $sub_path  = \Lamb\Response\upload_subpath();
     $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-    $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
+    $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
     $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);

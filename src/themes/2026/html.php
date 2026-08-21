@@ -82,6 +82,12 @@ global $template;
         endif;
         part($template);
         part("_related");
+        // Received webmentions: the part itself renders nothing unless the
+        // visitor is the logged-in author and the post has any (they are a
+        // private notification, per docs/webmentions.md). A theme that omits
+        // the call hides them from the author entirely — this one did, and it
+        // is the default theme.
+        part("_webmentions");
         ?>
     </main>
 </div>

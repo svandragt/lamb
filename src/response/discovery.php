@@ -39,16 +39,32 @@ function sitemap_date(?string $datetime): ?string
  * otherwise emit the same <loc> twice — invalid for a sitemap. Entries are
  * deduplicated by URL, keeping the first (newest, since ordered by updated DESC).
  *
+ * Only the three columns a URL entry is built from are read. /sitemap.xml is
+ * anonymous and unpaginated — unlike the feeds, which cap at 20 rows — so
+ * loading whole post beans put every body and every rendered `transformed`
+ * blob in memory at once: about 14 MB at 2,000 posts, and a fatal
+ * "Allowed memory size of 134217728 bytes exhausted" at 20,000 against the
+ * images' default 128M limit, which is a blank 500 for every crawler. The rows
+ * become beans one at a time so permalink() stays the only place a post URL is
+ * built.
+ *
  * @return list<array{loc: string, lastmod: string|null}>
  */
 function sitemap_urls(): array
 {
     $visible = \Lamb\visible_clause();
-    $posts = R::find('post', $visible['sql'] . 'ORDER BY updated DESC', $visible['params']);
+    $rows = R::getAll(
+        'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'ORDER BY updated DESC',
+        $visible['params']
+    );
 
     $entries = [];
     $seen = [];
-    foreach ($posts as $post) {
+    foreach ($rows as $row) {
+        $post = R::convertToBean('post', $row);
+        if ($post === null) {
+            continue;
+        }
         $loc = \Lamb\permalink($post);
         if (isset($seen[$loc])) {
             continue;
@@ -133,10 +149,10 @@ const PREVIEW_DISALLOW = '/*?preview=';
  *
  * Preview links (src/lamb.php: preview_token_valid()) deliberately serve an
  * unpublished post to anyone holding the token, with no login — which is
- * exactly what makes them indexable if one is pasted into a page a crawler
- * already follows. Any `preview` parameter counts, even an empty or wrong one:
- * the token doesn't have to be valid for the URL to be a duplicate of the
- * canonical permalink that should not be indexed on its own.
+ * exactly what makes them indexable if pasted into a page a crawler already
+ * follows. Any `preview` parameter counts, even an empty or wrong one; see
+ * response/README.md ("Discovery: sitemap, robots.txt, and noindex") and
+ * DECISIONS.md ("2026-08-03") for the full model.
  *
  * @param bool|string          $action The current request action (first path segment).
  * @param array<string, mixed> $query  The request query parameters (i.e. $_GET).

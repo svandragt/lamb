@@ -313,6 +313,13 @@ XML;
     {
         $this->assertSame('2024/03', asset_dir_for_date('2024-03-15 12:00:00'));
         $this->assertSame('2019/12', asset_dir_for_date('2019-12-01 00:00:00'));
+        // Both readers of these paths match on `\d{4}/\d{2}` exactly, so a year
+        // that is not four digits has to fall back to the current month the way
+        // an unparseable date already does. `0000-00-00` parses to year -1.
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('0000-00-00'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('-0001-11-30 00:00:00'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('not a date'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date(''));
     }
 
     public function testParseWxrStringReturnsRssElement(): void
@@ -1044,6 +1051,25 @@ XML;
                 glob("$dir/lamb_img_*") ?: [],
                 'expected zero leftover temp files'
             );
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
+    }
+
+    public function testPersistImageBytesWritesAReadableAsset(): void
+    {
+        // tempnam() creates 0600 and rename() carries that mode to the
+        // published file, leaving an asset the site serves that a separate
+        // static-file user (or the author's own account) cannot read. Every
+        // other upload path lands on the usual 0666 & ~umask.
+        $dir = sys_get_temp_dir() . '/lamb_persist_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        try {
+            $filename = persist_image_bytes('GIF89a' . str_repeat("\0", 32), 'gif', $dir, 'seed');
+
+            $this->assertNotNull($filename);
+            $this->assertSame(0666 & ~umask(), fileperms("$dir/$filename") & 0777);
         } finally {
             array_map('unlink', glob("$dir/*") ?: []);
             rmdir($dir);

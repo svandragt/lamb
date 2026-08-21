@@ -6,18 +6,12 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
 /**
- * Returns (creating if needed) the per-feed status bean keyed by md5(name . url) —
- * the same key the legacy `last_processed_date_*` option used.
- *
- * The bean records crawl *health*; config remains the source of truth for which
- * feeds exist. A freshly dispensed bean seeds its success watermark from any legacy
- * `last_processed_date_<key>` option so existing installs do not re-ingest (and
- * duplicate) every item on the first run after upgrade.
- *
- * `last_item_date` is the ingestion watermark (see ingest_item()); `last_success`
- * is only crawl health. They are separate because the first answers "how new is
- * the newest entry we have seen?" and the second "when did we last reach the
- * host?" — conflating them is what silently dropped items.
+ * Returns (creating if needed) the per-feed status bean, keyed by md5(name . url).
+ * Records crawl *health* only — config stays the source of truth for which feeds
+ * exist. A fresh bean seeds its success watermark from any legacy
+ * `last_processed_date_<key>` option so an upgraded install does not re-ingest
+ * everything on the first run. See network/README.md ("The watermark model",
+ * "feedstatus bean") for why the three timestamps are kept apart.
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -44,12 +38,13 @@ function feed_status_bean(string $name, string $url): OODBBean
 }
 
 /**
- * Opens a crawl: loads the feed's status bean and stamps the attempt timestamp.
- *
- * Every source type records an *attempt* before it fetches, so a feed that keeps
- * failing is still rate-limited by /_cron's 30-minute per-feed window (that window
- * is gated on `last_attempt`, not `last_success`). The bean is returned unsaved —
- * record_crawl_success()/record_crawl_failure() persist it with the outcome.
+ * Opens a crawl: loads the feed's status bean and *persists* the attempt
+ * timestamp before the fetch. Stamping it here, not in the outcome recorders
+ * (which only run if the fetch returns), is what stops a fetch that never
+ * returns — OOM on a hostile body, max_execution_time, a parser fatal — from
+ * leaving the feed permanently due and wedging every later step of the run. The
+ * bean is returned for the recorders to overwrite. See network/README.md
+ * ("The run").
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -60,6 +55,7 @@ function begin_crawl(string $name, string $url): array
     $status = feed_status_bean($name, $url);
     $now    = (int)date('U');
     $status->last_attempt = $now;
+    R::store($status);
 
     return [$status, $now];
 }
@@ -86,11 +82,8 @@ function record_crawl_failure(OODBBean $status, int $now, string $message): arra
 
 /**
  * Records a successful crawl: stamps crawl health, counts items, clears any error,
- * and raises the ingestion watermark to the newest entry the feed offered.
- *
- * The watermark only ever moves forward. A feed whose newest entry has scrolled
- * out of its window (or that briefly serves a truncated copy) must not lower it,
- * or every older entry still listed becomes eligible for ingestion again.
+ * and raises the ingestion watermark (via `max`, so it only moves forward) to the
+ * newest entry the feed offered. See network/README.md ("The watermark model").
  *
  * @param OODBBean $status      The status bean from begin_crawl().
  * @param int      $now         The attempt timestamp from begin_crawl().

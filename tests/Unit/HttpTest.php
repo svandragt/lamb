@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Http\extract_page_segment;
 use function Lamb\Http\get_request_uri;
 use function Lamb\Http\page_path;
+use function Lamb\Http\request_string;
 use function Lamb\Http\requested_path;
 
 class HttpTest extends TestCase
@@ -147,5 +148,33 @@ class HttpTest extends TestCase
     public function testPagePathStripsExistingPageSegment(): void
     {
         $this->assertSame('/tag/foo/page/4', page_path('/tag/foo/page/2', 4));
+    }
+    // request_string — a request value can always arrive as an array, and PHP 8
+    // fatals at the first string-typed sink rather than coercing it.
+
+    public function testRequestStringPassesStringsThrough(): void
+    {
+        $this->assertSame('needle', request_string('needle'));
+        $this->assertSame('', request_string(''));
+    }
+
+    public function testRequestStringReportsAnArrayAsAbsent(): void
+    {
+        $this->assertNull(request_string(['x']));
+        $this->assertNull(request_string(['a' => 'b']));
+        $this->assertNull(request_string([]));
+    }
+
+    public function testRequestStringReportsMissingAndNonTextValuesAsAbsent(): void
+    {
+        $this->assertNull(request_string(null));
+        $this->assertNull(request_string(true));
+        $this->assertNull(request_string(new \stdClass()));
+    }
+
+    public function testRequestStringRendersNumbersAsText(): void
+    {
+        $this->assertSame('42', request_string(42));
+        $this->assertSame('1.5', request_string(1.5));
     }
 }

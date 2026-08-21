@@ -18,6 +18,7 @@ use function Lamb\get_tags;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
+use function Lamb\permalink_path;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\visible_clause;
@@ -137,14 +138,9 @@ function date_created(OODBBean $bean): string
 
     $human_created = human_time(strtotime($bean->created));
 
-    $slug = "/status/$bean->id";
-    if (!empty($bean->slug)) {
-        $slug = $bean->slug;
-    }
-
     return sprintf(
-        '<a href="/%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
-        escape(ltrim($slug, '/')),
+        '<a href="%1$s" class="u-url" title="Timestamp: %2$s"><time class="dt-published" datetime="%2$s">%3$s</time></a>',
+        escape(permalink_path($bean)),
         escape((string) $bean->created),
         $human_created
     );
@@ -258,6 +254,25 @@ function related_posts(string $body, int $exclude_id = 0): array
 }
 
 /**
+ * How many rows a related-posts lookup reads per query, and how many it will
+ * read in total for one tag before giving up.
+ *
+ * The LIKE condition is a superset of a real tag match — body_has_tag() is what
+ * decides — so the query cannot simply LIMIT to the number of posts wanted: a
+ * page of rows can be filtered away entirely. It read every matching row
+ * instead, which on a common tag meant loading the whole archive to show ten
+ * links: 58 MB for one post page at 8,000 posts sharing a tag, and at 20,000 a
+ * fatal "Allowed memory size of 134217728 bytes exhausted" against the images'
+ * default 128M limit. Reading a page at a time keeps that flat.
+ *
+ * The scan cap is the same trade OUTBOX_SCAN_LIMIT makes: far more rows than a
+ * real tag needs before it has ten survivors, so in practice it is never
+ * reached, and a pathological tag costs a bounded read instead of the archive.
+ */
+const RELATED_TAG_BATCH = 50;
+const RELATED_SCAN_LIMIT = 500;
+
+/**
  * Finds all posts that contain at least one of the given tags, ordered by created date descending.
  *
  * @param list<string> $tags List of tag strings to search for.
@@ -277,13 +292,22 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
             $sql .= ' AND id != ?';
             $params[] = $exclude_id;
         }
-        $sql .= ' ORDER BY created DESC';
-        $tag_posts = R::find('post', $sql, $params);
-        foreach ($tag_posts as $tag_post) {
-            if (!body_has_tag($tag, (string) $tag_post->body)) {
-                continue;
+        $sql .= ' ORDER BY created DESC LIMIT ? OFFSET ?';
+
+        $scanned = 0;
+        while (count($related_posts) < $limit && $scanned < RELATED_SCAN_LIMIT) {
+            $batch = min(RELATED_TAG_BATCH, RELATED_SCAN_LIMIT - $scanned);
+            $tag_posts = R::find('post', $sql, array_merge($params, [$batch, $scanned]));
+            if (count($tag_posts) === 0) {
+                break;
             }
-            $related_posts[$tag_post->id] = $tag_post;
+            $scanned += count($tag_posts);
+            foreach ($tag_posts as $tag_post) {
+                if (!body_has_tag($tag, (string) $tag_post->body)) {
+                    continue;
+                }
+                $related_posts[$tag_post->id] = $tag_post;
+            }
         }
         if (count($related_posts) >= $limit) {
             break;
@@ -330,11 +354,8 @@ function link_source(OODBBean $bean): string
 
     $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
 
-    // escape() only encodes HTML metacharacters, not URL schemes: a
-    // `javascript:`-scheme URL passes through untouched into the href
-    // attribute. source_url is attacker-influenced (any subscribed feed's
-    // item permalink), so require a genuine http(s) URL before linking it,
-    // matching the scheme allowlist Parsedown's safe mode applies elsewhere.
+    // escape() doesn't cover URL schemes and source_url is feed-supplied. See
+    // theme/README.md ("Escaping is per-context, not per-file").
     if (!is_valid_http_url($url)) {
         return sprintf('Via %s', escape($bean->feed_name));
     }
@@ -358,11 +379,9 @@ function syndication_links(OODBBean $bean): string
     $targets = $config['syndicate_to'] ?? [];
     $links = [];
     foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
-        // Same reasoning as link_source() above: escape() encodes HTML
-        // metacharacters, not URL schemes, so a `javascript:` target passed
-        // straight into the href. syndicated_to is not author-only — a Micropub
-        // client holding just `create` scope sets it via mp-syndicate-to — so
-        // require a real http(s) URL before linking it.
+        // Same reasoning as link_source() above: escape() doesn't cover URL
+        // schemes, and syndicated_to can be set by a Micropub client holding
+        // just `create` scope. See theme/README.md ("Escaping is per-context").
         if ($uid === '' || !is_valid_http_url($uid)) {
             continue;
         }

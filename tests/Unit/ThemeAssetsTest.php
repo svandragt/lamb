@@ -96,6 +96,71 @@ class ThemeAssetsTest extends TestCase
         $this->assertSame('a{color:red}', minify_css('a { color: red; }'));
     }
 
+    /**
+     * Whitespace inside a quoted string is content, not formatting. Collapsing
+     * it around `{}:;,>` across the whole stylesheet reached into string
+     * literals: `content: "Note: hello"` lost its space, and an attribute
+     * selector like `[data-label="a > b"]` became `[data-label="a>b"]`, which
+     * no longer matches the element — the rule silently stopped applying.
+     *
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function literalPreservingProvider(): array
+    {
+        return [
+            'colon in content'      => ['.a::before { content: "Note: hello"; }', '.a::before{content:"Note: hello"}'],
+            'comma in content'      => ['.a::before { content: "one, two"; }',    '.a::before{content:"one, two"}'],
+            'semicolon in content'  => ['.a::before { content: "a; b"; }',        '.a::before{content:"a; b"}'],
+            'child combinator'      => ['[data-label="a > b"] { color: red; }',   '[data-label="a > b"]{color:red}'],
+            'comma in selector'     => ['[data-label="a, b"] { color: red; }',    '[data-label="a, b"]{color:red}'],
+            'single-quoted string'  => [".a::before { content: 'x: y'; }",        ".a::before{content:'x: y'}"],
+        ];
+    }
+
+    /**
+     * @dataProvider literalPreservingProvider
+     */
+    public function testMinifyCssLeavesStringLiteralsAlone(string $css, string $expected): void
+    {
+        $this->assertSame($expected, minify_css($css));
+    }
+
+    public function testMinifyCssStillCollapsesSyntaxAroundLiterals(): void
+    {
+        // The syntax between literals must still be minified — protecting the
+        // literals must not turn the whole declaration into a no-op.
+        $this->assertSame(
+            'body{font-family:"Segoe UI","Noto Sans",sans-serif}',
+            minify_css('body { font-family: "Segoe UI" , "Noto Sans" , sans-serif; }')
+        );
+    }
+
+    public function testMinifyCssProtectsAnUnquotedUrlToken(): void
+    {
+        // An unquoted data: URI can contain spaces and `>`; collapsing them
+        // corrupts the payload.
+        $css = '.a { background: url(data:image/svg+xml;utf8,<svg a=\'1\' > </svg>); }';
+
+        $this->assertStringContainsString("<svg a='1' > </svg>", minify_css($css));
+    }
+
+    public function testMinifyCssKeepsAnEscapedQuoteInsideALiteral(): void
+    {
+        // A `\"` does not end the string, so the split must not treat it as a
+        // delimiter — otherwise the rest of the stylesheet is misclassified.
+        $out = minify_css('.a::before { content: "a\\" b: c"; }');
+
+        $this->assertStringContainsString('b: c', $out);
+    }
+
+    public function testMinifyCssReturnsUsableCssWhenGivenAnUnterminatedString(): void
+    {
+        // Malformed input must not silently disable minification altogether.
+        $out = minify_css('.a { content: "unterminated ; }');
+
+        $this->assertStringContainsString('.a{', $out);
+    }
+
     // -------------------------------------------------------------------------
     // rewrite_css_urls
     // -------------------------------------------------------------------------

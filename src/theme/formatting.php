@@ -17,18 +17,10 @@ function escape(string $html): string
 
 /**
  * Re-levels a post body's headings so its highest heading sits at $top, keeping
- * the levels relative to each other.
- *
- * Post bodies are stored at the author's literal heading levels (theme-neutral),
- * so each theme fits them into its own outline at render time. A theme that
- * renders the post title at h2 passes $top = 3, so the body's highest heading
- * becomes h3 (directly under the title) and the rest shift by the same amount —
- * the level the author actually typed is immaterial, and no level is skipped at
- * the top of the body, which keeps the document outline in order for screen
- * readers (WCAG heading-order). The shift is signed: a body written deeper than
- * $top is pulled up just as one written shallower is pushed down. Results clamp
- * at h6. Open and close tags shift identically, attributes are preserved, and a
- * body with no headings is returned unchanged.
+ * the levels relative to each other. Open and close tags shift identically,
+ * attributes are preserved, and a body with no headings is returned unchanged.
+ * See theme/README.md ("Heading re-levelling") for why the shift is signed and
+ * why no level is skipped at the top of the body.
  *
  * @param string $html The post body HTML, at the author's literal levels.
  * @param int    $top  The level the body's highest heading should occupy.
@@ -59,11 +51,16 @@ function anchor_headings(string $html, int $top): string
 
 
 /**
- * Render the reply-context line for a post that is a reply to another URL.
+ * Renders the reply-context line for a post that is a reply to another URL,
+ * or '' when the post has no `in_reply_to` target. The link carries the
+ * `u-in-reply-to` microformats2 class so Webmention receivers categorise the
+ * mention as a reply.
  *
- * Returns an empty string when the post has no `in_reply_to` target. The link
- * carries the `u-in-reply-to` microformats2 class so Webmention receivers
- * categorise the mention as a reply.
+ * `in_reply_to` is not author-only (a Micropub client holding just `create`
+ * scope can set it) and this markup is also served inside the Atom/JSON
+ * feeds' content_html, so a target that isn't a genuine http(s) URL is shown
+ * as text rather than linked. See theme/README.md ("Escaping is per-context,
+ * not per-file").
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return string
@@ -73,6 +70,10 @@ function the_reply_context(\RedBeanPHP\OODBBean $bean): string
     $url = trim((string) ($bean->in_reply_to ?? ''));
     if ($url === '') {
         return '';
+    }
+
+    if (!\Lamb\Http\is_valid_http_url($url)) {
+        return '<p class="reply-context">In reply to ' . escape($url) . '</p>';
     }
 
     $label = parse_url($url, PHP_URL_HOST) ?: $url;
@@ -100,7 +101,7 @@ function og_escape(string $html): string
  */
 function preload_text(): string
 {
-    return htmlspecialchars($_GET['text'] ?? '', ENT_QUOTES, 'UTF-8');
+    return htmlspecialchars(\Lamb\Http\request_string($_GET['text'] ?? null) ?? '', ENT_QUOTES, 'UTF-8');
 }
 
 /**

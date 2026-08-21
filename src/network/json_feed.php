@@ -25,6 +25,18 @@ function is_json_feed_url(string $url): bool
  * Parses a JSON Feed document into feed items wrapped as JsonFeedItem adapters,
  * so the existing ingest pipeline (dedup, draft-on-ingest, create_item) is reused.
  *
+ * Every field is type-checked before it is read, the way JsonFeedItem below
+ * checks each item field: this is the function that decides whether an untrusted
+ * body is a JSON Feed, so it cannot assume the shapes it is testing for. A
+ * `version` or `title` that is not a string was cast anyway (warning "Array to
+ * string conversion", and a title of the literal "Array"), and an `items` that
+ * is not an array was walked by foreach() — warning on every cron run, and
+ * returning a feed with no entries, which record_crawl_success() then stamped as
+ * a healthy zero-item crawl for a source that is not a JSON Feed at all.
+ *
+ * An absent or null `items` is still read as an empty feed rather than a
+ * refusal: the two are indistinguishable here, and an empty feed is benign.
+ *
  * @param string $json The raw JSON Feed body.
  * @return array{title: string, items: list<JsonFeedItem>}|null
  *               The parsed feed, or null when the body is not a JSON Feed.
@@ -32,28 +44,35 @@ function is_json_feed_url(string $url): bool
 function parse_json_feed(string $json): ?array
 {
     $data = json_decode($json, true);
-    if (!is_array($data) || !str_contains((string) ($data['version'] ?? ''), 'jsonfeed.org')) {
+    if (!is_array($data)) {
+        return null;
+    }
+    $version = $data['version'] ?? null;
+    if (!is_string($version) || !str_contains($version, 'jsonfeed.org')) {
+        return null;
+    }
+    $raw_items = $data['items'] ?? [];
+    if (!is_array($raw_items)) {
         return null;
     }
 
     $items = [];
-    foreach ($data['items'] ?? [] as $raw) {
+    foreach ($raw_items as $raw) {
         if (is_array($raw)) {
             $items[] = new JsonFeedItem($raw);
         }
     }
 
-    return ['title' => (string) ($data['title'] ?? ''), 'items' => $items];
+    $title = $data['title'] ?? null;
+
+    return ['title' => is_string($title) ? $title : '', 'items' => $items];
 }
 
 /**
- * Fetches and ingests a JSON Feed source, recording the outcome on its
- * feedstatus bean — the JSON Feed counterpart of record_feed_crawl().
- *
- * Mirrors the SimplePie path: a failed fetch or a body that is not a JSON Feed
- * stamps the error without advancing the success watermark; on success, entries
- * newer than the newest one this feed has offered before are created/updated and
- * that ingestion watermark is raised.
+ * Fetches and ingests a JSON Feed source, recording the outcome on its feedstatus
+ * bean — the JSON Feed counterpart of record_feed_crawl(), sharing the same
+ * begin_crawl()/record_crawl_*() spine so the two paths cannot drift. See
+ * network/README.md ("Two source types, one spine").
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -63,9 +82,8 @@ function record_json_feed_crawl(string $name, string $url): array
 {
     [$status, $now] = begin_crawl($name, $url);
 
-    // A configured feed URL is admin-trusted, but nothing pins where it (or a
-    // redirect from it) actually points — fetch_guarded() re-checks the
-    // destination is a public, non-internal address on every hop.
+    // fetch_guarded() re-checks the destination is public on every hop: a
+    // configured URL is trusted, a redirect from it is not. See README.
     $response = fetch_guarded($url, [
         'timeout' => FEED_FETCH_TIMEOUT,
         'max_bytes' => FEED_FETCH_MAX_BYTES,
@@ -75,7 +93,7 @@ function record_json_feed_crawl(string $name, string $url): array
     if ($feed === null) {
         return record_crawl_failure($status, $now, $response === null
             ? 'Feed fetch failed: no data returned.'
-            : 'Not a valid JSON Feed (missing jsonfeed.org version).');
+            : 'Not a valid JSON Feed (unrecognised version or malformed document).');
     }
 
     [$items, $newest] = ingest_items($feed['items'], $name, $status);

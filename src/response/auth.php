@@ -14,13 +14,9 @@ use RedBeanPHP\R;
 /**
  * Handles the /login route without starting a session for anonymous visitors.
  *
- * /login is the one anonymous-reachable route, so starting a session here let an
- * attacker mint a week-lived session file per request — a disk-exhaustion DoS
- * through the single endpoint that couldn't refuse a session (issue #462). The
- * form's CSRF protection therefore rides in a signed double-submit cookie + a
- * matching hidden field (issue_login_csrf()/valid_login_csrf()) instead of the
- * session, and a server-side session is only established *after* the password
- * verifies — so anonymous traffic never writes a session file.
+ * Sessionless-login model (why, and the CSRF/throttle scheme that replaces the
+ * session-backed CSRF token): see response/README.md ("Login: a sessionless
+ * page with its own CSRF model").
  *
  * - Already logged in (a valid marker let bootstrap start a session): the marker
  *   is reissued and the visitor is bounced to the root URL.
@@ -77,7 +73,7 @@ function redirect_login(): array
         return login_page_data('Login is not configured on this site.');
     }
 
-    $user_pass = $_POST['password'] ?? '';
+    $user_pass = \Lamb\Http\request_string($_POST['password'] ?? null) ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();
         record_login_failure($ip, $now);
@@ -120,9 +116,8 @@ function login_page_data(?string $error = null): array
  * Derives the HMAC key used to sign the anonymous /login CSRF token.
  *
  * Deliberately distinct from the raw login hash (the key used for lamb_logged_in
- * markers): if the two shared a key, a CSRF token harvested from GET /login would
- * itself be a valid login marker, and replaying it as lamb_logged_in would start
- * a session per request — reopening the very DoS this endpoint avoids (#462).
+ * markers) — see response/README.md ("Login: a sessionless page with its own
+ * CSRF model") for why sharing a key would reopen the DoS this endpoint avoids.
  *
  * @param string $loginHash The per-install login hash (LAMB_LOGIN_PASSWORD).
  * @return string A derived HMAC key, distinct from $loginHash.
@@ -540,14 +535,22 @@ function respond_settings(): array
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Security\require_csrf();
 
-        if (isset($_POST['action']) && $_POST['action'] === 'reset') {
+        if (\Lamb\Http\request_string($_POST['action'] ?? null) === 'reset') {
             $default_ini = Config\get_default_ini_text();
             Config\save_ini_text($default_ini);
             $_SESSION['flash'][] = "Settings reset to defaults.";
             redirect_uri('/settings');
         }
 
-        $submitted_ini = $_POST['ini_text'] ?? '';
+        // A submission carrying no configuration text at all is not an author
+        // clearing the box (that posts an empty string) — it is a malformed
+        // request, and saving '' for it would wipe every setting.
+        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null);
+        if ($submitted_ini === null) {
+            $_SESSION['flash'][] = 'Settings not saved: the form did not include the configuration text.';
+            redirect_uri('/settings');
+        }
+
         $validation = Config\validate_ini($submitted_ini);
 
         if ($validation['valid']) {

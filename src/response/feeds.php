@@ -9,7 +9,9 @@ use Lamb\Config;
 use Lamb\Security;
 use RedBeanPHP\R;
 
-use function Lamb\Post\posts_by_tag;
+use function Lamb\Http\request_string;
+use function Lamb\Post\load_posts_in_order;
+use function Lamb\Post\post_ids_by_tag;
 use function Lamb\Theme\part;
 
 use const Lamb\SQL_IS_DELETED;
@@ -133,7 +135,11 @@ function count_scheduled(): int
 #[NoReturn]
 function redirect_search(string $query): void
 {
-    $location = \Lamb\Http\sanitize_location("/search/$query");
+    // Percent-encoded: the term becomes a path segment, and an unencoded `#`
+    // made the browser read the rest as a fragment (so searching for a hashtag
+    // from the box searched for nothing at all), while `/` split the term and
+    // a space made an invalid Location header.
+    $location = \Lamb\Http\sanitize_location('/search/' . \Lamb\encode_path_segment($query));
     header("Location: $location", true, 301);
     die();
 }
@@ -177,6 +183,7 @@ function get_feed_data(): array
  * Feeds are polled by readers rather than browsed, so they get a longer max-age
  * than regular pages, plus a conditional-GET 304 short-circuit keyed on the
  * feed's freshest item. No-op for logged-in users (their responses are private).
+ * See response/README.md ("Conditional GET, ETag, and 304 caching").
  *
  * @param string $updated The feed's latest-updated datetime string.
  * @return void
@@ -204,7 +211,9 @@ function sanitize_tag_arg(array $args): string
 {
     [$tag] = $args;
 
-    return htmlspecialchars(urldecode($tag));
+    // rawurldecode(), not urldecode(): a `+` is a legal tag character, not a
+    // space (see Lamb\parse_tags, which encodes the link the same way).
+    return htmlspecialchars(rawurldecode($tag));
 }
 
 /**
@@ -268,11 +277,10 @@ function get_tag_feed_data(string $tag): array
 {
     global $config;
 
-    $posts = posts_by_tag($tag);
-
-    // Sort by updated DESC and limit to 20
-    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
-    $posts = array_slice($posts, 0, 20);
+    // Twenty newest by `updated`, chosen from ids so the scan can stop as soon
+    // as it has them: this used to load a bean per match and then slice, which
+    // on a tag covering a large archive exhausted memory before it got here.
+    $posts = load_posts_in_order(post_ids_by_tag($tag, true, 20));
 
     return [
         'updated'  => get_feed_updated_date($posts),
@@ -315,9 +323,9 @@ function respond_tag_feed_json(array $args): void
  */
 function respond_search(array $args): array
 {
-    $query = urldecode($args[0] ?? '');
+    $query = rawurldecode((string) ($args[0] ?? ''));
     if (empty($query)) {
-        $query = $_GET['s'] ?? '';
+        $query = request_string($_GET['s'] ?? null) ?? '';
         if (empty($query)) {
             return [];
         }
@@ -332,8 +340,10 @@ function respond_search(array $args): array
     $where_clauses = [];
     $params = [];
     foreach ($words as $word) {
-        $where_clauses[] = 'body LIKE ?';
-        $params[] = "%$word%";
+        // The search term is literal text: without escaping, a `%` in it matched
+        // every post and an `_` matched any character.
+        $where_clauses[] = "body LIKE ? ESCAPE '\\'";
+        $params[] = '%' . \Lamb\like_escape($word) . '%';
     }
     $public = public_posts_clause();
     $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $public['sql'];
@@ -381,18 +391,24 @@ function get_results(array $data, array $posts, array $pagination): array
 function respond_tag(array $args): array
 {
     [$tag] = $args;
-    $tag = urldecode($tag);
+    $tag = rawurldecode((string) $tag);
     // Keep $tag raw: matching, URL-encoding and the page title each handle it
     // correctly, and the title is escaped at render time (so no double-encoding).
 
-    // Get all posts for this tag (in-memory array)
-    $all_posts = posts_by_tag($tag);
+    // The id list, not the posts: it is paginated first and only the page being
+    // rendered is loaded, so a tag covering the whole archive costs one id per
+    // match rather than one full post.
+    $all_ids = post_ids_by_tag($tag);
 
-    if (empty($all_posts)) {
+    if ($all_ids === []) {
         return respond_404();
     }
 
-    $paginated = paginate_posts($all_posts);
+    $paginated = paginate_posts($all_ids);
+    // paginate_posts() is generic over its source, so its items come back as
+    // array<int, mixed>; narrow them here rather than loosening the loader.
+    $page_ids = array_values(array_map('intval', $paginated['items']));
+    $paginated['items'] = load_posts_in_order($page_ids);
 
     $data['title'] = 'Tagged with #' . $tag;
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';

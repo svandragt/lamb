@@ -13,6 +13,7 @@ use function Lamb\Export\export_filename_stem;
 use function Lamb\Export\manifest_post_entry;
 use function Lamb\Export\post_export_path;
 use function Lamb\Export\referenced_assets;
+use function Lamb\Restore\safe_entry_path;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\split_frontmatter;
 
@@ -72,6 +73,7 @@ class ExportTest extends TestCase
             'draft'         => false,
             'deleted'       => false,
             'deleted_at'    => null,
+            'feed_locked'   => false,
             'version'       => 3,
             'feed_name'     => null,
             'feeditem_uuid' => null,
@@ -134,6 +136,42 @@ class ExportTest extends TestCase
         $this->assertStringNotContainsString('..', $path);
     }
 
+    /**
+     * The layout is not decoration: Restore\safe_entry_path() anchors
+     * `posts/\d{4}/\d{2}/…`, so a path the exporter writes outside that shape is
+     * one the importer refuses — the post does not come back from its own
+     * backup. A `created` of `0000-00-00`, which an older install or a
+     * MySQL-era row hands you, parses to year -1 and used to produce
+     * `posts/-0001/11/…`.
+     *
+     * @dataProvider awkwardCreatedDateProvider
+     */
+    public function testEveryExportPathIsOneTheImporterAccepts(string $created): void
+    {
+        $taken = [];
+        $path = post_export_path($this->post(['created' => $created]), $taken);
+
+        $this->assertSame($path, safe_entry_path($path), $created . ' produced ' . $path);
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function awkwardCreatedDateProvider(): array
+    {
+        return [
+            'ordinary'          => ['2026-07-14 09:30:00'],
+            'empty'             => [''],
+            'unparseable'       => ['not a date'],
+            'a zero date'       => ['0000-00-00'],
+            'a negative year'   => ['-0001-11-30 00:00:00'],
+            'year 0'            => ['0000-01-01 00:00:00'],
+            'a five-digit year' => ['10000-01-01 00:00:00'],
+            'last century'      => ['1900-01-01 00:00:00'],
+            'past 2038'         => ['2038-02-01 00:00:00'],
+        ];
+    }
+
     public function testReferencedAssetsFindsRootRelativeAndAbsoluteUrls(): void
     {
         $body = "![one](/assets/2026/07/a.webp)\n"
@@ -174,6 +212,22 @@ class ExportTest extends TestCase
         $this->assertTrue($entry['draft']);
         $this->assertTrue($entry['deleted']);
         $this->assertSame('2026-07-20 10:00:00', $entry['deleted_at']);
+    }
+
+    public function testManifestEntryRecordsTheFeedLock(): void
+    {
+        // feed_locked is author-owned state, not feed provenance: it records
+        // that the author took a feed-sourced post over through the edit form,
+        // which is the only thing stopping the next crawl overwriting it. An
+        // archive that drops it hands the post back to the feed on restore.
+        $locked = manifest_post_entry(
+            $this->post(['feeditem_uuid' => 'abc123', 'feed_locked' => true]),
+            'posts/2026/07/hello-world.md'
+        );
+        $unlocked = manifest_post_entry($this->post(), 'posts/2026/07/hello-world.md');
+
+        $this->assertTrue($locked['feed_locked']);
+        $this->assertFalse($unlocked['feed_locked']);
     }
 
     public function testManifestEntryRecordsFeedProvenance(): void
@@ -329,5 +383,44 @@ class ExportTest extends TestCase
         $this->assertSame(1, $zip->numFiles);
         $this->assertNotFalse($zip->locateName('manifest.json'));
         $zip->close();
+    }
+    public function testExportSurvivesAnInvalidUtf8ByteInTheManifest(): void
+    {
+        // One stray byte in a slug or the site title used to abort the whole
+        // export with "Malformed UTF-8 characters" — the author could not back
+        // the site up at all.
+        $dir = sys_get_temp_dir() . '/lamb_export_utf8_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        $zip_path = "$dir/export.zip";
+
+        try {
+            $manifest = build_export_archive(
+                [[
+                    'id'      => 1,
+                    'slug'    => 'caf' . chr(0xE9) . '-notes',
+                    'body'    => "Body text.\n",
+                    'created' => '2026-01-02 03:04:05',
+                    'updated' => '2026-01-02 03:04:05',
+                ]],
+                $dir,
+                $zip_path,
+                '2026-01-02T03:04:05+00:00',
+                ['title' => 'Caf' . chr(0xE9) . ' Blog', 'url' => 'https://example.com'],
+            );
+
+            $this->assertSame(1, $manifest['counts']['posts']);
+            $zip = new ZipArchive();
+            $this->assertTrue($zip->open($zip_path));
+            $json = $zip->getFromName('manifest.json');
+            $zip->close();
+            $this->assertIsString($json);
+            $decoded = json_decode($json, true);
+            $this->assertIsArray($decoded);
+            // The byte degrades to U+FFFD; the post file itself is stored raw.
+            $this->assertStringContainsString("\u{FFFD}", $decoded['site']['title']);
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
     }
 }

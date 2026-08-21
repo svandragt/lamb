@@ -65,4 +65,21 @@ class TagFeedCest
         // SimpleXMLElement encodes emoji as XML character entities
         $I->seeInSource('&#x1F411;');
     }
+    public function tryTagLinkWithAPlusResolves(AcceptanceTester $I)
+    {
+        $I->amOnPage('/login');
+        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
+        $I->click('Log in');
+        $I->amOnPage('/');
+        $I->fillField('contents', 'Learning #c++ today');
+        $I->click('Create post');
+
+        // Follow the link the post itself renders: `+` is a legal tag
+        // character, and the route used to read it back as a space.
+        $I->amOnPage('/');
+        $I->seeInSource('href="/tag/c++"');
+        $I->click('#c++');
+        $I->seeResponseCodeIs(200);
+        $I->see('Learning');
+    }
 }

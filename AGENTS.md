@@ -71,6 +71,15 @@ composer, npm, github-actions, docker, devcontainers — and
 Vulnerabilities are caught by `composer audit` (quality job), `pnpm audit`
 (js-test job), and a Trivy scan of the release image before it is pushed.
 
+An advisory in the base image that Lamb cannot patch goes in
+`.trivyignore.yaml` with an `expired_at` date, so the suppression lapses on its
+own and the scan asks again. When one expires, rebuild the release image and
+scan it with the entry removed. If the scan passes, the base image has caught
+up — delete the entry. If it still fails, push the date out and say in the
+`statement` what is still blocking it. Both scans have to name the file in the
+action's `trivyignores` input: Trivy auto-discovers only a plain-text
+`.trivyignore`, so an entry it is not pointed at does nothing.
+
 Two things that automation deliberately does **not** handle, so they need a
 human:
 
@@ -516,10 +525,20 @@ comment is noise:
 header('HTTP/1.1 400 Bad Request');
 ```
 
-Docblocks are the exception and are deliberately expansive in this codebase —
-they carry a function's "why" as a whole, and account for most of the ~44% of
-`src/` lines that are comments. Inline `//` rationale is the part to keep scarce:
-it runs at roughly **8% of non-docblock lines**, which is the level to aim for.
+Docblocks carry a function's **contract** — `@param`, `@return` and `@throws`
+are required (they feed PHPStan and IDE hover) — plus the *local* why: an
+invariant, a coupling, a ceiling the next editor will try to remove. Keep that
+on the symbol, where it is read at the point of change.
+
+A rationale that runs to a paragraph and explains a *subsystem* rather than a
+single function is documentation. Put it in the module's README
+(`src/<module>/README.md`) and leave a one-line pointer on the symbol
+(`// SSRF model: see network/README.md`), so a design essay lives in one place
+instead of being restated across every function it touches. `src/network/` is
+the first module to follow this; see its `README.md` and the `2026-08-21`
+decision log entry.
+
+Inline `//` rationale stays scarce — around **8% of non-docblock lines**.
 
 ## Testing
 

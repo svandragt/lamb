@@ -110,6 +110,38 @@ class ReplyContextTest extends TestCase
         $this->assertStringContainsString('other.example', $html);
     }
 
+    public function testReplyContextRefusesToLinkANonHttpScheme(): void
+    {
+        // escape() encodes HTML metacharacters, not URL schemes — the same gap
+        // link_source() and syndication_links() already guard. in_reply_to is
+        // not author-only: a Micropub client holding just `create` scope sets
+        // it, and replyTargetUrl() only unwraps the value, it does not validate
+        // it. This markup is served on every page listing the post and inside
+        // both feeds' content_html.
+        foreach (['javascript:alert(1)', 'JaVaScRiPt:alert(1)', 'data:text/html;base64,eA==', 'vbscript:x'] as $url) {
+            $bean = R::dispense('post');
+            $bean->in_reply_to = $url;
+
+            $html = the_reply_context($bean);
+
+            $this->assertStringNotContainsString('href=', $html, $url);
+            $this->assertStringNotContainsString('<a ', $html, $url);
+            // The target is still shown, just not as a link.
+            $this->assertStringContainsString('In reply to', $html, $url);
+        }
+    }
+
+    public function testReplyContextStillLinksAnOrdinaryUrl(): void
+    {
+        $bean = R::dispense('post');
+        $bean->in_reply_to = 'https://e.test/a?b=1&c=2';
+
+        $html = the_reply_context($bean);
+
+        $this->assertStringContainsString('href="https://e.test/a?b=1&amp;c=2"', $html);
+        $this->assertStringContainsString('u-in-reply-to', $html);
+    }
+
     public function testReplyContextHelperEmptyWhenUnset(): void
     {
         $bean = R::dispense('post');

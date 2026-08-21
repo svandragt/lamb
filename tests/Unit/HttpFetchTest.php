@@ -12,6 +12,7 @@ use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Http\parse_status_line;
 use function Lamb\Http\post_form;
+use function Lamb\Http\request_timeout;
 use function Lamb\Http\resolve_redirect_location;
 use function Lamb\Http\resolve_validated_ip;
 
@@ -43,6 +44,85 @@ class HttpFetchTest extends TestCase
     {
         $opts = build_http_context_options(['timeout' => 5]);
         $this->assertSame(5, $opts['timeout']);
+    }
+
+    // request_timeout ------------------------------------------------------
+    // Every remote host reached from here is attacker-influenced, so no request
+    // may be unbounded. The two transports used to reach "no timeout given" and
+    // disagree: curl left CURLOPT_TIMEOUT unset (no limit at all) while the
+    // streams path fell through to the host's default_socket_timeout ini. Both
+    // now decide it here, so neither can be talked into waiting forever.
+
+    public function testRequestTimeoutFallsBackToTheDefaultWhenNoneIsGiven(): void
+    {
+        $this->assertSame(\Lamb\Http\DEFAULT_FETCH_TIMEOUT, request_timeout([]));
+    }
+
+    public function testRequestTimeoutDefaultIsBounded(): void
+    {
+        // A non-positive default would hand curl "wait forever" — the value
+        // CURLOPT_TIMEOUT already had by being unset.
+        $this->assertGreaterThan(0, \Lamb\Http\DEFAULT_FETCH_TIMEOUT);
+    }
+
+    public function testRequestTimeoutPrefersTheCallersValue(): void
+    {
+        $this->assertSame(2, request_timeout(['timeout' => 2]));
+        $this->assertSame(600, request_timeout(['timeout' => 600]));
+    }
+
+    public function testRequestTimeoutCastsANumericStringToInt(): void
+    {
+        $this->assertSame(7, request_timeout(['timeout' => '7']));
+    }
+
+    public function testStreamContextAlwaysCarriesATimeout(): void
+    {
+        // The streams transport: without this the wrapper falls back to the
+        // host's default_socket_timeout ini, which an install may set to -1.
+        $opts = build_http_context_options([]);
+
+        $this->assertSame(\Lamb\Http\DEFAULT_FETCH_TIMEOUT, $opts['timeout']);
+    }
+
+    public function testFetchGuardedForwardsTheCallersTimeoutToTheTransport(): void
+    {
+        // fetch_guarded() always pins, so it always lands on the curl transport
+        // (fetch_pinned), which reads the timeout out of these same opts. The
+        // WXR image downloader passed max_bytes and no timeout, so its download
+        // ran with no time limit at all.
+        $resolver = fn (string $host) => ['93.184.216.34'];
+        $seen = [];
+        $fetcher = function (string $url, array $opts) use (&$seen) {
+            $seen[] = $opts;
+            return ['status' => 200, 'headers' => ['HTTP/1.1 200 OK'], 'body' => 'ok'];
+        };
+
+        fetch_guarded('http://good.example/img.png', ['timeout' => 30, 'max_bytes' => 1024], 5, $resolver, $fetcher);
+
+        $this->assertSame(30, $seen[0]['timeout']);
+        $this->assertSame(30, request_timeout($seen[0]));
+    }
+
+    public function testFetchGuardedKeepsTheTimeoutOnEveryRedirectHop(): void
+    {
+        // A redirect chain multiplies an unbounded read by the hop count, so the
+        // timeout has to survive the loop, not just the first request.
+        $resolver = fn (string $host) => ['93.184.216.34'];
+        $seen = [];
+        $fetcher = function (string $url, array $opts) use (&$seen) {
+            $seen[] = $opts;
+            return count($seen) < 3
+                ? ['status' => 302, 'headers' => ['HTTP/1.1 302 Found', 'Location: /next' . count($seen)], 'body' => '']
+                : ['status' => 200, 'headers' => ['HTTP/1.1 200 OK'], 'body' => 'ok'];
+        };
+
+        fetch_guarded('http://good.example/a', ['timeout' => 30], 5, $resolver, $fetcher);
+
+        $this->assertCount(3, $seen);
+        foreach ($seen as $opts) {
+            $this->assertSame(30, request_timeout($opts));
+        }
     }
 
     public function testRedirectOptionsCanBeOmitted(): void
@@ -79,6 +159,22 @@ class HttpFetchTest extends TestCase
     {
         // An empty reason phrase is valid; some servers omit it entirely.
         $this->assertSame(200, parse_status_line('HTTP/1.1 200'));
+    }
+
+    public function testParseStatusLineReadsTheCodeNotAnyThreeDigitsInTheLine(): void
+    {
+        // Micropub's token introspection relies on this to decide whether the
+        // token endpoint answered 200. A substring test for ' 200 ' read this
+        // line as a success — a fail-open answer on the request that
+        // establishes who the caller is.
+        $this->assertSame(500, parse_status_line('HTTP/1.1 500 Error 200 x'));
+    }
+
+    public function testParseStatusLineHandlesAnHttp2StatusLine(): void
+    {
+        // curl (fetch_pinned) reports HTTP/2 responses with this shape.
+        $this->assertSame(200, parse_status_line('HTTP/2 200'));
+        $this->assertSame(404, parse_status_line('HTTP/2 404'));
     }
 
     public function testParseStatusLineReturnsZeroForGarbage(): void

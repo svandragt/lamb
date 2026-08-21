@@ -8,6 +8,7 @@ use SimplePie\Item as SimplePieItem;
 use SimplePie\SimplePie;
 
 use function Lamb\Network\begin_crawl;
+use function Lamb\Network\feed_fetch_due;
 use function Lamb\Network\feed_status_bean;
 use function Lamb\Network\get_feed_statuses;
 use function Lamb\Network\prune_feed_status;
@@ -193,6 +194,50 @@ class FeedStatusTest extends TestCase
         $this->assertGreaterThan(0, $now);
         $this->assertSame($now, (int)$status->last_attempt);
         $this->assertSame(1700000000, (int)$status->last_success);
+    }
+
+    public function testBeginCrawlPersistsTheAttemptBeforeTheFetchRuns(): void
+    {
+        // record_crawl_success()/record_crawl_failure() only run when the fetch
+        // returns. A fetch that never returns (the worker OOMs on a hostile feed
+        // body, hits max_execution_time, fatals in the parser) used to leave
+        // last_attempt untouched on disk, so /_cron found the same feed due on
+        // the next run and died at it again — starving every feed after it, the
+        // WebSub pings and the whole outbound webmention queue, all of which sit
+        // downstream of that loop in process_feeds().
+        [, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+
+        $reloaded = R::findOne('feedstatus', ' feedkey = ? ', [md5('TestBlog' . 'https://testblog.example.com/feed')]);
+
+        $this->assertNotNull($reloaded);
+        $this->assertSame($now, (int)$reloaded->last_attempt);
+    }
+
+    public function testBeginCrawlMakesTheFeedNotDueEvenIfTheCrawlNeverReports(): void
+    {
+        // The observable consequence: the per-feed window is gated on
+        // last_attempt, so a crawl that never reports an outcome still holds the
+        // feed off for the full window instead of being retried every run.
+        [, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+
+        $status = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+
+        $this->assertFalse(feed_fetch_due((int)$status->last_attempt, $now));
+        $this->assertTrue(feed_fetch_due((int)$status->last_attempt, $now + FEED_FETCH_INTERVAL));
+    }
+
+    public function testBeginCrawlDoesNotInsertASecondRowForTheOutcome(): void
+    {
+        // begin_crawl() stores, then record_crawl_*() stores the same bean again.
+        // If the second store inserted instead of updating, the Logs tab would
+        // grow a duplicate row per crawl and prune_feed_status() would not clear
+        // it (the feedkey still matches a configured feed).
+        [$status, $now] = begin_crawl('TestBlog', 'https://testblog.example.com/feed');
+        record_crawl_success($status, $now, 2);
+
+        $rows = R::find('feedstatus', ' feedkey = ? ', [md5('TestBlog' . 'https://testblog.example.com/feed')]);
+
+        $this->assertCount(1, $rows);
     }
 
     public function testRecordCrawlFailurePersistsMessageAndReturnsOutcome(): void

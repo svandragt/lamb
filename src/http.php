@@ -124,6 +124,35 @@ function request_root_url(array $server): ?string
 }
 
 /**
+ * Reads a request value as a string, or null when it carries none.
+ *
+ * Every superglobal is attacker-shaped: `?s=x` arrives as a string, `?s[]=x` as
+ * an array, and the same is true of every POST field and cookie. PHP 8 turns
+ * that mismatch into an uncaught TypeError at the first string-typed sink, so a
+ * single bracket in a query string was a 500 any visitor could ask for —
+ * including one that told them a hidden post exists, since the crash only
+ * happened on the branch that checks a preview token.
+ *
+ * An array or object is reported as absent rather than coerced: "Array" is not
+ * a search term, a password, or a preview token, and every caller already has a
+ * sensible answer for "not supplied".
+ *
+ * @param mixed $value The raw superglobal value (e.g. `$_GET['s'] ?? null`).
+ * @return string|null The value as text, or null when it has none.
+ */
+function request_string(mixed $value): ?string
+{
+    if (is_string($value)) {
+        return $value;
+    }
+    if (is_int($value) || is_float($value)) {
+        return (string) $value;
+    }
+
+    return null;
+}
+
+/**
  * Sanitises a value bound for a `Location:` header.
  *
  * Any request-derived value interpolated into a redirect target (the request
@@ -152,6 +181,45 @@ function sanitize_location(string $location): string
 const DEFAULT_USER_AGENT = 'Lamb-Webmention';
 
 /**
+ * Socket timeout applied by {@see fetch} when a caller passes no `timeout`.
+ *
+ * There has to be one, because "no timeout given" is not a request to wait
+ * forever — but that is what it used to mean. curl leaves CURLOPT_TIMEOUT
+ * unset (no limit at all), and the streams path falls back to the host's
+ * `default_socket_timeout` ini, which an install can set to -1. Every remote
+ * host reached from here is attacker-influenced (a webmention source, a
+ * discovered endpoint, a feed URL, an image URL inside an imported WXR file),
+ * so an unbounded read is a host that never finishes answering holding the
+ * request — or the whole import — open indefinitely.
+ *
+ * Generous rather than tight: this is a backstop for a caller that named no
+ * timeout, not a policy. Each subsystem still sets its own, tuned to what it
+ * fetches (WEBSUB_PING_TIMEOUT is 2s for a fire-and-forget ping,
+ * FEED_FETCH_TIMEOUT 15s for a feed document, IMAGE_DOWNLOAD_TIMEOUT 30s for
+ * an image of up to IMAGE_DOWNLOAD_MAX_BYTES).
+ */
+const DEFAULT_FETCH_TIMEOUT = 30;
+
+/**
+ * The timeout a single request runs under: the caller's when it named one,
+ * DEFAULT_FETCH_TIMEOUT otherwise.
+ *
+ * Both transports read it from here. `fetch()` has two of them —
+ * {@see fetch_pinned} for a pinned request (curl) and the streams wrapper for
+ * everything else — and they used to reach the same "no timeout given" input
+ * and disagree about it: curl left CURLOPT_TIMEOUT unset, meaning no limit at
+ * all, while the streams path fell through to the host's
+ * `default_socket_timeout` ini. Deciding it once means a request cannot be
+ * unbounded on either, whichever one a caller happens to land on.
+ *
+ * @param array<string, mixed> $opts As passed to {@see fetch}.
+ */
+function request_timeout(array $opts): int
+{
+    return array_key_exists('timeout', $opts) ? (int) $opts['timeout'] : DEFAULT_FETCH_TIMEOUT;
+}
+
+/**
  * Build the `http` stream-context option array for {@see fetch}.
  *
  * Factored out so the option assembly can be unit-tested without opening a
@@ -164,7 +232,8 @@ const DEFAULT_USER_AGENT = 'Lamb-Webmention';
  *  - `headers`         string[] Raw header lines; when none include a
  *                      `User-Agent:` the default UA is appended.
  *  - `content`         string  Request body (e.g. for POST).
- *  - `timeout`         int     Socket timeout in seconds.
+ *  - `timeout`         int     Socket timeout in seconds (default
+ *                      DEFAULT_FETCH_TIMEOUT; a request is never unbounded).
  *  - `follow_location` int|null follow_location flag; pass null to omit it
  *                      (so PHP's stream default applies).
  *  - `max_redirects`   int|null redirect cap; pass null to omit it.
@@ -197,9 +266,9 @@ function build_http_context_options(array $opts): array
     if (array_key_exists('content', $opts)) {
         $context['content'] = $opts['content'];
     }
-    if (array_key_exists('timeout', $opts)) {
-        $context['timeout'] = $opts['timeout'];
-    }
+    // Shared with the curl path (fetch_pinned) so the two cannot disagree about
+    // an absent timeout — see request_timeout().
+    $context['timeout'] = request_timeout($opts);
 
     // follow_location / max_redirects default to the webmention behaviour, but
     // callers may pass null to omit them entirely (introspectToken's original
@@ -470,9 +539,9 @@ function fetch_pinned(string $url, array $opts, array $pin): ?array
             return strlen($chunk);
         },
     ];
-    if (array_key_exists('timeout', $opts)) {
-        $options[CURLOPT_TIMEOUT] = (int) $opts['timeout'];
-    }
+    // Always bounded: an absent `timeout` means the caller did not name one,
+    // not that the transfer may run forever (see request_timeout()).
+    $options[CURLOPT_TIMEOUT] = request_timeout($opts);
     if (array_key_exists('content', $opts)) {
         $options[CURLOPT_POSTFIELDS] = $opts['content'];
     }

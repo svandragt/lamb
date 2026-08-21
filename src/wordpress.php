@@ -278,8 +278,8 @@ function wordpress_status_path(array $item): ?string
 
 /**
  * Stores an automatic redirect from an imported WordPress URL path to the
- * local Lamb path. The importer only creates redirects for old paths that do
- * not naturally match Lamb's freshly minted permalink.
+ * local Lamb path. An old path that already matches Lamb's freshly minted
+ * permalink is dropped by store_redirect(), which every importer shares.
  *
  * @param array<string, mixed> $item
  */
@@ -290,10 +290,5 @@ function store_source_redirect(array $item, OODBBean $bean): void
         return;
     }
 
-    $to = $bean->slug ? '/' . $bean->slug : '/status/' . $bean->id;
-    if ($from === ltrim($to, '/')) {
-        return;
-    }
-
-    store_redirect($from, $to);
+    store_redirect($from, \Lamb\permalink_path($bean));
 }

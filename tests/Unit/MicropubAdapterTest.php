@@ -129,6 +129,56 @@ class MicropubAdapterTest extends TestCase
         );
     }
 
+    public function testMpLogKeepsTheEntryWhenAValueIsNotValidUtf8(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        // Without JSON_INVALID_UTF8_SUBSTITUTE, json_encode() returns false for
+        // the whole document over one malformed byte and `?: ''` wrote a blank
+        // line — so the entry explaining a failure was the one that vanished.
+        \Lamb\Micropub\mp_log('response', ['status' => 400, 'body' => "oops \xC3\x28 truncated"]);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $lines = array_values(array_filter(explode(PHP_EOL, $contents), fn ($l) => $l !== ''));
+
+        $this->assertCount(1, $lines, 'the entry must still be written');
+        $decoded = json_decode($lines[0], true);
+        $this->assertIsArray($decoded, 'the line must be valid JSON');
+        $this->assertSame(400, $decoded['status']);
+        $this->assertStringContainsString('truncated', $decoded['body']);
+    }
+
+    public function testMpLogStillWritesTheEntriesAroundABadOne(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        \Lamb\Micropub\mp_log('first', ['body' => "bad \xC3\x28"]);
+        \Lamb\Micropub\mp_log('second', ['body' => 'clean']);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $lines = array_values(array_filter(explode(PHP_EOL, $contents), fn ($l) => $l !== ''));
+
+        $this->assertCount(2, $lines);
+        $this->assertStringContainsString('first', $lines[0]);
+        $this->assertStringContainsString('second', $lines[1]);
+    }
+
+    public function testMpLogSubstitutesRatherThanDroppingTheBadByte(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        \Lamb\Micropub\mp_log('response', ['body' => "a\xC3\x28b"]);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $decoded = json_decode(trim($contents), true);
+
+        // U+FFFD in place of the malformed byte, with the surrounding text intact.
+        $this->assertSame("a\u{FFFD}(b", $decoded['body']);
+    }
+
     public function testVerifyTokenLogsMeMismatchReasonWithoutLeakingToken(): void
     {
         global $config;
@@ -425,6 +475,78 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body LIKE ? ', ['%Sanitise iframe%']);
         $this->assertNotNull($post);
         $this->assertStringNotContainsString('<iframe', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlEventHandlerAttributesAreStripped(): void
+    {
+        // strip_tags() drops disallowed *tags* and keeps every attribute of the
+        // ones it allows, so an `on*` handler on an allowed element survived
+        // into `transformed` — which every theme echoes raw and both feeds
+        // syndicate verbatim. Reachable by a token holding only `create` scope.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Handlers</p><img src="/assets/2026/01/a.webp" onerror="alert(1)">'
+                    . '<p onmouseover="alert(2)">hover</p><b OnClick="alert(3)">mixed case</b>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Handlers%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('onerror', $post->transformed);
+        $this->assertStringNotContainsString('onmouseover', $post->transformed);
+        $this->assertStringNotContainsString('OnClick', $post->transformed);
+        $this->assertStringNotContainsString('onclick', $post->transformed);
+        // The elements and their allowed attributes survive.
+        $this->assertStringContainsString('src="/assets/2026/01/a.webp"', $post->transformed);
+        $this->assertStringContainsString('<b>mixed case</b>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlStyleAttributeIsStripped(): void
+    {
+        // `style` alone is enough to cover the viewport with an element that
+        // links somewhere else, so the attribute allowlist drops it too.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p style="position:fixed;inset:0">Overlay</p>']],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Overlay%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('style=', $post->transformed);
+        $this->assertStringContainsString('<p>Overlay</p>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlLinkSchemeIsFilteredLikeMarkdown(): void
+    {
+        // The HTML path never goes through Parsedown, so nothing applied the
+        // scheme allowlist safe mode gives the Markdown path. It now defers to
+        // Parsedown's own filter, so both paths neutralise the same way.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Schemes</p><a href="javascript:alert(1)">bad</a>'
+                    . '<a href="https://example.test/ok">good</a>'
+                    . '<a href="mailto:a@b.test">mail</a>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Schemes%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('href="javascript:', $post->transformed);
+        $this->assertStringContainsString('javascript%3Aalert', $post->transformed);
+        // Everything Parsedown's safe mode allows in a Markdown link is kept here too.
+        $this->assertStringContainsString('href="https://example.test/ok"', $post->transformed);
+        $this->assertStringContainsString('href="mailto:a@b.test"', $post->transformed);
     }
 
     public function testCreateCallbackPlainTextContentIsStillMarkdownProcessed(): void
@@ -1116,6 +1238,74 @@ class MicropubAdapterTest extends TestCase
         $updated = R::load('post', $bean->id);
         $this->assertSame('My Title', $updated->title);
         $this->assertStringContainsString('New body text', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentAcceptsAnHtmlObject(): void
+    {
+        // A content value is legitimately `{"html": …}` — the shape
+        // createCallback() has always unwrapped, and the one a client that
+        // created the post with rich content sends back. Cast with (string),
+        // the object became the literal "Array" and overwrote the whole post.
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['html' => '<p>New <b>rich</b> body</p>']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('New rich body', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentAcceptsAValueObject(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['value' => 'Plain from an object']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('Plain from an object', $updated->body);
+    }
+
+    public function testUpdateCallbackRefusesContentWithNoText(): void
+    {
+        // An object carrying neither `html` nor `value` has no content to
+        // store; reporting success for it reads to the client as "saved".
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['alt' => 'no text here']]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        // Nothing is stored when an operation is refused.
+        $this->assertSame('Original content', R::load('post', $bean->id)->body);
     }
 
     public function testUpdateCallbackReplaceContentPreservesHashtags(): void
@@ -2183,5 +2373,143 @@ class MicropubAdapterTest extends TestCase
     public function testHasMicropubScopeFalseForFailedToken(): void
     {
         $this->assertFalse(has_micropub_scope(false, 'create'));
+    }
+    // Microformats values are not necessarily strings, and casting one stored
+    // the literal "Array" (with an "Array to string conversion" warning).
+
+    public function testCreateCallbackDropsCategoriesWithNoText(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'  => ['Categories of every shape'],
+                // A nested list collapses to its first entry, as front matter
+                // does; a boolean and an empty list carry no text at all.
+                'category' => ['ok', ['nested'], true, []],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Categories of every shape%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('#ok', $post->body);
+        $this->assertStringContainsString('#nested', $post->body);
+        $this->assertStringNotContainsString('#Array', $post->body);
+        $this->assertStringNotContainsString('#1', $post->body);
+    }
+
+    public function testCreateCallbackDropsAPhotoWithNoUsableUrl(): void
+    {
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content' => ['Photos of every shape'],
+                'photo'   => [
+                    ['value' => ['/one.jpg'], 'alt' => 'first'],
+                    ['value' => [], 'alt' => 'nothing'],
+                    '/two.jpg',
+                ],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Photos of every shape%']);
+        $this->assertNotNull($post);
+        $this->assertStringContainsString('![first](/one.jpg)', $post->body);
+        $this->assertStringContainsString('![](/two.jpg)', $post->body);
+        $this->assertStringNotContainsString('(Array)', $post->body);
+        $this->assertStringNotContainsString('nothing', $post->body);
+    }
+
+    public function testUpdateCallbackDropsCategoriesWithNoText(): void
+    {
+        $post = R::dispense('post');
+        $post->body = "Tagged post\n";
+        $post->slug = 'tagged-post';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback('http://localhost/tagged-post', [
+            'add' => ['category' => ['real', ['nested'], false]],
+        ]);
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $post->id);
+        $this->assertStringContainsString('#real', $updated->body);
+        $this->assertStringContainsString('#nested', $updated->body);
+        $this->assertStringNotContainsString('#Array', $updated->body);
+    }
+    public function testContentReplaceKeepsEachTagOnce(): void
+    {
+        // The old body's tags are carried across a content replace so
+        // categories survive it — but a tag the new content already carries
+        // must not be appended again, or every update grows the trailing run.
+        $post = R::dispense('post');
+        $post->body = 'hello #php world';
+        $post->slug = 'replace-tags';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/replace-tags',
+            ['replace' => ['content' => ['goodbye #php']]]
+        ));
+        $this->assertSame('goodbye #php', R::load('post', $post->id)->body);
+
+        // And a replacement that drops the tag from its text keeps it.
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/replace-tags',
+            ['replace' => ['content' => ['again']]]
+        ));
+        $this->assertSame('again #php', R::load('post', $post->id)->body);
+    }
+    public function testNamingAStatusPostMintsAUniqueSlug(): void
+    {
+        // Naming a titleless status post derives a slug from the title. That
+        // slug used to skip the uniqueness check every other save path
+        // applies, so two posts could end up sharing a URL — one of them
+        // unreachable at its own permalink.
+        $taken = R::dispense('post');
+        $taken->body = "---\ntitle: Shared Name\nslug: shared-name\n---\n\ntaken";
+        $taken->slug = 'shared-name';
+        $taken->created = date('Y-m-d H:i:s');
+        R::store($taken);
+
+        $post = R::dispense('post');
+        $post->body = 'a status post';
+        $post->slug = '';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/status/' . $post->id,
+            ['replace' => ['name' => ['Shared Name']]]
+        ));
+
+        $renamed = R::load('post', $post->id);
+        $this->assertNotSame('shared-name', $renamed->slug);
+        $this->assertSame(1, R::count('post', ' slug = ? ', ['shared-name']));
+    }
+
+    public function testRenamingAPostKeepsItsExistingSlug(): void
+    {
+        $post = R::dispense('post');
+        $post->body = "---\ntitle: Original\n---\n\nbody";
+        $post->slug = 'original';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $adapter = new LambMicropubAdapter();
+        $this->assertTrue($adapter->updateCallback(
+            'http://localhost/original',
+            ['replace' => ['name' => ['Renamed Entirely']]]
+        ));
+
+        $renamed = R::load('post', $post->id);
+        $this->assertSame('original', $renamed->slug);
+        $this->assertSame('Renamed Entirely', $renamed->title);
     }
 }

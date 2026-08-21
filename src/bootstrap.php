@@ -37,6 +37,28 @@ function load_dotenv(string $root): void
 }
 
 /**
+ * The directory holding this install's mutable state: the SQLite database, the
+ * session files, the SimplePie cache and the /_cron lock.
+ *
+ * `LAMB_DATA_DIR` moves all of it (the release-verify workflow and the
+ * acceptance suite both do), so anything writing under `data/` has to ask here
+ * rather than hardcode the default. A hardcoded `../data` was how the /_cron
+ * lock ended up in a directory that, on an install with LAMB_DATA_DIR set, does
+ * not exist at all — the lock could never be opened, and every run reported
+ * "Already running" forever.
+ *
+ * The default is relative to the web root, which is the working directory of a
+ * request (php-fpm and `php -S -t src` both chdir there). CLI entry points pass
+ * their own absolute path.
+ *
+ * @return string The data directory path.
+ */
+function data_dir(): string
+{
+    return getenv('LAMB_DATA_DIR') ?: '../data';
+}
+
+/**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.
  *
  * @param string $data_dir The directory path where the database file will be stored.
@@ -55,11 +77,6 @@ function bootstrap_db(string $data_dir): void
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
     R::useWriterCache(true);
-
-    // One-time migration: mark pre-versioning posts as version 1.
-    // transformed is already populated for these posts (parse_bean ran at creation/edit time);
-    // we only need to stamp the version column so upgrade_posts() never writes them again.
-    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
 
     ensure_post_columns();
 }
@@ -87,7 +104,41 @@ function ensure_post_columns(): void
     if (!in_array('import_uuid', $columns, true)) {
         R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
     }
+    backfill_post_version($columns);
     backfill_imported_post_identity($columns);
+}
+
+/**
+ * One-time migration: mark pre-versioning posts as version 1.
+ *
+ * `transformed` is already populated for these posts (parse_bean() ran at
+ * creation/edit time); only the version column needs stamping so
+ * upgrade_posts() never writes them again.
+ *
+ * Probes with a SELECT before writing. SQLite takes a write lock for an UPDATE
+ * even when no row matches it, so running this unconditionally made every
+ * request — an anonymous page view included — a writer, and writers serialise:
+ * with another request or a /_cron run holding the lock, the read blocked
+ * behind it (up to PDO's 60-second busy timeout) instead of being served under
+ * a shared read lock. The probe is a read, so it does not.
+ *
+ * Also skipped when the column does not exist yet: a `post` table predating it
+ * has nothing to stamp, and naming it in an UPDATE is an error rather than a
+ * no-op. Runs from ensure_post_columns(), which has already established that
+ * the table exists and collected its columns.
+ *
+ * @param list<string> $columns Column names as they were before the ALTERs above.
+ */
+function backfill_post_version(array $columns): void
+{
+    if (!in_array('version', $columns, true)) {
+        return;
+    }
+    if (!R::getCell('SELECT 1 FROM post WHERE version IS NULL LIMIT 1')) {
+        return;
+    }
+
+    R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
 }
 
 /**
@@ -102,7 +153,9 @@ function ensure_post_columns(): void
  * are not available here — the guard is the only discriminator there is.
  *
  * Rows whose uuid is already claimed by another post's import_uuid are left
- * alone rather than duplicated. Idempotent, so running it every boot is fine.
+ * alone rather than duplicated. Idempotent, so running it every boot is
+ * correct — but it probes with a SELECT first, because an UPDATE that matches
+ * nothing still takes a write lock (see backfill_post_version()).
  *
  * @param list<string> $columns Column names as they were before this call.
  */
@@ -112,11 +165,18 @@ function backfill_imported_post_identity(array $columns): void
         return;
     }
     $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
-    R::exec(
-        'UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL'
-        . " WHERE feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
-        . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)'
-    );
+    // One predicate, used by the probe and the update, so the two cannot
+    // disagree about which rows this migration is for.
+    $where = "feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
+        . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)';
+
+    // Probe first: see backfill_post_version() for why an unconditional UPDATE
+    // makes every request a writer even once there is nothing left to migrate.
+    if (!R::getCell('SELECT 1 FROM post WHERE ' . $where . ' LIMIT 1')) {
+        return;
+    }
+
+    R::exec('UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL WHERE ' . $where);
 }
 
 /**
@@ -347,8 +407,19 @@ function content_etag(int $contentTs, int $configTs): string
  * Decides whether the client already holds the current version of a response,
  * so a 304 Not Modified can be returned instead of a full body.
  *
- * Honours both If-None-Match (against the ETag) and If-Modified-Since (against
- * the last-modified timestamp).
+ * Honours If-None-Match (against the ETag), and If-Modified-Since (against the
+ * last-modified timestamp) only when no If-None-Match was sent — RFC 9110
+ * §13.1.3: "A recipient MUST ignore If-Modified-Since if the request contains
+ * an If-None-Match header field."
+ *
+ * That precedence is load-bearing here, not pedantry. A browser revalidating
+ * sends both, and latest_content_timestamp() is not actually monotonic: it is
+ * the newest `updated` among published posts, so trashing the newest post moves
+ * it *backwards*. Checking the date after a non-matching ETag therefore answered
+ * 304 to a client holding the pre-deletion page — the deleted post stayed in
+ * its cache until the timestamp climbed back past where it had been. The ETag
+ * had already noticed (it is what #279 added for same-second changes); it just
+ * wasn't allowed to decide.
  *
  * @param array<string, mixed> $server          Typically $_SERVER.
  * @param string $etag            The current response ETag.
@@ -358,8 +429,8 @@ function content_etag(int $contentTs, int $configTs): string
 function client_has_current_version(array $server, string $etag, int $lastModifiedTs): bool
 {
     $if_none_match = trim($server['HTTP_IF_NONE_MATCH'] ?? '');
-    if ($if_none_match !== '' && $if_none_match === $etag) {
-        return true;
+    if ($if_none_match !== '') {
+        return $if_none_match === $etag;
     }
     $if_modified_since = $server['HTTP_IF_MODIFIED_SINCE'] ?? '';
     if ($if_modified_since !== '') {

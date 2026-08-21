@@ -253,24 +253,33 @@ function normalize_matter_values(array $matter): array
 }
 
 /**
- * Strips leading slashes/backslashes from an explicit front-matter `slug:`
- * value.
+ * Reduces an explicit front-matter `slug:` value to the single URL path
+ * segment a post is served under.
  *
- * An explicit slug (unlike a title-derived one, which goes through
- * slugify()) is stored verbatim and later feeds an automatic redirect's
- * `to_url` on a subsequent slug change (`'/' . $slug`, in redirect_edited()).
- * A slug beginning with `/` (or `\`, which some browsers normalise to `/` in
- * a URL) would make that concatenation a protocol-relative `//host/...` (or
- * `/\host/...`) URL — an open redirect off the site. Stripped rather than
- * rejected outright so a legitimate custom slug that merely has redundant
- * leading slashes still saves.
+ * An explicit slug (unlike a title-derived one, which goes through slugify())
+ * is stored close to verbatim, and two things then read it as a path:
+ *
+ * - It feeds an automatic redirect's `to_url` on a subsequent slug change
+ *   (`'/' . $slug`, in redirect_edited()). A slug beginning with `/` (or `\`,
+ *   which some browsers normalise to `/` in a URL) would make that
+ *   concatenation a protocol-relative `//host/...` (or `/\host/...`) URL — an
+ *   open redirect off the site. Hence the leading separators go first.
+ * - permalink() serves the post at `/<slug>`, and the router matches a post
+ *   against the request's *first* path segment. A slug with a separator inside
+ *   it (`archive/2024`) therefore names a URL that can never route back to the
+ *   post: it saves, every link on the site points at it, and it 404s. The
+ *   remaining separators become hyphens so the stored slug is the URL the post
+ *   actually answers on.
+ *
+ * Sanitised rather than rejected outright so a post with a stray slash in its
+ * slug still saves.
  *
  * @param string $slug
  * @return string
  */
 function sanitize_explicit_slug(string $slug): string
 {
-    return ltrim($slug, "/\\");
+    return str_replace(['/', '\\'], '-', ltrim($slug, "/\\"));
 }
 
 /**
@@ -347,6 +356,15 @@ function consume_leading_heading(string $body): string
  * matter, so the stored title is migrated into the body before re-parsing.
  * The result matches the format modern feed ingestion writes.
  *
+ * An existing block is recognised by the same fence split_frontmatter() reads,
+ * not by a literal `---\n`: a browser normalises a <textarea> to CRLF on
+ * submit, so every body saved from the edit form arrives with `---\r\n`
+ * fences. Matching only the LF spelling took those bodies down the
+ * create-a-block branch and prepended a *second* front-matter block — the
+ * author's real one (with its `draft:`, `slug:` and `created:` lines) became
+ * body text, so parse_bean() saw no `draft` key and published the post.
+ * The block's own line ending is reused for the inserted line.
+ *
  * @param string $body The post body, with or without existing front matter.
  * @param string $title The title to write into the front matter.
  * @return string The body with the title present in its front matter.
@@ -354,11 +372,28 @@ function consume_leading_heading(string $body): string
 function inject_title_matter(string $body, string $title): string
 {
     $title_line = rtrim(Yaml::dump(['title' => $title]), "\n");
-    if (str_starts_with($body, "---\n")) {
-        return "---\n" . $title_line . "\n" . substr($body, strlen("---\n"));
+    // has_frontmatter(), not a non-empty YAML block: `---\n---\n` is an empty
+    // block, and adding a second one above it is the bug this guards against.
+    if (has_frontmatter($body) && preg_match('/\A---[ \t]*(\R)/', $body, $m) === 1) {
+        return $m[0] . $title_line . $m[1] . substr($body, strlen($m[0]));
     }
 
     return "---\n" . $title_line . "\n---\n\n" . $body;
+}
+
+/**
+ * Whether the body opens with a complete front-matter block.
+ *
+ * split_frontmatter() cannot answer this on its own: it reports an empty YAML
+ * string both for a body with no block at all and for one whose block is empty
+ * (`---\n---\n`). The content it returns is the discriminator — it is the body
+ * itself only when nothing was split off.
+ *
+ * @param string $body The raw post body.
+ */
+function has_frontmatter(string $body): bool
+{
+    return split_frontmatter($body)[1] !== $body;
 }
 
 function slugify(string $text): string
@@ -404,42 +439,62 @@ function build_matter(array $matter, string $content): string
  * key already holds the target value, are returned unchanged (no cosmetic
  * churn).
  *
+ * The value is rendered through the YAML writer rather than interpolated, for
+ * the reason build_matter() already documents: a slug carrying a colon
+ * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
+ * *whole* front-matter block — title, draft, created — silently vanished on the
+ * next read; one carrying a `#` had everything from it treated as a comment.
+ * finalize_slug() reaches both by appending an id suffix to an explicit slug
+ * that collides or names a reserved route, and then pinning the result here.
+ * Yaml::dump() already quotes anything that needs it, including the
+ * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
  * @param string $value The value to write.
- * @param bool $quote When true, the value is wrapped in single quotes.
  * @param bool $append When true, the key is appended if absent (otherwise the
  *                     body is returned unchanged when the key is missing).
  * @return string The body with the front-matter key set.
  */
-function set_matter(string $body, string $key, string $value, bool $quote = false, bool $append = true): string
+function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
     if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
         return $body;
     }
 
-    $rendered = $quote ? "'" . $value . "'" : $value;
-
+    $rendered = Yaml::dump($value);
+    // A browser submits a <textarea> with CRLF line endings, so most bodies
+    // reaching here carry them. The `\r` is matched and carried over rather
+    // than swept into the value: as part of $line[2] it made $current differ
+    // from $value on every save, so the no-churn contract above never held for
+    // an edit-form body and each save rewrote the line (and re-stored the post).
     $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
         function (array $line) use ($value, $rendered): string {
             $current = trim($line[2], " \t'\"");
             if ($current === $value) {
                 return $line[0];
             }
-            return $line[1] . ' ' . $rendered;
+            return $line[1] . ' ' . $rendered . $line[3];
         },
         $m[2],
         1,
         $count
     );
+    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
+    // on a long block). Concatenating that would drop the entire YAML block, so
+    // leave the body alone instead.
+    if ($new_yaml === null) {
+        return $body;
+    }
 
     if ($count === 0) {
         if (!$append) {
             return $body;
         }
-        $new_yaml = $m[2] . "$key: $rendered\n";
+        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
+        $new_yaml = $m[2] . "$key: $rendered" . $eol;
     }
 
     return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
@@ -609,35 +664,119 @@ function finalize_and_store_post(OODBBean $bean): void
 }
 
 /**
- * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
+ * Matches a line that could carry a task-list marker: optional blockquote
+ * markers, an optional bullet or ordered list marker, then `[ ]`/`[x]`/`[X]`
+ * followed by whitespace and a non-empty label.
  *
- * Task markers are list lines of the form `- [ ] ` / `* [x] ` / `+ [X] `. They
- * are counted in document order (the same order LambDown numbers the rendered
- * checkboxes with `data-checkbox-index`), so the Nth rendered checkbox maps to
- * the Nth source marker. Only the target marker's state character is rewritten;
- * every other marker and all surrounding text is preserved verbatim. An index
- * past the last marker returns the body unchanged.
+ * Whether such a marker actually renders as a checkbox depends on the block it
+ * lands in, which only the renderer knows — see toggle_rendered_checkbox().
  *
- * @param string $body    The raw post body.
- * @param int    $index   Zero-based index of the marker to toggle.
- * @param bool   $checked True to check the marker, false to uncheck it.
- * @return string The body with the target marker toggled.
+ * Capture 2 is the state character, so its byte offset locates the single
+ * character a toggle rewrites.
  */
-function toggle_checkbox(string $body, int $index, bool $checked): string
+const TASK_MARKER_PATTERN = '/^([ \t]*(?:>[ \t]?)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?\[)([ xX])(\][ \t]+\S)/';
+
+/**
+ * Every byte offset in $body that could be the state character of a rendered
+ * checkbox — a deliberately permissive superset.
+ *
+ * This is only a candidate list, not an answer: which markers actually become
+ * checkboxes is decided by Parsedown's block structure, and that is not
+ * something a line scanner can be trusted to reproduce. So this scan skips
+ * front matter (never rendered) and otherwise matches every task marker it
+ * sees, leaving toggle_rendered_checkbox() to identify the real one by asking
+ * the renderer.
+ *
+ * @param string $body The raw post body (front matter included).
+ * @return list<int> Byte offsets of each candidate marker's state character.
+ */
+function candidate_marker_offsets(string $body): array
 {
-    $seen = 0;
-    return preg_replace_callback(
-        '/^(\s*[-*+]\s+\[)[ xX](\]\s)/m',
-        function (array $m) use (&$seen, $index, $checked): string {
-            $state = $seen === $index ? ($checked ? 'x' : ' ') : null;
-            $seen++;
-            if ($state === null) {
-                return $m[0];
-            }
-            return $m[1] . $state . $m[2];
-        },
-        $body
-    ) ?? $body;
+    [, $content] = split_frontmatter($body);
+    $position = strlen($body) - strlen($content);
+
+    $offsets = [];
+    foreach (preg_split('/(\R)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $index => $piece) {
+        if ($index % 2 === 0 && preg_match(TASK_MARKER_PATTERN, $piece, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $offsets[] = $position + (int) $m[2][1];
+        }
+        $position += strlen($piece);
+    }
+
+    return $offsets;
+}
+
+/**
+ * The checked state of every task checkbox the renderer emits for a body, in
+ * the order the toggle endpoint's `data-checkbox-index` counts them.
+ *
+ * The renderer is the authority on which markers become checkboxes, so this is
+ * what toggle_rendered_checkbox() resolves a `data-checkbox-index` against.
+ *
+ * @param string $body The raw post body (front matter included).
+ * @return list<bool> True for each checked box, in document order.
+ */
+function rendered_checkbox_states(string $body): array
+{
+    [, $content] = split_frontmatter($body);
+    $parser = new \Lamb\LambDown();
+    $parser->setSafeMode(true);
+    $parser->text(trim($content));
+
+    return $parser->renderedCheckboxStates();
+}
+
+/**
+ * Rewrites the source marker behind the Nth *rendered* checkbox.
+ *
+ * The toggle endpoint addresses a checkbox by its rendered position
+ * (`data-checkbox-index`, numbered in document order by LambDown::text()), so
+ * the marker to rewrite is the one whose flip moves that box and no other. That
+ * is a property of the renderer, not of the source text: `    - [ ] x` on the
+ * first line is a checkbox (render_body() trims the body, so the indent is
+ * gone), the same line inside a list item is a code block, and a scanner that
+ * guesses either way flips somebody else's box — or, when the requested state
+ * already holds, silently rewrites a `[ ]` inside a code block.
+ *
+ * So the renderer decides. Each candidate marker is rewritten in turn and the
+ * result re-rendered; the marker that produces exactly the requested change,
+ * with every other box untouched, is the right one. At most one candidate can
+ * satisfy that, because only the marker behind box $index can move it.
+ *
+ * @param string $body    The raw post body (front matter included).
+ * @param int    $index   Zero-based index of the rendered checkbox to toggle.
+ * @param bool   $checked True to check the box, false to uncheck it.
+ * @return string|null The body with that box toggled, or null when $index names
+ *                     no rendered checkbox or no marker accounts for it.
+ */
+function toggle_rendered_checkbox(string $body, int $index, bool $checked): ?string
+{
+    if ($index < 0) {
+        return null;
+    }
+
+    $before = rendered_checkbox_states($body);
+    if (!isset($before[$index])) {
+        return null;
+    }
+    // Already in the requested state: nothing to rewrite. Skipping the search
+    // matters, because with no state change to look for every candidate would
+    // satisfy the check — including one inside a code block.
+    if ($before[$index] === $checked) {
+        return $body;
+    }
+
+    $expected = $before;
+    $expected[$index] = $checked;
+
+    foreach (candidate_marker_offsets($body) as $offset) {
+        $candidate = substr_replace($body, $checked ? 'x' : ' ', $offset, 1);
+        if (rendered_checkbox_states($candidate) === $expected) {
+            return $candidate;
+        }
+    }
+
+    return null;
 }
 
 /**
@@ -654,8 +793,8 @@ function toggle_checkbox(string $body, int $index, bool $checked): string
 function get_tag_search_conditions(string $tag): array
 {
     return [
-        'sql'    => 'body LIKE ?',
-        'params' => ["%#$tag%"],
+        'sql'    => "body LIKE ? ESCAPE '\\'",
+        'params' => ['%#' . \Lamb\like_escape($tag) . '%'],
     ];
 }
 
@@ -665,32 +804,113 @@ function get_tag_search_conditions(string $tag): array
  * start of the string, whitespace, or `>`, and be followed by whitespace, the
  * end of the string, or one of the tag-terminating punctuation characters.
  *
+ * The terminator set is Lamb\TAG_TERMINATORS, the same class TAG_PATTERN
+ * excludes from a tag name, rather than a second copy of it. The copy had
+ * drifted: it was missing `>`, `"`, `'`, a backtick, `=` and both slashes, so a
+ * body reading `#php/8` rendered a link to /tag/php — TAG_PATTERN ends the tag
+ * at the slash — while this said the post carried no such tag. post_ids_by_tag()
+ * and Theme\get_posts_by_tags() both filter on it, so the tag page and the
+ * related-posts list left out the very post whose link led there.
+ *
  * @param string $tag  The tag to look for (without the leading `#`).
  * @param string $body The raw post body.
  * @return bool
  */
 function body_has_tag(string $tag, string $body): bool
 {
-    $pattern = '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[\s#&.,!?;:()\[\]{}<]|$)/iu';
+    $pattern = '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[' . \Lamb\TAG_TERMINATORS . ']|$)/iu';
     return (bool) preg_match($pattern, $body);
 }
 
 /**
- * Retrieves posts that contain the specified tag within their body content.
+ * How many rows a tag scan reads per query.
  *
- * @param string $tag The tag to search for within post content.
- *
- * @return list<\RedBeanPHP\OODBBean> An array of posts that match the specified tag.
+ * Only ids survive a page, so the page can be generous: it is the number of
+ * bodies held at once, and one query per 500 matches keeps the query count
+ * reasonable for a tag that really does cover the archive.
  */
-function posts_by_tag(string $tag): array
+const TAG_SCAN_PAGE = 500;
+
+/**
+ * The ids of every publicly visible post that really carries $tag, newest first.
+ *
+ * The LIKE condition get_tag_search_conditions() builds is a superset of a real
+ * tag match — `#photographylover` matches `%#photography%`, and body_has_tag()
+ * is what decides — so the rows cannot be narrowed to the wanted ones in SQL.
+ * They are read a page at a time and only the surviving ids are kept, so one
+ * page of bodies is all that is in memory at once.
+ *
+ * Holding a full bean per match instead made both /tag/<tag> and
+ * /tag/<tag>/feed die on a tag that covers a large archive: at 20,000 posts
+ * under one tag, "Allowed memory size of 134217728 bytes exhausted" on each,
+ * against the default 128M limit both images inherit. Neither endpoint needs
+ * more than a page of posts to render — the tag page paginates and the feed
+ * takes 20 — so nothing but the id list has to grow with the tag.
+ *
+ * @param string $tag            The tag to search for within post content.
+ * @param bool   $by_updated     Order by `updated` rather than `created` (what
+ *                               the tag feeds sort on). The column is chosen
+ *                               here, never interpolated from a caller.
+ * @param int    $limit          Stop once this many ids have been collected;
+ *                               0 collects every match.
+ * @return list<int>
+ */
+function post_ids_by_tag(string $tag, bool $by_updated = false, int $limit = 0): array
 {
     $conditions = get_tag_search_conditions($tag);
     $public = \Lamb\Response\public_posts_clause();
-    $posts = R::find(
-        'post',
-        '(' . $conditions['sql'] . ') AND' . $public['sql'] . 'ORDER BY created DESC',
-        array_merge($conditions['params'], $public['params'])
-    );
+    $order = $by_updated ? 'updated' : 'created';
+    $sql = 'SELECT id, body FROM post WHERE (' . $conditions['sql'] . ') AND' . $public['sql']
+        . 'ORDER BY ' . $order . ' DESC LIMIT ? OFFSET ?';
+    $params = array_merge($conditions['params'], $public['params']);
 
-    return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));
+    $ids = [];
+    $offset = 0;
+    while ($limit === 0 || count($ids) < $limit) {
+        $rows = R::getAll($sql, array_merge($params, [TAG_SCAN_PAGE, $offset]));
+        if ($rows === []) {
+            break;
+        }
+        $offset += count($rows);
+        foreach ($rows as $row) {
+            if (!body_has_tag($tag, (string) ($row['body'] ?? ''))) {
+                continue;
+            }
+            $ids[] = (int) $row['id'];
+            if ($limit !== 0 && count($ids) >= $limit) {
+                break;
+            }
+        }
+        if (count($rows) < TAG_SCAN_PAGE) {
+            break;
+        }
+    }
+
+    return $ids;
+}
+
+/**
+ * Loads posts for the given ids, in the order the ids are given.
+ *
+ * R::loadAll() returns a map keyed by id, so the caller's ordering — which for
+ * a tag listing is the whole point — has to be reapplied.
+ *
+ * @param list<int> $ids
+ * @return list<\RedBeanPHP\OODBBean>
+ */
+function load_posts_in_order(array $ids): array
+{
+    if ($ids === []) {
+        return [];
+    }
+    $beans = R::loadAll('post', $ids);
+
+    $ordered = [];
+    foreach ($ids as $id) {
+        if (isset($beans[$id]) && (int) $beans[$id]->id === $id) {
+            $ordered[] = $beans[$id];
+        }
+    }
+
+    return $ordered;
 }

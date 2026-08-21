@@ -180,7 +180,7 @@ class FrontMatterTest extends TestCase
         $body = "---\ncreated: 2020-01-01 00:00:00\n---\nContent.";
         $this->assertSame(
             "---\ncreated: '2024-06-05 12:00:00'\n---\nContent.",
-            set_matter($body, 'created', '2024-06-05 12:00:00', quote: true, append: false)
+            set_matter($body, 'created', '2024-06-05 12:00:00', append: false)
         );
     }
 
@@ -189,7 +189,7 @@ class FrontMatterTest extends TestCase
         $body = "---\ntitle: Hi\n---\nContent.";
         $this->assertSame(
             $body,
-            set_matter($body, 'created', '2024-06-05 12:00:00', quote: true, append: false)
+            set_matter($body, 'created', '2024-06-05 12:00:00', append: false)
         );
     }
 
@@ -198,7 +198,71 @@ class FrontMatterTest extends TestCase
         $body = "---\ncreated: '2024-06-05 12:00:00'\n---\nContent.";
         $this->assertSame(
             $body,
-            set_matter($body, 'created', '2024-06-05 12:00:00', quote: true, append: false)
+            set_matter($body, 'created', '2024-06-05 12:00:00', append: false)
         );
+    }
+
+    // set_matter — the value is YAML, not interpolated text
+
+    public function testSetMatterQuotesASlugCarryingAColon(): void
+    {
+        // finalize_slug() appends an id suffix to an explicit slug that
+        // collides or names a reserved route, then pins the result back here.
+        // Interpolated, `slug: a: b-12` is not valid YAML, so parse_matter()
+        // returned nothing and the whole block — title and draft included —
+        // silently vanished on the next read.
+        $body = "---\ntitle: My Post\ndraft: true\nslug: 'a: b'\n---\n\nBody.\n";
+
+        $result = set_matter($body, 'slug', 'a: b-12');
+
+        $this->assertSame(
+            ['title' => 'My Post', 'draft' => true, 'slug' => 'a: b-12'],
+            parse_matter($result)
+        );
+    }
+
+    public function testSetMatterQuotesASlugCarryingAHash(): void
+    {
+        // Unquoted, everything from the `#` is a YAML comment, so the pinned
+        // slug read back as `y` and never matched the stored one.
+        $body = "---\ntitle: T\nslug: x\n---\n\nBody.\n";
+
+        $this->assertSame('y #z', parse_matter(set_matter($body, 'slug', 'y #z'))['slug']);
+    }
+
+    public function testSetMatterQuotesAnAppendedValueToo(): void
+    {
+        $body = "---\ntitle: T\n---\n\nBody.\n";
+
+        $this->assertSame('a: b', parse_matter(set_matter($body, 'slug', 'a: b'))['slug']);
+    }
+
+    // set_matter — CRLF bodies (what a browser submits from a <textarea>)
+
+    public function testSetMatterDoesNotChurnACrlfBodyWhoseValueIsUnchanged(): void
+    {
+        $body = "---\r\nslug: my-slug\r\ntitle: Hi\r\n---\r\n\r\nBody text.\r\n";
+
+        $this->assertSame($body, set_matter($body, 'slug', 'my-slug'));
+    }
+
+    public function testSetMatterKeepsCrlfWhenRewritingAValue(): void
+    {
+        $body = "---\r\nslug: my-slug\r\ntitle: Hi\r\n---\r\n\r\nBody text.\r\n";
+
+        $this->assertSame(
+            "---\r\nslug: other\r\ntitle: Hi\r\n---\r\n\r\nBody text.\r\n",
+            set_matter($body, 'slug', 'other')
+        );
+    }
+
+    public function testSetMatterKeepsCrlfWhenAppendingAKey(): void
+    {
+        $body = "---\r\ntitle: Hi\r\n---\r\n\r\nBody.\r\n";
+
+        $result = set_matter($body, 'slug', 'new');
+
+        $this->assertSame("---\r\ntitle: Hi\r\nslug: new\r\n---\r\n\r\nBody.\r\n", $result);
+        $this->assertSame(['title' => 'Hi', 'slug' => 'new'], parse_matter($result));
     }
 }

@@ -8,7 +8,7 @@ use SimplePie\SimplePie;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Http\resolve_validated_ip;
 
-// FEED_FETCH_TIMEOUT is defined in constants.php
+// FEED_FETCH_TIMEOUT and FEED_FETCH_MAX_BYTES are defined in constants.php
 
 /**
  * @return array<array-key, mixed> Configured feed URLs keyed by feed name.
@@ -23,27 +23,13 @@ function get_feeds(): array
 }
 
 /**
- * SimplePie's remote-fetch class, hardened against SSRF: refuses to make a
- * request when the destination doesn't resolve to a public address, and pins
- * the curl connection to the exact address that was validated.
+ * SimplePie's remote-fetch class, subclassed to harden feed fetches against
+ * SSRF and oversized bodies. SimplePie follows a redirect by recursively
+ * re-entering this constructor (PHP dispatches `$this->__construct()`
+ * virtually), so the guards below run on every hop, not just the initial URL.
  *
- * A feed URL is admin-configured (trusted at add-time), but nothing pins its
- * *eventual* destination — if the feed host is later compromised, or simply
- * issues a redirect, the cron job would otherwise fetch wherever it points,
- * including internal/loopback addresses. SimplePie\File follows redirects by
- * recursively calling `$this->__construct()` on each hop (see its
- * constructor), which — since PHP dispatches `$this->__construct()`
- * virtually — re-enters *this* subclass's override on every hop, so each
- * redirect target is checked, not just the initial URL.
- *
- * Checking the URL and then letting curl make its own, independent DNS
- * lookup is itself a DNS-rebinding TOCTOU — the address curl connects to
- * could differ from the one just validated. `CURLOPT_RESOLVE` closes that:
- * it pins curl to a chosen address for a given host:port while still using
- * the original hostname for the `Host:` header, SNI, and certificate
- * verification. That only works through curl, so a request forced through
- * `fsockopen` (which has no equivalent) is refused rather than left
- * unpinned.
+ * See network/README.md ("Fetch hardening") for the SSRF-pinning and body-cap
+ * model this implements.
  */
 class SafeFile extends SimplePieFile
 {
@@ -66,7 +52,52 @@ class SafeFile extends SimplePieFile
             return;
         }
 
-        parent::__construct($url, $timeout, $redirects, $headers, $useragent, false, $pinned);
+        parent::__construct(
+            $url,
+            $timeout,
+            $redirects,
+            $headers,
+            $useragent,
+            false,
+            self::capBodyCurlOptions($pinned, FEED_FETCH_MAX_BYTES)
+        );
+    }
+
+    /**
+     * Caps a feed fetch at $max_bytes without changing how SimplePie receives
+     * the body. SimplePie reads the response from curl_exec()'s return value, so
+     * a CURLOPT_WRITEFUNCTION cap (the fetch_guarded() approach) would lose it;
+     * these three options bound the transfer instead. Each guards its own line:
+     *
+     * - `CURLOPT_ENCODING: identity` forces an uncompressed body, so the cap
+     *   bounds real bytes — over a compressed transfer it would bound only the
+     *   *compressed* size and a gzip bomb would expand past it unseen.
+     * - `CURLOPT_MAXFILESIZE` refuses an over-cap declared Content-Length up front.
+     * - the progress callback catches a chunked/undeclared-length body; aborting
+     *   surfaces as a fetch error, so the success watermark is left alone.
+     *
+     * See network/README.md ("Fetch hardening"). Applied on every redirect hop
+     * (see the class docblock).
+     *
+     * @param array<int, mixed> $curl_options
+     * @return array<int, mixed>
+     */
+    public static function capBodyCurlOptions(array $curl_options, int $max_bytes): array
+    {
+        $curl_options[CURLOPT_ENCODING] = 'identity';
+        $curl_options[CURLOPT_MAXFILESIZE] = $max_bytes;
+        $curl_options[CURLOPT_NOPROGRESS] = false;
+        $curl_options[CURLOPT_PROGRESSFUNCTION] = static function (
+            mixed $ch,
+            int $download_size,
+            int $downloaded,
+            int $upload_size,
+            int $uploaded
+        ) use ($max_bytes): int {
+            return ($downloaded > $max_bytes || $download_size > $max_bytes) ? 1 : 0;
+        };
+
+        return $curl_options;
     }
 
     /**
@@ -141,7 +172,7 @@ function ensure_feed_cache(string $dir): string|false
 function configure_simplepie_feed(SimplePie $feed, string $url): void
 {
     $feed->get_registry()->register(SimplePieFile::class, SafeFile::class, true);
-    $cache_dir = ensure_feed_cache('../data/cache/simplepie');
+    $cache_dir = ensure_feed_cache(\Lamb\Bootstrap\data_dir() . '/cache/simplepie');
     if ($cache_dir === false) {
         $feed->enable_cache(false);
     } else {
@@ -174,13 +205,10 @@ function init_simplepie_feed(string $url): SimplePie
 }
 
 /**
- * Crawls a single initialised feed and records the outcome on its feedstatus bean.
- *
- * A failed fetch (`!$feed->data` or a non-empty `$feed->error()`) does NOT advance the
- * success watermark — it only stamps `last_attempt` and records the error so the
- * Logs tab can surface it. On success, entries newer than the newest one this feed
- * has offered before are created or updated, that ingestion watermark is raised, the
- * item count is recorded and any prior error is cleared.
+ * Crawls a single initialised feed and records the outcome on its feedstatus bean:
+ * a failed fetch (`!$feed->data` or a non-empty `$feed->error()`) records the error
+ * without advancing the success watermark; a success ingests and raises it. See
+ * network/README.md ("The watermark model").
  *
  * @param string    $name Feed name from config.
  * @param string    $url  Feed URL from config.

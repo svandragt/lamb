@@ -11,6 +11,7 @@ use ZipArchive;
 use function Lamb\Bootstrap\ensure_post_columns;
 use function Lamb\Export\build_export_archive;
 use function Lamb\Import\run_import;
+use function Lamb\Restore\apply_manifest_state;
 use function Lamb\Restore\import_post;
 use function Lamb\Restore\item_skip_reason;
 use function Lamb\Restore\manifest_items;
@@ -412,6 +413,7 @@ class LambRestoreTest extends TestCase
             'draft'         => false,
             'deleted'       => false,
             'deleted_at'    => null,
+            'feed_locked'   => false,
             'version'       => 3,
             'feed_name'     => null,
             'feeditem_uuid' => null,
@@ -450,6 +452,15 @@ class LambRestoreTest extends TestCase
                 'id'   => 5,
                 'slug' => 'with-a-photo',
                 'body' => "---\nslug: with-a-photo\n---\n\n![](/assets/2026/07/photo.png)\n",
+            ]),
+            $this->post([
+                'id'            => 6,
+                'slug'          => 'taken-over',
+                'body'          => "---\ntitle: Taken over\nslug: taken-over\n---\n\nMy words now.\n",
+                'feed_name'     => 'example',
+                'feeditem_uuid' => 'abc123',
+                'source_url'    => 'https://example.test/post',
+                'feed_locked'   => true,
             ]),
         ];
     }
@@ -552,7 +563,7 @@ class LambRestoreTest extends TestCase
     {
         $this->importArchive($this->buildArchive());
 
-        $this->assertSame(5, R::count('post'));
+        $this->assertSame(6, R::count('post'));
 
         $hello = R::findOne('post', ' slug = ? ', ['hello-world']);
         $this->assertNotNull($hello);
@@ -575,6 +586,15 @@ class LambRestoreTest extends TestCase
 
         $photo = R::findOne('post', ' slug = ? ', ['with-a-photo']);
         $this->assertStringContainsString('/assets/2026/07/photo.png', (string) $photo->body);
+
+        // feed_locked has to travel with feeditem_uuid: the uuid is what the
+        // next crawl matches the post on, and feed_locked is the only thing
+        // stopping that crawl overwriting the author's own edits.
+        $taken_over = R::findOne('post', ' slug = ? ', ['taken-over']);
+        $this->assertNotNull($taken_over);
+        $this->assertSame('abc123', (string) $taken_over->feeditem_uuid);
+        $this->assertSame(1, (int) $taken_over->feed_locked);
+        $this->assertEmpty($hello->feed_locked);
     }
 
     public function testReimportingTheSameArchiveChangesNothing(): void
@@ -583,8 +603,8 @@ class LambRestoreTest extends TestCase
         $this->importArchive($archive);
         $output = $this->importArchive($archive);
 
-        $this->assertSame(5, R::count('post'));
-        $this->assertStringContainsString('created=0 existed=5', $output);
+        $this->assertSame(6, R::count('post'));
+        $this->assertStringContainsString('created=0 existed=6', $output);
     }
 
     public function testReplaceOverwritesLocalEditsAndRestoresTrashState(): void
@@ -602,8 +622,8 @@ class LambRestoreTest extends TestCase
 
         $output = $this->importArchive($archive, true);
 
-        $this->assertStringContainsString('replaced=5', $output);
-        $this->assertSame(5, R::count('post'));
+        $this->assertStringContainsString('replaced=6', $output);
+        $this->assertSame(6, R::count('post'));
         $this->assertSame(
             "---\ntitle: Hello World\nslug: hello-world\n---\n\nBody text.\n",
             R::load('post', $edited->id)->body
@@ -699,7 +719,7 @@ class LambRestoreTest extends TestCase
 
         $this->importArchive("$this->tmp_dir/unpacked");
 
-        $this->assertSame(5, R::count('post'));
+        $this->assertSame(6, R::count('post'));
         $this->assertSame('2026-07-14 09:30:00', R::findOne('post', ' slug = ? ', ['hello-world'])->created);
     }
 
@@ -795,6 +815,35 @@ class LambRestoreTest extends TestCase
         $this->assertSame(['restored' => 0, 'skipped' => 1, 'rejected' => 0], $tally);
     }
 
+    /**
+     * The tally is the only account an operator gets of a restore, so it has to
+     * describe what reached disk. A failed rename left the bytes at the .part
+     * name, where nothing serves them and nothing cleans them up, and still
+     * counted as restored.
+     */
+    public function testRestoreAssetsDoesNotCountARestoreTheRenameFailed(): void
+    {
+        $root = "$this->tmp_dir/assets_dest";
+        // A directory where the asset belongs: the staged write succeeds and the
+        // rename onto it cannot.
+        mkdir("$root/2026/07/photo.png", 0777, true);
+
+        $manifest = $this->manifest(['assets' => ['assets/2026/07/photo.png']]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json'             => (string) json_encode($manifest),
+            'assets/2026/07/photo.png'  => $this->pngBytes(),
+        ], 'rename-fails.zip'));
+
+        // Silenced deliberately: rename() onto a directory raises E_WARNING, and
+        // Codeception turns PHP errors into exceptions. The warning is the
+        // condition under test, not a surprise.
+        $tally = @restore_assets($manifest, $root, $reader, false);
+
+        $this->assertSame(['restored' => 0, 'skipped' => 1, 'rejected' => 0], $tally);
+        $this->assertFalse(is_file("$root/2026/07/photo.png"));
+        $this->assertFileDoesNotExist("$root/2026/07/photo.png.part");
+    }
+
     public function testRestoreAssetsWritesNothingOnADryRun(): void
     {
         [$tally, $root] = $this->restoreAssets(['assets/2026/07/photo.png' => $this->pngBytes()], true);
@@ -827,7 +876,7 @@ class LambRestoreTest extends TestCase
         $process->run();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('[dry-run] Done. created=5', $process->getOutput());
+        $this->assertStringContainsString('[dry-run] Done. created=6', $process->getOutput());
     }
 
     public function testTheCliScriptRefusesWhenExperimentalFeaturesDisabled(): void
@@ -873,5 +922,113 @@ class LambRestoreTest extends TestCase
         );
         $this->assertSame(['backup.zip', false, false, null], parse_restore_args(['x', 'backup.zip']));
         $this->assertSame([null, false, false, null], parse_restore_args(['x', '--help']));
+    }
+    public function testApplyManifestStateFlattensASeparatorInTheSlug(): void
+    {
+        // An archive from an older Lamb can carry a slug with a separator in
+        // it; the router serves a post at one path segment, so restoring it
+        // verbatim would put the post at a URL that 404s.
+        $bean = R::dispense('post');
+        apply_manifest_state($bean, ['slug' => 'archive/2024', 'created' => '2024-01-01 00:00:00']);
+
+        $this->assertSame('archive-2024', $bean->slug);
+    }
+
+    /**
+     * A manifest date is untrusted like the rest of the archive. Stored
+     * verbatim, one that is not a date sorted above every real date, so
+     * visible_clause() read the restored post as scheduled and it never
+     * appeared in a listing.
+     *
+     * @dataProvider unusableManifestDateProvider
+     */
+    public function testApplyManifestStateFallsBackWhenTheManifestDateIsNotADate(mixed $created): void
+    {
+        $bean = R::dispense('post');
+        $bean->created = '2024-01-01 00:00:00';
+
+        apply_manifest_state($bean, ['created' => $created, 'updated' => $created]);
+
+        $this->assertSame('2024-01-01 00:00:00', $bean->created, 'the settled date must survive');
+        $this->assertSame('2024-01-01 00:00:00', $bean->updated);
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unusableManifestDateProvider(): array
+    {
+        return [
+            'unparseable text' => ['not a date'],
+            'letters only'     => ['zzzz'],
+            'trailing markup'  => ['2019-04-05T10:11:12+00:00 <script>'],
+            'an array'         => [['2019-04-05']],
+            'a boolean'        => [true],
+            'empty string'     => [''],
+        ];
+    }
+
+    public function testApplyManifestStateKeepsAUsableManifestDate(): void
+    {
+        $bean = R::dispense('post');
+        $bean->created = '2024-01-01 00:00:00';
+
+        apply_manifest_state($bean, [
+            'created' => '2019-04-05 10:11:12',
+            'updated' => '2020-01-02 03:04:05',
+        ]);
+
+        $this->assertSame('2019-04-05 10:11:12', $bean->created);
+        $this->assertSame('2020-01-02 03:04:05', $bean->updated);
+    }
+
+    /**
+     * purge_deleted_posts() hard-deletes a trashed post 30 days after its
+     * deleted_at stamp, so a manifest value sorting below that cutoff purged
+     * the post on the very next /_cron — destroying, during a restore, the data
+     * the restore exists to recover. NULL is the safe answer: the purge already
+     * backfills it for rows trashed before it tracked this.
+     *
+     * @dataProvider unusableDeletedAtProvider
+     */
+    public function testApplyManifestStateDropsADeletedAtItCannotJustify(mixed $deletedAt): void
+    {
+        $bean = R::dispense('post');
+
+        apply_manifest_state($bean, [
+            'created'    => '2026-08-20 09:00:00',
+            'deleted'    => true,
+            'deleted_at' => $deletedAt,
+        ]);
+
+        $this->assertNull($bean->deleted_at);
+        $this->assertSame(1, $bean->deleted, 'the post is still trashed, only its stamp is dropped');
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unusableDeletedAtProvider(): array
+    {
+        return [
+            'unparseable text'    => ['not a date'],
+            'sorts below any date' => ['!'],
+            'a zero date'         => ['0000-00-00'],
+            'before the post existed' => ['2019-01-01 00:00:00'],
+            'an array'            => [['2026-08-20']],
+        ];
+    }
+
+    public function testApplyManifestStateKeepsARealDeletedAt(): void
+    {
+        $bean = R::dispense('post');
+
+        apply_manifest_state($bean, [
+            'created'    => '2026-08-01 09:00:00',
+            'deleted'    => true,
+            'deleted_at' => '2026-08-19 12:00:00',
+        ]);
+
+        $this->assertSame('2026-08-19 12:00:00', $bean->deleted_at);
     }
 }
