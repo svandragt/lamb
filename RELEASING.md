@@ -92,7 +92,7 @@ branch tip) and publishes the release in one step — no separate `git tag` need
 ```sh
 gh release create <version> \
   --target release \
-  --title "Lamb <version>" \
+  --title "<version>" \
   --notes-file /tmp/notes.md
 # add --prerelease for an -rcN tag
 # add --latest to mark a final release as the latest
