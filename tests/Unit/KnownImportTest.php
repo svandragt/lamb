@@ -530,6 +530,36 @@ XML;
         $this->assertSame('/' . $bean->slug, (string) $guidRedirect->to_url);
     }
 
+    /**
+     * The <guid> branch used to skip the check the <link> branch applies, so an
+     * item whose Known permalink is a single segment matching its own new slug
+     * left a row pointing the post's URL at itself. index.php prefers the post
+     * while it is live, so the row was invisible until the post was trashed —
+     * at which point the permalink 301ed to itself.
+     */
+    public function testImportItemStoresNoRedirectWhenTheSourcePathIsTheNewPermalink(): void
+    {
+        $rss = str_replace(
+            '<guid>https://known.example/view/aaaa1111</guid>',
+            '<guid>https://example.test/turn-that-frown-upside-down</guid>',
+            self::SAMPLE_RSS
+        );
+        $items = extract_items(parse_rss_string($rss));
+
+        $bean = import_item($items[0], fn(): ?string => null, false);
+        $this->assertNotNull($bean);
+        $this->assertSame('turn-that-frown-upside-down', (string) $bean->slug);
+
+        $this->assertNull(
+            R::findOne('redirect', ' from_slug = ? ', ['turn-that-frown-upside-down']),
+            'a post must not be redirected to itself'
+        );
+        // The dated <link> path is a different path, so it still redirects.
+        $this->assertNotNull(
+            R::findOne('redirect', ' from_slug = ? ', ['2020/turn-that-frown-upside-down'])
+        );
+    }
+
     public function testImportItemIsIdempotentByUuid(): void
     {
         $items = $this->sampleItems();

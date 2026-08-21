@@ -722,8 +722,17 @@ function prepare_imported_html(string $html, string $created, callable $download
 
 /**
  * Stores an automatic redirect from an imported source URL path to a local
- * Lamb path. Importers only create redirects for old paths that do not
- * naturally match Lamb's freshly minted permalink.
+ * Lamb path, unless the source path is the post's own new permalink.
+ *
+ * A row pointing a path at itself is not a redirect. While the post is live
+ * index.php prefers the post, so the row is invisible dead weight in the
+ * author's redirect list; once the post is trashed the router falls through to
+ * the redirect instead, and the old permalink 301s to itself until the next
+ * /_cron run reaches flatten_redirects(). The comparison lives here rather than
+ * in each importer because a source path that differs from the new permalink
+ * only by encoding is the same key once decoded — and because each importer
+ * having its own copy is how one of them (Known's <guid> branch) came to be
+ * missing it.
  */
 function store_redirect(string $from, string $to): void
 {
@@ -731,6 +740,9 @@ function store_redirect(string $from, string $to): void
     // before looking a redirect up), while an imported path arrives encoded as
     // the source site wrote it.
     $from = rawurldecode($from);
+    if ($from === '' || $from === rawurldecode(ltrim($to, '/'))) {
+        return;
+    }
     $redirect = R::findOneOrDispense('redirect', ' from_slug = ? ', [$from]);
     $redirect->from_slug = $from;
     $redirect->to_url = $to;

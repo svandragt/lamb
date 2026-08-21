@@ -376,35 +376,27 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
 /**
  * Stores automatic redirects from an imported Known item's old URLs to its
  * new local Lamb path: the on-host `<link>` path (`2020/<slug>`, skipped for
- * offsite bookmarks and when it already equals the new path) and the `<guid>`
- * path (`view/<hash>`) — Known's own permalinks resolved either way.
+ * offsite bookmarks, whose `<link>` is the bookmarked page rather than a Known
+ * URL) and the `<guid>` path (`view/<hash>`) — Known's own permalinks resolved
+ * either way. A path that is already the post's new permalink is dropped by
+ * store_redirect() rather than here, so both branches get the same treatment.
  *
  * @param array<string, mixed> $item
  */
 function store_source_redirects(array $item, OODBBean $bean): void
 {
     $to = \Lamb\permalink_path($bean);
-    // store_redirect() keys on the decoded path; compare in the same space so a
-    // source path that merely differs by encoding is still recognised as the
-    // post's own new URL (and skipped) rather than stored as a self-redirect.
-    $to_slug = rawurldecode(ltrim($to, '/'));
 
     $bookmark_url = trim((string) ($item['bookmark_url'] ?? ''));
     if ($bookmark_url === '') {
         $link_path = parse_url((string) ($item['link'] ?? ''), PHP_URL_PATH);
         if (is_string($link_path) && $link_path !== '') {
-            $from = trim($link_path, '/');
-            if ($from !== '' && rawurldecode($from) !== $to_slug) {
-                store_redirect($from, $to);
-            }
+            store_redirect(trim($link_path, '/'), $to);
         }
     }
 
     $guid_path = parse_url((string) ($item['guid'] ?? ''), PHP_URL_PATH);
     if (is_string($guid_path) && $guid_path !== '') {
-        $from = trim($guid_path, '/');
-        if ($from !== '') {
-            store_redirect($from, $to);
-        }
+        store_redirect(trim($guid_path, '/'), $to);
     }
 }
