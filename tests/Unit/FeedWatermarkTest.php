@@ -9,6 +9,7 @@ use SimplePie\SimplePie;
 
 use function Lamb\Network\feed_status_bean;
 use function Lamb\Network\ingest_item;
+use function Lamb\Network\ingest_items;
 use function Lamb\Network\record_feed_crawl;
 
 /**
@@ -166,5 +167,89 @@ class FeedWatermarkTest extends TestCase
 
         $reloaded = R::load('post', $bean->id);
         $this->assertSame('Original body', $reloaded->body);
+    }
+
+    /**
+     * The watermark only ever rises, and an item at or below it is never
+     * created — so a run that stepped over an item it had failed to write put
+     * that item permanently under the line, which is the same "dropped for
+     * good" failure this whole mechanism exists to prevent.
+     */
+    public function testAFailedCreateDoesNotAdvanceTheWatermark(): void
+    {
+        $status = feed_status_bean(self::NAME, self::URL);
+        $status->last_item_date = 0;
+        R::store($status);
+
+        $item = $this->makeItem('0.12.0', time() - 60);
+
+        [$ingested, $newest] = $this->ingestWithFailingInsert([$item], $status);
+
+        $this->assertSame(0, $ingested, 'an item that was not written is not an item taken in');
+        $this->assertNull($newest, 'the watermark must not step over the lost item');
+        $this->assertSame(0, R::count('post'));
+    }
+
+    public function testAnItemLostToAFailedCreateIsStillCreatedOnTheNextCrawl(): void
+    {
+        $status = feed_status_bean(self::NAME, self::URL);
+        $status->last_item_date = 0;
+        R::store($status);
+
+        $item = $this->makeItem('0.12.0', time() - 60);
+        [, $newest] = $this->ingestWithFailingInsert([$item], $status);
+
+        // Exactly what record_crawl_success() would store for that run.
+        if ($newest !== null) {
+            $status->last_item_date = max((int) $status->last_item_date, $newest);
+            R::store($status);
+        }
+
+        [$ingested] = ingest_items([$item], self::NAME, $status);
+
+        $this->assertSame(1, $ingested);
+        $this->assertSame(1, R::count('post'));
+    }
+
+    public function testOneLostItemDoesNotStopTheOthersInTheRun(): void
+    {
+        $status = feed_status_bean(self::NAME, self::URL);
+        $status->last_item_date = 0;
+        R::store($status);
+
+        // Both fail here (the trigger blocks every insert); the point is that
+        // the run reports the loss rather than a count it cannot back up.
+        [$ingested, $newest] = $this->ingestWithFailingInsert([
+            $this->makeItem('0.11.0', time() - 86400),
+            $this->makeItem('0.12.0', time() - 60),
+        ], $status);
+
+        $this->assertSame(0, $ingested);
+        $this->assertNull($newest);
+    }
+
+    /**
+     * Runs a batch with every INSERT on `post` refused, the way a SQLite file
+     * locked by a concurrent /_cron refuses one.
+     *
+     * @param list<SimplePieItem> $items
+     * @return array{0: int, 1: int|null}
+     */
+    private function ingestWithFailingInsert(array $items, \RedBeanPHP\OODBBean $status): array
+    {
+        // Settle the schema first: RedBean's fluid mode would otherwise ALTER
+        // the table during the run, and the trigger has to already exist.
+        $warm = R::dispense('post');
+        $warm->body = 'warm';
+        R::store($warm);
+        R::exec('DELETE FROM post');
+
+        R::exec("CREATE TRIGGER lamb_block_insert BEFORE INSERT ON post"
+            . " BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+        try {
+            return ingest_items($items, self::NAME, $status);
+        } finally {
+            R::exec('DROP TRIGGER IF EXISTS lamb_block_insert');
+        }
     }
 }
