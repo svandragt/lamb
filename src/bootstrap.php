@@ -407,8 +407,19 @@ function content_etag(int $contentTs, int $configTs): string
  * Decides whether the client already holds the current version of a response,
  * so a 304 Not Modified can be returned instead of a full body.
  *
- * Honours both If-None-Match (against the ETag) and If-Modified-Since (against
- * the last-modified timestamp).
+ * Honours If-None-Match (against the ETag), and If-Modified-Since (against the
+ * last-modified timestamp) only when no If-None-Match was sent — RFC 9110
+ * §13.1.3: "A recipient MUST ignore If-Modified-Since if the request contains
+ * an If-None-Match header field."
+ *
+ * That precedence is load-bearing here, not pedantry. A browser revalidating
+ * sends both, and latest_content_timestamp() is not actually monotonic: it is
+ * the newest `updated` among published posts, so trashing the newest post moves
+ * it *backwards*. Checking the date after a non-matching ETag therefore answered
+ * 304 to a client holding the pre-deletion page — the deleted post stayed in
+ * its cache until the timestamp climbed back past where it had been. The ETag
+ * had already noticed (it is what #279 added for same-second changes); it just
+ * wasn't allowed to decide.
  *
  * @param array<string, mixed> $server          Typically $_SERVER.
  * @param string $etag            The current response ETag.
@@ -418,8 +429,8 @@ function content_etag(int $contentTs, int $configTs): string
 function client_has_current_version(array $server, string $etag, int $lastModifiedTs): bool
 {
     $if_none_match = trim($server['HTTP_IF_NONE_MATCH'] ?? '');
-    if ($if_none_match !== '' && $if_none_match === $etag) {
-        return true;
+    if ($if_none_match !== '') {
+        return $if_none_match === $etag;
     }
     $if_modified_since = $server['HTTP_IF_MODIFIED_SINCE'] ?? '';
     if ($if_modified_since !== '') {
