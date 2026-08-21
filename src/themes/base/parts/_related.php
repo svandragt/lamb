@@ -28,7 +28,15 @@ if (!empty($related_posts['posts'])) :
                     ?>
                     <li>
                         <?php if (!empty($bean->title)) : ?>
-                            <span><?= escape(substr(strip_tags($bean->title), 0, 42)) ?>&hellip;</span>
+                            <?php // mb_strimwidth(), as the 2026 theme's own _related.php uses:
+                                  // substr() cuts on bytes, so any title in a script whose
+                                  // characters are multi-byte was truncated mid-sequence and
+                                  // rendered a U+FFFD, and only got half as many characters as
+                                  // a Latin one. It also appends the ellipsis only when it
+                                  // actually trims — the literal &hellip; was emitted even for
+                                  // a title that fit.
+                            ?>
+                            <span><?= escape(mb_strimwidth(strip_tags($bean->title), 0, 42, '…')) ?></span>
                         <?php endif; ?>
                         <p><?= date_created($bean) ?>
                         <?php if (!empty($bean->transformed)) : ?>
