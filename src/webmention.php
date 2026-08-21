@@ -33,6 +33,20 @@ const WEBMENTION_FETCH_TIMEOUT = 10;
 const WEBMENTION_FETCH_MAX_BYTES = 2_000_000;
 
 /**
+ * Most pending outbox rows a single /_cron run will step over while looking
+ * for ones it can deliver.
+ *
+ * process_outbound()'s `$limit` bounds sends, and a deferred row (its source
+ * post is still scheduled) costs no network request — so a run pages past
+ * deferred rows rather than letting them consume the window. This caps that
+ * paging: stepping over a row still costs a post load, and a queue holding
+ * hundreds of scheduled rows must not make one run walk the whole backlog.
+ * Well above any plausible number of simultaneously scheduled posts, so in
+ * practice a run reaches deliverable rows long before this.
+ */
+const OUTBOX_SCAN_LIMIT = 500;
+
+/**
  * Route handler for POST /webmention.
  *
  * Accepts `source` and `target` form parameters per the Webmention spec,
@@ -586,9 +600,19 @@ function reconcile_resends_on_restore(int $post_id): int
  * draft, or missing posts are cancelled, and rows for still-scheduled posts
  * are left pending (untouched, no attempt counted) until publication. This
  * deliberately does not use is_viewable(), which trusts logged-in sessions —
- * a logged-in author hitting /_cron must not leak drafts. Deferred scheduled
- * rows still occupy part of the LIMIT window; with the default of 20 that is
- * harmless.
+ * a logged-in author hitting /_cron must not leak drafts.
+ *
+ * `$limit` bounds the rows that *attempt a send*, not the rows looked at. A
+ * deferred row stays pending, so it stays at the front of the queue: once
+ * `$limit` scheduled posts with external links are queued, they filled the
+ * whole window on every run and no webmention was ever sent again — silently,
+ * because a deferred row increments no counter and webmention_line() prints
+ * nothing when all four are zero. Deferring costs one post load and no network
+ * request, so a run steps over deferred rows (paging by how many it has seen)
+ * and spends its window on rows that can actually be delivered.
+ *
+ * OUTBOX_SCAN_LIMIT bounds that stepping, so a queue with a very large backlog
+ * of scheduled rows cannot make a single run walk it end to end.
  *
  * Both network operations are injectable for testing:
  *  - $fetcher fn(string $url): ?array{headers: string[], body: string}
@@ -606,12 +630,33 @@ function process_outbound(?callable $fetcher = null, ?callable $sender = null, i
     $sender ??= __NAMESPACE__ . '\\send_webmention';
 
     $stats = ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0];
-    $rows = R::find('webmentionoutbox', ' status = ? ORDER BY created ASC LIMIT ? ', ['pending', $limit]);
+    $handled  = 0;
+    $deferred = 0;
 
-    foreach ($rows as $row) {
-        $outcome = process_outbound_row($row, $fetcher, $sender, $resolver);
-        if ($outcome !== null) {
+    while ($handled < $limit && $deferred < OUTBOX_SCAN_LIMIT) {
+        // `id` breaks ties on `created`: enqueue_for_post() writes every row for
+        // one post in the same second, so `created` alone is not a total order
+        // and SQLite may return tied rows differently between the pages below —
+        // which would let a row be seen twice, or skipped.
+        $rows = R::find(
+            'webmentionoutbox',
+            ' status = ? ORDER BY created ASC, id ASC LIMIT ? OFFSET ? ',
+            ['pending', $limit - $handled, $deferred]
+        );
+        if (count($rows) === 0) {
+            break;
+        }
+
+        foreach ($rows as $row) {
+            $outcome = process_outbound_row($row, $fetcher, $sender, $resolver);
+            if ($outcome === null) {
+                // Left pending and untouched, so it stays in this result set —
+                // the next page has to step over it.
+                $deferred++;
+                continue;
+            }
             $stats[$outcome]++;
+            $handled++;
         }
     }
 
