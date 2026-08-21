@@ -45,9 +45,38 @@ if (($_ENV['PWD'] ?? '') === '/srv/app') {
     $site_url = 'http://localhost';
 }
 
-$data  = "SITE_URL='" . $site_url . "'" . PHP_EOL;
-$data .= "LAMB_TEST_PORT='" . $test_port . "'" . PHP_EOL;
-$data .= "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
+/**
+ * One `.env` value, quoted so phpdotenv reads back exactly what was passed.
+ *
+ * Single quotes are this file's normal form and hold everything without
+ * escaping — spaces, `"`, `\`, `$`, `#`, non-ASCII — because phpdotenv treats a
+ * single-quoted value as literal. The two characters they cannot hold are a
+ * single quote itself and a real newline: both end the value early, and
+ * phpdotenv then refuses the *whole file* with InvalidFileException. Bootstrap\
+ * load_dotenv() calls safeLoad(), which only swallows a missing file, so a
+ * password containing an apostrophe left `composer serve` throwing on every
+ * request — with LAMB_LOGIN_PASSWORD unreadable even though its own line was
+ * well-formed.
+ *
+ * Those two fall back to double quotes, which phpdotenv does unescape. `$` is
+ * escaped there as well: a double-quoted value is interpolated, so `${HOME}` in
+ * a password would otherwise be substituted instead of stored.
+ */
+function env_value(string $value): string
+{
+    if (!str_contains($value, "'") && !str_contains($value, "\n") && !str_contains($value, "\r")) {
+        return "'" . $value . "'";
+    }
+
+    $escaped = str_replace(['\\', '"', '$'], ['\\\\', '\\"', '\\$'], $value);
+    $escaped = str_replace(["\r", "\n"], ['\\r', '\\n'], $escaped);
+
+    return '"' . $escaped . '"';
+}
+
+$data  = 'SITE_URL=' . env_value($site_url) . PHP_EOL;
+$data .= 'LAMB_TEST_PORT=' . env_value($test_port) . PHP_EOL;
+$data .= 'LAMB_LOGIN_PASSWORD=' . env_value($hash) . PHP_EOL;
 // The plaintext password is only useful to the acceptance suite (it logs in
 // with $_ENV['LAMB_TEST_PASSWORD']). Keep it out of .env by default so a
 // self-hoster's setup file never carries the cleartext secret; the test harness
@@ -55,7 +84,7 @@ $data .= "LAMB_LOGIN_PASSWORD='" . $hash . "'" . PHP_EOL;
 // runs this script under a variables_order that does not populate $_ENV from the
 // environment, but getenv() reads the process environment regardless.
 if (getenv('LAMB_WRITE_TEST_PASSWORD')) {
-    $data .= "LAMB_TEST_PASSWORD='" . $password . "'" . PHP_EOL;
+    $data .= 'LAMB_TEST_PASSWORD=' . env_value($password) . PHP_EOL;
 }
 $env_out = file_put_contents('.env', $data);
 if (!$env_out) {
