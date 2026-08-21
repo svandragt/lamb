@@ -47,6 +47,39 @@ class RedirectTest extends TestCase
         $this->assertSame('/caf%C3%A9', find_redirect('2020/café'));
     }
 
+    /**
+     * @dataProvider selfRedirectProvider
+     */
+    public function testStoreRedirectDropsAPathThatIsAlreadyItsTarget(string $from, string $to): void
+    {
+        \Lamb\Import\store_redirect($from, $to);
+
+        $this->assertCount(0, R::findAll('redirect'), $from . ' -> ' . $to . ' is a loop, not a redirect');
+    }
+
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function selfRedirectProvider(): array
+    {
+        return [
+            'identical path'      => ['hello-world', '/hello-world'],
+            'target encoded'      => ['café', '/caf%C3%A9'],
+            'source encoded'      => ['caf%C3%A9', '/café'],
+            'status permalink'    => ['status/12', '/status/12'],
+            'empty source'        => ['', '/hello-world'],
+        ];
+    }
+
+    public function testStoreRedirectKeepsAPathThatOnlyEndsWithItsTarget(): void
+    {
+        // The check is equality, not containment: a dated source path ending in
+        // the new slug is exactly the redirect an import exists to create.
+        \Lamb\Import\store_redirect('2020/hello-world', '/hello-world');
+
+        $this->assertSame('/hello-world', find_redirect('2020/hello-world'));
+    }
+
     // find_redirect — config-based
 
     public function testFindRedirectReturnsAbsoluteUrlFromConfig(): void
