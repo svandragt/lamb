@@ -40,17 +40,21 @@ use function Lamb\Post\populate_bean;
  * @param SimplePieItem|JsonFeedItem $item      The feed item.
  * @param string        $name      Feed name from config.
  * @param int           $watermark Newest entry publication timestamp seen so far.
- * @return bool True when a post was created or updated (counts toward the run total).
+ * @return bool|null True when a post was created or updated (counts toward the
+ *                   run total), false when there was nothing to do, and null
+ *                   when an entry that should now exist does not because the
+ *                   write failed — which the watermark has to know about.
  */
-function ingest_item(SimplePieItem|JsonFeedItem $item, string $name, int $watermark): bool
+function ingest_item(SimplePieItem|JsonFeedItem $item, string $name, int $watermark): ?bool
 {
     $uuid     = md5($name . $item->get_id());
     $existing = R::findOne('post', ' feeditem_uuid = ? ', [$uuid]);
 
     if (!$existing) {
         if ((int) $item->get_date('U') > $watermark) {
-            create_item($item, $name);
-            return true;
+            // null, not true, when the store failed: creation is the only
+            // decision the watermark gates, so a lost entry has to hold it back.
+            return create_item($item, $name) ? true : null;
         }
         return false;
     }
@@ -61,8 +65,10 @@ function ingest_item(SimplePieItem|JsonFeedItem $item, string $name, int $waterm
     // to run, and stops a re-synced item from being re-synced on every crawl.
     $synced_at = (int) strtotime((string) $existing->updated);
     if (!$existing->feed_locked && (int) $item->get_updated_date('U') > $synced_at) {
-        update_item($item, $name);
-        return true;
+        // A failed re-sync needs no special handling: `updated` was not stamped,
+        // so the next crawl compares against the same value and tries again. It
+        // just must not be counted as an entry this run took in.
+        return update_item($item, $name);
     }
 
     return false;
@@ -76,20 +82,36 @@ function ingest_item(SimplePieItem|JsonFeedItem $item, string $name, int $waterm
  * watermark they read — the divergence this pattern is prone to, and the reason
  * the pair already share begin_crawl()/record_crawl_*().
  *
+ * A run that failed to create an entry reports no new watermark at all.
+ * record_crawl_success() only ever raises the watermark, and an entry at or
+ * below it is never created — so advancing past an entry the run lost would put
+ * it permanently under the line that decides whether to create it, dropping it
+ * for good. That is the same failure the watermark was introduced to prevent,
+ * arriving by a different route. Holding the watermark for one run costs
+ * nothing: every entry is deduped on feeditem_uuid, so the ones that did land
+ * are not created a second time.
+ *
  * @param array<array-key, SimplePieItem|JsonFeedItem> $items  The feed's entries.
  * @param string   $name   Feed name from config.
  * @param OODBBean $status The feed's status bean from begin_crawl().
  * @return array{0: int, 1: int|null} Entries created or updated, and the newest
- *                                    entry date seen (null when none is dated).
+ *                                    entry date seen (null when none is dated,
+ *                                    or when an entry was lost to a failed write).
  */
 function ingest_items(array $items, string $name, OODBBean $status): array
 {
     $watermark = (int) $status->last_item_date;
     $ingested  = 0;
     $newest    = null;
+    $lost      = false;
 
     foreach ($items as $item) {
-        if (ingest_item($item, $name, $watermark)) {
+        $outcome = ingest_item($item, $name, $watermark);
+        if ($outcome === null) {
+            $lost = true;
+            continue;
+        }
+        if ($outcome) {
             $ingested++;
         }
         $date = (int) $item->get_date('U');
@@ -98,16 +120,20 @@ function ingest_items(array $items, string $name, OODBBean $status): array
         }
     }
 
-    return [$ingested, $newest];
+    return [$ingested, $lost ? null : $newest];
 }
 
-function update_item(SimplePieItem|JsonFeedItem $item, string $name): void
+/**
+ * Re-syncs an already-ingested entry. Returns false when the row is gone or the
+ * write failed, so the caller does not count a re-sync that did not happen.
+ */
+function update_item(SimplePieItem|JsonFeedItem $item, string $name): bool
 {
     $uuid = md5($name . $item->get_id());
     $bean = R::findOne('post', ' feeditem_uuid = ?', [$uuid]);
     if (!$bean) {
         // Record not found
-        return;
+        return false;
     }
     $bean = prepare_item($item, $name, $bean);
     $bean->updated = $item->get_updated_date("Y-m-d H:i:s");
@@ -116,8 +142,10 @@ function update_item(SimplePieItem|JsonFeedItem $item, string $name): void
     try {
         R::store($bean);
     } catch (SQL) {
-        // continue
+        return false;
     }
+
+    return true;
 }
 
 function prepare_item(SimplePieItem|JsonFeedItem $item, string $name, ?OODBBean $bean = null): OODBBean
@@ -127,7 +155,11 @@ function prepare_item(SimplePieItem|JsonFeedItem $item, string $name, ?OODBBean 
     return populate_bean($contents, $item, $name, $bean);
 }
 
-function create_item(SimplePieItem|JsonFeedItem $item, string $name): void
+/**
+ * Creates a post for a feed entry. Returns false when the write failed, so the
+ * caller can hold the watermark back instead of stepping over a lost entry.
+ */
+function create_item(SimplePieItem|JsonFeedItem $item, string $name): bool
 {
     $contents = get_structured_content($item, $name);
     $bean = populate_bean($contents, $item, $name);
@@ -138,8 +170,10 @@ function create_item(SimplePieItem|JsonFeedItem $item, string $name): void
         // body's front matter so cron updates re-derive it unchanged.
         finalize_and_store_post($bean);
     } catch (SQL) {
-        // continue
+        return false;
     }
+
+    return true;
 }
 
 /**
