@@ -313,6 +313,13 @@ XML;
     {
         $this->assertSame('2024/03', asset_dir_for_date('2024-03-15 12:00:00'));
         $this->assertSame('2019/12', asset_dir_for_date('2019-12-01 00:00:00'));
+        // Both readers of these paths match on `\d{4}/\d{2}` exactly, so a year
+        // that is not four digits has to fall back to the current month the way
+        // an unparseable date already does. `0000-00-00` parses to year -1.
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('0000-00-00'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('-0001-11-30 00:00:00'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date('not a date'));
+        $this->assertMatchesRegularExpression('#^\d{4}/\d{2}$#', asset_dir_for_date(''));
     }
 
     public function testParseWxrStringReturnsRssElement(): void
