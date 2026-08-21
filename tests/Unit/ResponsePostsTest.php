@@ -323,6 +323,25 @@ class ResponsePostsTest extends TestCase
         $this->assertSame('/drafts', safe_referer_path('/drafts'));
     }
 
+    public function testSafeRefererPathRejectsAProtocolRelativePath(): void
+    {
+        // The host check passes — the Referer *is* same-origin — but the path it
+        // yields is `//evil.example/x`, which a browser resolves as
+        // protocol-relative and follows off-site. local_redirect_target()
+        // already refuses this shape for `?redirect_to=`, and states why.
+        $this->assertSame('/', safe_referer_path(ROOT_URL . '//evil.example/x'));
+        $this->assertSame('/', safe_referer_path('//evil.example/x'));
+    }
+
+    public function testSafeRefererPathRejectsABackslashPrefixedPath(): void
+    {
+        // Browsers normalise `\` to `/` in a URL, so `/\host` resolves the same
+        // way as `//host`. sanitize_explicit_slug() refuses it for a slug for
+        // exactly this reason.
+        $this->assertSame('/', safe_referer_path(ROOT_URL . '/\\evil.example/x'));
+        $this->assertSame('/', safe_referer_path('/\\evil.example'));
+    }
+
     // -------------------------------------------------------------------------
     // delete_return_path
     // -------------------------------------------------------------------------
