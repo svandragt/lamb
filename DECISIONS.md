@@ -68,6 +68,18 @@ The `preview` parameter counts even when empty or wrong. A bad token never grant
 
 ---
 
+## 2026-08-21 — Module-level developer docs live in `src/<module>/README.md`
+
+**Status:** Accepted
+
+**Context:** Between the whole-project guide (`AGENTS.md`) and per-function docblocks there was no place for a *subsystem's* story. Core files run near 50% comment lines, and the same rationale — the feed-ingestion watermark model is the clearest case — was restated across several docblocks, so the copies drift. The `2026-05-29` decision put contributor docs in root-level files but enumerated a fixed set and did not anticipate a per-module tier. The house authoring rule ("a paragraph-long comment is documentation — put it in a README and leave a one-line pointer") already pointed the way; this records where that README goes.
+
+**Decision:** A subsystem's narrative — how its parts fit, the invariants that span more than one function, the non-obvious design — lives in `src/<module>/README.md`, next to the code it explains. Docblocks keep the **contract** (`@param`/`@return`/`@throws`, still required) plus the *local* why (an invariant or coupling read at the point of change); a paragraph that explains the module rather than the function moves to the README with a one-line pointer left on the symbol. Root-level files (`README.md`, `CONTRIBUTING`, `DECISIONS.md`, `DESIGN.md`, `PRODUCT.md`) keep project-wide and cross-cutting material; `docs/` stays end-user only. First applied to `src/network/` (feed ingestion).
+
+**Consequences:** `AGENTS.md` §Comments is updated to match, so the next contributor does not read "docblocks are deliberately expansive" and re-inflate what was moved out. A design essay lives in one place instead of N drifting copies. The trade-off is deliberate: a module README sits one directory from the code — farther than a docblock — so it is for subsystem-spanning rationale, not per-line why, which stays on the symbol. New modules adopt the pattern as they are touched, not in a big-bang sweep.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

@@ -103,16 +103,10 @@ function webmention_line(array $sent): string
 {
     header('Content-Type: text/plain');
 
-    // /_cron is unauthenticated and meant to be hit by an external cron job
-    // (see docs/cron-scheduled-tasks.md), but nothing stops anyone from
-    // flooding it with concurrent requests. The rate-limit watermark below is
-    // only written after all work below completes, so without a lock, every
-    // request in such a burst reads the same stale watermark, passes the
-    // "too often" check, and proceeds in parallel — multiplying outbound
-    // feed/webmention HTTP calls and risking duplicate feed-item ingestion
-    // (no unique constraint on `feeditem_uuid`) and duplicate outbound
-    // webmention sends (no atomic claim on a queued row). Acquiring a
-    // non-blocking exclusive lock first serializes overlapping runs instead.
+    // Serialise overlapping runs before anything else: /_cron is unauthenticated
+    // and the rate-limit watermark is only written after all work finishes, so a
+    // concurrent burst without this lock would run in parallel on the same stale
+    // watermark. See network/README.md ("The run") for what that duplicates.
     $lock = acquire_cron_lock();
     if ($lock === false) {
         http_response_code(500);
@@ -165,19 +159,16 @@ function cron_lock_path(): string
 }
 
 /**
- * Acquires an exclusive, non-blocking lock serializing /_cron runs.
+ * Acquires an exclusive, non-blocking lock serialising /_cron runs.
  *
- * The returned handle must be kept referenced for the remainder of the
- * request: the lock releases automatically once it (and the underlying file
- * descriptor) is closed or the request ends, so an explicit unlock isn't
- * needed as long as the caller never returns normally before then (every
- * process_feeds() exit path terminates the request via die()/exit()).
+ * The handle must stay referenced until the request ends: the lock releases
+ * when it closes, so no explicit unlock is needed as long as every
+ * process_feeds() exit path terminates via die()/exit().
  *
- * The two ways this can fail are kept apart. A lock file that cannot be opened
- * at all is not another run in progress — it is a broken install, and reporting
- * it as contention is what let a mislocated lock file silently stop every cron
- * run (feeds, the webmention queue, the purge) while the endpoint kept
- * answering "Already running, try again later."
+ * The two failure modes are kept apart deliberately — a lock file that cannot
+ * be *opened* is a broken install (false), not another run in progress (null);
+ * collapsing them once silently stopped every cron run. See network/README.md
+ * ("The run").
  *
  * @param string|null $path Lock file path; defaults to cron_lock_path().
  * @return resource|false|null The open lock-file handle; null when another run
