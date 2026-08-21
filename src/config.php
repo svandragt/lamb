@@ -158,6 +158,23 @@ function parse_ini_safe(string $ini_text): array
  */
 function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
 {
+    // Unparseable INI is not themeless INI, and parse_ini_safe() answers []
+    // for both. Prepending a `theme =` line to a file with a syntax error
+    // leaves it exactly as unparseable, so the migration below fired again on
+    // the next request — and every request after that, since get_ini_text()
+    // saves whenever the text changed. The stored config grew by a line per
+    // request, each one a write, and save_ini_text() advances the config
+    // timestamp monotonically, so latest_content_timestamp() moved every
+    // request too and no anonymous response could be served from cache.
+    //
+    // A broken file needs fixing, not migrating: leave it alone. Nothing
+    // downstream depends on the migration having run — normalize_config()
+    // drops an unusable theme and index.php falls back to the base theme,
+    // which is the same outcome this function aims at.
+    if (!validate_ini($ini_text)['valid']) {
+        return $ini_text;
+    }
+
     $parsed = parse_ini_safe($ini_text);
 
     if (!array_key_exists('theme', $parsed)) {
