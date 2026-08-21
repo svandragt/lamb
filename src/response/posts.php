@@ -18,9 +18,8 @@ use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
-use function Lamb\Post\rendered_checkbox_states;
 use function Lamb\Post\sanitize_explicit_slug;
-use function Lamb\Post\toggle_checkbox;
+use function Lamb\Post\toggle_rendered_checkbox;
 use function Lamb\Route\is_reserved_route;
 
 /**
@@ -407,42 +406,30 @@ function respond_checkbox(array $_args): void
 /**
  * Toggles a task-list checkbox in a post and persists it as an edit.
  *
- * Loads the post, flips the Nth `[ ]`/`[x]` marker in its body, re-parses so
- * `transformed`/`description` reflect the new state, and bumps `updated`. The
+ * Loads the post, flips the marker behind its Nth rendered checkbox, re-parses
+ * so `transformed`/`description` reflect the new state, and bumps `updated`. The
  * testable core of respond_checkbox() (which adds auth and the JSON response).
  *
  * @param int  $id      The post id.
- * @param int  $index   Zero-based checkbox index.
+ * @param int  $index   Zero-based rendered checkbox index.
  * @param bool $checked The desired checked state.
- * @return bool True on success, false when the post is missing or the index invalid.
+ * @return bool True on success, false when the post is missing or the index
+ *              names no checkbox the renderer emits.
  */
 function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
 {
-    if ($index < 0) {
-        return false;
-    }
-
     $bean = R::load('post', $id);
     if (!$bean->id) {
         return false;
     }
 
-    // The index names a *rendered* checkbox, so the rewrite is checked against
-    // the renderer rather than trusted: no such checkbox, or a rewrite that
-    // moves any other box, is refused. The client then reverts the tick instead
-    // of the author silently finding a different task crossed off — which is
-    // what a document the source scan reads differently from the renderer
-    // (see Post\checkbox_marker_offsets) used to do.
-    $body   = (string) $bean->body;
-    $before = rendered_checkbox_states($body);
-    if (!isset($before[$index])) {
-        return false;
-    }
-
-    $toggled  = toggle_checkbox($body, $index, $checked);
-    $expected = $before;
-    $expected[$index] = $checked;
-    if (rendered_checkbox_states($toggled) !== $expected) {
+    // The index names a *rendered* checkbox, and which source marker that is is
+    // the renderer's answer to give (see Post\toggle_rendered_checkbox): null
+    // means no such checkbox, or none whose flip leaves every other box alone.
+    // The client then reverts the tick instead of the author silently finding a
+    // different task crossed off.
+    $toggled = toggle_rendered_checkbox((string) $bean->body, $index, $checked);
+    if ($toggled === null) {
         return false;
     }
 
