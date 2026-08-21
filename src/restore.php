@@ -379,8 +379,10 @@ function apply_manifest_state(OODBBean $bean, array $item): void
     }
     $bean->updated = $updated !== '' ? $updated : $bean->created;
 
-    $slug = (string) ($item['slug'] ?? '');
+    $slug = Post\sanitize_explicit_slug((string) ($item['slug'] ?? ''));
     if ($slug !== '') {
+        // Sanitised like any explicit slug: an archive from an older Lamb can
+        // carry one with a separator in it, which the router cannot serve.
         $bean->slug = $slug;
     }
 

@@ -330,4 +330,43 @@ class ExportTest extends TestCase
         $this->assertNotFalse($zip->locateName('manifest.json'));
         $zip->close();
     }
+    public function testExportSurvivesAnInvalidUtf8ByteInTheManifest(): void
+    {
+        // One stray byte in a slug or the site title used to abort the whole
+        // export with "Malformed UTF-8 characters" — the author could not back
+        // the site up at all.
+        $dir = sys_get_temp_dir() . '/lamb_export_utf8_' . uniqid('', true);
+        mkdir($dir, 0777, true);
+        $zip_path = "$dir/export.zip";
+
+        try {
+            $manifest = build_export_archive(
+                [[
+                    'id'      => 1,
+                    'slug'    => 'caf' . chr(0xE9) . '-notes',
+                    'body'    => "Body text.\n",
+                    'created' => '2026-01-02 03:04:05',
+                    'updated' => '2026-01-02 03:04:05',
+                ]],
+                $dir,
+                $zip_path,
+                '2026-01-02T03:04:05+00:00',
+                ['title' => 'Caf' . chr(0xE9) . ' Blog', 'url' => 'https://example.com'],
+            );
+
+            $this->assertSame(1, $manifest['counts']['posts']);
+            $zip = new ZipArchive();
+            $this->assertTrue($zip->open($zip_path));
+            $json = $zip->getFromName('manifest.json');
+            $zip->close();
+            $this->assertIsString($json);
+            $decoded = json_decode($json, true);
+            $this->assertIsArray($decoded);
+            // The byte degrades to U+FFFD; the post file itself is stored raw.
+            $this->assertStringContainsString("\u{FFFD}", $decoded['site']['title']);
+        } finally {
+            array_map('unlink', glob("$dir/*") ?: []);
+            rmdir($dir);
+        }
+    }
 }

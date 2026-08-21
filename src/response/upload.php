@@ -83,7 +83,10 @@ function respond_upload(array $_args): void
         $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
-    echo json_encode($out, JSON_THROW_ON_ERROR);
+    // The markdown carries the client's filename, which need not be valid
+    // UTF-8; without substitution json_encode() throws and the upload 500s
+    // after the file has already been stored.
+    echo json_encode($out, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     die();
 }
 
@@ -281,6 +284,14 @@ function persist_image_bytes(string $bytes, string $ext, string $dest_dir, strin
         @unlink($tmp);
         return null;
     }
+    // tempnam() creates its file 0600, and rename() carries that mode to the
+    // published asset — every other upload path (move_uploaded_file(),
+    // imagewebp(), the restore's file_put_contents()) lands on the usual
+    // 0666 & ~umask. A 0600 asset is readable by the PHP user alone, so a
+    // separate static-file server user, a backup, or the author's own account
+    // cannot read an image the site is serving.
+    @chmod("$dest_dir/$filename", 0666 & ~umask());
+
     return $filename;
 }
 

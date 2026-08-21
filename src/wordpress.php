@@ -290,8 +290,9 @@ function store_source_redirect(array $item, OODBBean $bean): void
         return;
     }
 
-    $to = $bean->slug ? '/' . $bean->slug : '/status/' . $bean->id;
-    if ($from === ltrim($to, '/')) {
+    $to = \Lamb\permalink_path($bean);
+    // Compared in the decoded space store_redirect() keys on.
+    if (rawurldecode($from) === rawurldecode(ltrim($to, '/'))) {
         return;
     }
 

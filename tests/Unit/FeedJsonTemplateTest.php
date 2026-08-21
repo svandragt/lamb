@@ -141,6 +141,25 @@ class FeedJsonTemplateTest extends TestCase
         $this->assertStringNotContainsString('src="/assets', $html);
     }
 
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonSurvivesAnInvalidUtf8Byte(): void
+    {
+        // json_encode() returns false for the whole document if one string is
+        // not valid UTF-8, so a single stray byte — in a setting, or in a post
+        // stored before bodies were repaired on save — served every subscriber
+        // an empty 200.
+        $json = $this->renderJsonFeedWithPost(
+            ['title' => 'Caf' . chr(0xE9), 'transformed' => '<p>Body</p>'],
+            ['site_title' => 'Caf' . chr(0xE9) . ' Blog'],
+        );
+
+        $this->assertCount(1, $json['items']);
+        $this->assertStringContainsString("\u{FFFD}", $json['items'][0]['title']);
+    }
+
     private function renderJsonFeedWithPost(array $fields, array $extraConfig = []): array
     {
         require_once __DIR__ . '/../../vendor/autoload.php';

@@ -37,6 +37,28 @@ function load_dotenv(string $root): void
 }
 
 /**
+ * The directory holding this install's mutable state: the SQLite database, the
+ * session files, the SimplePie cache and the /_cron lock.
+ *
+ * `LAMB_DATA_DIR` moves all of it (the release-verify workflow and the
+ * acceptance suite both do), so anything writing under `data/` has to ask here
+ * rather than hardcode the default. A hardcoded `../data` was how the /_cron
+ * lock ended up in a directory that, on an install with LAMB_DATA_DIR set, does
+ * not exist at all — the lock could never be opened, and every run reported
+ * "Already running" forever.
+ *
+ * The default is relative to the web root, which is the working directory of a
+ * request (php-fpm and `php -S -t src` both chdir there). CLI entry points pass
+ * their own absolute path.
+ *
+ * @return string The data directory path.
+ */
+function data_dir(): string
+{
+    return getenv('LAMB_DATA_DIR') ?: '../data';
+}
+
+/**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.
  *
  * @param string $data_dir The directory path where the database file will be stored.

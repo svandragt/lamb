@@ -414,6 +414,60 @@ class ResponsePostsTest extends TestCase
         $this->assertFalse(apply_checkbox_toggle($post->id, -1, true));
     }
 
+    public function testApplyCheckboxToggleUsesRenderedIndex(): void
+    {
+        // The first rendered checkbox is the bare marker, not the list item —
+        // the index the client sends counts every checkbox on the page.
+        $post          = R::dispense('post');
+        $post->body    = "[ ] bare\n\n- [ ] listed\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, true));
+        $this->assertSame("[x] bare\n\n- [ ] listed\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleSkipsMarkersInFencedCode(): void
+    {
+        $post          = R::dispense('post');
+        $post->body    = "```\n- [ ] sample\n```\n\n- [ ] real\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, true));
+        $this->assertSame("```\n- [ ] sample\n```\n\n- [x] real\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleFailsForIndexPastLastCheckbox(): void
+    {
+        $post          = R::dispense('post');
+        $post->body    = "- [ ] one\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertFalse(apply_checkbox_toggle($post->id, 3, true));
+        // Refused, not silently accepted with the body left as it was.
+        $this->assertSame("- [ ] one\n", R::load('post', $post->id)->body);
+    }
+
+    public function testApplyCheckboxToggleRefusesWhenRewriteWouldMoveAnotherBox(): void
+    {
+        // A body whose markers the source scan and the renderer read
+        // differently: the fence is swallowed by the preceding list item, so
+        // the renderer shows three checkboxes where the scan sees two.
+        $post          = R::dispense('post');
+        $post->body    = "- [ ] one\n+ [ ] two\n```\n- [ ] three\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertFalse(apply_checkbox_toggle($post->id, 2, true));
+        $this->assertSame("- [ ] one\n+ [ ] two\n```\n- [ ] three\n", R::load('post', $post->id)->body);
+    }
+
     // -------------------------------------------------------------------------
     // lock_if_feed_sourced
     // -------------------------------------------------------------------------

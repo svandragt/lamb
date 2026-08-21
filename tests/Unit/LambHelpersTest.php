@@ -5,10 +5,13 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\encode_path_segment;
 use function Lamb\find_post_by_path;
 use function Lamb\get_option;
+use function Lamb\like_escape;
 use function Lamb\now;
 use function Lamb\permalink;
+use function Lamb\permalink_path;
 use function Lamb\post_has_slug;
 use function Lamb\set_option;
 
@@ -105,6 +108,84 @@ class LambHelpersTest extends TestCase
         R::store($bean);
         $bean->slug = null;
         $this->assertSame(ROOT_URL . '/status/' . $bean->id, permalink($bean));
+    }
+
+    // permalink_path / encode_path_segment — a post's URL has to survive the
+    // round trip back through the router, which matches the *decoded* request
+    // path against the stored slug.
+
+    public function testPermalinkEncodesWhatAPathCannotHold(): void
+    {
+        $bean = R::dispense('post');
+
+        $bean->slug = 'my post';
+        $this->assertSame('/my%20post', permalink_path($bean));
+
+        $bean->slug = 'café';
+        $this->assertSame('/caf%C3%A9', permalink_path($bean));
+
+        $bean->slug = 'a?b#c';
+        $this->assertSame('/a%3Fb%23c', permalink_path($bean));
+    }
+
+    public function testPermalinkLeavesPathLegalCharactersAlone(): void
+    {
+        // These already resolve, and a permalink is also the post's Atom entry
+        // id — re-encoding one would show every subscriber the post as new.
+        $bean = R::dispense('post');
+
+        $bean->slug = 'tea-&-cake';
+        $this->assertSame('/tea-&-cake', permalink_path($bean));
+
+        $bean->slug = 'c++,notes;x=1:2@3';
+        $this->assertSame('/c++,notes;x=1:2@3', permalink_path($bean));
+
+        $bean->slug = 'hello-world';
+        $this->assertSame('/hello-world', permalink_path($bean));
+    }
+
+    public function testEncodePathSegmentEncodesSeparatorsAndPercent(): void
+    {
+        $this->assertSame('a%2Fb', encode_path_segment('a/b'));
+        $this->assertSame('a%5Cb', encode_path_segment('a\\b'));
+        $this->assertSame('100%25', encode_path_segment('100%'));
+    }
+
+    public function testPermalinkPathFallsBackToStatusId(): void
+    {
+        $bean = R::dispense('post');
+        R::store($bean);
+        $bean->slug = '';
+        $this->assertSame('/status/' . $bean->id, permalink_path($bean));
+    }
+
+    public function testFindPostByPathDecodesTheSlug(): void
+    {
+        $bean = R::dispense('post');
+        $bean->slug = 'my post';
+        $bean->body = 'Spaced.';
+        R::store($bean);
+
+        $found = find_post_by_path('/my%20post');
+        $this->assertNotNull($found);
+        $this->assertSame((int) $bean->id, (int) $found->id);
+    }
+
+    // like_escape — a visitor's literal text must stay literal inside a LIKE.
+
+    public function testLikeEscapeEscapesWildcards(): void
+    {
+        $this->assertSame('100\\%', like_escape('100%'));
+        $this->assertSame('a\\_b', like_escape('a_b'));
+        $this->assertSame('plain', like_escape('plain'));
+    }
+
+    public function testLikeEscapeEscapesTheEscapeCharacterFirst(): void
+    {
+        // Otherwise a trailing backslash in the term escapes the pattern's own
+        // closing wildcard instead of itself.
+        $this->assertSame('back\\\\slash', like_escape('back\\slash'));
+        $this->assertSame('\\\\\\%', like_escape('\\%'));
     }
 
     // get_option

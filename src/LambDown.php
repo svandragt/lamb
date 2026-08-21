@@ -14,6 +14,14 @@ class LambDown extends Parsedown
     private $imageSizeResolver = null;
 
     /**
+     * The checked state of each checkbox the last text() call rendered, in
+     * document order.
+     *
+     * @var list<bool>
+     */
+    private array $checkboxStates = [];
+
+    /**
      * Registers the GitHub-style task-list checkbox block.
      *
      * Internalised from leblanc-simon/parsedown-checkbox (which targets
@@ -40,14 +48,33 @@ class LambDown extends Parsedown
     {
         $html = parent::text($text);
 
+        $this->checkboxStates = [];
         $index = 0;
         return preg_replace_callback(
-            '/<input type="checkbox"/',
-            static function (array $m) use (&$index): string {
-                return $m[0] . ' data-checkbox-index="' . $index++ . '"';
+            '/<input type="checkbox"( checked)?/',
+            function (array $m) use (&$index): string {
+                $checked = $m[1] ?? '';
+                $this->checkboxStates[] = $checked !== '';
+                return '<input type="checkbox" data-checkbox-index="' . $index++ . '"' . $checked;
             },
             $html
         ) ?? $html;
+    }
+
+    /**
+     * The checked state of every checkbox the last text() call rendered, in the
+     * same order as their `data-checkbox-index` values.
+     *
+     * Recorded by the renderer itself so callers that need to map a rendered
+     * checkbox back to the source (the task-list toggle endpoint) can check
+     * their own reading of the Markdown against what was actually rendered,
+     * rather than re-deriving it from the HTML.
+     *
+     * @return list<bool>
+     */
+    public function renderedCheckboxStates(): array
+    {
+        return $this->checkboxStates;
     }
 
     /**

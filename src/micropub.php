@@ -24,6 +24,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
+use function Lamb\Post\finalize_slug;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
@@ -488,6 +489,10 @@ class LambMicropubAdapter extends MicropubAdapter
             return $rejection;
         }
 
+        // Captured before any operation runs: whether this update *mints* a
+        // slug decides whether it is finalised below.
+        $slug_before = (string) ($bean->slug ?? '');
+
         foreach ($actions['replace'] ?? [] as $property => $values) {
             if (!is_array($values) || !array_is_list($values)) {
                 return 'invalid_request';
@@ -531,6 +536,20 @@ class LambMicropubAdapter extends MicropubAdapter
 
         parse_bean($bean);
         $bean->updated = \Lamb\now();
+        // An update can mint a slug where there was none: naming a titleless
+        // status post derives one from the title. Without finalize_slug() that
+        // slug skipped the uniqueness and reserved-route checks every other
+        // save path applies, so two posts could end up sharing a URL — one of
+        // them unreachable at its own permalink, with its feed entry pointing
+        // at the other's content.
+        //
+        // Only a freshly minted slug is finalised. A post that already had one
+        // keeps it untouched (pinSlug() writes it into the front matter before
+        // a rename): moving a live permalink — the URL the client just used to
+        // address the post — is worse than leaving a pre-existing duplicate be.
+        if ($slug_before === '') {
+            finalize_slug($bean);
+        }
         R::store($bean);
 
         notify_post_subscribers($bean);
@@ -550,7 +569,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyAdd(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = add_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = add_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -628,7 +647,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyDeleteValues(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'category') {
-            $bean->body = remove_body_tags($bean->body ?? '', array_map('strval', $values));
+            $bean->body = remove_body_tags($bean->body ?? '', self::textValues($values));
             return true;
         }
 
@@ -670,7 +689,7 @@ class LambMicropubAdapter extends MicropubAdapter
             // set, so the hashtags already on the body go first.
             $bean->body = add_body_tags(
                 strip_trailing_body_tags($bean->body ?? ''),
-                array_map('strval', $values)
+                self::textValues($values)
             );
             return true;
         }
@@ -815,10 +834,11 @@ class LambMicropubAdapter extends MicropubAdapter
         $currentBody = (string) ($bean->body ?? '');
         [$yaml] = split_frontmatter(normalize_frontmatter_fence($currentBody));
 
-        $tags       = get_tags($currentBody);
-        $hashtagStr = empty($tags) ? '' : ' ' . implode(' ', array_map(fn($t) => '#' . $t, $tags));
-
-        $content = $newContent . $hashtagStr;
+        // add_body_tags() rather than appending the old body's tags outright:
+        // a tag the replacement content already carries must not be appended a
+        // second time, or every content update grows the trailing run
+        // (`goodbye #php #php`).
+        $content = add_body_tags($newContent, get_tags($currentBody));
 
         return $yaml === '' ? $content : "---\n" . $yaml . "\n---\n" . $content;
     }
@@ -1018,20 +1038,25 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildPhotos(array $photos): string
     {
-        if (empty($photos)) {
-            return '';
-        }
-
-        return implode("\n", array_map(function ($photo) {
+        $markdown = [];
+        foreach ($photos as $photo) {
             if (is_array($photo)) {
-                $url = $photo['value'] ?? '';
-                $alt = $photo['alt'] ?? '';
+                $url = matter_string($photo['value'] ?? null);
+                $alt = matter_string($photo['alt'] ?? null) ?? '';
             } else {
-                $url = $photo;
+                $url = matter_string($photo);
                 $alt = '';
             }
-            return '![' . $alt . '](' . $url . ')';
-        }, $photos));
+            // A photo with no usable URL is dropped rather than written as
+            // `![](Array)`: the value has no faithful text, and an image link
+            // to it is worse than no image link.
+            if ($url === null || trim($url) === '') {
+                continue;
+            }
+            $markdown[] = '![' . $alt . '](' . $url . ')';
+        }
+
+        return implode("\n", $markdown);
     }
 
     /**
@@ -1042,11 +1067,36 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildTags(array $categories): string
     {
-        if (empty($categories)) {
-            return '';
+        $tags = self::textValues($categories);
+
+        return $tags === [] ? '' : implode(' ', array_map(fn(string $c) => '#' . $c, $tags));
+    }
+
+    /**
+     * The text values of a Micropub property, dropping anything with no
+     * faithful textual form.
+     *
+     * Microformats properties are arrays of values, and a value is not
+     * necessarily a string. Casting one with (string) or strval() stored the
+     * literal "Array" — as a hashtag, as an image URL — and raised an
+     * "Array to string conversion" warning on the way. matter_string() applies
+     * the same rule front matter already uses: a list collapses to its first
+     * entry, and anything else with no text is absent.
+     *
+     * @param array<array-key, mixed> $values
+     * @return list<string>
+     */
+    private static function textValues(array $values): array
+    {
+        $texts = [];
+        foreach ($values as $value) {
+            $text = matter_string($value);
+            if ($text !== null && trim($text) !== '') {
+                $texts[] = $text;
+            }
         }
 
-        return implode(' ', array_map(fn($c) => '#' . $c, $categories));
+        return $texts;
     }
 }
 
@@ -1097,7 +1147,7 @@ function mp_log_path(): string
     if (!empty($GLOBALS['lamb_mp_log_path'])) {
         return (string) $GLOBALS['lamb_mp_log_path'];
     }
-    return ROOT_DIR . '/../data/micropub.log';
+    return \Lamb\Bootstrap\data_dir() . '/micropub.log';
 }
 
 /**
@@ -1376,7 +1426,7 @@ function respond_micropub_media(): void
         micropub_error(400, 'invalid_request', 'File upload failed.');
     }
 
-    $ext = \Lamb\Response\safe_upload_extension($file['name'] ?? '');
+    $ext = \Lamb\Response\safe_upload_extension(\Lamb\Http\request_string($file['name'] ?? null) ?? '');
     if ($ext === null) {
         micropub_error(400, 'invalid_request', 'Unsupported file type.');
     }
@@ -1389,7 +1439,7 @@ function respond_micropub_media(): void
 
     $sub_path  = \Lamb\Response\upload_subpath();
     $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-    $seed      = sha1(($file['name'] ?? '') . uniqid('', true));
+    $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
     $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);

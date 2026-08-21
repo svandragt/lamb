@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
 
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
@@ -33,6 +34,18 @@ class LambTest extends TestCase
     public function testAddBodyTagsTrimsTrailingWhitespaceBeforeAppending()
     {
         $this->assertSame('Hello #new', add_body_tags("Hello \n", ['new']));
+    }
+
+    public function testAddBodyTagsSkipsATagPresentInAnotherCase()
+    {
+        // `#PHP` and `#php` are one tag everywhere else — the link parse_tags()
+        // writes and the lookup posts_by_tag() runs are both case-insensitive.
+        $this->assertSame('Hello #PHP', add_body_tags('Hello #PHP', ['php']));
+    }
+
+    public function testAddBodyTagsAddsARepeatedTagOnce()
+    {
+        $this->assertSame('Hello #foo', add_body_tags('Hello', ['foo', 'foo', 'FOO']));
     }
 
     // strip_trailing_body_tags
@@ -152,6 +165,16 @@ class LambTest extends TestCase
         $this->assertStringContainsString('<a href="/tag/🐑">#🐑</a>', $result);
     }
 
+    public function testParseTagsLinksATagContainingAPlus()
+    {
+        // `+` is a legal tag character and a legal path character, so the link
+        // carries it verbatim — the tag route reads the path with
+        // rawurldecode(), which leaves it alone. urldecode() turned it into a
+        // space, so a post's own tag link 404ed.
+        $result = parse_tags('<p>Learning #c++ today</p>');
+        $this->assertStringContainsString('<a href="/tag/c++">#c++</a>', $result);
+    }
+
     public function testParseTagsDoesNotAlterTextWithNoTags()
     {
         $input = '<p>No tags here.</p>';
@@ -173,5 +196,69 @@ class LambTest extends TestCase
         $result = parse_tags('<p>#foo&amp;bar</p>');
         $this->assertStringNotContainsString('href="/tag/foo&amp"', $result);
         $this->assertStringContainsString('href="/tag/foo"', $result);
+    }
+    private function connect(): void
+    {
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+    }
+
+    // normalize_utf8 — a body that is not valid UTF-8 rendered as nothing at
+    // all, because htmlspecialchars() returns '' for input it cannot decode.
+
+    public function testNormalizeUtf8LeavesValidTextUntouched(): void
+    {
+        $text = "Caf\u{e9} \u{1F411} notes";
+        $this->assertSame($text, \Lamb\normalize_utf8($text));
+        $this->assertSame('', \Lamb\normalize_utf8(''));
+    }
+
+    public function testNormalizeUtf8RecoversALatin1Byte(): void
+    {
+        $latin1 = 'Caf' . chr(0xE9) . ' notes';
+
+        $repaired = \Lamb\normalize_utf8($latin1);
+
+        $this->assertSame("Caf\u{e9} notes", $repaired);
+        $this->assertTrue(mb_check_encoding($repaired, 'UTF-8'));
+    }
+
+    public function testNormalizeUtf8RecoversAWindows1252SmartQuote(): void
+    {
+        // 0x92 is a right single quote in Windows-1252 and invalid in UTF-8 —
+        // the byte a word processor pastes in.
+        $repaired = \Lamb\normalize_utf8('It' . chr(0x92) . 's here');
+
+        $this->assertSame("It\u{2019}s here", $repaired);
+    }
+
+    public function testParseBeanRendersABodyWithAStrayByte(): void
+    {
+        $this->connect();
+        $bean = R::dispense('post');
+        $bean->body = 'Caf' . chr(0xE9) . " notes\n\nsecond paragraph";
+
+        \Lamb\parse_bean($bean);
+
+        // Every paragraph containing a stray byte used to render as `<p></p>`.
+        $this->assertStringContainsString("Caf\u{e9} notes", (string) $bean->transformed);
+        $this->assertStringContainsString('second paragraph', (string) $bean->transformed);
+        $this->assertSame("Caf\u{e9} notes", (string) $bean->description);
+    }
+
+    public function testParseBeanKeepsFrontMatterOnABodyWithAStrayByte(): void
+    {
+        $this->connect();
+        $bean = R::dispense('post');
+        $bean->body = "---\ntitle: Caf" . chr(0xE9) . "\n---\n\nBody text.";
+
+        \Lamb\parse_bean($bean);
+
+        // The YAML parser refuses a block it cannot decode, so the title (and
+        // the slug derived from it) went missing along with the rendering.
+        $this->assertSame("Caf\u{e9}", (string) $bean->title);
+        $this->assertStringContainsString('Body text.', (string) $bean->transformed);
     }
 }

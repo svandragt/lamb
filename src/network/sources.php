@@ -141,7 +141,7 @@ function ensure_feed_cache(string $dir): string|false
 function configure_simplepie_feed(SimplePie $feed, string $url): void
 {
     $feed->get_registry()->register(SimplePieFile::class, SafeFile::class, true);
-    $cache_dir = ensure_feed_cache('../data/cache/simplepie');
+    $cache_dir = ensure_feed_cache(\Lamb\Bootstrap\data_dir() . '/cache/simplepie');
     if ($cache_dir === false) {
         $feed->enable_cache(false);
     } else {

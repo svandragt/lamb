@@ -53,8 +53,8 @@ function require_login(): void
  */
 function require_csrf(): void
 {
-    $token = $_POST[HIDDEN_CSRF_NAME] ?? '';
-    $csrf = $_SESSION[HIDDEN_CSRF_NAME] ?? '';
+    $token = \Lamb\Http\request_string($_POST[HIDDEN_CSRF_NAME] ?? null) ?? '';
+    $csrf = \Lamb\Http\request_string($_SESSION[HIDDEN_CSRF_NAME] ?? null) ?? '';
     if (! $token || ! hash_equals($csrf, $token)) {
         $txt = $_SERVER['SERVER_PROTOCOL'] . ' 405 Method Not Allowed';
         header($txt);

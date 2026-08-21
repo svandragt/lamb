@@ -239,6 +239,22 @@ class PostTest extends TestCase
         $this->assertSame('normal-slug', sanitize_explicit_slug('normal-slug'));
     }
 
+    public function testSanitizeExplicitSlugFlattensInnerSeparators()
+    {
+        // A slug is one path segment: the router matches a post against the
+        // request's first segment, so `archive/2024` named a URL that could
+        // never route back to the post it was stored on.
+        $this->assertSame('archive-2024', sanitize_explicit_slug('archive/2024'));
+        $this->assertSame('a-b-c', sanitize_explicit_slug('a/b\\c'));
+        $this->assertSame('evil.com-x', sanitize_explicit_slug('//evil.com/x'));
+    }
+
+    public function testParseMatterFlattensInnerSlashInExplicitSlug()
+    {
+        $body = "---\nslug: archive/2024\n---\nContent.";
+        $this->assertSame('archive-2024', parse_matter($body)['slug']);
+    }
+
     // parse_matter — front matter is a *leading* fence only
 
     public function testParseMatterIgnoresKeyValueLineAfterBodyContent()

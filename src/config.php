@@ -514,6 +514,10 @@ function get_ini_text(): string
  */
 function save_ini_text(string $ini_text): void
 {
+    // Valid UTF-8, like a post body (see Lamb\normalize_utf8): a stray byte
+    // pasted into a setting reaches json_encode() through the JSON feed and the
+    // export manifest, and json_encode() refuses the whole document over it.
+    $ini_text = \Lamb\normalize_utf8($ini_text);
     $option = get_option('site_config_ini', '');
     // Stamp the edit time so conditional-GET validators invalidate cached pages
     // immediately on a settings change (see Response\latest_content_timestamp).

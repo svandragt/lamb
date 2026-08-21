@@ -132,7 +132,10 @@ function extract_items(SimpleXMLElement $rss): array
             $path = parse_url($link, PHP_URL_PATH);
             if (is_string($path) && trim($path, '/') !== '') {
                 $segments = explode('/', trim($path, '/'));
-                $slug = (string) end($segments);
+                // Decoded: the slug column holds the text, and permalink_path()
+                // re-encodes it for the URL. Keeping the encoded form would
+                // double-encode the imported post's permalink.
+                $slug = rawurldecode((string) end($segments));
             }
         } else {
             $bookmark_url = $link;
@@ -380,14 +383,18 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
  */
 function store_source_redirects(array $item, OODBBean $bean): void
 {
-    $to = $bean->slug ? '/' . $bean->slug : '/status/' . $bean->id;
+    $to = \Lamb\permalink_path($bean);
+    // store_redirect() keys on the decoded path; compare in the same space so a
+    // source path that merely differs by encoding is still recognised as the
+    // post's own new URL (and skipped) rather than stored as a self-redirect.
+    $to_slug = rawurldecode(ltrim($to, '/'));
 
     $bookmark_url = trim((string) ($item['bookmark_url'] ?? ''));
     if ($bookmark_url === '') {
         $link_path = parse_url((string) ($item['link'] ?? ''), PHP_URL_PATH);
         if (is_string($link_path) && $link_path !== '') {
             $from = trim($link_path, '/');
-            if ($from !== '' && $from !== ltrim($to, '/')) {
+            if ($from !== '' && rawurldecode($from) !== $to_slug) {
                 store_redirect($from, $to);
             }
         }

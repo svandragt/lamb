@@ -708,6 +708,10 @@ function prepare_imported_html(string $html, string $created, callable $download
  */
 function store_redirect(string $from, string $to): void
 {
+    // The key is matched against the *decoded* request path (the router decodes
+    // before looking a redirect up), while an imported path arrives encoded as
+    // the source site wrote it.
+    $from = rawurldecode($from);
     $redirect = R::findOneOrDispense('redirect', ' from_slug = ? ', [$from]);
     $redirect->from_slug = $from;
     $redirect->to_url = $to;

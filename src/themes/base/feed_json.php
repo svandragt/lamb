@@ -51,4 +51,12 @@ foreach ($data['posts'] as $bean) {
     $feed['items'][] = $item;
 }
 
-echo json_encode($feed, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+// JSON_INVALID_UTF8_SUBSTITUTE: json_encode() returns false for the whole
+// document if any one string is not valid UTF-8, which served subscribers an
+// empty 200 with no clue why. A post stored before parse_bean() started
+// repairing bodies can still hold such a byte, so the feed degrades that one
+// character to U+FFFD instead of vanishing.
+echo json_encode(
+    $feed,
+    JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
+);

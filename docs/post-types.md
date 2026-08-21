@@ -29,6 +29,8 @@ Write GitHub-style task lists with `- [ ]` for an open item and `- [x]` for a do
 - [x] walk the dog
 ```
 
+A numbered list (`1. [ ] …`) works too, as does a marker with no list bullet at all (`[ ] buy milk` on its own line). A marker inside a code block stays code, so you can write about task lists without turning them into checkboxes.
+
 These render as real checkboxes. When you are logged in the checkboxes are interactive: tick or untick one straight on the page and Lamb saves it as an edit, rewriting the `[ ]`/`[x]` in the post source for you. Visitors see the checkboxes as read-only.
 
 ## Page
@@ -60,6 +62,8 @@ Headings inside a post body are levelled to fit beneath the post title automatic
 Editing the `slug:` line (or the title, when no explicit slug is set) reslugs the post, and Lamb automatically stores a 301 redirect from the old slug — _good URLs don't change_, so bookmarks and inbound links keep working. See [Redirections]({{ site.baseurl }}{% link redirections.md %}).
 
 Slugs are unique. If a slug is already taken by another post (or matches a built-in route like `/search`), Lamb appends the post's id to keep the URL distinct, and writes the final slug back into the post's front-matter so you can see — and edit — the slug the post is actually served under.
+
+A slug is a single URL segment: Lamb serves posts at `/<slug>`, so a slash in a slug is turned into a hyphen (`archive/2024` becomes `archive-2024`). Spaces and non-ASCII characters are fine — `slug: café` is served at `/café`, which your browser sends (and Lamb reads) percent-encoded.
 
 You can also set a `created:` date in the front-matter. A future date schedules the post — see [Scheduling]({{ site.baseurl }}{% link scheduling.md %}).
 

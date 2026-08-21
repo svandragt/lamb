@@ -9,6 +9,7 @@ use Lamb\Config;
 use Lamb\Security;
 use RedBeanPHP\R;
 
+use function Lamb\Http\request_string;
 use function Lamb\Post\posts_by_tag;
 use function Lamb\Theme\part;
 
@@ -133,7 +134,11 @@ function count_scheduled(): int
 #[NoReturn]
 function redirect_search(string $query): void
 {
-    $location = \Lamb\Http\sanitize_location("/search/$query");
+    // Percent-encoded: the term becomes a path segment, and an unencoded `#`
+    // made the browser read the rest as a fragment (so searching for a hashtag
+    // from the box searched for nothing at all), while `/` split the term and
+    // a space made an invalid Location header.
+    $location = \Lamb\Http\sanitize_location('/search/' . \Lamb\encode_path_segment($query));
     header("Location: $location", true, 301);
     die();
 }
@@ -204,7 +209,9 @@ function sanitize_tag_arg(array $args): string
 {
     [$tag] = $args;
 
-    return htmlspecialchars(urldecode($tag));
+    // rawurldecode(), not urldecode(): a `+` is a legal tag character, not a
+    // space (see Lamb\parse_tags, which encodes the link the same way).
+    return htmlspecialchars(rawurldecode($tag));
 }
 
 /**
@@ -315,9 +322,9 @@ function respond_tag_feed_json(array $args): void
  */
 function respond_search(array $args): array
 {
-    $query = urldecode($args[0] ?? '');
+    $query = rawurldecode((string) ($args[0] ?? ''));
     if (empty($query)) {
-        $query = $_GET['s'] ?? '';
+        $query = request_string($_GET['s'] ?? null) ?? '';
         if (empty($query)) {
             return [];
         }
@@ -332,8 +339,10 @@ function respond_search(array $args): array
     $where_clauses = [];
     $params = [];
     foreach ($words as $word) {
-        $where_clauses[] = 'body LIKE ?';
-        $params[] = "%$word%";
+        // The search term is literal text: without escaping, a `%` in it matched
+        // every post and an `_` matched any character.
+        $where_clauses[] = "body LIKE ? ESCAPE '\\'";
+        $params[] = '%' . \Lamb\like_escape($word) . '%';
     }
     $public = public_posts_clause();
     $where_sql = '(' . implode(' AND ', $where_clauses) . ') AND' . $public['sql'];
@@ -381,7 +390,7 @@ function get_results(array $data, array $posts, array $pagination): array
 function respond_tag(array $args): array
 {
     [$tag] = $args;
-    $tag = urldecode($tag);
+    $tag = rawurldecode((string) $tag);
     // Keep $tag raw: matching, URL-encoding and the page title each handle it
     // correctly, and the title is escaped at render time (so no double-encoding).
 

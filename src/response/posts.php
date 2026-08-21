@@ -12,11 +12,13 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
+use function Lamb\Http\request_string;
 use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\rendered_checkbox_states;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\toggle_checkbox;
 use function Lamb\Route\is_reserved_route;
@@ -33,10 +35,10 @@ function redirect_created(): void
 {
     Security\require_login();
     Security\require_csrf();
-    if ($_POST['submit'] !== SUBMIT_CREATE) {
+    if (request_string($_POST['submit'] ?? null) !== SUBMIT_CREATE) {
         return;
     }
-    $contents = trim($_POST['contents'] ?? '');
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     if (empty($contents)) {
         return;
     }
@@ -80,8 +82,10 @@ function warn_if_manual_redirect(string $slug): void
         return;
     }
 
-    $_SESSION['flash'][] = 'A manual redirect for <code>' . $slug
-        . '</code> still exists in Settings → [redirections]. You may want to remove it.';
+    // Plain text: the themes escape a flash before printing it, so markup here
+    // reaches the author as literal tags.
+    $_SESSION['flash'][] = 'A manual redirect for "' . $slug
+        . '" still exists in Settings → [redirections]. You may want to remove it.';
 }
 
 /**
@@ -106,7 +110,10 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
 
     $auto_redirect = R::dispense('redirect');
     $auto_redirect->from_slug = $old_slug;
-    $auto_redirect->to_url    = '/' . sanitize_explicit_slug($new_slug);
+    // Encoded the same way permalink_path() encodes it, so the 301 lands on a
+    // URL the router can read back (a slug may carry a space or a non-ASCII
+    // character).
+    $auto_redirect->to_url    = '/' . \Lamb\encode_path_segment(sanitize_explicit_slug($new_slug));
     R::store($auto_redirect);
 }
 
@@ -260,11 +267,11 @@ function redirect_edited(): void
     Security\require_login();
     Security\require_csrf();
     $validSubmits = [SUBMIT_EDIT];
-    if (!in_array($_POST['submit'], $validSubmits, true)) {
+    if (!in_array(request_string($_POST['submit'] ?? null), $validSubmits, true)) {
         return;
     }
 
-    $contents = trim(($_POST['contents']));
+    $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
     if (empty($contents) || empty($id)) {
         return;
@@ -283,7 +290,7 @@ function redirect_edited(): void
     $bean->updated = \Lamb\now();
 
     if (is_reserved_route($bean->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use <code>' . $bean->slug . '</code>';
+        $_SESSION['flash'][] = 'Failed to save, slug is in use: "' . $bean->slug . '"';
 
         return;
     }
@@ -394,7 +401,26 @@ function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
         return false;
     }
 
-    $bean->body = toggle_checkbox((string) $bean->body, $index, $checked);
+    // The index names a *rendered* checkbox, so the rewrite is checked against
+    // the renderer rather than trusted: no such checkbox, or a rewrite that
+    // moves any other box, is refused. The client then reverts the tick instead
+    // of the author silently finding a different task crossed off — which is
+    // what a document the source scan reads differently from the renderer
+    // (see Post\checkbox_marker_offsets) used to do.
+    $body   = (string) $bean->body;
+    $before = rendered_checkbox_states($body);
+    if (!isset($before[$index])) {
+        return false;
+    }
+
+    $toggled  = toggle_checkbox($body, $index, $checked);
+    $expected = $before;
+    $expected[$index] = $checked;
+    if (rendered_checkbox_states($toggled) !== $expected) {
+        return false;
+    }
+
+    $bean->body = $toggled;
     parse_bean($bean);
     $bean->updated = \Lamb\now();
 
@@ -418,7 +444,7 @@ function respond_status(array $args): array
 {
     [$id] = $args;
     $bean = R::load('post', (int)$id);
-    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, $_GET['preview'] ?? null)) {
+    if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, request_string($_GET['preview'] ?? null))) {
         return respond_404([], true);
     }
 
@@ -462,7 +488,7 @@ function respond_post(array $args): array
 {
     [$slug] = $args;
     $post = R::findOne('post', ' slug = ? ', [$slug]);
-    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, $_GET['preview'] ?? null))) {
+    if ($post === null || (!\Lamb\is_viewable($post) && !\Lamb\preview_token_valid($post, request_string($_GET['preview'] ?? null)))) {
         return respond_404([]);
     }
     $data['posts'] = [$post];

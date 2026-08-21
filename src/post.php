@@ -253,24 +253,33 @@ function normalize_matter_values(array $matter): array
 }
 
 /**
- * Strips leading slashes/backslashes from an explicit front-matter `slug:`
- * value.
+ * Reduces an explicit front-matter `slug:` value to the single URL path
+ * segment a post is served under.
  *
- * An explicit slug (unlike a title-derived one, which goes through
- * slugify()) is stored verbatim and later feeds an automatic redirect's
- * `to_url` on a subsequent slug change (`'/' . $slug`, in redirect_edited()).
- * A slug beginning with `/` (or `\`, which some browsers normalise to `/` in
- * a URL) would make that concatenation a protocol-relative `//host/...` (or
- * `/\host/...`) URL — an open redirect off the site. Stripped rather than
- * rejected outright so a legitimate custom slug that merely has redundant
- * leading slashes still saves.
+ * An explicit slug (unlike a title-derived one, which goes through slugify())
+ * is stored close to verbatim, and two things then read it as a path:
+ *
+ * - It feeds an automatic redirect's `to_url` on a subsequent slug change
+ *   (`'/' . $slug`, in redirect_edited()). A slug beginning with `/` (or `\`,
+ *   which some browsers normalise to `/` in a URL) would make that
+ *   concatenation a protocol-relative `//host/...` (or `/\host/...`) URL — an
+ *   open redirect off the site. Hence the leading separators go first.
+ * - permalink() serves the post at `/<slug>`, and the router matches a post
+ *   against the request's *first* path segment. A slug with a separator inside
+ *   it (`archive/2024`) therefore names a URL that can never route back to the
+ *   post: it saves, every link on the site points at it, and it 404s. The
+ *   remaining separators become hyphens so the stored slug is the URL the post
+ *   actually answers on.
+ *
+ * Sanitised rather than rejected outright so a post with a stray slash in its
+ * slug still saves.
  *
  * @param string $slug
  * @return string
  */
 function sanitize_explicit_slug(string $slug): string
 {
-    return ltrim($slug, "/\\");
+    return str_replace(['/', '\\'], '-', ltrim($slug, "/\\"));
 }
 
 /**
@@ -609,14 +618,171 @@ function finalize_and_store_post(OODBBean $bean): void
 }
 
 /**
+ * Matches a task-list marker the renderer turns into a checkbox: optional
+ * blockquote markers, an optional bullet or ordered list marker, then
+ * `[ ]`/`[x]`/`[X]` followed by whitespace and a non-empty label.
+ *
+ * Capture 2 is the state character, so its byte offset locates the single
+ * character a toggle rewrites.
+ */
+const TASK_MARKER_PATTERN = '/^([ \t]*(?:>[ \t]?)*[ \t]*(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?\[)([ xX])(\][ \t]+\S)/';
+
+/**
+ * Matches any list item line (task or not), used to track whether the scanner
+ * is inside a list — where an indented line is nested content rather than an
+ * indented code block.
+ */
+const LIST_ITEM_PATTERN = '/^[ \t]*(?:>[ \t]?)*[ \t]*(?:[-*+]|\d{1,9}[.)])[ \t]+/';
+
+/**
+ * Matches the opening line of a fenced code block, capturing the fence itself
+ * so a closing fence can be required to use the same character and be at least
+ * as long — the rule Parsedown applies, so a longer fence can quote a shorter
+ * one inside it.
+ */
+const CODE_FENCE_PATTERN = '/^[ \t]*(?:>[ \t]?)*[ \t]*(`{3,}|~{3,})/';
+
+/**
+ * The width of a line's leading indentation, with tabs expanded to the next
+ * multiple of four (the tab stop Markdown's four-space code indent assumes).
+ *
+ * @param string $line A single source line.
+ * @return int The indentation width in columns.
+ */
+function indent_width(string $line): int
+{
+    $width = 0;
+    for ($i = 0, $len = strlen($line); $i < $len; $i++) {
+        if ($line[$i] === ' ') {
+            $width++;
+        } elseif ($line[$i] === "\t") {
+            $width += 4 - ($width % 4);
+        } else {
+            break;
+        }
+    }
+
+    return $width;
+}
+
+/**
+ * The byte offsets, within $body, of the state character of every task marker
+ * the renderer turns into a checkbox — in the order the checkboxes appear.
+ *
+ * The toggle endpoint addresses a checkbox by its rendered position
+ * (`data-checkbox-index`, numbered in document order by LambDown::text()), so
+ * this has to recognise a marker exactly where the renderer does, or a click
+ * flips somebody else's box. That means mirroring LambDown/Parsedown, not just
+ * matching `- [ ] ` lines:
+ *
+ * - a marker needs no list bullet at all (`[ ] task` is a checkbox block on its
+ *   own, which is why LambDown registers one), and an ordered bullet
+ *   (`1. [ ] task`) counts as much as `-`/`*`/`+`;
+ * - blockquoted markers render too, which every feed-ingested post is made of
+ *   (Network\attributed_content() quotes the source with `> `);
+ * - a marker inside a fenced or indented code block renders as code, not a
+ *   checkbox, so it must not be counted;
+ * - a marker with no label after it (`- [ ] `) is not a checkbox either;
+ * - front matter is not rendered at all, so markers there are invisible.
+ *
+ * @param string $body The raw post body (front matter included).
+ * @return list<int> Byte offsets of each rendered marker's state character.
+ */
+function checkbox_marker_offsets(string $body): array
+{
+    [, $content] = split_frontmatter($body);
+    $position = strlen($body) - strlen($content);
+
+    $offsets = [];
+    /** @var string|null $fence The opening fence (e.g. '```') while inside a code block. */
+    $fence   = null;
+    $in_list = false;
+    $blank   = true;
+
+    foreach (preg_split('/(\R)/', $content, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [] as $index => $piece) {
+        // Odd indices are the captured line endings.
+        if ($index % 2 === 1) {
+            $position += strlen($piece);
+            continue;
+        }
+
+        $line = $piece;
+        $advance = strlen($line);
+
+        if ($fence !== null) {
+            $closing = '/^[ \t]*(?:>[ \t]?)*[ \t]*' . $fence[0] . '{' . strlen($fence) . ',}[ \t]*$/';
+            if (preg_match($closing, $line) === 1) {
+                $fence = null;
+            }
+            $position += $advance;
+            continue;
+        }
+        if (trim($line) === '') {
+            $blank = true;
+            $position += $advance;
+            continue;
+        }
+        // An indented code block, but only outside a list: inside one the same
+        // indentation marks nested list content, which does render checkboxes.
+        if (indent_width($line) >= 4 && !$in_list) {
+            $blank = false;
+            $position += $advance;
+            continue;
+        }
+        if (preg_match(CODE_FENCE_PATTERN, $line, $m) === 1) {
+            $fence = $m[1];
+            $blank = false;
+            $position += $advance;
+            continue;
+        }
+
+        if (preg_match(LIST_ITEM_PATTERN, $line) === 1) {
+            $in_list = true;
+        } elseif ($blank && indent_width($line) === 0) {
+            // A fresh, unindented block after a blank line closes the list.
+            $in_list = false;
+        }
+        $blank = false;
+
+        if (preg_match(TASK_MARKER_PATTERN, $line, $m, PREG_OFFSET_CAPTURE) === 1) {
+            $offsets[] = $position + (int) $m[2][1];
+        }
+
+        $position += $advance;
+    }
+
+    return $offsets;
+}
+
+/**
+ * The checked state of every task checkbox the renderer emits for a body, in
+ * the order the toggle endpoint's `data-checkbox-index` counts them.
+ *
+ * The renderer is the authority on which markers become checkboxes, so this is
+ * what checkbox_marker_offsets()'s reading of the source is checked against
+ * before a toggle is stored (see Response\apply_checkbox_toggle).
+ *
+ * @param string $body The raw post body (front matter included).
+ * @return list<bool> True for each checked box, in document order.
+ */
+function rendered_checkbox_states(string $body): array
+{
+    [, $content] = split_frontmatter($body);
+    $parser = new \Lamb\LambDown();
+    $parser->setSafeMode(true);
+    $parser->text(trim($content));
+
+    return $parser->renderedCheckboxStates();
+}
+
+/**
  * Toggles the checked state of the Nth GitHub-style task-list marker in a body.
  *
- * Task markers are list lines of the form `- [ ] ` / `* [x] ` / `+ [X] `. They
- * are counted in document order (the same order LambDown numbers the rendered
- * checkboxes with `data-checkbox-index`), so the Nth rendered checkbox maps to
- * the Nth source marker. Only the target marker's state character is rewritten;
- * every other marker and all surrounding text is preserved verbatim. An index
- * past the last marker returns the body unchanged.
+ * Markers are counted exactly as the renderer numbers the checkboxes it emits
+ * (see checkbox_marker_offsets()), so the Nth rendered checkbox maps to the Nth
+ * source marker. Only the target marker's state character is rewritten; every
+ * other marker and all surrounding text is preserved verbatim. An index past
+ * the last marker returns the body unchanged.
  *
  * @param string $body    The raw post body.
  * @param int    $index   Zero-based index of the marker to toggle.
@@ -625,19 +791,12 @@ function finalize_and_store_post(OODBBean $bean): void
  */
 function toggle_checkbox(string $body, int $index, bool $checked): string
 {
-    $seen = 0;
-    return preg_replace_callback(
-        '/^(\s*[-*+]\s+\[)[ xX](\]\s)/m',
-        function (array $m) use (&$seen, $index, $checked): string {
-            $state = $seen === $index ? ($checked ? 'x' : ' ') : null;
-            $seen++;
-            if ($state === null) {
-                return $m[0];
-            }
-            return $m[1] . $state . $m[2];
-        },
-        $body
-    ) ?? $body;
+    $offsets = checkbox_marker_offsets($body);
+    if ($index < 0 || !isset($offsets[$index])) {
+        return $body;
+    }
+
+    return substr_replace($body, $checked ? 'x' : ' ', $offsets[$index], 1);
 }
 
 /**
@@ -654,8 +813,8 @@ function toggle_checkbox(string $body, int $index, bool $checked): string
 function get_tag_search_conditions(string $tag): array
 {
     return [
-        'sql'    => 'body LIKE ?',
-        'params' => ["%#$tag%"],
+        'sql'    => "body LIKE ? ESCAPE '\\'",
+        'params' => ['%#' . \Lamb\like_escape($tag) . '%'],
     ];
 }
 

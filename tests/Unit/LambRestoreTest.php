@@ -11,6 +11,7 @@ use ZipArchive;
 use function Lamb\Bootstrap\ensure_post_columns;
 use function Lamb\Export\build_export_archive;
 use function Lamb\Import\run_import;
+use function Lamb\Restore\apply_manifest_state;
 use function Lamb\Restore\import_post;
 use function Lamb\Restore\item_skip_reason;
 use function Lamb\Restore\manifest_items;
@@ -873,5 +874,15 @@ class LambRestoreTest extends TestCase
         );
         $this->assertSame(['backup.zip', false, false, null], parse_restore_args(['x', 'backup.zip']));
         $this->assertSame([null, false, false, null], parse_restore_args(['x', '--help']));
+    }
+    public function testApplyManifestStateFlattensASeparatorInTheSlug(): void
+    {
+        // An archive from an older Lamb can carry a slug with a separator in
+        // it; the router serves a post at one path segment, so restoring it
+        // verbatim would put the post at a URL that 404s.
+        $bean = R::dispense('post');
+        apply_manifest_state($bean, ['slug' => 'archive/2024', 'created' => '2024-01-01 00:00:00']);
+
+        $this->assertSame('archive-2024', $bean->slug);
     }
 }
