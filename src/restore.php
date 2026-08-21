@@ -478,7 +478,15 @@ function restore_assets(array $manifest, string $assets_root, callable $reader, 
             $tally['skipped']++;
             continue;
         }
-        rename($staged, $dest);
+        // Checked: the tally is the only account an operator gets of a restore,
+        // and a rename that failed leaves the bytes at the .part name, where
+        // nothing serves them and nothing cleans them up. Counting that as
+        // restored reports a recovery that did not happen.
+        if (!rename($staged, $dest)) {
+            @unlink($staged);
+            $tally['skipped']++;
+            continue;
+        }
         $tally['restored']++;
     }
 

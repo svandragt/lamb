@@ -815,6 +815,35 @@ class LambRestoreTest extends TestCase
         $this->assertSame(['restored' => 0, 'skipped' => 1, 'rejected' => 0], $tally);
     }
 
+    /**
+     * The tally is the only account an operator gets of a restore, so it has to
+     * describe what reached disk. A failed rename left the bytes at the .part
+     * name, where nothing serves them and nothing cleans them up, and still
+     * counted as restored.
+     */
+    public function testRestoreAssetsDoesNotCountARestoreTheRenameFailed(): void
+    {
+        $root = "$this->tmp_dir/assets_dest";
+        // A directory where the asset belongs: the staged write succeeds and the
+        // rename onto it cannot.
+        mkdir("$root/2026/07/photo.png", 0777, true);
+
+        $manifest = $this->manifest(['assets' => ['assets/2026/07/photo.png']]);
+        [, $reader] = open_source($this->zip([
+            'manifest.json'             => (string) json_encode($manifest),
+            'assets/2026/07/photo.png'  => $this->pngBytes(),
+        ], 'rename-fails.zip'));
+
+        // Silenced deliberately: rename() onto a directory raises E_WARNING, and
+        // Codeception turns PHP errors into exceptions. The warning is the
+        // condition under test, not a surprise.
+        $tally = @restore_assets($manifest, $root, $reader, false);
+
+        $this->assertSame(['restored' => 0, 'skipped' => 1, 'rejected' => 0], $tally);
+        $this->assertFalse(is_file("$root/2026/07/photo.png"));
+        $this->assertFileDoesNotExist("$root/2026/07/photo.png.part");
+    }
+
     public function testRestoreAssetsWritesNothingOnADryRun(): void
     {
         [$tally, $root] = $this->restoreAssets(['assets/2026/07/photo.png' => $this->pngBytes()], true);
