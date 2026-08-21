@@ -1014,20 +1014,109 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Strip disallowed tags from HTML content, keeping safe formatting elements.
+     * Tags kept in Micropub `content.html`. Everything else is unwrapped by
+     * strip_tags(), which keeps the text inside it.
+     */
+    private const HTML_TAGS = [
+        'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
+        'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
+        'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
+        'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
+        'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+    ];
+
+    /**
+     * Attributes kept on a surviving element, by lower-case tag name. `*`
+     * applies to every tag. An allowlist rather than a denylist of `on*`: a
+     * denylist has to keep pace with every attribute that can run script or
+     * reposition the page, and `style` alone is enough to cover the viewport.
+     */
+    private const HTML_ATTRIBUTES = [
+        '*'          => ['title'],
+        'a'          => ['href'],
+        'blockquote' => ['cite'],
+        'img'        => ['src', 'alt', 'width', 'height'],
+        'ol'         => ['start'],
+        'q'          => ['cite'],
+        'td'         => ['colspan', 'rowspan'],
+        'th'         => ['colspan', 'rowspan', 'scope'],
+    ];
+
+    /** Kept attributes whose value is a URL and must clear the scheme allowlist. */
+    private const HTML_URL_ATTRIBUTES = ['href', 'src', 'cite'];
+
+    /**
+     * Sanitise the HTML of a Micropub `content.html` create.
+     *
+     * The result is written straight to the post's `transformed` column, which
+     * every theme echoes raw into the page (`<?= anchor_headings($bean->transformed, …) ?>`)
+     * and which is syndicated verbatim inside the Atom `<content type="html">`
+     * and the JSON Feed's `content_html`. It never passes through Parsedown, so
+     * safe mode does not apply to it.
+     *
+     * strip_tags() alone was not a sanitiser for that: it drops disallowed
+     * *tags* and keeps every attribute of the ones it allows, so
+     * `<img src=x onerror=…>`, `<p onmouseover=…>` and `<a href="javascript:…">`
+     * all survived intact — stored XSS reachable by any token holding only
+     * `create` scope, running in the author's logged-in session. The codebase
+     * already treats that scope as a limited-trust principal (see
+     * apply_frontmatter()'s note on `id:`/`deleted:`, and syndication_links()).
+     *
+     * Import\sanitize_html_in_dom() scrubs `on*` off imported HTML for the same
+     * reason; this does the equivalent for the Micropub path, as an attribute
+     * allowlist, and hands every URL attribute to LambDown::filterContentUrl()
+     * so a link here is filtered exactly as the Markdown path filters one.
      *
      * @param string $html
      * @return string
      */
     private function sanitizeHtml(string $html): string
     {
-        return strip_tags($html, [
-            'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
-            'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
-            'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
-            'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
-            'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
-        ]);
+        $html = strip_tags($html, self::HTML_TAGS);
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $filter = new \Lamb\LambDown();
+        $dom = \Lamb\Import\load_html_fragment($html);
+        foreach ((new \DOMXPath($dom))->query('//*') ?: [] as $element) {
+            if (!$element instanceof \DOMElement) {
+                continue;
+            }
+            $this->sanitizeAttributes($element, $filter);
+        }
+
+        return \Lamb\Import\dump_html_fragment($dom);
+    }
+
+    /**
+     * Reduces one element's attributes to the allowlisted set, with any URL
+     * among them run through the same filter Parsedown's safe mode applies.
+     */
+    private function sanitizeAttributes(\DOMElement $element, \Lamb\LambDown $filter): void
+    {
+        $allowed = array_merge(
+            self::HTML_ATTRIBUTES['*'],
+            self::HTML_ATTRIBUTES[strtolower($element->tagName)] ?? []
+        );
+
+        // The names are snapshotted first: DOMNamedNodeMap is live, and removing
+        // while iterating it skips the entry that shuffles into the freed slot.
+        $names = [];
+        foreach ($element->attributes as $attribute) {
+            $names[] = $attribute->nodeName;
+        }
+
+        foreach ($names as $name) {
+            $lower = strtolower($name);
+            if (!in_array($lower, $allowed, true)) {
+                $element->removeAttribute($name);
+                continue;
+            }
+            if (in_array($lower, self::HTML_URL_ATTRIBUTES, true)) {
+                $element->setAttribute($name, $filter->filterContentUrl($element->getAttribute($name)));
+            }
+        }
     }
 
     /**

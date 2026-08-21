@@ -222,6 +222,29 @@ class LambDown extends Parsedown
     }
 
     /**
+     * Neutralises a disallowed URL scheme in a content attribute, exactly as
+     * safe mode does for a Markdown link or image.
+     *
+     * The Micropub `content.html` path stores its HTML straight into the post's
+     * `transformed` column and never goes through Parsedown, so nothing applied
+     * the scheme allowlist the Markdown path gets for free. This exposes
+     * Parsedown's own filterUnsafeUrlInAttribute() rather than restating the
+     * allowlist, so the two content paths cannot drift: a `mailto:` link is
+     * kept in both, a `javascript:` one becomes `javascript%3A` in both, and a
+     * root-relative `/assets/…` (what asset_url() writes) carries no colon and
+     * is untouched.
+     *
+     * @param string $url The attribute's raw value.
+     * @return string The value with a disallowed scheme neutralised.
+     */
+    public function filterContentUrl(string $url): string
+    {
+        $element = $this->filterUnsafeUrlInAttribute(['attributes' => ['url' => $url]], 'url');
+
+        return (string) $element['attributes']['url'];
+    }
+
+    /**
      * Supplies the lookup used to stamp intrinsic `width`/`height` on images.
      *
      * Injected rather than looked up here so the parser stays a pure
