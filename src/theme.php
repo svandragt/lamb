@@ -254,6 +254,25 @@ function related_posts(string $body, int $exclude_id = 0): array
 }
 
 /**
+ * How many rows a related-posts lookup reads per query, and how many it will
+ * read in total for one tag before giving up.
+ *
+ * The LIKE condition is a superset of a real tag match — body_has_tag() is what
+ * decides — so the query cannot simply LIMIT to the number of posts wanted: a
+ * page of rows can be filtered away entirely. It read every matching row
+ * instead, which on a common tag meant loading the whole archive to show ten
+ * links: 58 MB for one post page at 8,000 posts sharing a tag, and at 20,000 a
+ * fatal "Allowed memory size of 134217728 bytes exhausted" against the images'
+ * default 128M limit. Reading a page at a time keeps that flat.
+ *
+ * The scan cap is the same trade OUTBOX_SCAN_LIMIT makes: far more rows than a
+ * real tag needs before it has ten survivors, so in practice it is never
+ * reached, and a pathological tag costs a bounded read instead of the archive.
+ */
+const RELATED_TAG_BATCH = 50;
+const RELATED_SCAN_LIMIT = 500;
+
+/**
  * Finds all posts that contain at least one of the given tags, ordered by created date descending.
  *
  * @param list<string> $tags List of tag strings to search for.
@@ -273,13 +292,22 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
             $sql .= ' AND id != ?';
             $params[] = $exclude_id;
         }
-        $sql .= ' ORDER BY created DESC';
-        $tag_posts = R::find('post', $sql, $params);
-        foreach ($tag_posts as $tag_post) {
-            if (!body_has_tag($tag, (string) $tag_post->body)) {
-                continue;
+        $sql .= ' ORDER BY created DESC LIMIT ? OFFSET ?';
+
+        $scanned = 0;
+        while (count($related_posts) < $limit && $scanned < RELATED_SCAN_LIMIT) {
+            $batch = min(RELATED_TAG_BATCH, RELATED_SCAN_LIMIT - $scanned);
+            $tag_posts = R::find('post', $sql, array_merge($params, [$batch, $scanned]));
+            if (count($tag_posts) === 0) {
+                break;
             }
-            $related_posts[$tag_post->id] = $tag_post;
+            $scanned += count($tag_posts);
+            foreach ($tag_posts as $tag_post) {
+                if (!body_has_tag($tag, (string) $tag_post->body)) {
+                    continue;
+                }
+                $related_posts[$tag_post->id] = $tag_post;
+            }
         }
         if (count($related_posts) >= $limit) {
             break;
