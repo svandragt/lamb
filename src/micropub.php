@@ -239,8 +239,16 @@ class LambMicropubAdapter extends MicropubAdapter
             return null;
         }
 
+        // Http\parse_status_line(), not a substring test for ' 200 '. That test
+        // answered on the wrong thing in both directions: it read a status line
+        // with no reason phrase ("HTTP/1.1 200", "HTTP/2 200") as a failure, so a
+        // conforming token endpoint could take the whole Micropub endpoint down
+        // with no usable diagnosis; and it matched ' 200 ' anywhere in the line,
+        // so "HTTP/1.1 500 Error 200 x" read as a success — a fail-open answer on
+        // the request that establishes who the caller is.
         $statusLine = $result['headers'][0] ?? '';
-        if (!str_contains($statusLine, ' 200 ')) {
+        $status = \Lamb\Http\parse_status_line($statusLine);
+        if ($status !== 200) {
             mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'non_200', 'status' => trim($statusLine)]);
             return null;
         }
