@@ -874,7 +874,7 @@ function get_tag_search_conditions(string $tag): array
  * excludes from a tag name, rather than a second copy of it. The copy had
  * drifted: it was missing `>`, `"`, `'`, a backtick, `=` and both slashes, so a
  * body reading `#php/8` rendered a link to /tag/php — TAG_PATTERN ends the tag
- * at the slash — while this said the post carried no such tag. posts_by_tag()
+ * at the slash — while this said the post carried no such tag. post_ids_by_tag()
  * and Theme\get_posts_by_tags() both filter on it, so the tag page and the
  * related-posts list left out the very post whose link led there.
  *
@@ -889,21 +889,94 @@ function body_has_tag(string $tag, string $body): bool
 }
 
 /**
- * Retrieves posts that contain the specified tag within their body content.
+ * How many rows a tag scan reads per query.
  *
- * @param string $tag The tag to search for within post content.
- *
- * @return list<\RedBeanPHP\OODBBean> An array of posts that match the specified tag.
+ * Only ids survive a page, so the page can be generous: it is the number of
+ * bodies held at once, and one query per 500 matches keeps the query count
+ * reasonable for a tag that really does cover the archive.
  */
-function posts_by_tag(string $tag): array
+const TAG_SCAN_PAGE = 500;
+
+/**
+ * The ids of every publicly visible post that really carries $tag, newest first.
+ *
+ * The LIKE condition get_tag_search_conditions() builds is a superset of a real
+ * tag match — `#photographylover` matches `%#photography%`, and body_has_tag()
+ * is what decides — so the rows cannot be narrowed to the wanted ones in SQL.
+ * They are read a page at a time and only the surviving ids are kept, so one
+ * page of bodies is all that is in memory at once.
+ *
+ * Holding a full bean per match instead made both /tag/<tag> and
+ * /tag/<tag>/feed die on a tag that covers a large archive: at 20,000 posts
+ * under one tag, "Allowed memory size of 134217728 bytes exhausted" on each,
+ * against the default 128M limit both images inherit. Neither endpoint needs
+ * more than a page of posts to render — the tag page paginates and the feed
+ * takes 20 — so nothing but the id list has to grow with the tag.
+ *
+ * @param string $tag            The tag to search for within post content.
+ * @param bool   $by_updated     Order by `updated` rather than `created` (what
+ *                               the tag feeds sort on). The column is chosen
+ *                               here, never interpolated from a caller.
+ * @param int    $limit          Stop once this many ids have been collected;
+ *                               0 collects every match.
+ * @return list<int>
+ */
+function post_ids_by_tag(string $tag, bool $by_updated = false, int $limit = 0): array
 {
     $conditions = get_tag_search_conditions($tag);
     $public = \Lamb\Response\public_posts_clause();
-    $posts = R::find(
-        'post',
-        '(' . $conditions['sql'] . ') AND' . $public['sql'] . 'ORDER BY created DESC',
-        array_merge($conditions['params'], $public['params'])
-    );
+    $order = $by_updated ? 'updated' : 'created';
+    $sql = 'SELECT id, body FROM post WHERE (' . $conditions['sql'] . ') AND' . $public['sql']
+        . 'ORDER BY ' . $order . ' DESC LIMIT ? OFFSET ?';
+    $params = array_merge($conditions['params'], $public['params']);
 
-    return array_values(array_filter($posts, fn($post) => body_has_tag($tag, (string) $post->body)));
+    $ids = [];
+    $offset = 0;
+    while ($limit === 0 || count($ids) < $limit) {
+        $rows = R::getAll($sql, array_merge($params, [TAG_SCAN_PAGE, $offset]));
+        if ($rows === []) {
+            break;
+        }
+        $offset += count($rows);
+        foreach ($rows as $row) {
+            if (!body_has_tag($tag, (string) ($row['body'] ?? ''))) {
+                continue;
+            }
+            $ids[] = (int) $row['id'];
+            if ($limit !== 0 && count($ids) >= $limit) {
+                break;
+            }
+        }
+        if (count($rows) < TAG_SCAN_PAGE) {
+            break;
+        }
+    }
+
+    return $ids;
+}
+
+/**
+ * Loads posts for the given ids, in the order the ids are given.
+ *
+ * R::loadAll() returns a map keyed by id, so the caller's ordering — which for
+ * a tag listing is the whole point — has to be reapplied.
+ *
+ * @param list<int> $ids
+ * @return list<\RedBeanPHP\OODBBean>
+ */
+function load_posts_in_order(array $ids): array
+{
+    if ($ids === []) {
+        return [];
+    }
+    $beans = R::loadAll('post', $ids);
+
+    $ordered = [];
+    foreach ($ids as $id) {
+        if (isset($beans[$id]) && (int) $beans[$id]->id === $id) {
+            $ordered[] = $beans[$id];
+        }
+    }
+
+    return $ordered;
 }

@@ -10,7 +10,8 @@ use Lamb\Security;
 use RedBeanPHP\R;
 
 use function Lamb\Http\request_string;
-use function Lamb\Post\posts_by_tag;
+use function Lamb\Post\load_posts_in_order;
+use function Lamb\Post\post_ids_by_tag;
 use function Lamb\Theme\part;
 
 use const Lamb\SQL_IS_DELETED;
@@ -275,11 +276,10 @@ function get_tag_feed_data(string $tag): array
 {
     global $config;
 
-    $posts = posts_by_tag($tag);
-
-    // Sort by updated DESC and limit to 20
-    usort($posts, fn($a, $b) => strtotime($b->updated) - strtotime($a->updated));
-    $posts = array_slice($posts, 0, 20);
+    // Twenty newest by `updated`, chosen from ids so the scan can stop as soon
+    // as it has them: this used to load a bean per match and then slice, which
+    // on a tag covering a large archive exhausted memory before it got here.
+    $posts = load_posts_in_order(post_ids_by_tag($tag, true, 20));
 
     return [
         'updated'  => get_feed_updated_date($posts),
@@ -394,14 +394,17 @@ function respond_tag(array $args): array
     // Keep $tag raw: matching, URL-encoding and the page title each handle it
     // correctly, and the title is escaped at render time (so no double-encoding).
 
-    // Get all posts for this tag (in-memory array)
-    $all_posts = posts_by_tag($tag);
+    // The id list, not the posts: it is paginated first and only the page being
+    // rendered is loaded, so a tag covering the whole archive costs one id per
+    // match rather than one full post.
+    $all_ids = post_ids_by_tag($tag);
 
-    if (empty($all_posts)) {
+    if ($all_ids === []) {
         return respond_404();
     }
 
-    $paginated = paginate_posts($all_posts);
+    $paginated = paginate_posts($all_ids);
+    $paginated['items'] = load_posts_in_order($paginated['items']);
 
     $data['title'] = 'Tagged with #' . $tag;
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';

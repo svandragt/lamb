@@ -5,7 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\Post\posts_by_tag;
+use function Lamb\Post\post_ids_by_tag;
 
 class PostDraftVisibilityTest extends TestCase
 {
@@ -38,7 +38,7 @@ class PostDraftVisibilityTest extends TestCase
         $bean->created = date('Y-m-d H:i:s');
         R::store($bean);
 
-        $results = posts_by_tag('php');
+        $results = post_ids_by_tag('php');
 
         $this->assertNotEmpty($results, 'Posts with NULL draft should be visible in tag pages');
     }
@@ -51,7 +51,7 @@ class PostDraftVisibilityTest extends TestCase
         $bean->created = date('Y-m-d H:i:s');
         R::store($bean);
 
-        $results = posts_by_tag('php');
+        $results = post_ids_by_tag('php');
 
         $this->assertNotEmpty($results, 'Posts with draft=0 should be visible in tag pages');
     }
@@ -64,7 +64,7 @@ class PostDraftVisibilityTest extends TestCase
         $bean->created = date('Y-m-d H:i:s');
         R::store($bean);
 
-        $results = posts_by_tag('php');
+        $results = post_ids_by_tag('php');
 
         $this->assertEmpty($results, 'Posts with draft=1 should NOT be visible in tag pages');
     }

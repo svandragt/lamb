@@ -19,7 +19,6 @@ parameters:
             message: '#expects literal-string\|null, non-falsy-string given#'
             identifier: argument.type
             paths:
-                - src/post.php
                 - src/response.php
                 - src/response/discovery.php
                 - src/response/feeds.php
