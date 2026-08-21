@@ -40,7 +40,14 @@ function now(): string
 // parse_tags() builds around it — quotes, angle brackets, a backtick, `=`, and
 // the slashes — on top of the punctuation that merely ends a tag. Emoji and other
 // non-Latin scripts stay valid in a tag name.
-const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\]+)/u';
+// The character class itself, so the one other place that has to agree on where
+// a tag ends — Post\body_has_tag(), which decides whether a post belongs on the
+// /tag/ page the link below points at — can be built from it instead of
+// restating it. The two had drifted: body_has_tag() was missing `>`, `"`, `'`,
+// a backtick, `=` and the slashes, so `#php/8` rendered a link to /tag/php and
+// then the tag page left the post out.
+const TAG_TERMINATORS = '\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\';
+const TAG_PATTERN = '/(^|[\s>])#([^' . TAG_TERMINATORS . ']+)/u';
 
 // Bean fields front matter is allowed to set. Anything else in a front-matter
 // block is metadata for the author's own use, not a column to write; see the

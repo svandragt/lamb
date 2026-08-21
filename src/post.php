@@ -824,13 +824,21 @@ function get_tag_search_conditions(string $tag): array
  * start of the string, whitespace, or `>`, and be followed by whitespace, the
  * end of the string, or one of the tag-terminating punctuation characters.
  *
+ * The terminator set is Lamb\TAG_TERMINATORS, the same class TAG_PATTERN
+ * excludes from a tag name, rather than a second copy of it. The copy had
+ * drifted: it was missing `>`, `"`, `'`, a backtick, `=` and both slashes, so a
+ * body reading `#php/8` rendered a link to /tag/php — TAG_PATTERN ends the tag
+ * at the slash — while this said the post carried no such tag. posts_by_tag()
+ * and Theme\get_posts_by_tags() both filter on it, so the tag page and the
+ * related-posts list left out the very post whose link led there.
+ *
  * @param string $tag  The tag to look for (without the leading `#`).
  * @param string $body The raw post body.
  * @return bool
  */
 function body_has_tag(string $tag, string $body): bool
 {
-    $pattern = '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[\s#&.,!?;:()\[\]{}<]|$)/iu';
+    $pattern = '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[' . \Lamb\TAG_TERMINATORS . ']|$)/iu';
     return (bool) preg_match($pattern, $body);
 }
 
