@@ -20,7 +20,13 @@ RUN install-php-extensions gettext pdo_mysql gd
 # nothing needs it once the extensions are built. Dropping it also drops
 # linux-libc-dev, whose kernel CVEs blocked every release scan — the container
 # runs the host's kernel, so those headers were never the thing at risk.
-RUN apt-get purge -y --auto-remove linux-libc-dev \
+#
+# The base image's util-linux (2.41-5) trails the Debian security update
+# (2.41.5-0+deb13u1) that fixes the mount/libblkid CVEs the release scan blocks
+# on. Pull the fix in the same layer rather than suppress it.
+RUN apt-get update \
+    && apt-get install -y --only-upgrade util-linux libmount1 libblkid1 libsmartcols1 libuuid1 \
+    && apt-get purge -y --auto-remove linux-libc-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN cp "$PHP_INI_DIR/php.ini-production" "$PHP_INI_DIR/php.ini"
