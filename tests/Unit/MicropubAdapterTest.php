@@ -427,6 +427,78 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringNotContainsString('<iframe', $post->transformed);
     }
 
+    public function testCreateCallbackHtmlEventHandlerAttributesAreStripped(): void
+    {
+        // strip_tags() drops disallowed *tags* and keeps every attribute of the
+        // ones it allows, so an `on*` handler on an allowed element survived
+        // into `transformed` — which every theme echoes raw and both feeds
+        // syndicate verbatim. Reachable by a token holding only `create` scope.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Handlers</p><img src="/assets/2026/01/a.webp" onerror="alert(1)">'
+                    . '<p onmouseover="alert(2)">hover</p><b OnClick="alert(3)">mixed case</b>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Handlers%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('onerror', $post->transformed);
+        $this->assertStringNotContainsString('onmouseover', $post->transformed);
+        $this->assertStringNotContainsString('OnClick', $post->transformed);
+        $this->assertStringNotContainsString('onclick', $post->transformed);
+        // The elements and their allowed attributes survive.
+        $this->assertStringContainsString('src="/assets/2026/01/a.webp"', $post->transformed);
+        $this->assertStringContainsString('<b>mixed case</b>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlStyleAttributeIsStripped(): void
+    {
+        // `style` alone is enough to cover the viewport with an element that
+        // links somewhere else, so the attribute allowlist drops it too.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p style="position:fixed;inset:0">Overlay</p>']],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Overlay%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('style=', $post->transformed);
+        $this->assertStringContainsString('<p>Overlay</p>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlLinkSchemeIsFilteredLikeMarkdown(): void
+    {
+        // The HTML path never goes through Parsedown, so nothing applied the
+        // scheme allowlist safe mode gives the Markdown path. It now defers to
+        // Parsedown's own filter, so both paths neutralise the same way.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Schemes</p><a href="javascript:alert(1)">bad</a>'
+                    . '<a href="https://example.test/ok">good</a>'
+                    . '<a href="mailto:a@b.test">mail</a>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Schemes%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('href="javascript:', $post->transformed);
+        $this->assertStringContainsString('javascript%3Aalert', $post->transformed);
+        // Everything Parsedown's safe mode allows in a Markdown link is kept here too.
+        $this->assertStringContainsString('href="https://example.test/ok"', $post->transformed);
+        $this->assertStringContainsString('href="mailto:a@b.test"', $post->transformed);
+    }
+
     public function testCreateCallbackPlainTextContentIsStillMarkdownProcessed(): void
     {
         $adapter = new LambMicropubAdapter();
