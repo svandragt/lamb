@@ -439,42 +439,62 @@ function build_matter(array $matter, string $content): string
  * key already holds the target value, are returned unchanged (no cosmetic
  * churn).
  *
+ * The value is rendered through the YAML writer rather than interpolated, for
+ * the reason build_matter() already documents: a slug carrying a colon
+ * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
+ * *whole* front-matter block — title, draft, created — silently vanished on the
+ * next read; one carrying a `#` had everything from it treated as a comment.
+ * finalize_slug() reaches both by appending an id suffix to an explicit slug
+ * that collides or names a reserved route, and then pinning the result here.
+ * Yaml::dump() already quotes anything that needs it, including the
+ * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
  * @param string $value The value to write.
- * @param bool $quote When true, the value is wrapped in single quotes.
  * @param bool $append When true, the key is appended if absent (otherwise the
  *                     body is returned unchanged when the key is missing).
  * @return string The body with the front-matter key set.
  */
-function set_matter(string $body, string $key, string $value, bool $quote = false, bool $append = true): string
+function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
     if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
         return $body;
     }
 
-    $rendered = $quote ? "'" . $value . "'" : $value;
-
+    $rendered = Yaml::dump($value);
+    // A browser submits a <textarea> with CRLF line endings, so most bodies
+    // reaching here carry them. The `\r` is matched and carried over rather
+    // than swept into the value: as part of $line[2] it made $current differ
+    // from $value on every save, so the no-churn contract above never held for
+    // an edit-form body and each save rewrote the line (and re-stored the post).
     $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
         function (array $line) use ($value, $rendered): string {
             $current = trim($line[2], " \t'\"");
             if ($current === $value) {
                 return $line[0];
             }
-            return $line[1] . ' ' . $rendered;
+            return $line[1] . ' ' . $rendered . $line[3];
         },
         $m[2],
         1,
         $count
     );
+    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
+    // on a long block). Concatenating that would drop the entire YAML block, so
+    // leave the body alone instead.
+    if ($new_yaml === null) {
+        return $body;
+    }
 
     if ($count === 0) {
         if (!$append) {
             return $body;
         }
-        $new_yaml = $m[2] . "$key: $rendered\n";
+        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
+        $new_yaml = $m[2] . "$key: $rendered" . $eol;
     }
 
     return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));

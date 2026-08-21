@@ -701,7 +701,7 @@ function visible_clause(): array
  */
 function persist_resolved_created(string $body, string $resolved): string
 {
-    return set_matter($body, 'created', $resolved, quote: true, append: false);
+    return set_matter($body, 'created', $resolved, append: false);
 }
 
 /**
