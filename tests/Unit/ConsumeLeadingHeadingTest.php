@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\parse_bean;
 use function Lamb\Post\consume_leading_heading;
+use function Lamb\Post\parse_matter;
 use function Lamb\Theme\anchor_headings;
 
 class ConsumeLeadingHeadingTest extends TestCase
@@ -73,6 +74,47 @@ class ConsumeLeadingHeadingTest extends TestCase
         $this->assertStringContainsString('My Post', $result);
         $this->assertStringContainsString('created: 2020-01-01', $result);
         $this->assertStringContainsString('Body.', $result);
+    }
+
+    public function testPreservesCrlfFrontMatterWhenPromotingHeading()
+    {
+        // A browser normalises a <textarea> to CRLF on submit, so this is what
+        // every body saved from the edit form looks like. The existing block
+        // must gain the title, not be pushed below a second one — otherwise
+        // `draft: true` stops being front matter and the post publishes.
+        $body = "---\r\ndraft: true\r\n---\r\n\r\n# My Post\r\n\r\nBody.\r\n";
+
+        $result = consume_leading_heading($body);
+
+        $this->assertSame(2, substr_count($result, '---'));
+        $matter = parse_matter($result);
+        $this->assertSame('My Post', $matter['title'] ?? null);
+        $this->assertTrue($matter['draft'] ?? false);
+        $this->assertStringNotContainsString('# My Post', $result);
+        $this->assertSame($result, consume_leading_heading($result));
+    }
+
+    public function testPreservesFrontMatterFenceWithTrailingWhitespace()
+    {
+        // split_frontmatter() accepts trailing spaces on a fence line, so the
+        // title injection has to recognise the same block it reads.
+        $body = "---  \ncreated: 2020-01-01\n---  \n\n# My Post\n\nBody.";
+
+        $result = consume_leading_heading($body);
+
+        $this->assertSame(2, substr_count($result, '---'));
+        $this->assertStringContainsString('created: 2020-01-01', $result);
+        $this->assertSame('My Post', parse_matter($result)['title'] ?? null);
+    }
+
+    public function testFillsAnEmptyFrontMatterBlockRatherThanAddingAnother()
+    {
+        $body = "---\n---\n\n# My Post\n\nBody.";
+
+        $result = consume_leading_heading($body);
+
+        $this->assertSame(2, substr_count($result, '---'));
+        $this->assertSame('My Post', parse_matter($result)['title'] ?? null);
     }
 
     public function testIsIdempotent()

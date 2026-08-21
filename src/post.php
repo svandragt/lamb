@@ -356,6 +356,15 @@ function consume_leading_heading(string $body): string
  * matter, so the stored title is migrated into the body before re-parsing.
  * The result matches the format modern feed ingestion writes.
  *
+ * An existing block is recognised by the same fence split_frontmatter() reads,
+ * not by a literal `---\n`: a browser normalises a <textarea> to CRLF on
+ * submit, so every body saved from the edit form arrives with `---\r\n`
+ * fences. Matching only the LF spelling took those bodies down the
+ * create-a-block branch and prepended a *second* front-matter block — the
+ * author's real one (with its `draft:`, `slug:` and `created:` lines) became
+ * body text, so parse_bean() saw no `draft` key and published the post.
+ * The block's own line ending is reused for the inserted line.
+ *
  * @param string $body The post body, with or without existing front matter.
  * @param string $title The title to write into the front matter.
  * @return string The body with the title present in its front matter.
@@ -363,11 +372,28 @@ function consume_leading_heading(string $body): string
 function inject_title_matter(string $body, string $title): string
 {
     $title_line = rtrim(Yaml::dump(['title' => $title]), "\n");
-    if (str_starts_with($body, "---\n")) {
-        return "---\n" . $title_line . "\n" . substr($body, strlen("---\n"));
+    // has_frontmatter(), not a non-empty YAML block: `---\n---\n` is an empty
+    // block, and adding a second one above it is the bug this guards against.
+    if (has_frontmatter($body) && preg_match('/\A---[ \t]*(\R)/', $body, $m) === 1) {
+        return $m[0] . $title_line . $m[1] . substr($body, strlen($m[0]));
     }
 
     return "---\n" . $title_line . "\n---\n\n" . $body;
+}
+
+/**
+ * Whether the body opens with a complete front-matter block.
+ *
+ * split_frontmatter() cannot answer this on its own: it reports an empty YAML
+ * string both for a body with no block at all and for one whose block is empty
+ * (`---\n---\n`). The content it returns is the discriminator — it is the body
+ * itself only when nothing was split off.
+ *
+ * @param string $body The raw post body.
+ */
+function has_frontmatter(string $body): bool
+{
+    return split_frontmatter($body)[1] !== $body;
 }
 
 function slugify(string $text): string
@@ -413,42 +439,62 @@ function build_matter(array $matter, string $content): string
  * key already holds the target value, are returned unchanged (no cosmetic
  * churn).
  *
+ * The value is rendered through the YAML writer rather than interpolated, for
+ * the reason build_matter() already documents: a slug carrying a colon
+ * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
+ * *whole* front-matter block — title, draft, created — silently vanished on the
+ * next read; one carrying a `#` had everything from it treated as a comment.
+ * finalize_slug() reaches both by appending an id suffix to an explicit slug
+ * that collides or names a reserved route, and then pinning the result here.
+ * Yaml::dump() already quotes anything that needs it, including the
+ * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
  * @param string $value The value to write.
- * @param bool $quote When true, the value is wrapped in single quotes.
  * @param bool $append When true, the key is appended if absent (otherwise the
  *                     body is returned unchanged when the key is missing).
  * @return string The body with the front-matter key set.
  */
-function set_matter(string $body, string $key, string $value, bool $quote = false, bool $append = true): string
+function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
     if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
         return $body;
     }
 
-    $rendered = $quote ? "'" . $value . "'" : $value;
-
+    $rendered = Yaml::dump($value);
+    // A browser submits a <textarea> with CRLF line endings, so most bodies
+    // reaching here carry them. The `\r` is matched and carried over rather
+    // than swept into the value: as part of $line[2] it made $current differ
+    // from $value on every save, so the no-churn contract above never held for
+    // an edit-form body and each save rewrote the line (and re-stored the post).
     $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*$/mi',
+        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
         function (array $line) use ($value, $rendered): string {
             $current = trim($line[2], " \t'\"");
             if ($current === $value) {
                 return $line[0];
             }
-            return $line[1] . ' ' . $rendered;
+            return $line[1] . ' ' . $rendered . $line[3];
         },
         $m[2],
         1,
         $count
     );
+    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
+    // on a long block). Concatenating that would drop the entire YAML block, so
+    // leave the body alone instead.
+    if ($new_yaml === null) {
+        return $body;
+    }
 
     if ($count === 0) {
         if (!$append) {
             return $body;
         }
-        $new_yaml = $m[2] . "$key: $rendered\n";
+        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
+        $new_yaml = $m[2] . "$key: $rendered" . $eol;
     }
 
     return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));

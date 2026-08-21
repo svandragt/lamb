@@ -148,6 +148,21 @@ function call_route(bool|string $action): array
 /**
  * Checks if a given route is reserved.
  *
+ * The registry is built on demand when it is empty. A CLI importer
+ * (import-lamb.php, import-wordpress.php, import-known.php) bootstraps the
+ * database and the config but never the router, so $routes was empty there and
+ * this answered "not reserved" for every name — silently disabling the guard on
+ * exactly the path that pins a foreign permalink as a slug. A WordPress page at
+ * /login/ therefore imported as slug `login`, and index.php registers a matching
+ * post's route *after* register_app_routes(), overwriting it: /login served the
+ * post and the author could no longer reach the login form. `feed`, `search`,
+ * `settings` and `_cron` shadow the same way.
+ *
+ * A web request has already called register_app_routes(), so the rebuild never
+ * fires there. The `false` action picks the same key set as any other — the
+ * action-dependent branches choose a handler for `home` and `tag`, not whether
+ * those names exist.
+ *
  * @param string $name The name of the route to check.
  *
  * @return bool True if the route is reserved, false otherwise.
@@ -155,6 +170,10 @@ function call_route(bool|string $action): array
 function is_reserved_route(string $name): bool
 {
     global $routes;
+
+    if (empty($routes)) {
+        register_app_routes(false);
+    }
 
     return isset($routes[$name]);
 }

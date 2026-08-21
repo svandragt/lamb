@@ -167,45 +167,40 @@ class LambDown extends Parsedown
     /**
      * Renders a disabled task checkbox followed by its inline-formatted label.
      *
+     * The label goes through line() with safe mode left ON, and is not escaped
+     * beforehand. The upstream extension this was internalised from pre-escaped
+     * the text and then switched safe mode off around the inline pass — which
+     * turned off more than the escaping it was compensating for. Safe mode is
+     * also what applies Parsedown's URL-scheme allowlist (sanitiseElement()),
+     * so with it off a link or image *inside a label* kept whatever scheme it
+     * was given:
+     *
+     *     [ ] [click](javascript:alert(1))
+     *     → <input type="checkbox" disabled> <a href="javascript:alert(1)">click</a>
+     *
+     * while the same link outside a label correctly became `javascript%3A`.
+     * That is not only the author's own body: a subscribed feed's item
+     * description reaches the renderer (attributed_content() strips HTML tags
+     * but leaves Markdown, and prefixes each line with `> `, which still parses
+     * as a task item inside the blockquote), as does a Micropub client holding
+     * only `create` scope — so it was remotely triggerable stored XSS, served
+     * to every visitor from the post's cached `transformed` column.
+     *
+     * Dropping the pre-escape also fixes what it broke on the way past: `&` in
+     * a label's link URL was escaped once by hand and once more as an attribute
+     * value, so `?b=1&c=2` was emitted as `?b=1&amp;amp;c=2` and the link
+     * pointed at a URL with a literal `&amp;` in it. line() escapes the label's
+     * own text by itself, exactly once, the way every other inline text does.
+     *
      * @param string $text    The label text.
      * @param bool   $checked Whether the box is ticked.
      * @return string The checkbox HTML.
      */
     protected function renderCheckbox($text, $checked)
     {
-        if ($this->markupEscaped || $this->safeMode) {
-            $text = self::escape($text);
-        }
-
         $checkedAttr = $checked ? ' checked' : '';
 
-        return '<input type="checkbox"' . $checkedAttr . ' disabled> ' . $this->formatLabel($text);
-    }
-
-    /**
-     * Inline-formats a checkbox label without double-escaping.
-     *
-     * The label has already been escaped under safe mode, so markup escaping and
-     * safe mode are toggled off around the inline pass (then restored), exactly
-     * as the upstream extension does.
-     *
-     * @param string $text The (already escaped) label text.
-     * @return string The inline-formatted label.
-     */
-    protected function formatLabel($text)
-    {
-        $markupEscaped = $this->markupEscaped;
-        $safeMode      = $this->safeMode;
-
-        $this->setMarkupEscaped(false);
-        $this->setSafeMode(false);
-
-        $text = $this->line($text);
-
-        $this->setMarkupEscaped($markupEscaped);
-        $this->setSafeMode($safeMode);
-
-        return $text;
+        return '<input type="checkbox"' . $checkedAttr . ' disabled> ' . $this->line($text);
     }
 
     /**
@@ -224,6 +219,29 @@ class LambDown extends Parsedown
         }
 
         return parent::blockHeader($Line);
+    }
+
+    /**
+     * Neutralises a disallowed URL scheme in a content attribute, exactly as
+     * safe mode does for a Markdown link or image.
+     *
+     * The Micropub `content.html` path stores its HTML straight into the post's
+     * `transformed` column and never goes through Parsedown, so nothing applied
+     * the scheme allowlist the Markdown path gets for free. This exposes
+     * Parsedown's own filterUnsafeUrlInAttribute() rather than restating the
+     * allowlist, so the two content paths cannot drift: a `mailto:` link is
+     * kept in both, a `javascript:` one becomes `javascript%3A` in both, and a
+     * root-relative `/assets/…` (what asset_url() writes) carries no colon and
+     * is untouched.
+     *
+     * @param string $url The attribute's raw value.
+     * @return string The value with a disallowed scheme neutralised.
+     */
+    public function filterContentUrl(string $url): string
+    {
+        $element = $this->filterUnsafeUrlInAttribute(['attributes' => ['url' => $url]], 'url');
+
+        return (string) $element['attributes']['url'];
     }
 
     /**

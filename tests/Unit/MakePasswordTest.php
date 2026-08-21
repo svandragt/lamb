@@ -105,6 +105,41 @@ class MakePasswordTest extends TestCase
         $this->assertStringContainsString("LAMB_TEST_PASSWORD='hackme'", $contents);
     }
 
+    public function testPasswordWithAnApostropheProducesAParseableEnv(): void
+    {
+        // Single quotes are the file's normal form and hold everything except a
+        // single quote and a newline — both end the value early, and phpdotenv
+        // then refuses the *whole file*. load_dotenv() calls safeLoad(), which
+        // only swallows a missing file, so this left `composer serve` throwing
+        // on every request with LAMB_LOGIN_PASSWORD unreadable.
+        $contents = $this->runScript(
+            ['PWD' => $this->workspace, 'LAMB_WRITE_TEST_PASSWORD' => '1'],
+            "it's-a-secret"
+        );
+
+        // Double-quoted, so phpdotenv reads the apostrophe as part of the value.
+        $this->assertStringContainsString('LAMB_TEST_PASSWORD="it\'s-a-secret"', $contents);
+        $this->assertStringNotContainsString("LAMB_TEST_PASSWORD='it's", $contents);
+        // The line that matters most is still well-formed either way.
+        $this->assertMatchesRegularExpression("/^LAMB_LOGIN_PASSWORD='[A-Za-z0-9+\\/=]+'$/m", $contents);
+    }
+
+    public function testPasswordNeedingNoEscapeKeepsTheSingleQuotedForm(): void
+    {
+        // Spaces, double quotes, backslashes and `${...}` are all literal inside
+        // single quotes, so they must not be switched to the escaped form (where
+        // `${...}` would be interpolated).
+        $contents = $this->runScript(
+            ['PWD' => $this->workspace, 'LAMB_WRITE_TEST_PASSWORD' => '1'],
+            'a "quoted" pass\\phrase ${HOME}'
+        );
+
+        $this->assertStringContainsString(
+            'LAMB_TEST_PASSWORD=\'a "quoted" pass\\phrase ${HOME}\'',
+            $contents
+        );
+    }
+
     // Refusing to clobber an existing .env (issues #597, #598)
     //
     // The script writes .env into the current directory, and the docs tell a
