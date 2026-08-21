@@ -14,28 +14,12 @@ use function Lamb\Post\populate_bean;
 
 /**
  * Decides whether a single feed item is created, updated, or skipped, keyed on
- * its `feeditem_uuid` rather than dates alone.
- *
- * Deduplication lives here: an item that already has a post is never recreated
- * (the source of the recreated-draft bug when a feed re-stamps an item's
- * publication date past the watermark).
- *
- * Both remaining date comparisons are against something the *feed* said, never
- * against the clock:
- *
- * - A brand-new item is created when its publication date is newer than the
- *   newest entry this feed has ever offered us (`feedstatus.last_item_date`).
- *   That mark exists only to stop an entry still sitting in the feed window
- *   from resurrecting a post the author trashed and /_cron later purged. It
- *   used to be the *crawl* timestamp, which quietly dropped items for good: any
- *   crawl that succeeded without seeing the entry — a cached or CDN-stale copy
- *   of the feed, a feed that publishes with a lag — still stamped
- *   `last_success = now`, and the entry's own publication date was by then
- *   older than that stamp, so it was never created and never would be.
- * - An already-ingested post is re-synced only when the item was modified after
- *   the copy we stored (its `updated` column, which update_item() stamps from
- *   the item) AND the author has not taken the post over via the edit form
- *   (`feed_locked`) — so a published, re-slugged post is left intact.
+ * its `feeditem_uuid` so an item that already has a post is never recreated.
+ * Every date comparison is against something the feed said, never the clock:
+ * a new item is created only when it is newer than the ingestion watermark, an
+ * existing post re-synced only when the feed's copy is newer than ours and the
+ * author has not taken it over (`feed_locked`). See network/README.md
+ * ("The watermark model").
  *
  * @param SimplePieItem|JsonFeedItem $item      The feed item.
  * @param string        $name      Feed name from config.
@@ -76,20 +60,10 @@ function ingest_item(SimplePieItem|JsonFeedItem $item, string $name, int $waterm
 
 /**
  * Runs a crawled feed's entries through ingest_item() against that feed's
- * ingestion watermark, and reports what the run should record.
- *
- * Shared by the SimplePie and JSON Feed crawls so the two cannot drift on which
- * watermark they read — the divergence this pattern is prone to, and the reason
- * the pair already share begin_crawl()/record_crawl_*().
- *
- * A run that failed to create an entry reports no new watermark at all.
- * record_crawl_success() only ever raises the watermark, and an entry at or
- * below it is never created — so advancing past an entry the run lost would put
- * it permanently under the line that decides whether to create it, dropping it
- * for good. That is the same failure the watermark was introduced to prevent,
- * arriving by a different route. Holding the watermark for one run costs
- * nothing: every entry is deduped on feeditem_uuid, so the ones that did land
- * are not created a second time.
+ * ingestion watermark, and reports what the run should record. Shared by both
+ * crawl paths so they cannot drift on which watermark they read. A run that lost
+ * an entry to a failed write reports no new watermark, so the watermark is never
+ * stepped over a lost entry. See network/README.md ("The watermark model").
  *
  * @param array<array-key, SimplePieItem|JsonFeedItem> $items  The feed's entries.
  * @param string   $name   Feed name from config.
@@ -186,29 +160,20 @@ function get_structured_content(SimplePieItem|JsonFeedItem $item, string $name):
     $contents = attributed_content($item, $name);
     $title = sanitize_feed_title($item->get_title() ?? '');
     if (!empty($title)) {
-        // build_matter() (i.e. Yaml::dump) rather than interpolating the title
-        // into a heredoc. Interpolation let the remote feed choose the YAML
-        // *type* of its own title: `[a, b]` arrived as a list and `2024-01-02`
-        // as a date object, neither of which is a string, and the ingest run
-        // died on the first such item. Dumping quotes the scalar so a title is
-        // always read back as the text the feed sent.
+        // Dump via build_matter() (Yaml::dump), never string interpolation: a
+        // feed could otherwise choose its title's YAML type and crash the run.
+        // See network/README.md ("Untrusted content → front matter").
         $contents = build_matter(['title' => $title], "\n" . $contents);
     }
     return $contents;
 }
 
 /**
- * Sanitises a remote feed title before it is embedded in a post's YAML front matter.
- *
- * Front matter is delimited by `---` and parsed as YAML, so an untrusted title
- * containing newlines could inject extra keys (e.g. `slug`, `created`) and a `---`
- * sequence could close the block early. Whitespace is collapsed to single spaces,
- * any run of three or more hyphens is shortened, and the result is length-capped.
- *
- * Quoting and escaping are no longer done here: get_structured_content() now
- * renders the block with Yaml::dump(), which quotes the scalar correctly for
- * whatever it contains. The previous addslashes() left a literal backslash in
- * front of every apostrophe in the stored title.
+ * Sanitises a remote feed title before it is embedded in a post's YAML front
+ * matter: collapses whitespace, shortens `---` runs, and length-caps it so an
+ * untrusted title cannot inject keys or close the block early. Quoting is left to
+ * Yaml::dump() in get_structured_content(). See network/README.md
+ * ("Untrusted content → front matter").
  *
  * @param string $title The raw feed item title.
  * @return string A single-line, length-capped title safe for front matter.

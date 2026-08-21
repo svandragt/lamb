@@ -525,10 +525,20 @@ comment is noise:
 header('HTTP/1.1 400 Bad Request');
 ```
 
-Docblocks are the exception and are deliberately expansive in this codebase —
-they carry a function's "why" as a whole, and account for most of the ~44% of
-`src/` lines that are comments. Inline `//` rationale is the part to keep scarce:
-it runs at roughly **8% of non-docblock lines**, which is the level to aim for.
+Docblocks carry a function's **contract** — `@param`, `@return` and `@throws`
+are required (they feed PHPStan and IDE hover) — plus the *local* why: an
+invariant, a coupling, a ceiling the next editor will try to remove. Keep that
+on the symbol, where it is read at the point of change.
+
+A rationale that runs to a paragraph and explains a *subsystem* rather than a
+single function is documentation. Put it in the module's README
+(`src/<module>/README.md`) and leave a one-line pointer on the symbol
+(`// SSRF model: see network/README.md`), so a design essay lives in one place
+instead of being restated across every function it touches. `src/network/` is
+the first module to follow this; see its `README.md` and the `2026-08-21`
+decision log entry.
+
+Inline `//` rationale stays scarce — around **8% of non-docblock lines**.
 
 ## Testing
 

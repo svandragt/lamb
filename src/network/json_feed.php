@@ -69,13 +69,10 @@ function parse_json_feed(string $json): ?array
 }
 
 /**
- * Fetches and ingests a JSON Feed source, recording the outcome on its
- * feedstatus bean — the JSON Feed counterpart of record_feed_crawl().
- *
- * Mirrors the SimplePie path: a failed fetch or a body that is not a JSON Feed
- * stamps the error without advancing the success watermark; on success, entries
- * newer than the newest one this feed has offered before are created/updated and
- * that ingestion watermark is raised.
+ * Fetches and ingests a JSON Feed source, recording the outcome on its feedstatus
+ * bean — the JSON Feed counterpart of record_feed_crawl(), sharing the same
+ * begin_crawl()/record_crawl_*() spine so the two paths cannot drift. See
+ * network/README.md ("Two source types, one spine").
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -85,9 +82,8 @@ function record_json_feed_crawl(string $name, string $url): array
 {
     [$status, $now] = begin_crawl($name, $url);
 
-    // A configured feed URL is admin-trusted, but nothing pins where it (or a
-    // redirect from it) actually points — fetch_guarded() re-checks the
-    // destination is a public, non-internal address on every hop.
+    // fetch_guarded() re-checks the destination is public on every hop: a
+    // configured URL is trusted, a redirect from it is not. See README.
     $response = fetch_guarded($url, [
         'timeout' => FEED_FETCH_TIMEOUT,
         'max_bytes' => FEED_FETCH_MAX_BYTES,
