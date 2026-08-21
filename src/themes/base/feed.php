@@ -80,7 +80,11 @@ foreach ($data['posts'] as $bean) {
     if ($content_document !== null) {
         $content_node->appendChild($content_document->createTextNode($content_html));
     }
-    if (!empty($bean->in_reply_to)) {
+    // Guarded like the reply context in <content> above: `ref`/`href` are a URL a
+    // reader may turn into a link, and in_reply_to is not author-only (a Micropub
+    // client with `create` scope sets it, unvalidated), so a non-http(s) scheme
+    // must not be syndicated as one.
+    if (!empty($bean->in_reply_to) && Lamb\Http\is_valid_http_url((string) $bean->in_reply_to)) {
         // Raw URL: SimpleXML escapes attribute values itself, so pre-escaping
         // would double-encode any query-string ampersands.
         $Thread = $Entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');
