@@ -123,16 +123,10 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
  *
  * This is the open-redirect guard the redirect-after-action handlers share:
  * redirect_uri()/sanitize_location() only strip control characters and do not
- * check the host, so an off-site Referer would otherwise redirect off-site.
- *
- * The host check alone was not enough for that. A same-origin Referer of
- * `https://site/​/evil.test/x` has host `site`, so it passed — and yielded the
- * path `//evil.test/x`, which a browser resolves as protocol-relative and
- * follows off-site. `/\evil.test` does the same, since browsers normalise the
- * backslash. Referer is a request header, so its path is caller-supplied
- * either way. local_redirect_target() already refuses both shapes for
- * `?redirect_to=` and states why, and sanitize_explicit_slug() refuses them for
- * a slug — so the final answer is delegated to it rather than restated here.
+ * check the host, so an off-site Referer would otherwise redirect off-site. The
+ * host check alone is not enough for that (a protocol-relative path trick
+ * survives it) — see response/README.md ("Referer-based redirect targets") for
+ * the shape and why the final answer is delegated to local_redirect_target().
  *
  * @param string|null $referer The request Referer header (may be null).
  * @return string A same-origin path (with query), or '/'.
@@ -352,11 +346,10 @@ function redirect_edited(): void
 /**
  * Marks a feed-sourced post as author-owned so feed re-ingestion leaves it alone.
  *
- * Feed crawls dedupe on `feeditem_uuid` and re-sync source updates onto matching
- * posts. Once the author edits such a post through the edit form, that auto-sync
- * would clobber their changes, so set `feed_locked` to opt the post out of future
- * updates. Posts that did not originate from a feed (`feeditem_uuid` empty) are
- * left untouched.
+ * Posts that did not originate from a feed (`feeditem_uuid` empty) are left
+ * untouched. This is the response-side half of the `feed_locked` invariant; see
+ * ../network/README.md ("The watermark model") for why it exists and how the
+ * crawl side reads it.
  *
  * @param OODBBean $bean The post being saved.
  * @return void
@@ -371,13 +364,11 @@ function lock_if_feed_sourced(OODBBean $bean): void
 /**
  * Toggles a GitHub-style task-list checkbox and persists it as a post edit.
  *
- * AJAX endpoint for the logged-in author: flips the Nth `[ ]`/`[x]` marker in
- * the post body (the index supplied by the rendered checkbox's
- * `data-checkbox-index`), re-parses so `transformed` reflects the new state,
- * and bumps `updated`. Login-only, no CSRF — matching respond_upload() and the
- * SameSite=Strict session, which already blocks cross-site POSTs. Webmention
- * and WebSub are intentionally skipped: ticking a box is a minor edit and must
- * not re-notify subscribers.
+ * AJAX endpoint for the logged-in author. Login-only, no CSRF — see
+ * AGENTS.md's Security section for the SameSite=Strict invariant this and
+ * respond_upload() both rely on instead. Webmention and WebSub are
+ * intentionally skipped: ticking a box is a minor edit and must not re-notify
+ * subscribers.
  *
  * @param array<int, string> $_args Unused route arguments.
  * @return void
