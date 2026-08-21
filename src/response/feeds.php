@@ -404,7 +404,10 @@ function respond_tag(array $args): array
     }
 
     $paginated = paginate_posts($all_ids);
-    $paginated['items'] = load_posts_in_order($paginated['items']);
+    // paginate_posts() is generic over its source, so its items come back as
+    // array<int, mixed>; narrow them here rather than loosening the loader.
+    $page_ids = array_values(array_map('intval', $paginated['items']));
+    $paginated['items'] = load_posts_in_order($page_ids);
 
     $data['title'] = 'Tagged with #' . $tag;
     $data['feed_url'] = ROOT_URL . '/tag/' . rawurlencode($tag) . '/feed';
