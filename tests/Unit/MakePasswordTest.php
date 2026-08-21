@@ -225,6 +225,59 @@ class MakePasswordTest extends TestCase
         $this->assertStringNotContainsString('--force', $contents);
     }
 
+    /**
+     * .env holds the login hash, so its permissions matter as much as the data
+     * directory's — bootstrap_db() creates that 0750 for the same reason.
+     * file_put_contents() alone left .env at whatever the umask allowed: 644
+     * normally, and 666 under a 0000 umask, which is not unusual in containers.
+     * World-readable hands a local user the bcrypt hash; world-writable lets
+     * them replace it and own the login.
+     */
+    public function testEnvIsNotReadableByOtherUsers(): void
+    {
+        $this->runScript(['PWD' => $this->workspace], 'correct-horse-battery-staple');
+
+        $this->assertEnvMode0600();
+    }
+
+    public function testEnvPermissionsHoldUnderAPermissiveUmask(): void
+    {
+        // umask 0000 is what a container often runs with, and it is the case
+        // that produced a world-*writable* .env rather than merely readable.
+        $process = new Process(
+            ['sh', '-c', 'umask 000 && exec "$0" "$@"', 'php',
+                codecept_root_dir('make-password.php'), 'correct-horse-battery-staple'],
+            $this->workspace,
+            ['PWD' => $this->workspace]
+        );
+        $process->mustRun();
+
+        $this->assertEnvMode0600();
+    }
+
+    public function testForceTightensAnAlreadyLooseEnv(): void
+    {
+        $this->seedExistingEnv('superseded-marker');
+        chmod($this->workspace . '/.env', 0666);
+
+        $this->runScript(['PWD' => $this->workspace], 'correct-horse-battery-staple', ['--force']);
+
+        $this->assertEnvMode0600();
+    }
+
+    private function assertEnvMode0600(): void
+    {
+        $path = $this->workspace . '/.env';
+        clearstatcache(true, $path);
+        $mode = fileperms($path) & 0777;
+
+        $this->assertSame(
+            '0600',
+            sprintf('%04o', $mode),
+            '.env holds the login hash and must not be readable by other users'
+        );
+    }
+
     public function testOptInIsReadFromProcessEnvNotVariablesOrder(): void
     {
         // Mirror CI: run with the stock variables_order (which omits 'E', so
