@@ -368,7 +368,25 @@ function build_post_body(string $title, string $markdown_body, array $tags, stri
 
 /**
  * Returns the YYYY/MM subpath under src/assets/ for a post's created date.
- * Falls back to the current month when the date can't be parsed.
+ * Falls back to the current month when the date can't be used.
+ *
+ * `YYYY/MM` is not just a convention here — it is the shape both gates that
+ * read these paths match on. Restore\safe_entry_path() anchors `\d{4}/\d{2}`,
+ * and Export\referenced_assets() only picks up `/assets/\d{4}/\d{2}/…` out of a
+ * body. A year that does not render as four digits therefore produces a path
+ * the rest of the system cannot see:
+ *
+ * - `created: 0000-00-00` in front matter (what an older install, or a
+ *   MySQL-era row, hands you) parses to year -1, so a post exported to
+ *   `posts/-0001/11/<slug>.md` was refused by the importer as a "bad path" —
+ *   the post did not come back from its own backup.
+ * - Images for such a post downloaded into `src/assets/-0001/11/`, where
+ *   referenced_assets() cannot match them, so they were absent from every
+ *   export.
+ *
+ * Only the folder falls back; the date itself is untouched, and front matter
+ * and the manifest still carry it. That is the same trade this function
+ * already made for a date that does not parse at all.
  */
 function asset_dir_for_date(string $created): string
 {
@@ -376,7 +394,12 @@ function asset_dir_for_date(string $created): string
     if ($ts === false) {
         $ts = time();
     }
-    return date('Y/m', $ts);
+    $dir = date('Y/m', $ts);
+    if (preg_match('#^\d{4}/\d{2}$#D', $dir) !== 1) {
+        $dir = date('Y/m');
+    }
+
+    return $dir;
 }
 
 /**
