@@ -608,6 +608,18 @@ function href_looks_like_image(string $href): bool
 const IMAGE_DOWNLOAD_MAX_BYTES = 20_000_000;
 
 /**
+ * Time limit for a single image download.
+ *
+ * The byte cap alone does not bound the download: a server that answers one
+ * byte at a time never reaches IMAGE_DOWNLOAD_MAX_BYTES and never finishes,
+ * and a WXR file names one image URL per attachment — so a single such URL
+ * stalls the whole import with nothing logged. Generous next to the other
+ * outbound timeouts because this transfers up to 20 MB, where the webmention
+ * and feed fetches read a document.
+ */
+const IMAGE_DOWNLOAD_TIMEOUT = 30;
+
+/**
  * Default downloader used by the CLI scripts: fetches $url over HTTP and
  * writes it under ROOT_DIR/assets/$sub_path with a content-hash filename.
  * JPEG/PNG are re-encoded to WebP via the shared persistence helper. Returns
@@ -644,7 +656,14 @@ function default_image_downloader(string $url, string $sub_path): ?string
     // attacker-influenced as a webmention source; use the same SSRF-safe
     // fetcher (rejects loopback/private/link-local destinations and
     // re-checks every redirect hop) rather than the unguarded fetch().
-    $response = fetch_guarded($url, ['max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES]);
+    // Both halves of the guard, not just the cap: request_options() bundles the
+    // timeout with the byte cap on every webmention call for exactly this
+    // reason, and this URL is no less attacker-influenced than a webmention
+    // source.
+    $response = fetch_guarded($url, [
+        'max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES,
+        'timeout' => IMAGE_DOWNLOAD_TIMEOUT,
+    ]);
     if ($response === null || $response['body'] === '') {
         return null;
     }
