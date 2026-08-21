@@ -84,8 +84,17 @@ function rewrite_css_urls(string $css, string $base_url): string
 /**
  * Minifies CSS for inlining: strips comments and collapses insignificant whitespace.
  *
- * Conservative by design — it only touches whitespace and comments, so it is safe
- * for the controlled, hand-written theme stylesheets Lamb ships.
+ * Conservative by design — it only touches whitespace and comments. "Insignificant"
+ * is the whole difficulty: collapsing whitespace around `{}:;,>` across the entire
+ * stylesheet also reached inside quoted strings and url() tokens, where that
+ * whitespace is content. `content: "Note: hello"` became `content:"Note:hello"`,
+ * and `[data-label="a > b"]` became `[data-label="a>b"]` — a selector that no
+ * longer matches the element, so the rule silently stopped applying.
+ *
+ * No theme Lamb ships triggers it, but the_styles() inlines whichever theme the
+ * `theme` setting names, so a hand-written or third-party stylesheet is an input
+ * this has to survive. String literals and url() tokens are therefore split out
+ * and copied through untouched, and only the CSS syntax between them is collapsed.
  *
  * @param string $css The stylesheet contents.
  * @return string Minified CSS.
@@ -93,11 +102,35 @@ function rewrite_css_urls(string $css, string $base_url): string
 function minify_css(string $css): string
 {
     $css = preg_replace('#/\*.*?\*/#s', '', $css) ?? $css;
-    $css = preg_replace('/\s+/', ' ', $css) ?? $css;
-    $css = preg_replace('/\s*([{}:;,>])\s*/', '$1', $css) ?? $css;
-    $css = str_replace(';}', '}', $css);
 
-    return trim($css);
+    // Capturing split, so the delimiters (the literals) are kept and land on the
+    // odd indices. url() is included so an unquoted data URI is protected too.
+    $parts = preg_split(
+        '/("(?:[^"\\\\]|\\\\.)*"|\'(?:[^\'\\\\]|\\\\.)*\'|url\([^)]*\))/',
+        $css,
+        -1,
+        PREG_SPLIT_DELIM_CAPTURE
+    );
+    if ($parts === false) {
+        return trim($css);
+    }
+
+    $out = '';
+    foreach ($parts as $index => $part) {
+        if ($index % 2 === 1) {
+            // A literal or url() token: content, not syntax.
+            $out .= $part;
+            continue;
+        }
+        $part = preg_replace('/\s+/', ' ', $part) ?? $part;
+        $part = preg_replace('/\s*([{}:;,>])\s*/', '$1', $part) ?? $part;
+        // A `;` that CSS syntax owns is always in the same segment as the `}`
+        // that follows it — `;"foo"}` is not valid CSS — so this is safe here
+        // and cannot reach a literal ending in `;}`.
+        $out .= str_replace(';}', '}', $part);
+    }
+
+    return trim($out);
 }
 
 /**
