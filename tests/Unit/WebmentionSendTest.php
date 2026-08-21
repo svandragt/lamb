@@ -412,6 +412,119 @@ class WebmentionSendTest extends TestCase
         $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
     }
 
+    // process_outbound (deferred rows must not starve the queue) -------------
+
+    /**
+     * A post whose `created` is in the future, so its outbox rows defer.
+     */
+    private function schedulePost(): int
+    {
+        $post = R::dispense('post');
+        $post->body = 'Later';
+        $post->transformed = '<p>Later</p>';
+        $post->created = date('Y-m-d H:i:s', time() + 3600);
+        $post->updated = date('Y-m-d H:i:s');
+        $post->version = 1;
+
+        return (int) R::store($post);
+    }
+
+    /**
+     * Queues $count rows for one post in a single enqueue_outbound() call.
+     *
+     * One call, not $count of them: enqueue_outbound() cancels pending rows for
+     * the same source whose target is absent from the HTML it is given, so
+     * calling it once per link would leave only the last row pending. A single
+     * call is also how a real post with several links enqueues — which is why
+     * every row it writes carries the same `created` second.
+     *
+     * @return string The source URL the rows share.
+     */
+    private function seedPendingBatch(int $postId, string $sourcePath, string $hostPrefix, int $count): string
+    {
+        $html = '';
+        for ($i = 0; $i < $count; $i++) {
+            $html .= '<a href="https://' . $hostPrefix . $i . '.example/a">x</a>';
+        }
+        $source = ROOT_URL . $sourcePath;
+        $this->assertSame($count, enqueue_outbound($postId, $source, $html));
+
+        return $source;
+    }
+
+    public function testProcessDoesNotLetDeferredRowsConsumeTheSendWindow(): void
+    {
+        // A deferred row stays pending, so it stays at the front of the queue.
+        // Once $limit scheduled posts' links were queued they filled the whole
+        // window on every run and nothing was ever sent again — silently, since
+        // a deferred row increments no counter and webmention_line() prints
+        // nothing when all four are zero.
+        $this->seedPendingBatch($this->schedulePost(), '/status/2', 's', 20);
+        $this->seedPending('https://live.example/a');
+
+        $fetcher = fn (string $url) => ['headers' => ['<https://live.example/wm>; rel="webmention"'], 'body' => ''];
+        $sender = fn (string $e, string $s, string $t): int => 202;
+
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
+
+        $this->assertSame(1, $result['sent']);
+        $this->assertSame(
+            'sent',
+            R::findOne('webmentionoutbox', ' target = ? ', ['https://live.example/a'])->status
+        );
+        $this->assertCount(20, R::find('webmentionoutbox', ' status = ? ', ['pending']));
+    }
+
+    public function testProcessStillCapsSendsAtTheLimit(): void
+    {
+        // The window bounds sends, and that has to stay true: paging past
+        // deferred rows must not turn $limit into "everything deliverable".
+        $this->seedPendingBatch($this->postId, '/status/1', 't', 25);
+
+        $fetcher = fn (string $url) => ['headers' => ['<https://t.example/wm>; rel="webmention"'], 'body' => ''];
+        $sender = fn (string $e, string $s, string $t): int => 202;
+
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
+
+        $this->assertSame(20, $result['sent']);
+        $this->assertCount(5, R::find('webmentionoutbox', ' status = ? ', ['pending']));
+    }
+
+    public function testProcessSendsEachRowOnceWhenCreatedTimestampsTie(): void
+    {
+        // Every row from one enqueue_outbound() call shares a `created` second,
+        // so `created` alone is not a total order — paging over a non-total
+        // order could send a row twice or skip one. The query breaks the tie
+        // on `id`.
+        $this->seedPendingBatch($this->schedulePost(), '/status/2', 's', 5);
+        $this->seedPendingBatch($this->postId, '/status/1', 'l', 5);
+
+        $sent = [];
+        $fetcher = fn (string $url) => ['headers' => ['<https://l.example/wm>; rel="webmention"'], 'body' => ''];
+        $sender = function (string $e, string $s, string $target) use (&$sent): int {
+            $sent[] = $target;
+            return 202;
+        };
+
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
+
+        $this->assertSame(5, $result['sent']);
+        $this->assertSame($sent, array_values(array_unique($sent)));
+        $this->assertCount(5, R::find('webmentionoutbox', ' status = ? ', ['pending']));
+    }
+
+    public function testProcessTerminatesWhenEveryPendingRowIsDeferred(): void
+    {
+        // The paging loop must not spin when there is nothing it can deliver.
+        $this->seedPendingBatch($this->schedulePost(), '/status/2', 's', 25);
+
+        [$fetcher, $sender] = $this->unreachableNetwork();
+        $result = process_outbound($fetcher, $sender, 20, $this->publicResolver());
+
+        $this->assertSame(['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0], $result);
+        $this->assertCount(25, R::find('webmentionoutbox', ' status = ? ', ['pending']));
+    }
+
     public function testProcessSendsOnceScheduledPostBecomesPublic(): void
     {
         $post = R::load('post', $this->postId);
