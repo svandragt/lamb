@@ -14,6 +14,7 @@
     "ext-curl": "*",
     "ext-gettext": "*",
     "ext-mbstring": "*",
+    "ext-pdo_mysql": "*",
     "ext-pdo_sqlite": "*",
     "ext-simplexml": "*",
     "erusev/parsedown": "^1.7",

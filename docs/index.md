@@ -11,7 +11,7 @@ Barrier free super simple blogging, self-hosted. [Read about the features](https
 ## Requirements
 
 - PHP 8.4 – 8.5
-- pdo_sqlite, gettext, simplexml, mbstring extensions (Lamb talks to SQLite through PDO, so pdo_sqlite is the driver it needs — no MySQL extension is involved)
+- pdo_sqlite, pdo_mysql, gettext, simplexml, mbstring extensions (Lamb talks to SQLite through pdo_sqlite; pdo_mysql is also required because RedBeanPHP references a MySQL PDO constant at load time and fatals without it, even though Lamb never connects to MySQL)
 - gd extension, recommended: converts image uploads to WebP (without it originals are stored as-is)
 
 ## Getting started

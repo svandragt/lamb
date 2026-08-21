@@ -14,7 +14,7 @@ LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 
 # gd powers WebP upload conversion
-RUN install-php-extensions gettext gd
+RUN install-php-extensions gettext pdo_mysql gd
 
 # The base image ships a C/C++ toolchain so install-php-extensions can compile;
 # nothing needs it once the extensions are built. Dropping it also drops
