@@ -125,6 +125,15 @@ function store_slug_change_redirect(string $old_slug, string $new_slug): void
  * redirect_uri()/sanitize_location() only strip control characters and do not
  * check the host, so an off-site Referer would otherwise redirect off-site.
  *
+ * The host check alone was not enough for that. A same-origin Referer of
+ * `https://site/​/evil.test/x` has host `site`, so it passed — and yielded the
+ * path `//evil.test/x`, which a browser resolves as protocol-relative and
+ * follows off-site. `/\evil.test` does the same, since browsers normalise the
+ * backslash. Referer is a request header, so its path is caller-supplied
+ * either way. local_redirect_target() already refuses both shapes for
+ * `?redirect_to=` and states why, and sanitize_explicit_slug() refuses them for
+ * a slug — so the final answer is delegated to it rather than restated here.
+ *
  * @param string|null $referer The request Referer header (may be null).
  * @return string A same-origin path (with query), or '/'.
  */
@@ -147,7 +156,8 @@ function safe_referer_path(?string $referer): string
     if (isset($parts['query']) && $parts['query'] !== '') {
         $path .= '?' . $parts['query'];
     }
-    return $path;
+
+    return local_redirect_target($path);
 }
 
 /**
