@@ -67,16 +67,9 @@ function the_opengraph(): void
 }
 
 /**
- * Resolves the OpenGraph/Twitter card image for a status post.
- *
- * Selection order, most specific first:
- *   1. the first image embedded in the post body — so sharing a photo/screenshot post
- *      previews that image (twitter:card upgrades to summary_large_image);
- *   2. a site default dropped in the web root as og-image.<ext>, user-replaceable in the
- *      same spirit as the favicon.png / logo.png feed convention;
- *   3. the shipped Lamb card.
- *
- * Width/height/type are emitted only when the image maps to a readable local file.
+ * Resolves the OpenGraph/Twitter card image for a status post. See
+ * theme/README.md ("OpenGraph image selection") for the fallback order and
+ * why dimensions are only emitted for a locally-resolvable image.
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return array{url:string, card:string, width?:string, height?:string, type?:string}
@@ -154,21 +147,12 @@ function image_dimensions(string $url): array
  * remote URL (which can't be measured locally) and for anything that resolves
  * outside the web root.
  *
- * The URL is the `src` of the first `<img>` in a post's rendered body, so it is
- * whatever the Markdown said — and the body is not always the author's: a
- * subscribed feed's item description reaches here (strip_tags() removes HTML
- * tags but leaves Markdown `![](…)` for Parsedown to render), as does a
- * Micropub client holding only `create` scope, and both importers. `![](/../..
- * /etc/whatever.png)` therefore built a path straight out of the web root, and
- * image_dimensions() published whether it exists — plus its pixel size and MIME
- * type — into the page's og:image meta tags for anyone to read.
- *
- * Response\asset_dimensions() already resolves the same class of body-supplied
- * `src` and documents why: "Post bodies are hand-written Markdown, so
- * /assets/../../etc/passwd … is reachable input; realpath() containment rejects
- * it, and covers symlinks out of the tree too." The containment here is against
- * ROOT_DIR rather than src/assets/, because the site default (og-image.png) and
- * the shipped card both legitimately live outside the uploads tree.
+ * The URL is body-supplied (post Markdown, including feed items and
+ * `create`-scope Micropub posts), so `realpath()` containment against
+ * ROOT_DIR — the same defence `Response\asset_dimensions()` applies — guards
+ * against a path built straight out of the web root. See theme/README.md
+ * ("OpenGraph image selection") for why the containment root is ROOT_DIR
+ * rather than the narrower uploads tree.
  *
  * @param string $url Image URL.
  * @return string|null The resolved path inside ROOT_DIR, or null.

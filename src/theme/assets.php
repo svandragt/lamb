@@ -24,14 +24,10 @@ function the_styles(): void
 }
 
 /**
- * Builds the markup that loads the active theme's stylesheet.
- *
- * Small stylesheets are inlined as a <style> tag to remove the render-blocking
- * round-trip on first paint (the single biggest mobile PageSpeed win for a
- * one-file theme). Relative url() references are rewritten to absolute so they
- * still resolve once the CSS lives in the HTML rather than at styles/styles.css.
- * Anything larger than $max_bytes, or an unreadable file, falls back to an
- * external <link> with a content-hash cache-buster.
+ * Builds the markup that loads the active theme's stylesheet: inlined as a
+ * <style> tag when small enough, otherwise an external <link> with a
+ * content-hash cache-buster. See theme/README.md ("Why CSS gets minified and
+ * inlined, but JS never does").
  *
  * @param string $css_path  Absolute filesystem path to the stylesheet.
  * @param string $css_url   Public URL of the stylesheet (fallback <link> href).
@@ -57,10 +53,9 @@ function styles_markup(string $css_path, string $css_url, string $base_url, int 
 
 /**
  * Rewrites relative url() references in CSS to absolute URLs against $base_url.
- *
- * Needed when CSS is inlined into the HTML document: a relative url('fonts/x.woff2')
- * would otherwise resolve against the page URL instead of the stylesheet's directory.
  * Absolute (http(s):, //, /), data: and fragment (#) URLs are left untouched.
+ * See theme/README.md ("Why CSS gets minified and inlined, but JS never
+ * does") for why this matters once the CSS is inlined into the HTML document.
  *
  * @param string $css      The stylesheet contents.
  * @param string $base_url Absolute URL of the stylesheet's directory (trailing slash).
@@ -82,19 +77,12 @@ function rewrite_css_urls(string $css, string $base_url): string
 }
 
 /**
- * Minifies CSS for inlining: strips comments and collapses insignificant whitespace.
- *
- * Conservative by design — it only touches whitespace and comments. "Insignificant"
- * is the whole difficulty: collapsing whitespace around `{}:;,>` across the entire
- * stylesheet also reached inside quoted strings and url() tokens, where that
- * whitespace is content. `content: "Note: hello"` became `content:"Note:hello"`,
- * and `[data-label="a > b"]` became `[data-label="a>b"]` — a selector that no
- * longer matches the element, so the rule silently stopped applying.
- *
- * No theme Lamb ships triggers it, but the_styles() inlines whichever theme the
- * `theme` setting names, so a hand-written or third-party stylesheet is an input
- * this has to survive. String literals and url() tokens are therefore split out
- * and copied through untouched, and only the CSS syntax between them is collapsed.
+ * Minifies CSS for inlining: strips comments and collapses insignificant
+ * whitespace. Deliberately conservative — string literals and url() tokens
+ * are split out and copied through untouched, since whitespace inside them
+ * is content rather than syntax. See theme/README.md ("Why CSS gets
+ * minified and inlined, but JS never does") for the concrete cases this
+ * protects.
  *
  * @param string $css The stylesheet contents.
  * @return string Minified CSS.
@@ -152,12 +140,10 @@ function the_scripts(): void
 }
 
 /**
- * Computes a content-addressed cache-busting version for an asset.
- *
- * Hashing the file contents (not the URL) means the version only changes when the
- * file actually changes, so a deploy invalidates stale browser/CDN copies while
- * returning visitors keep their cache across deploys that leave the file untouched.
- * Falls back to hashing the URL when the file cannot be read (e.g. a remote asset).
+ * Computes a content-addressed cache-busting version for an asset: hashes the
+ * file contents, falling back to hashing the URL when the file can't be read
+ * (e.g. a remote asset). See theme/README.md ("Cache-busting is
+ * content-addressed").
  *
  * @param string $local_path Absolute filesystem path to the asset.
  * @param string $href       The public URL of the asset (used as a fallback).
@@ -178,6 +164,9 @@ function asset_version(string $local_path, string $href): string
  * - ''          always loaded
  * - 'logged_in' loaded only when the user is authenticated
  * - any other string is matched against the current $template
+ *
+ * See theme/README.md ("asset_loader()'s three-way key") for why the loaders
+ * are split this way.
  *
  * @param array<string, list<string>> $assets Associative array: key = subdirectory condition, value = array of filenames.
  * @param string $asset_dir Base directory for the assets.

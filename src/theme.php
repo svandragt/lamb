@@ -326,11 +326,8 @@ function link_source(OODBBean $bean): string
 
     $url = $bean->source_url ?? $feeds[$bean->feed_name] ?? '';
 
-    // escape() only encodes HTML metacharacters, not URL schemes: a
-    // `javascript:`-scheme URL passes through untouched into the href
-    // attribute. source_url is attacker-influenced (any subscribed feed's
-    // item permalink), so require a genuine http(s) URL before linking it,
-    // matching the scheme allowlist Parsedown's safe mode applies elsewhere.
+    // escape() doesn't cover URL schemes and source_url is feed-supplied. See
+    // theme/README.md ("Escaping is per-context, not per-file").
     if (!is_valid_http_url($url)) {
         return sprintf('Via %s', escape($bean->feed_name));
     }
@@ -354,11 +351,9 @@ function syndication_links(OODBBean $bean): string
     $targets = $config['syndicate_to'] ?? [];
     $links = [];
     foreach (preg_split('/\s+/', trim($raw)) ?: [] as $uid) {
-        // Same reasoning as link_source() above: escape() encodes HTML
-        // metacharacters, not URL schemes, so a `javascript:` target passed
-        // straight into the href. syndicated_to is not author-only — a Micropub
-        // client holding just `create` scope sets it via mp-syndicate-to — so
-        // require a real http(s) URL before linking it.
+        // Same reasoning as link_source() above: escape() doesn't cover URL
+        // schemes, and syndicated_to can be set by a Micropub client holding
+        // just `create` scope. See theme/README.md ("Escaping is per-context").
         if ($uid === '' || !is_valid_http_url($uid)) {
             continue;
         }
