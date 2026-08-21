@@ -26,6 +26,7 @@ else :
         echo '<ul>';
     endif;
     foreach ($data['posts'] as $bean) :
+        /** @var \RedBeanPHP\OODBBean $bean */
         if ($template !== 'status' && is_menu_item($bean->slug ?? $bean->id)) :
             # Hide from timeline
             continue;
