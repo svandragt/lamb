@@ -38,28 +38,22 @@ function respond_upload(array $_args): void
 
     $files = normalize_uploaded_files($_FILES[IMAGE_FILES]);
 
+    // The whole batch is checked before any of it is stored. The client posts
+    // every dropped file in one request, so refusing file 2 mid-loop left
+    // file 1 already written into src/assets/ — stored, referenced by nothing,
+    // and invisible to the author, who saw only the refusal.
+    [$accepted, $refusal] = accept_upload_batch($files);
+    if ($refusal !== null) {
+        // The status is load-bearing: upload-image.js keys on response.ok to
+        // tell markdown-to-insert from error-to-report.
+        header('HTTP/1.1 400 Bad Request');
+        echo json_encode($refusal, JSON_THROW_ON_ERROR);
+        die();
+    }
+
     $out = '';
-    foreach ($files as $f) {
-        if ($f['error'] !== UPLOAD_ERR_OK) {
-            // The status is load-bearing: upload-image.js keys on response.ok to
-            // tell markdown-to-insert from error-to-report.
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('File upload error: ' . $f['error'], JSON_THROW_ON_ERROR);
-            die();
-        }
-        // File upload successful
-        $ext = safe_upload_extension($f['name']);
-        if ($ext === null) {
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('Unsupported file type.', JSON_THROW_ON_ERROR);
-            die();
-        }
-        $temp_fp  = $f['tmp_name'];
-        if (!upload_content_allowed(sniff_file_content_type($temp_fp), $ext)) {
-            header('HTTP/1.1 400 Bad Request');
-            echo json_encode('File contents do not match its type.', JSON_THROW_ON_ERROR);
-            die();
-        }
+    $stored = [];
+    foreach ($accepted as $f) {
         // Salt with uniqid() so two uploads with the same client-supplied
         // filename in the same month don't collide on disk — without this,
         // an attacker-controlled filename can silently overwrite an earlier,
@@ -70,16 +64,22 @@ function respond_upload(array $_args): void
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        $new_fn = store_webp_copy($temp_fp, $ext, $dir, $seed);
+        $new_fn = store_webp_copy($f['tmp_name'], $f['ext'], $dir, $seed);
         if ($new_fn === null) {
-            $new_fn = "$seed.$ext";
+            $new_fn = $seed . '.' . $f['ext'];
             $new_fp = sprintf("%s/%s", $dir, $new_fn);
-            if (!move_uploaded_file($temp_fp, $new_fp)) {
+            if (!move_uploaded_file($f['tmp_name'], $new_fp)) {
+                // Same reasoning as the batch check: the request is failing, so
+                // the files that did land are unreachable. Take them with it.
+                foreach ($stored as $orphan) {
+                    @unlink($orphan);
+                }
                 header('HTTP/1.1 500 Internal Server Error');
-                echo json_encode('Move upload error: ' . $temp_fp, JSON_THROW_ON_ERROR);
+                echo json_encode('Move upload error: ' . $f['tmp_name'], JSON_THROW_ON_ERROR);
                 die();
             }
         }
+        $stored[] = $dir . '/' . $new_fn;
         $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
     }
 
@@ -88,6 +88,43 @@ function respond_upload(array $_args): void
     // after the file has already been stored.
     echo json_encode($out, JSON_THROW_ON_ERROR | JSON_INVALID_UTF8_SUBSTITUTE);
     die();
+}
+
+/**
+ * Checks every file in an upload batch, resolving each one's extension.
+ *
+ * Returns the accepted files and null, or an empty list and the message for the
+ * first file that cannot be stored. Every refusal here is a 400: the request
+ * described something Lamb will not accept, and nothing has been written yet.
+ *
+ * Separated from respond_upload() because the responder stores as it validates
+ * and dies on every exit path — which is both why the mixed order was a bug and
+ * why it could not be tested. This half is pure: it reads the batch and the
+ * files it names, and writes nothing.
+ *
+ * @param array<int, array<string, mixed>> $files From normalize_uploaded_files().
+ * @return array{0: list<array{name: string, tmp_name: string, ext: string}>, 1: string|null}
+ */
+function accept_upload_batch(array $files): array
+{
+    $accepted = [];
+    foreach ($files as $file) {
+        if (($file['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_OK) {
+            return [[], 'File upload error: ' . (int) ($file['error'] ?? UPLOAD_ERR_NO_FILE)];
+        }
+        $name = (string) ($file['name'] ?? '');
+        $ext  = safe_upload_extension($name);
+        if ($ext === null) {
+            return [[], 'Unsupported file type.'];
+        }
+        $tmp_fp = (string) ($file['tmp_name'] ?? '');
+        if (!upload_content_allowed(sniff_file_content_type($tmp_fp), $ext)) {
+            return [[], 'File contents do not match its type.'];
+        }
+        $accepted[] = ['name' => $name, 'tmp_name' => $tmp_fp, 'ext' => $ext];
+    }
+
+    return [$accepted, null];
 }
 
 /**
