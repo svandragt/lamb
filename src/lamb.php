@@ -158,7 +158,14 @@ function add_body_tags(string $body, array $tags): string
  */
 function strip_trailing_body_tags(string $body): string
 {
-    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body) ?? $body);
+    // TAG_TERMINATORS, not a third copy of the class: the copy here was missing
+    // `&`, `>`, `"`, `'`, a backtick, `=` and both slashes, so a token like
+    // `#php&more` counted as one long "hashtag" and the whole of it was
+    // stripped — taking `&more`, which is body text, with it. Ending the token
+    // where a tag actually ends means such a run is no longer trailing (there
+    // is text after the tag), so it is left alone, which is what this function
+    // says it does with an inline tag.
+    return rtrim(preg_replace('/(\s+#[^' . TAG_TERMINATORS . ']+)+$/u', '', $body) ?? $body);
 }
 
 /**
@@ -172,7 +179,26 @@ function strip_trailing_body_tags(string $body): string
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
-        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body) ?? $body;
+        // An empty name would leave a pattern that matches a bare `#`, deleting
+        // a literal one out of the body. add_body_tags() skips it the same way.
+        if ($tag === '') {
+            continue;
+        }
+        // Matched with the same boundaries as TAG_PATTERN, and case-insensitively
+        // like add_body_tags(), so this removes exactly the tags get_tags()
+        // reports. It used to demand whitespace on both sides, which left the
+        // tag in place for most real bodies — `Hello #php.`, `Hello #php, ok`,
+        // `#php at the start` — while Micropub's category delete-values still
+        // answered success, so the client was told the tag was gone.
+        //
+        // A callback rather than a replacement string: the leading whitespace
+        // goes with the tag (or two spaces close up where one belonged), but a
+        // `>` before it is the quote marker it was already part of and stays.
+        $body = preg_replace_callback(
+            '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[' . TAG_TERMINATORS . ']|$)/iu',
+            static fn(array $match): string => $match[1] === '>' ? '>' : '',
+            $body
+        ) ?? $body;
     }
 
     return $body;
