@@ -373,16 +373,27 @@ function import_post(array $item, callable $_downloader, bool $dry_run = false, 
  * crawl overwriting the author's own edits. Restoring one without the other
  * hands the post back to the feed.
  *
+ * Total does not mean unquestioning: the three date columns drive visibility
+ * and the trash purge, so a value the manifest cannot justify is dropped rather
+ * than written into a comparison it would break.
+ *
  * @param array<string, mixed> $item
  */
 function apply_manifest_state(OODBBean $bean, array $item): void
 {
-    $created = (string) ($item['created'] ?? '');
-    $updated = (string) ($item['updated'] ?? '');
-    if ($created !== '') {
+    // normalize_datetime() rather than the raw manifest value, the same way
+    // Micropub's createCallback() reads an untrusted `published`. Stored
+    // verbatim, a value that is not a date sorts above every real one, so
+    // visible_clause() reads the restored post as scheduled and it never
+    // appears in a listing; a non-string value was worse still, the (string)
+    // cast warning and storing the literal "Array". Both now fall back to what
+    // populate_bean() settled, exactly as an absent date already did.
+    $created = \Lamb\normalize_datetime($item['created'] ?? null);
+    $updated = \Lamb\normalize_datetime($item['updated'] ?? null);
+    if ($created !== null) {
         $bean->created = $created;
     }
-    $bean->updated = $updated !== '' ? $updated : $bean->created;
+    $bean->updated = $updated ?? $bean->created;
 
     $slug = Post\sanitize_explicit_slug((string) ($item['slug'] ?? ''));
     if ($slug !== '') {
@@ -397,7 +408,17 @@ function apply_manifest_state(OODBBean $bean, array $item): void
     // reads as 0 — the value such an install would have had for any post whose
     // author never took it over.
     $bean->feed_locked = empty($item['feed_locked']) ? 0 : 1;
-    $bean->deleted_at = $item['deleted_at'] ?? null;
+    // deleted_at drives purge_deleted_posts(), which hard-deletes a trashed post
+    // 30 days after this stamp. A value sorting below that cutoff — '0000-00-00'
+    // from an older install, or anything that is not a date at all — purged the
+    // post on the very next /_cron, destroying during a restore the data the
+    // restore exists to recover. Nothing earlier than the post's own created
+    // date can be a real deletion time either, so both fall back to NULL, which
+    // the purge already backfills for rows trashed before it tracked this.
+    $deleted_at = \Lamb\normalize_datetime($item['deleted_at'] ?? null);
+    $bean->deleted_at = ($deleted_at !== null && $deleted_at >= (string) $bean->created)
+        ? $deleted_at
+        : null;
     $bean->feed_name = $item['feed_name'] ?? null;
     $bean->feeditem_uuid = $item['feeditem_uuid'] ?? null;
     $bean->source_url = $item['source_url'] ?? null;

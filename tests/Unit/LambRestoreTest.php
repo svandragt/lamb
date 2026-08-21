@@ -904,4 +904,102 @@ class LambRestoreTest extends TestCase
 
         $this->assertSame('archive-2024', $bean->slug);
     }
+
+    /**
+     * A manifest date is untrusted like the rest of the archive. Stored
+     * verbatim, one that is not a date sorted above every real date, so
+     * visible_clause() read the restored post as scheduled and it never
+     * appeared in a listing.
+     *
+     * @dataProvider unusableManifestDateProvider
+     */
+    public function testApplyManifestStateFallsBackWhenTheManifestDateIsNotADate(mixed $created): void
+    {
+        $bean = R::dispense('post');
+        $bean->created = '2024-01-01 00:00:00';
+
+        apply_manifest_state($bean, ['created' => $created, 'updated' => $created]);
+
+        $this->assertSame('2024-01-01 00:00:00', $bean->created, 'the settled date must survive');
+        $this->assertSame('2024-01-01 00:00:00', $bean->updated);
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unusableManifestDateProvider(): array
+    {
+        return [
+            'unparseable text' => ['not a date'],
+            'letters only'     => ['zzzz'],
+            'trailing markup'  => ['2019-04-05T10:11:12+00:00 <script>'],
+            'an array'         => [['2019-04-05']],
+            'a boolean'        => [true],
+            'empty string'     => [''],
+        ];
+    }
+
+    public function testApplyManifestStateKeepsAUsableManifestDate(): void
+    {
+        $bean = R::dispense('post');
+        $bean->created = '2024-01-01 00:00:00';
+
+        apply_manifest_state($bean, [
+            'created' => '2019-04-05 10:11:12',
+            'updated' => '2020-01-02 03:04:05',
+        ]);
+
+        $this->assertSame('2019-04-05 10:11:12', $bean->created);
+        $this->assertSame('2020-01-02 03:04:05', $bean->updated);
+    }
+
+    /**
+     * purge_deleted_posts() hard-deletes a trashed post 30 days after its
+     * deleted_at stamp, so a manifest value sorting below that cutoff purged
+     * the post on the very next /_cron — destroying, during a restore, the data
+     * the restore exists to recover. NULL is the safe answer: the purge already
+     * backfills it for rows trashed before it tracked this.
+     *
+     * @dataProvider unusableDeletedAtProvider
+     */
+    public function testApplyManifestStateDropsADeletedAtItCannotJustify(mixed $deletedAt): void
+    {
+        $bean = R::dispense('post');
+
+        apply_manifest_state($bean, [
+            'created'    => '2026-08-20 09:00:00',
+            'deleted'    => true,
+            'deleted_at' => $deletedAt,
+        ]);
+
+        $this->assertNull($bean->deleted_at);
+        $this->assertSame(1, $bean->deleted, 'the post is still trashed, only its stamp is dropped');
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unusableDeletedAtProvider(): array
+    {
+        return [
+            'unparseable text'    => ['not a date'],
+            'sorts below any date' => ['!'],
+            'a zero date'         => ['0000-00-00'],
+            'before the post existed' => ['2019-01-01 00:00:00'],
+            'an array'            => [['2026-08-20']],
+        ];
+    }
+
+    public function testApplyManifestStateKeepsARealDeletedAt(): void
+    {
+        $bean = R::dispense('post');
+
+        apply_manifest_state($bean, [
+            'created'    => '2026-08-01 09:00:00',
+            'deleted'    => true,
+            'deleted_at' => '2026-08-19 12:00:00',
+        ]);
+
+        $this->assertSame('2026-08-19 12:00:00', $bean->deleted_at);
+    }
 }
