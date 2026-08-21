@@ -86,9 +86,18 @@ jobs:
       - name: Install dependencies
         run: composer install --prefer-dist --no-progress
 
+      # GITHUB_REF is quoted, and reached through env: rather than interpolated
+      # into the script. git allows `'`, `;`, `&`, `|` and `$( )` in a ref name
+      # (check-ref-format only forbids space, `~^:?*[`, control characters and a
+      # few shapes), so an unquoted expansion here made the ref name shell
+      # syntax: `refs/heads/a$(id)` ran `id`. Reaching it needs push access —
+      # a pull_request run gets `refs/pull/N/merge` — so this is hardening
+      # rather than an open hole, but it costs one quote pair.
       - name: Run Codeception tests
+        env:
+          GIT_REF: ${{ github.ref }}
         run: |
-          LAMB_WRITE_TEST_PASSWORD=1 php make-password.php $GITHUB_REF
+          LAMB_WRITE_TEST_PASSWORD=1 php make-password.php "$GIT_REF"
           vendor/bin/codecept run --steps
 
       - name: Check code coverage
