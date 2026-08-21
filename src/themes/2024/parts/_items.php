@@ -38,11 +38,13 @@ else :
 
         <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
             <header>
-                <?php if ($template !== 'status') : ?>
-                    <?php $title = title_link($bean); ?>
-                    <?php if (!empty(trim(strip_tags($title)))) : ?>
-                        <h2><?= $title ?></h2>
-                    <?php endif; ?>
+                <?php // On a post page the h1 already shows the title, and the
+                      // stylesheet hides this h2 — but the h-entry still needs a
+                      // p-name, so the element is emitted and hidden rather than
+                      // skipped. Same expression as the base theme.
+                ?>
+                <?php if (!empty($bean->title)) : ?>
+                    <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
                 <?php endif; ?>
                 <div class="meta">
                     <span itemprop="author"><?= author_card() ?></span> @

@@ -138,11 +138,56 @@ class MicroformatsTest extends TestCase
         $this->assertStringContainsString('h-card', $html, "$theme: author should be an h-card");
     }
 
-    public function testBaseStatusTitleCarriesPName(): void
+    /**
+     * On a post page the h1 already shows the title, so the h2 that carries the
+     * entry's p-name is hidden by CSS rather than skipped — the h-entry still
+     * needs a name for anything parsing the permalink. The 2024 and 2026
+     * templates skipped the element instead, so their stylesheets were hiding
+     * markup that was never emitted and their permalink pages published an
+     * h-entry with no p-name at all.
+     *
+     * @dataProvider themeProvider
+     */
+    public function testThemeStatusTitleCarriesPName(string $theme): void
     {
-        $html = $this->renderItems('base', 'status', ['title' => 'Hello World']);
-        $this->assertStringContainsString('p-name', $html);
-        $this->assertStringContainsString('Hello World', $html);
+        $html = $this->renderItems($theme, 'status', ['title' => 'Hello World']);
+
+        $this->assertStringContainsString('p-name', $html, "$theme: status entry should carry a p-name");
+        $this->assertStringContainsString('Hello World', $html, "$theme: status entry should name the post");
+    }
+
+    /**
+     * @dataProvider themeProvider
+     */
+    public function testThemeStatusTitleIsEscaped(string $theme): void
+    {
+        // The p-name span holds the raw title rather than title_link()'s
+        // already-escaped output, so it needs escaping of its own.
+        $html = $this->renderItems($theme, 'status', ['title' => '<img src=x onerror=alert(1)>']);
+
+        $this->assertStringNotContainsString('<img src=x', $html, "$theme: title must not reach the page as markup");
+        $this->assertStringContainsString('&lt;img', $html, "$theme: title should be escaped");
+    }
+
+    /**
+     * The element exists to be machine-readable, not visible, so each theme
+     * hides it on the post page. base used `article header + h2` — a sibling
+     * combinator — while the h2 is a *child* of the header in every theme, so
+     * the rule matched nothing and the title rendered twice.
+     *
+     * @dataProvider themeProvider
+     */
+    public function testThemeHidesTheStatusTitleItEmits(string $theme): void
+    {
+        $css = (string) file_get_contents(dirname(__DIR__, 2) . "/src/themes/$theme/styles/styles.css");
+
+        // A descendant or child relationship between `header` and `h2`; a `+`
+        // between them would not select the emitted element.
+        $this->assertMatchesRegularExpression(
+            '/article\s+(?:>\s*)?header\s+(?:>\s*)?h2/',
+            $css,
+            "$theme: stylesheet should hide the h2 the template emits inside article header"
+        );
     }
 
     public static function themeProvider(): array
