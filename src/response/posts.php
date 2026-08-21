@@ -282,7 +282,15 @@ function redirect_edited(): void
     }
 
     $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
-    $id = trim(filter_input(INPUT_POST, 'id', FILTER_SANITIZE_NUMBER_INT) ?: '');
+    // filter_var() over $_POST rather than filter_input(INPUT_POST, ...): the
+    // same FILTER_SANITIZE_NUMBER_INT over the same value, but read where every
+    // other input in this function is read. filter_input() reads the SAPI's
+    // request data, which does not exist under the CLI SAPI the test suite runs
+    // on — it returns null there whatever $_POST holds, so everything below this
+    // line was unreachable from a unit test (hence the existing coverage
+    // stopping at "early-return paths"). Non-numeric input still sanitises to ''
+    // and returns here, exactly as before.
+    $id = trim((string) filter_var(request_string($_POST['id'] ?? null) ?? '', FILTER_SANITIZE_NUMBER_INT));
     if (empty($contents) || empty($id)) {
         return;
     }
@@ -316,7 +324,15 @@ function redirect_edited(): void
     try {
         R::store($bean);
     } catch (SQL $e) {
+        // Return, like the reserved-slug check above: everything below this
+        // point is a consequence of the edit having been saved. Falling through
+        // on a failed write — a locked SQLite file while /_cron holds it is the
+        // realistic one — pointed the post's live URL at a slug that was never
+        // stored (a 301 to a 404), and announced the unsaved content to
+        // webmention receivers and the WebSub hub.
         $_SESSION['flash'][] = 'Failed to update status: ' . $e->getMessage();
+
+        return;
     }
 
     $new_slug = $bean->slug;
