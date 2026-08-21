@@ -211,6 +211,58 @@ class ThemeExtendedTest extends TestCase
         $this->assertCount(1, $result);
     }
 
+    /**
+     * The block shows ten links; it used to read every row the LIKE matched to
+     * find them. On a common tag that is the whole archive, on the most-visited
+     * anonymous page there is: 58 MB for one post page at 8,000 posts sharing a
+     * tag, and a fatal "Allowed memory size of 134217728 bytes exhausted" at
+     * 20,000 against the images' default 128M limit.
+     */
+    public function testGetPostsByTagsReadsInBoundedPages(): void
+    {
+        // More than one page, and interleaved with rows the LIKE matches but
+        // body_has_tag() rejects — the reason a plain LIMIT will not do.
+        for ($i = 1; $i <= 120; $i++) {
+            $this->taggedPost("Post $i about #photography", $i * 2);
+            $this->taggedPost("Post $i about #photographylover", $i * 2 + 1);
+        }
+
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        try {
+            $result = get_posts_by_tags(['photography']);
+            $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        } finally {
+            R::debug(false);
+        }
+
+        // The decoys must not stop it filling the block.
+        $this->assertCount(10, $result);
+
+        $selects = array_filter(
+            array_map(static fn(string $sql): string => str_replace('`', '', $sql), $logs),
+            static fn(string $sql): bool => stripos($sql, 'SELECT') !== false
+                && stripos($sql, 'FROM post') !== false
+        );
+        $this->assertNotSame([], $selects, 'the lookup should have queried the post table');
+        foreach ($selects as $sql) {
+            $this->assertStringContainsStringIgnoringCase(
+                'LIMIT',
+                $sql,
+                'a related-posts query must be bounded: ' . $sql
+            );
+        }
+    }
+
+    private function taggedPost(string $body, int $minutesOld): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = $body;
+        $bean->version = 1;
+        $bean->created = date('Y-m-d H:i:s', time() - $minutesOld * 60);
+        $bean->updated = $bean->created;
+        R::store($bean);
+    }
+
     // related_posts
 
     public function testRelatedPostsReturnsEmptyPostsArrayWhenBodyHasNoTags(): void
