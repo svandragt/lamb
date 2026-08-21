@@ -64,6 +64,10 @@ function collect_posts(): array
             'draft'          => (bool) $bean->draft,
             'deleted'        => (bool) $bean->deleted,
             'deleted_at'     => $bean->deleted_at === null ? null : (string) $bean->deleted_at,
+            // Author-owned state, not feed provenance: it says the author took
+            // this post over through the edit form, which is why the next crawl
+            // leaves it alone. Losing it means the feed reclaims the post.
+            'feed_locked'    => (bool) $bean->feed_locked,
             'version'        => $bean->version === null ? null : (int) $bean->version,
             'feed_name'      => $bean->feed_name === null ? null : (string) $bean->feed_name,
             'feeditem_uuid'  => $bean->feeditem_uuid === null ? null : (string) $bean->feeditem_uuid,
@@ -195,7 +199,8 @@ function asset_source_path(string $assets_root, string $relative): ?string
  * Deliberately carries no title and no body: those live in the `.md` file at
  * `path`, and duplicating them here would create two sources of truth that can
  * drift. What is recorded instead is the state the front matter cannot express
- * — the row's identity, timestamps, draft/deleted flags and feed provenance.
+ * — the row's identity, timestamps, draft/deleted/feed-locked flags and feed
+ * provenance.
  *
  * The field list is an explicit allowlist so a future column added to the post
  * bean cannot start appearing in exports (and leaking, in the case of another
@@ -215,6 +220,7 @@ function manifest_post_entry(array $post, string $path): array
         'draft'         => (bool) ($post['draft'] ?? false),
         'deleted'       => (bool) ($post['deleted'] ?? false),
         'deleted_at'    => $post['deleted_at'] ?? null,
+        'feed_locked'   => (bool) ($post['feed_locked'] ?? false),
         'post_version'  => $post['version'] ?? null,
         'feed_name'     => $post['feed_name'] ?? null,
         'feeditem_uuid' => $post['feeditem_uuid'] ?? null,

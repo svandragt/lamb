@@ -72,6 +72,7 @@ class ExportTest extends TestCase
             'draft'         => false,
             'deleted'       => false,
             'deleted_at'    => null,
+            'feed_locked'   => false,
             'version'       => 3,
             'feed_name'     => null,
             'feeditem_uuid' => null,
@@ -174,6 +175,22 @@ class ExportTest extends TestCase
         $this->assertTrue($entry['draft']);
         $this->assertTrue($entry['deleted']);
         $this->assertSame('2026-07-20 10:00:00', $entry['deleted_at']);
+    }
+
+    public function testManifestEntryRecordsTheFeedLock(): void
+    {
+        // feed_locked is author-owned state, not feed provenance: it records
+        // that the author took a feed-sourced post over through the edit form,
+        // which is the only thing stopping the next crawl overwriting it. An
+        // archive that drops it hands the post back to the feed on restore.
+        $locked = manifest_post_entry(
+            $this->post(['feeditem_uuid' => 'abc123', 'feed_locked' => true]),
+            'posts/2026/07/hello-world.md'
+        );
+        $unlocked = manifest_post_entry($this->post(), 'posts/2026/07/hello-world.md');
+
+        $this->assertTrue($locked['feed_locked']);
+        $this->assertFalse($unlocked['feed_locked']);
     }
 
     public function testManifestEntryRecordsFeedProvenance(): void
