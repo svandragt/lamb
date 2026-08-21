@@ -356,6 +356,15 @@ function consume_leading_heading(string $body): string
  * matter, so the stored title is migrated into the body before re-parsing.
  * The result matches the format modern feed ingestion writes.
  *
+ * An existing block is recognised by the same fence split_frontmatter() reads,
+ * not by a literal `---\n`: a browser normalises a <textarea> to CRLF on
+ * submit, so every body saved from the edit form arrives with `---\r\n`
+ * fences. Matching only the LF spelling took those bodies down the
+ * create-a-block branch and prepended a *second* front-matter block — the
+ * author's real one (with its `draft:`, `slug:` and `created:` lines) became
+ * body text, so parse_bean() saw no `draft` key and published the post.
+ * The block's own line ending is reused for the inserted line.
+ *
  * @param string $body The post body, with or without existing front matter.
  * @param string $title The title to write into the front matter.
  * @return string The body with the title present in its front matter.
@@ -363,11 +372,28 @@ function consume_leading_heading(string $body): string
 function inject_title_matter(string $body, string $title): string
 {
     $title_line = rtrim(Yaml::dump(['title' => $title]), "\n");
-    if (str_starts_with($body, "---\n")) {
-        return "---\n" . $title_line . "\n" . substr($body, strlen("---\n"));
+    // has_frontmatter(), not a non-empty YAML block: `---\n---\n` is an empty
+    // block, and adding a second one above it is the bug this guards against.
+    if (has_frontmatter($body) && preg_match('/\A---[ \t]*(\R)/', $body, $m) === 1) {
+        return $m[0] . $title_line . $m[1] . substr($body, strlen($m[0]));
     }
 
     return "---\n" . $title_line . "\n---\n\n" . $body;
+}
+
+/**
+ * Whether the body opens with a complete front-matter block.
+ *
+ * split_frontmatter() cannot answer this on its own: it reports an empty YAML
+ * string both for a body with no block at all and for one whose block is empty
+ * (`---\n---\n`). The content it returns is the discriminator — it is the body
+ * itself only when nothing was split off.
+ *
+ * @param string $body The raw post body.
+ */
+function has_frontmatter(string $body): bool
+{
+    return split_frontmatter($body)[1] !== $body;
 }
 
 function slugify(string $text): string
