@@ -117,6 +117,59 @@ class LambDownTest extends TestCase
         $this->assertStringContainsString('<strong>the</strong>', $html);
     }
 
+    public function testCheckboxLabelLinkGetsTheSafeModeSchemeAllowlist(): void
+    {
+        // The label used to be rendered with safe mode switched off, so
+        // Parsedown's URL-scheme allowlist never ran on a link inside it —
+        // while the same link outside a label was correctly neutralised.
+        $inLabel  = $this->parser->text('[ ] [click](javascript:alert(1))');
+        $outside  = $this->parser->text('[click](javascript:alert(1))');
+
+        $this->assertStringNotContainsString('href="javascript:', $inLabel);
+        $this->assertStringContainsString('javascript%3Aalert', $inLabel);
+        // Both spellings of the same link are neutralised the same way.
+        $this->assertStringContainsString('javascript%3Aalert', $outside);
+    }
+
+    public function testCheckboxLabelImageGetsTheSafeModeSchemeAllowlist(): void
+    {
+        $html = $this->parser->text('[x] ![a](javascript:alert(2))');
+
+        $this->assertStringNotContainsString('src="javascript:', $html);
+        $this->assertStringContainsString('javascript%3Aalert', $html);
+    }
+
+    public function testBlockquotedCheckboxLabelIsAlsoFiltered(): void
+    {
+        // The shape feed ingestion produces: attributed_content() strips HTML
+        // tags but leaves Markdown, and prefixes every line with `> `, which
+        // still parses as a task item inside the blockquote. That made this
+        // remotely triggerable by any subscribed feed.
+        $html = $this->parser->text('> [ ] [click](javascript:alert(4))');
+
+        $this->assertStringNotContainsString('href="javascript:', $html);
+        $this->assertStringContainsString('javascript%3Aalert', $html);
+    }
+
+    public function testCheckboxLabelStillEscapesRawHtml(): void
+    {
+        $html = $this->parser->text('[ ] <img src=x onerror=alert(3)>');
+
+        $this->assertStringNotContainsString('<img src=x', $html);
+        $this->assertStringContainsString('&lt;img src=x onerror=alert(3)&gt;', $html);
+    }
+
+    public function testCheckboxLabelLinkUrlIsNotDoubleEscaped(): void
+    {
+        // The label was escaped by hand and then again as an attribute value,
+        // so `?b=1&c=2` was emitted as `?b=1&amp;amp;c=2` — a link pointing at
+        // a URL with a literal `&amp;` in it.
+        $html = $this->parser->text('[x] [l](https://example.test/a?b=1&c=2)');
+
+        $this->assertStringContainsString('href="https://example.test/a?b=1&amp;c=2"', $html);
+        $this->assertStringNotContainsString('&amp;amp;', $html);
+    }
+
     public function testVideoExtensionRendersVideoTag(): void
     {
         $html = $this->parser->text('![clip](video.mp4)');

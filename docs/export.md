@@ -48,6 +48,7 @@ The filename comes from the post's slug. A post with no slug is named after its 
       "draft": false,
       "deleted": false,
       "deleted_at": null,
+      "feed_locked": false,
       "post_version": 3,
       "feed_name": null,
       "feeditem_uuid": null,
@@ -68,6 +69,7 @@ Each entry in `posts` points at a file in the archive and records the things a M
 | `created` / `updated` | Local timestamps, `Y-m-d H:i:s`. A `created` date in the future means the post is [scheduled]({{ site.baseurl }}{% link scheduling.md %}). |
 | `draft` | `true` for an unpublished [draft]({{ site.baseurl }}{% link drafts.md %}). |
 | `deleted` / `deleted_at` | `true` and a timestamp for a post in the [trash]({{ site.baseurl }}{% link trash.md %}). |
+| `feed_locked` | `true` when you have edited a feed-sourced post through the edit form, which stops later crawls of that [feed]({{ site.baseurl }}{% link feeds.md %}) overwriting your version. |
 | `post_version` | Which revision of Lamb's post pipeline last rendered the post. |
 | `feed_name`, `feeditem_uuid`, `source_url` | Set when the post came from a subscribed feed rather than being written locally. Locally authored posts have `null` in all three. |
 | `site.url` (in the top-level `site` block, not per-post) | The origin the [Lamb importer]({{ site.baseurl }}{% link lamb-import.md %}) uses to namespace restored post ids, so archives from two different sites never collide on id. |

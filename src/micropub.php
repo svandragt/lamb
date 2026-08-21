@@ -239,8 +239,16 @@ class LambMicropubAdapter extends MicropubAdapter
             return null;
         }
 
+        // Http\parse_status_line(), not a substring test for ' 200 '. That test
+        // answered on the wrong thing in both directions: it read a status line
+        // with no reason phrase ("HTTP/1.1 200", "HTTP/2 200") as a failure, so a
+        // conforming token endpoint could take the whole Micropub endpoint down
+        // with no usable diagnosis; and it matched ' 200 ' anywhere in the line,
+        // so "HTTP/1.1 500 Error 200 x" read as a success — a fail-open answer on
+        // the request that establishes who the caller is.
         $statusLine = $result['headers'][0] ?? '';
-        if (!str_contains($statusLine, ' 200 ')) {
+        $status = \Lamb\Http\parse_status_line($statusLine);
+        if ($status !== 200) {
             mp_log('introspect', ['endpoint' => $endpoint, 'reason' => 'non_200', 'status' => trim($statusLine)]);
             return null;
         }
@@ -679,8 +687,29 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyReplace(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'content') {
-            $newContent = (string) ($values[0] ?? '');
-            $bean->body = $this->rebuildBody($bean, $newContent);
+            // An empty value list is Micropub's "replace with nothing".
+            if ($values === []) {
+                $bean->body = $this->rebuildBody($bean, '');
+                return true;
+            }
+            // extractContent(), not (string) $values[0]: a content value is
+            // legitimately `{"html": …}` or `{"value": …}`, which the create
+            // path has always unwrapped. Cast here instead, that object became
+            // the literal string "Array" (with an "Array to string conversion"
+            // warning) and rebuildBody() wrote it over the entire post — a
+            // spec-legal update from the same client that created the post
+            // destroyed its content.
+            ['content' => $newContent, 'is_html' => $isHtml] = $this->extractContent(['content' => $values]);
+            if ($newContent === null) {
+                // A value carrying no text at all (an object with neither key)
+                // is a replace the storage cannot honour; reporting success for
+                // it reads to the client as "saved", as applyAdd() notes.
+                return false;
+            }
+            // strip_tags() for the html shape, matching what createCallback()
+            // stores in the body. `transformed` is regenerated from the body by
+            // the parse_bean() at the end of updateCallback() either way.
+            $bean->body = $this->rebuildBody($bean, $isHtml ? strip_tags($newContent) : $newContent);
             return true;
         }
 
@@ -1014,20 +1043,109 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * Strip disallowed tags from HTML content, keeping safe formatting elements.
+     * Tags kept in Micropub `content.html`. Everything else is unwrapped by
+     * strip_tags(), which keeps the text inside it.
+     */
+    private const HTML_TAGS = [
+        'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
+        'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
+        'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
+        'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
+        'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
+    ];
+
+    /**
+     * Attributes kept on a surviving element, by lower-case tag name. `*`
+     * applies to every tag. An allowlist rather than a denylist of `on*`: a
+     * denylist has to keep pace with every attribute that can run script or
+     * reposition the page, and `style` alone is enough to cover the viewport.
+     */
+    private const HTML_ATTRIBUTES = [
+        '*'          => ['title'],
+        'a'          => ['href'],
+        'blockquote' => ['cite'],
+        'img'        => ['src', 'alt', 'width', 'height'],
+        'ol'         => ['start'],
+        'q'          => ['cite'],
+        'td'         => ['colspan', 'rowspan'],
+        'th'         => ['colspan', 'rowspan', 'scope'],
+    ];
+
+    /** Kept attributes whose value is a URL and must clear the scheme allowlist. */
+    private const HTML_URL_ATTRIBUTES = ['href', 'src', 'cite'];
+
+    /**
+     * Sanitise the HTML of a Micropub `content.html` create.
+     *
+     * The result is written straight to the post's `transformed` column, which
+     * every theme echoes raw into the page (`<?= anchor_headings($bean->transformed, …) ?>`)
+     * and which is syndicated verbatim inside the Atom `<content type="html">`
+     * and the JSON Feed's `content_html`. It never passes through Parsedown, so
+     * safe mode does not apply to it.
+     *
+     * strip_tags() alone was not a sanitiser for that: it drops disallowed
+     * *tags* and keeps every attribute of the ones it allows, so
+     * `<img src=x onerror=…>`, `<p onmouseover=…>` and `<a href="javascript:…">`
+     * all survived intact — stored XSS reachable by any token holding only
+     * `create` scope, running in the author's logged-in session. The codebase
+     * already treats that scope as a limited-trust principal (see
+     * apply_frontmatter()'s note on `id:`/`deleted:`, and syndication_links()).
+     *
+     * Import\sanitize_html_in_dom() scrubs `on*` off imported HTML for the same
+     * reason; this does the equivalent for the Micropub path, as an attribute
+     * allowlist, and hands every URL attribute to LambDown::filterContentUrl()
+     * so a link here is filtered exactly as the Markdown path filters one.
      *
      * @param string $html
      * @return string
      */
     private function sanitizeHtml(string $html): string
     {
-        return strip_tags($html, [
-            'a', 'abbr', 'b', 'blockquote', 'br', 'caption',
-            'code', 'del', 'em', 'figcaption', 'figure', 'h1', 'h2', 'h3',
-            'h4', 'h5', 'h6', 'hr', 'i', 'img', 'ins', 'li', 'ol', 'p',
-            'pre', 'q', 's', 'small', 'strong', 'sub', 'sup',
-            'table', 'tbody', 'td', 'th', 'thead', 'tr', 'u', 'ul',
-        ]);
+        $html = strip_tags($html, self::HTML_TAGS);
+        if (trim($html) === '') {
+            return '';
+        }
+
+        $filter = new \Lamb\LambDown();
+        $dom = \Lamb\Import\load_html_fragment($html);
+        foreach ((new \DOMXPath($dom))->query('//*') ?: [] as $element) {
+            if (!$element instanceof \DOMElement) {
+                continue;
+            }
+            $this->sanitizeAttributes($element, $filter);
+        }
+
+        return \Lamb\Import\dump_html_fragment($dom);
+    }
+
+    /**
+     * Reduces one element's attributes to the allowlisted set, with any URL
+     * among them run through the same filter Parsedown's safe mode applies.
+     */
+    private function sanitizeAttributes(\DOMElement $element, \Lamb\LambDown $filter): void
+    {
+        $allowed = array_merge(
+            self::HTML_ATTRIBUTES['*'],
+            self::HTML_ATTRIBUTES[strtolower($element->tagName)] ?? []
+        );
+
+        // The names are snapshotted first: DOMNamedNodeMap is live, and removing
+        // while iterating it skips the entry that shuffles into the freed slot.
+        $names = [];
+        foreach ($element->attributes as $attribute) {
+            $names[] = $attribute->nodeName;
+        }
+
+        foreach ($names as $name) {
+            $lower = strtolower($name);
+            if (!in_array($lower, $allowed, true)) {
+                $element->removeAttribute($name);
+                continue;
+            }
+            if (in_array($lower, self::HTML_URL_ATTRIBUTES, true)) {
+                $element->setAttribute($name, $filter->filterContentUrl($element->getAttribute($name)));
+            }
+        }
     }
 
     /**

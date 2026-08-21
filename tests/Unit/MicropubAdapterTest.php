@@ -427,6 +427,78 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringNotContainsString('<iframe', $post->transformed);
     }
 
+    public function testCreateCallbackHtmlEventHandlerAttributesAreStripped(): void
+    {
+        // strip_tags() drops disallowed *tags* and keeps every attribute of the
+        // ones it allows, so an `on*` handler on an allowed element survived
+        // into `transformed` — which every theme echoes raw and both feeds
+        // syndicate verbatim. Reachable by a token holding only `create` scope.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Handlers</p><img src="/assets/2026/01/a.webp" onerror="alert(1)">'
+                    . '<p onmouseover="alert(2)">hover</p><b OnClick="alert(3)">mixed case</b>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Handlers%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('onerror', $post->transformed);
+        $this->assertStringNotContainsString('onmouseover', $post->transformed);
+        $this->assertStringNotContainsString('OnClick', $post->transformed);
+        $this->assertStringNotContainsString('onclick', $post->transformed);
+        // The elements and their allowed attributes survive.
+        $this->assertStringContainsString('src="/assets/2026/01/a.webp"', $post->transformed);
+        $this->assertStringContainsString('<b>mixed case</b>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlStyleAttributeIsStripped(): void
+    {
+        // `style` alone is enough to cover the viewport with an element that
+        // links somewhere else, so the attribute allowlist drops it too.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' => '<p style="position:fixed;inset:0">Overlay</p>']],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Overlay%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('style=', $post->transformed);
+        $this->assertStringContainsString('<p>Overlay</p>', $post->transformed);
+    }
+
+    public function testCreateCallbackHtmlLinkSchemeIsFilteredLikeMarkdown(): void
+    {
+        // The HTML path never goes through Parsedown, so nothing applied the
+        // scheme allowlist safe mode gives the Markdown path. It now defers to
+        // Parsedown's own filter, so both paths neutralise the same way.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => [
+                'content' => [['html' =>
+                    '<p>Schemes</p><a href="javascript:alert(1)">bad</a>'
+                    . '<a href="https://example.test/ok">good</a>'
+                    . '<a href="mailto:a@b.test">mail</a>',
+                ]],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Schemes%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('href="javascript:', $post->transformed);
+        $this->assertStringContainsString('javascript%3Aalert', $post->transformed);
+        // Everything Parsedown's safe mode allows in a Markdown link is kept here too.
+        $this->assertStringContainsString('href="https://example.test/ok"', $post->transformed);
+        $this->assertStringContainsString('href="mailto:a@b.test"', $post->transformed);
+    }
+
     public function testCreateCallbackPlainTextContentIsStillMarkdownProcessed(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -1116,6 +1188,74 @@ class MicropubAdapterTest extends TestCase
         $updated = R::load('post', $bean->id);
         $this->assertSame('My Title', $updated->title);
         $this->assertStringContainsString('New body text', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentAcceptsAnHtmlObject(): void
+    {
+        // A content value is legitimately `{"html": …}` — the shape
+        // createCallback() has always unwrapped, and the one a client that
+        // created the post with rich content sends back. Cast with (string),
+        // the object became the literal "Array" and overwrote the whole post.
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['html' => '<p>New <b>rich</b> body</p>']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('New rich body', $updated->body);
+    }
+
+    public function testUpdateCallbackReplaceContentAcceptsAValueObject(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['value' => 'Plain from an object']]]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertStringNotContainsString('Array', $updated->body);
+        $this->assertStringContainsString('Plain from an object', $updated->body);
+    }
+
+    public function testUpdateCallbackRefusesContentWithNoText(): void
+    {
+        // An object carrying neither `html` nor `value` has no content to
+        // store; reporting success for it reads to the client as "saved".
+        $bean = R::dispense('post');
+        $bean->body = 'Original content';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => [['alt' => 'no text here']]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        // Nothing is stored when an operation is refused.
+        $this->assertSame('Original content', R::load('post', $bean->id)->body);
     }
 
     public function testUpdateCallbackReplaceContentPreservesHashtags(): void

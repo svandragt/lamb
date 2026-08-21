@@ -40,7 +40,14 @@ function now(): string
 // parse_tags() builds around it — quotes, angle brackets, a backtick, `=`, and
 // the slashes — on top of the punctuation that merely ends a tag. Emoji and other
 // non-Latin scripts stay valid in a tag name.
-const TAG_PATTERN = '/(^|[\s>])#([^\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\]+)/u';
+// The character class itself, so the one other place that has to agree on where
+// a tag ends — Post\body_has_tag(), which decides whether a post belongs on the
+// /tag/ page the link below points at — can be built from it instead of
+// restating it. The two had drifted: body_has_tag() was missing `>`, `"`, `'`,
+// a backtick, `=` and the slashes, so `#php/8` rendered a link to /tag/php and
+// then the tag page left the post out.
+const TAG_TERMINATORS = '\s#&.,!?;:()\[\]{}<>"\'`=\/\\\\';
+const TAG_PATTERN = '/(^|[\s>])#([^' . TAG_TERMINATORS . ']+)/u';
 
 // Bean fields front matter is allowed to set. Anything else in a front-matter
 // block is metadata for the author's own use, not a column to write; see the
@@ -151,7 +158,14 @@ function add_body_tags(string $body, array $tags): string
  */
 function strip_trailing_body_tags(string $body): string
 {
-    return rtrim(preg_replace('/(\s+#[^\s#.,!?;:()\[\]{}<]+)+$/u', '', $body) ?? $body);
+    // TAG_TERMINATORS, not a third copy of the class: the copy here was missing
+    // `&`, `>`, `"`, `'`, a backtick, `=` and both slashes, so a token like
+    // `#php&more` counted as one long "hashtag" and the whole of it was
+    // stripped — taking `&more`, which is body text, with it. Ending the token
+    // where a tag actually ends means such a run is no longer trailing (there
+    // is text after the tag), so it is left alone, which is what this function
+    // says it does with an inline tag.
+    return rtrim(preg_replace('/(\s+#[^' . TAG_TERMINATORS . ']+)+$/u', '', $body) ?? $body);
 }
 
 /**
@@ -165,7 +179,26 @@ function strip_trailing_body_tags(string $body): string
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
-        $body = preg_replace('/(\s+)#' . preg_quote($tag, '/') . '(?=\s|$)/u', '', $body) ?? $body;
+        // An empty name would leave a pattern that matches a bare `#`, deleting
+        // a literal one out of the body. add_body_tags() skips it the same way.
+        if ($tag === '') {
+            continue;
+        }
+        // Matched with the same boundaries as TAG_PATTERN, and case-insensitively
+        // like add_body_tags(), so this removes exactly the tags get_tags()
+        // reports. It used to demand whitespace on both sides, which left the
+        // tag in place for most real bodies — `Hello #php.`, `Hello #php, ok`,
+        // `#php at the start` — while Micropub's category delete-values still
+        // answered success, so the client was told the tag was gone.
+        //
+        // A callback rather than a replacement string: the leading whitespace
+        // goes with the tag (or two spaces close up where one belonged), but a
+        // `>` before it is the quote marker it was already part of and stays.
+        $body = preg_replace_callback(
+            '/(^|[\s>])#' . preg_quote($tag, '/') . '(?=[' . TAG_TERMINATORS . ']|$)/iu',
+            static fn(array $match): string => $match[1] === '>' ? '>' : '',
+            $body
+        ) ?? $body;
     }
 
     return $body;
@@ -701,7 +734,7 @@ function visible_clause(): array
  */
 function persist_resolved_created(string $body, string $resolved): string
 {
-    return set_matter($body, 'created', $resolved, quote: true, append: false);
+    return set_matter($body, 'created', $resolved, append: false);
 }
 
 /**

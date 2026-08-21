@@ -98,6 +98,24 @@ class SlugFinalizeTest extends TestCase
         $this->assertSame('my-page', $bean->slug);
     }
 
+    public function testFinalizeSuffixesReservedRouteSlugWithNoRouterRegistered(): void
+    {
+        // No register_route() call: this is the state a CLI importer runs in,
+        // and is_reserved_route() has to answer the same there as it does in a
+        // request. An importer pins a foreign permalink verbatim, so a
+        // WordPress page at /login/ arrives with slug `login`.
+        global $routes;
+        $routes = [];
+
+        $text = "---\nslug: login\n---\nContent.";
+        $bean = populate_bean($text);
+        R::store($bean);
+        finalize_slug($bean);
+        R::store($bean);
+
+        $this->assertSame('login-' . $bean->id, $bean->slug);
+    }
+
     public function testFinalizeSuffixesReservedRouteSlug(): void
     {
         // Routes are registered by index.php at runtime; register one here so

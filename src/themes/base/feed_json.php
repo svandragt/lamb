@@ -44,7 +44,10 @@ foreach ($data['posts'] as $bean) {
     if (!empty($bean->title)) {
         $item['title'] = $bean->title;
     }
-    if (!empty($bean->in_reply_to)) {
+    // Guarded like the reply context in content_html above: the consumer turns
+    // this into a link, and in_reply_to is not author-only (a Micropub client
+    // with `create` scope sets it, unvalidated).
+    if (!empty($bean->in_reply_to) && Lamb\Http\is_valid_http_url((string) $bean->in_reply_to)) {
         // micro.blog reply convention.
         $item['_microblog'] = ['in_reply_to_url' => $bean->in_reply_to];
     }

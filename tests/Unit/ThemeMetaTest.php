@@ -5,6 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Theme\image_dimensions;
+use function Lamb\Theme\og_local_path;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 
@@ -353,6 +355,50 @@ class ThemeMetaTest extends TestCase
             @unlink($dir . '/og-image.' . $ext);
         }
         return $dir;
+    }
+
+    // -------------------------------------------------------------------------
+    // og_local_path — a body-supplied src must not escape the web root
+    // -------------------------------------------------------------------------
+
+    public function testOgLocalPathRefusesAnImageOutsideTheWebRoot(): void
+    {
+        // The src is the first <img> in a post's rendered body, and the body is
+        // not always the author's: a subscribed feed's item description reaches
+        // here as Markdown, so `![](/../../secret.png)` is remote input. Sizing
+        // it published the existence, pixel size and MIME type of a file
+        // outside the web root into the page's og:image meta tags.
+        $webRoot = $this->resetWebRoot();
+        file_put_contents($webRoot . '/og-image.png', $this->onePixelPng());
+
+        $outside = sys_get_temp_dir() . '/lamb_og_outside_' . getmypid() . '.png';
+        file_put_contents($outside, $this->onePixelPng());
+        // Enough `..` segments to climb out of ROOT_DIR wherever it points.
+        $climb = str_repeat('/..', substr_count(trim(str_replace('\\', '/', (string) realpath(ROOT_DIR)), '/'), '/') + 1);
+
+        try {
+            // Positive control: a file genuinely inside the web root still resolves.
+            $this->assertNotNull(og_local_path(ROOT_URL . '/og-image.png'));
+            $this->assertNotSame([], image_dimensions(ROOT_URL . '/og-image.png'));
+
+            // The same file, reached by climbing out of the root, does not.
+            $this->assertSame($outside, realpath($outside));
+            $this->assertNull(og_local_path(ROOT_URL . $climb . $outside));
+            $this->assertSame([], image_dimensions(ROOT_URL . $climb . $outside));
+            // The root-relative spelling (no ROOT_URL prefix) is the same path.
+            $this->assertNull(og_local_path($climb . $outside));
+        } finally {
+            @unlink($webRoot . '/og-image.png');
+            @unlink($outside);
+        }
+    }
+
+    /** A real 1x1 PNG, so getimagesize() can read its dimensions and type. */
+    private function onePixelPng(): string
+    {
+        return (string) base64_decode(
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+        );
     }
 
     // -------------------------------------------------------------------------

@@ -65,6 +65,16 @@ function anchor_headings(string $html, int $top): string
  * carries the `u-in-reply-to` microformats2 class so Webmention receivers
  * categorise the mention as a reply.
  *
+ * The same guard link_source() and syndication_links() already apply: escape()
+ * encodes HTML metacharacters, not URL schemes, so a `javascript:` target went
+ * into the href untouched. `in_reply_to` is not author-only — a Micropub client
+ * holding just `create` scope sets it, and replyTargetUrl() only unwraps the
+ * value, it does not validate it — and this markup is served on every page
+ * listing the post *and* inside the Atom and JSON feeds' content_html. A target
+ * that is not a real http(s) URL is shown as text instead of being linked: it
+ * cannot be a webmention target either (enqueue_outbound() filters on the same
+ * predicate), so there is nothing for the anchor to mean.
+ *
  * @param \RedBeanPHP\OODBBean $bean
  * @return string
  */
@@ -73,6 +83,10 @@ function the_reply_context(\RedBeanPHP\OODBBean $bean): string
     $url = trim((string) ($bean->in_reply_to ?? ''));
     if ($url === '') {
         return '';
+    }
+
+    if (!\Lamb\Http\is_valid_http_url($url)) {
+        return '<p class="reply-context">In reply to ' . escape($url) . '</p>';
     }
 
     $label = parse_url($url, PHP_URL_HOST) ?: $url;

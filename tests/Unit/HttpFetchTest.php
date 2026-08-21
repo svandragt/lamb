@@ -161,6 +161,22 @@ class HttpFetchTest extends TestCase
         $this->assertSame(200, parse_status_line('HTTP/1.1 200'));
     }
 
+    public function testParseStatusLineReadsTheCodeNotAnyThreeDigitsInTheLine(): void
+    {
+        // Micropub's token introspection relies on this to decide whether the
+        // token endpoint answered 200. A substring test for ' 200 ' read this
+        // line as a success — a fail-open answer on the request that
+        // establishes who the caller is.
+        $this->assertSame(500, parse_status_line('HTTP/1.1 500 Error 200 x'));
+    }
+
+    public function testParseStatusLineHandlesAnHttp2StatusLine(): void
+    {
+        // curl (fetch_pinned) reports HTTP/2 responses with this shape.
+        $this->assertSame(200, parse_status_line('HTTP/2 200'));
+        $this->assertSame(404, parse_status_line('HTTP/2 404'));
+    }
+
     public function testParseStatusLineReturnsZeroForGarbage(): void
     {
         $this->assertSame(0, parse_status_line(''));

@@ -413,6 +413,7 @@ class LambRestoreTest extends TestCase
             'draft'         => false,
             'deleted'       => false,
             'deleted_at'    => null,
+            'feed_locked'   => false,
             'version'       => 3,
             'feed_name'     => null,
             'feeditem_uuid' => null,
@@ -451,6 +452,15 @@ class LambRestoreTest extends TestCase
                 'id'   => 5,
                 'slug' => 'with-a-photo',
                 'body' => "---\nslug: with-a-photo\n---\n\n![](/assets/2026/07/photo.png)\n",
+            ]),
+            $this->post([
+                'id'            => 6,
+                'slug'          => 'taken-over',
+                'body'          => "---\ntitle: Taken over\nslug: taken-over\n---\n\nMy words now.\n",
+                'feed_name'     => 'example',
+                'feeditem_uuid' => 'abc123',
+                'source_url'    => 'https://example.test/post',
+                'feed_locked'   => true,
             ]),
         ];
     }
@@ -553,7 +563,7 @@ class LambRestoreTest extends TestCase
     {
         $this->importArchive($this->buildArchive());
 
-        $this->assertSame(5, R::count('post'));
+        $this->assertSame(6, R::count('post'));
 
         $hello = R::findOne('post', ' slug = ? ', ['hello-world']);
         $this->assertNotNull($hello);
@@ -576,6 +586,15 @@ class LambRestoreTest extends TestCase
 
         $photo = R::findOne('post', ' slug = ? ', ['with-a-photo']);
         $this->assertStringContainsString('/assets/2026/07/photo.png', (string) $photo->body);
+
+        // feed_locked has to travel with feeditem_uuid: the uuid is what the
+        // next crawl matches the post on, and feed_locked is the only thing
+        // stopping that crawl overwriting the author's own edits.
+        $taken_over = R::findOne('post', ' slug = ? ', ['taken-over']);
+        $this->assertNotNull($taken_over);
+        $this->assertSame('abc123', (string) $taken_over->feeditem_uuid);
+        $this->assertSame(1, (int) $taken_over->feed_locked);
+        $this->assertEmpty($hello->feed_locked);
     }
 
     public function testReimportingTheSameArchiveChangesNothing(): void
@@ -584,8 +603,8 @@ class LambRestoreTest extends TestCase
         $this->importArchive($archive);
         $output = $this->importArchive($archive);
 
-        $this->assertSame(5, R::count('post'));
-        $this->assertStringContainsString('created=0 existed=5', $output);
+        $this->assertSame(6, R::count('post'));
+        $this->assertStringContainsString('created=0 existed=6', $output);
     }
 
     public function testReplaceOverwritesLocalEditsAndRestoresTrashState(): void
@@ -603,8 +622,8 @@ class LambRestoreTest extends TestCase
 
         $output = $this->importArchive($archive, true);
 
-        $this->assertStringContainsString('replaced=5', $output);
-        $this->assertSame(5, R::count('post'));
+        $this->assertStringContainsString('replaced=6', $output);
+        $this->assertSame(6, R::count('post'));
         $this->assertSame(
             "---\ntitle: Hello World\nslug: hello-world\n---\n\nBody text.\n",
             R::load('post', $edited->id)->body
@@ -700,7 +719,7 @@ class LambRestoreTest extends TestCase
 
         $this->importArchive("$this->tmp_dir/unpacked");
 
-        $this->assertSame(5, R::count('post'));
+        $this->assertSame(6, R::count('post'));
         $this->assertSame('2026-07-14 09:30:00', R::findOne('post', ' slug = ? ', ['hello-world'])->created);
     }
 
@@ -828,7 +847,7 @@ class LambRestoreTest extends TestCase
         $process->run();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('[dry-run] Done. created=5', $process->getOutput());
+        $this->assertStringContainsString('[dry-run] Done. created=6', $process->getOutput());
     }
 
     public function testTheCliScriptRefusesWhenExperimentalFeaturesDisabled(): void

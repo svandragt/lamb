@@ -113,7 +113,13 @@ $template = $action;
 # Empty when the request has no first segment at all (e.g. `//`), which must not
 # be looked up: every status post has an empty slug, so it would match one.
 $slug_lookup = is_string($action) ? rawurldecode($action) : '';
-if ($slug_lookup !== '' && post_has_slug($slug_lookup) !== null) {
+# A reserved name is never re-registered as a post: register_route() overwrites,
+# and this runs after register_app_routes(), so a post slugged `login` used to
+# replace the login route and lock the author out of their own site. finalize_slug()
+# suffixes such a slug at save time, but a database can carry one that predates
+# that guard or came in through an importer, and the site has to keep working.
+# The post is still served at its /status/<id> permalink.
+if ($slug_lookup !== '' && !Route\is_reserved_route($action) && post_has_slug($slug_lookup) !== null) {
     Route\register_route($action, __NAMESPACE__ . '\\Response\respond_post', $slug_lookup);
     $template = 'status';
 } elseif ($action !== false && !Route\is_reserved_route($action)) {
