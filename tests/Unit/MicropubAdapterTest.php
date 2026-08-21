@@ -129,6 +129,56 @@ class MicropubAdapterTest extends TestCase
         );
     }
 
+    public function testMpLogKeepsTheEntryWhenAValueIsNotValidUtf8(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        // Without JSON_INVALID_UTF8_SUBSTITUTE, json_encode() returns false for
+        // the whole document over one malformed byte and `?: ''` wrote a blank
+        // line — so the entry explaining a failure was the one that vanished.
+        \Lamb\Micropub\mp_log('response', ['status' => 400, 'body' => "oops \xC3\x28 truncated"]);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $lines = array_values(array_filter(explode(PHP_EOL, $contents), fn ($l) => $l !== ''));
+
+        $this->assertCount(1, $lines, 'the entry must still be written');
+        $decoded = json_decode($lines[0], true);
+        $this->assertIsArray($decoded, 'the line must be valid JSON');
+        $this->assertSame(400, $decoded['status']);
+        $this->assertStringContainsString('truncated', $decoded['body']);
+    }
+
+    public function testMpLogStillWritesTheEntriesAroundABadOne(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        \Lamb\Micropub\mp_log('first', ['body' => "bad \xC3\x28"]);
+        \Lamb\Micropub\mp_log('second', ['body' => 'clean']);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $lines = array_values(array_filter(explode(PHP_EOL, $contents), fn ($l) => $l !== ''));
+
+        $this->assertCount(2, $lines);
+        $this->assertStringContainsString('first', $lines[0]);
+        $this->assertStringContainsString('second', $lines[1]);
+    }
+
+    public function testMpLogSubstitutesRatherThanDroppingTheBadByte(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        \Lamb\Micropub\mp_log('response', ['body' => "a\xC3\x28b"]);
+
+        $contents = (string) @file_get_contents($GLOBALS['lamb_mp_log_path']);
+        $decoded = json_decode(trim($contents), true);
+
+        // U+FFFD in place of the malformed byte, with the surrounding text intact.
+        $this->assertSame("a\u{FFFD}(b", $decoded['body']);
+    }
+
     public function testVerifyTokenLogsMeMismatchReasonWithoutLeakingToken(): void
     {
         global $config;

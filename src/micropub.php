@@ -1282,9 +1282,16 @@ function mp_log(string $event, array $context = []): void
         return;
     }
 
+    // JSON_INVALID_UTF8_SUBSTITUTE, as the export manifest, the JSON feed and
+    // the upload response all use: without it json_encode() returns false for
+    // the whole document over a single malformed byte, and `?: ''` then wrote a
+    // blank line — losing the event entirely. A logged value can carry one
+    // (a remote response body, a raw request body, a client-supplied filename),
+    // and a diagnostic log that drops the entry explaining a failure is worse
+    // than one that renders a byte as U+FFFD.
     $line = json_encode(
         ['ts' => \Lamb\now(), 'event' => $event] + $context,
-        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
     ) ?: '';
     @file_put_contents(mp_log_path(), $line . PHP_EOL, FILE_APPEND | LOCK_EX);
 }
@@ -1440,7 +1447,10 @@ function respond_micropub(): void
     mp_log('response', [
         'status' => $status,
         // Only echo the body into the log on failures — it carries the error reason.
-        'body'   => $status >= 400 ? substr((string) $response->getBody(), 0, 300) : null,
+        // mb_substr(), not substr(): a response body is remote text, and cutting
+        // it mid-sequence at byte 300 produced the malformed byte above. 300
+        // characters is what "an excerpt" meant anyway.
+        'body'   => $status >= 400 ? mb_substr((string) $response->getBody(), 0, 300) : null,
     ]);
 
     http_response_code($status);
@@ -1473,7 +1483,13 @@ function micropub_error(int $status, string $error, string $description, ?string
     if ($wwwAuthenticate !== null) {
         header('WWW-Authenticate: ' . $wwwAuthenticate);
     }
-    echo json_encode(['error' => $error, 'error_description' => $description]);
+    // Same flag as mp_log() above: $description reaches here from a validation
+    // failure and can quote client input, and `echo false` would answer the
+    // error with an empty body.
+    echo json_encode(
+        ['error' => $error, 'error_description' => $description],
+        JSON_INVALID_UTF8_SUBSTITUTE
+    );
     exit;
 }
 
