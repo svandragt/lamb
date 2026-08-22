@@ -34,6 +34,15 @@ php import-wordpress.php /path/to/wordpress.WordPress.xml --dry-run
 php import-wordpress.php /path/to/wordpress.WordPress.xml
 ```
 
+The preferred entry point is the unified driver, which takes the same flags:
+
+```bash
+bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dry-run
+```
+
+`import-wordpress.php` still works but is a deprecated shim that delegates to
+`bin/lamb import wordpress` and prints a warning; it is removed a release later.
+
 The script prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'wordpress-' + guid`) and left alone.
 
 ### `--replace`

@@ -899,6 +899,72 @@ function run_import(
 }
 
 /**
+ * Backing store for {@see register_source} / {@see get_source} /
+ * {@see source_names}. A function-local static rather than a global, so
+ * nothing but these three functions can reach in and mutate it.
+ *
+ * @param array<string, mixed>|null $source Pass to add/replace a source by
+ *                                           its 'name'; omit to just read.
+ * @return array<string, array<string, mixed>>
+ */
+function source_registry(?array $source = null): array
+{
+    static $sources = [];
+    if ($source !== null) {
+        $sources[(string) $source['name']] = $source;
+    }
+    return $sources;
+}
+
+/**
+ * Registers an importer's callables under $source['name'], so bin/lamb can
+ * look a source up by name instead of each import-*.php script hardcoding
+ * its own copy of the CLI wiring around run_import().
+ *
+ * 'args' defaults to {@see parse_import_args} and only needs overriding by a
+ * source with flags of its own (the lamb source's `--site-url=`); its return
+ * tuple's elements past the first three (path, dry_run, replace) are passed
+ * on to 'extract'. 'after' is an optional post-run_import() step (the lamb
+ * source's asset restore); sources without one skip it.
+ *
+ * @param array{
+ *     name: string,
+ *     args?: callable(list<string>): list<mixed>,
+ *     parse: callable(string): mixed,
+ *     extract: callable(mixed, mixed...): list<array<string, mixed>>,
+ *     skip_reason: callable(array<string, mixed>): ?string,
+ *     uuid: callable(array<string, mixed>): string,
+ *     import: callable(array<string, mixed>, callable, bool, ?\RedBeanPHP\OODBBean=): ?\RedBeanPHP\OODBBean,
+ *     after?: callable(mixed, bool): void
+ * } $source
+ * @return void
+ */
+function register_source(array $source): void
+{
+    source_registry($source);
+}
+
+/**
+ * @return array<string, mixed>|null
+ */
+function get_source(string $name): ?array
+{
+    return source_registry()[$name] ?? null;
+}
+
+/**
+ * The registered source names, sorted for a stable "unknown source" listing.
+ *
+ * @return list<string>
+ */
+function source_names(): array
+{
+    $names = array_keys(source_registry());
+    sort($names);
+    return $names;
+}
+
+/**
  * Loads an HTML fragment into DOMDocument with UTF-8 preserved.
  *
  * Wraps the input in a full <!doctype html><html><body> tree rather than using
