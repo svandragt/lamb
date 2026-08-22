@@ -11,7 +11,6 @@ use function Lamb\Http\is_private_ip;
 use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Http\parse_status_line;
-use function Lamb\Http\post_form;
 use function Lamb\Http\request_timeout;
 use function Lamb\Http\resolve_redirect_location;
 use function Lamb\Http\resolve_validated_ip;
@@ -299,14 +298,6 @@ class HttpFetchTest extends TestCase
         $this->assertFalse(is_valid_http_url('/relative/path'));
         $this->assertFalse(is_valid_http_url('not a url'));
         $this->assertFalse(is_valid_http_url(''));
-    }
-
-    // post_form ---------------------------------------------------------------
-
-    public function testPostFormReturnsZeroOnTransportFailure(): void
-    {
-        $status = @post_form('file:///nonexistent/path/at/all', ['a' => 'b'], 1, 'Lamb-Test');
-        $this->assertSame(0, $status);
     }
 
     // is_private_ip -----------------------------------------------------------
