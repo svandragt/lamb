@@ -49,9 +49,12 @@ function sitemap_date(?string $datetime): ?string
  * resolves to, so the rule stays in one place without a bean per row — making
  * one cost about 130 ms of this response at 30,000 posts.
  *
+ * @param string $root The site root each `<loc>` is built from. Defaults to
+ *                     this request's ROOT_URL; respond_sitemap() passes
+ *                     SITEMAP_ROOT so the cached copy is host-independent.
  * @return list<array{loc: string, lastmod: string|null}>
  */
-function sitemap_urls(): array
+function sitemap_urls(string $root = ROOT_URL): array
 {
     $visible = \Lamb\visible_clause();
     $rows = R::getAll(
@@ -62,7 +65,7 @@ function sitemap_urls(): array
     $entries = [];
     $seen = [];
     foreach ($rows as $row) {
-        $loc = ROOT_URL . \Lamb\post_path((string) $row['slug'], (int) $row['id']);
+        $loc = $root . \Lamb\post_path((string) $row['slug'], (int) $row['id']);
         if (isset($seen[$loc])) {
             continue;
         }
@@ -75,7 +78,7 @@ function sitemap_urls(): array
 
     // Home page first; its lastmod tracks the freshest post (null when empty).
     array_unshift($entries, [
-        'loc'     => ROOT_URL . '/',
+        'loc'     => $root . '/',
         'lastmod' => $entries[0]['lastmod'] ?? null,
     ]);
 
@@ -138,24 +141,33 @@ function newest_visible_update(): ?string
  * exactly when the validator does and a served copy always matches the ETag
  * sent with it — no staleness window to reason about.
  *
- * `$root_url` is in the key because an install with no configured canonical
- * URL builds ROOT_URL — and so every `<loc>` here — from the request's own
- * Host header, which index.php documents as attacker-chosen. Without it in
- * the key, one request carrying a forged Host caches a document full of that
- * host's URLs and every later visitor is served it until the content changes.
- * Uncached, a bad Host only spoils the response that sent it; caching is what
- * would make it persist, so the cache is what has to account for it. Setting
- * `site_url` pins ROOT_URL and the term becomes inert.
+ * The site root is deliberately *not* part of the key. The cached document is
+ * host-independent — it holds SITEMAP_ROOT where the root belongs, and
+ * emit_sitemap() substitutes this request's ROOT_URL on the way out — so one
+ * entry is correct for every host. Keying on the root instead would have made
+ * an install with no `site_url` (the shipped default) cache whatever Host a
+ * request claimed: harmless as a per-request answer, but persisted it becomes
+ * a poisoning, and evicting the honest entry with junk Hosts would disable
+ * the cache outright. Substituting at render time removes both.
  *
  * @param string $updated   The newest visible post's stored datetime.
  * @param int    $config_ts The config's last-modified timestamp.
- * @param string $root_url  The site root the document's URLs are built from.
  * @return string A filename-safe cache key.
  */
-function sitemap_cache_key(string $updated, int $config_ts, string $root_url): string
+function sitemap_cache_key(string $updated, int $config_ts): string
 {
-    return md5($updated . '|' . $config_ts . '|' . $root_url);
+    return md5($updated . '|' . $config_ts);
 }
+
+/**
+ * The stand-in for the site root inside a cached sitemap.
+ *
+ * Safe as a marker because it can never occur in a rendered `<loc>`:
+ * Lamb\encode_path_segment() leaves only alphanumerics and a fixed set of
+ * sub-delimiters unescaped, and the braces are not among them, so a slug
+ * containing them arrives percent-encoded.
+ */
+const SITEMAP_ROOT = '{ROOT}';
 
 /**
  * Where the cached sitemap for $key lives — under the same `data/cache/`
@@ -180,8 +192,7 @@ function sitemap_cache_path(string $key): string
  * sitemap.
  *
  * Older keys are removed once the new one is in place, so the directory holds
- * one sitemap rather than one per edit — and, on an install with no canonical
- * URL, cannot be grown by requests carrying junk Host headers.
+ * one sitemap rather than one per edit.
  *
  * Every call is `@`-suppressed on purpose. These are best-effort filesystem
  * operations on a path the operator controls, each already handled by its
@@ -217,28 +228,42 @@ function store_sitemap_cache(string $path, string $xml): void
 /**
  * Sends the sitemap for $path, rendering it first when that copy is not there.
  *
- * A hit streams the file with readfile() instead of building the document:
- * 1.2 ms against 77 ms at 30,000 posts, and none of the 25,000 entries or the
- * 2.6 MB string ever exist in PHP memory. A miss renders as before and echoes
- * *before* caching, so nothing about the cache can delay or break the response.
+ * The cached copy holds SITEMAP_ROOT where the site root belongs; this puts
+ * the current ROOT_URL back. A hit costs 4.7 ms against 79 ms to rebuild at
+ * 30,000 posts, and 5 MB of transient string against the 32 MB the build
+ * holds in rows, entries and output at once.
  *
- * The read is `@`-suppressed for the same reason as the writes, and because a
- * concurrent request replacing the cache can unlink this key between the
- * is_readable() check and the open. Losing that race returns false and falls
- * through to rendering, which is the correct answer anyway.
+ * The root is escaped exactly as render_sitemap() escaped the rest of the
+ * `<loc>` around it. htmlspecialchars() works per character, so escaping the
+ * root and the path separately gives the same bytes as escaping the joined
+ * URL once — which matters because `site_url` is only checked for a scheme
+ * and a host, so a `&` in it would otherwise be substituted raw into the XML.
+ *
+ * A miss renders, echoes, and only then writes, so nothing about the cache can
+ * delay or break the response. The read is `@`-suppressed like the writes, and
+ * because a concurrent request replacing the cache can unlink this key between
+ * the is_readable() check and the open; losing that race just renders.
  *
  * @param string $path The cache path for the current key.
  * @return void
  */
 function emit_sitemap(string $path): void
 {
-    if (is_readable($path) && @readfile($path) !== false) {
-        return;
+    $template = is_readable($path) ? @file_get_contents($path) : false;
+    $miss = $template === false;
+    if ($miss) {
+        $template = render_sitemap(sitemap_urls(SITEMAP_ROOT));
     }
 
-    $xml = render_sitemap(sitemap_urls());
-    echo $xml;
-    store_sitemap_cache($path, $xml);
+    echo str_replace(
+        SITEMAP_ROOT,
+        htmlspecialchars(ROOT_URL, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE),
+        $template
+    );
+
+    if ($miss) {
+        store_sitemap_cache($path, $template);
+    }
 }
 
 /**
@@ -264,7 +289,7 @@ function respond_sitemap(): never
     $updated = newest_visible_update() ?? \Lamb\now();
     feed_cache($updated);
     emit_sitemap(sitemap_cache_path(
-        sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp(), ROOT_URL)
+        sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp())
     ));
     die();
 }

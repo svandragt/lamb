@@ -204,11 +204,17 @@ without the document being built at all. Those same two values, together with
 request that does get a 200 streams a file instead of rebuilding 25,000
 entries. Keying on the content is what keeps the cache honest: it turns over
 exactly when the ETag does, so the bytes sent always match the validator sent
-with them, and there is no staleness window to reason about. `ROOT_URL` is in
-the key for a different reason: with no `site_url` configured it comes from
-the request's own `Host`, which index.php flags as attacker-chosen, so without
-it one forged Host would cache a document of that host's URLs and serve it to
-everyone else until the content next changed. Every filesystem operation is
+with them, and there is no staleness window to reason about. The cached copy is host-independent: it
+holds a `{ROOT}` placeholder where the site root belongs, and the current
+`ROOT_URL` is substituted on the way out. That matters because with no
+`site_url` configured `ROOT_URL` comes from the request's own `Host`, which
+index.php flags as attacker-chosen — caching a rendered host would serve one
+visitor's claimed host to everyone else, and keying the cache per host instead
+would let junk `Host` headers evict the honest entry and disable the cache.
+Substituting at render time costs about 3 ms on a hit at 30,000 posts and
+removes both. The substituted root is escaped exactly as `render_sitemap()`
+escaped the rest of the `<loc>`, since `site_url` is only validated for a
+scheme and a host and could contain an `&`. Every filesystem operation is
 best-effort: an unwritable data directory costs the cache, never the
 response.
 

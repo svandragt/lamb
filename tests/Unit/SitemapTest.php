@@ -11,6 +11,8 @@ use function Lamb\Response\render_sitemap;
 use function Lamb\Response\sitemap_cache_key;
 use function Lamb\Response\sitemap_cache_path;
 use function Lamb\Response\sitemap_urls;
+
+use const Lamb\Response\SITEMAP_ROOT;
 use function Lamb\Response\store_sitemap_cache;
 
 /**
@@ -239,65 +241,73 @@ class SitemapTest extends TestCase
     public function testCacheKeyIsStableForTheSameInputs(): void
     {
         $this->assertSame(
-            sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com'),
-            sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com')
+            sitemap_cache_key('2026-06-01 09:00:00', 1000),
+            sitemap_cache_key('2026-06-01 09:00:00', 1000)
         );
     }
 
     public function testCacheKeyChangesWithEachInput(): void
     {
-        $base = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com');
+        $base = sitemap_cache_key('2026-06-01 09:00:00', 1000);
 
-        $this->assertNotSame($base, sitemap_cache_key('2026-06-02 09:00:00', 1000, 'https://example.com'));
-        $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000, 'https://example.com'));
-    }
-
-    /**
-     * With no `site_url` configured, ROOT_URL comes from the request's own Host
-     * header — attacker-chosen, as index.php says — and every <loc> is built
-     * from it. Uncached that only spoils the response that sent the bad Host;
-     * a cache that ignored it would store that document under the current
-     * content key and serve it to every later visitor until the content
-     * changed. Verified as a real poisoning before this term was added, so it
-     * is a security property, not a multi-host feature.
-     */
-    public function testCacheKeySeparatesDocumentsBuiltForADifferentHost(): void
-    {
-        $honest = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com');
-        $forged = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://evil.example');
-
-        $this->assertNotSame($honest, $forged);
+        $this->assertNotSame($base, sitemap_cache_key('2026-06-02 09:00:00', 1000));
+        $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000));
     }
 
     public function testCacheKeyIsFilenameSafe(): void
     {
-        $key = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com/a b?c#d');
+        $key = sitemap_cache_key('2026-06-01 09:00:00', 1000);
 
         $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $key);
         $this->assertStringContainsString($key, sitemap_cache_path($key));
     }
 
-    public function testAMissRendersAndWritesTheCache(): void
+    /**
+     * The cached document must carry no host at all. With no `site_url`
+     * configured ROOT_URL comes from the request's own Host header, so a cache
+     * holding a rendered host would serve whatever host one visitor claimed to
+     * every later visitor — and keying the cache per host instead would let
+     * junk Host headers evict the honest entry. Storing a placeholder and
+     * substituting on the way out removes both problems.
+     */
+    public function testTheCachedCopyHoldsNoHost(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        $path = $this->cacheDir() . '/sitemap-nohost.xml';
+
+        $this->emit($path);
+        $cached = (string) file_get_contents($path);
+
+        $this->assertStringContainsString('<loc>' . SITEMAP_ROOT . '/hello</loc>', $cached);
+        $this->assertStringNotContainsString(ROOT_URL, $cached);
+    }
+
+    public function testAMissRendersTheCurrentHostAndWritesTheCache(): void
     {
         $this->makePost(['slug' => 'hello']);
         $path = $this->cacheDir() . '/sitemap-miss.xml';
 
         $body = $this->emit($path);
 
-        $this->assertStringContainsString('<loc>' . ROOT_URL . '/hello</loc>', $body);
+        // Byte-for-byte what a direct render produces, so the cache can never
+        // change the document — only where it comes from.
+        $this->assertSame(render_sitemap(sitemap_urls()), $body);
         $this->assertFileExists($path);
-        $this->assertSame($body, file_get_contents($path));
     }
 
-    public function testAHitIsServedFromTheFileWithoutRebuilding(): void
+    public function testAHitSubstitutesTheHostIntoTheCachedTemplate(): void
     {
         $this->makePost(['slug' => 'hello']);
         $path = $this->cacheDir() . '/sitemap-hit.xml';
-        // Content only the cache can supply: if this comes back, the document
-        // was streamed rather than regenerated from the database.
-        file_put_contents($path, '<urlset>sentinel</urlset>');
+        $this->emit($path);
 
-        $this->assertSame('<urlset>sentinel</urlset>', $this->emit($path));
+        // Prove it came from the file, not the database: the row is gone.
+        R::exec('DELETE FROM post');
+
+        $body = $this->emit($path);
+
+        $this->assertStringContainsString('<loc>' . ROOT_URL . '/hello</loc>', $body);
+        $this->assertStringNotContainsString(SITEMAP_ROOT, $body);
     }
 
     public function testStoringACopyRemovesTheOlderOnes(): void
