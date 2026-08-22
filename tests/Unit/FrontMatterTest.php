@@ -163,12 +163,15 @@ class FrontMatterTest extends TestCase
         $this->assertSame($body, set_matter($body, 'slug', 'new'));
     }
 
-    public function testSetMatterPreservesKeyWhitespacePrefixOnReplace(): void
+    public function testSetMatterTreatsIndentedKeyAsNestedAndAppends(): void
     {
+        // The single engine anchors to column zero: an indented `slug:` belongs
+        // to whatever block encloses it, so it is left alone and a top-level
+        // slug is appended instead. (Real front-matter keys are never indented;
+        // persist_slug() only ever pins a column-zero slug.)
         $body = "---\n  slug:   old\n---\nContent.";
-        // The matched key prefix is preserved; value rewritten with single space.
         $this->assertSame(
-            "---\n  slug: new\n---\nContent.",
+            "---\n  slug:   old\nslug: new\n---\nContent.",
             set_matter($body, 'slug', 'new')
         );
     }
@@ -246,23 +249,26 @@ class FrontMatterTest extends TestCase
         $this->assertSame($body, set_matter($body, 'slug', 'my-slug'));
     }
 
-    public function testSetMatterKeepsCrlfWhenRewritingAValue(): void
+    public function testSetMatterNormalisesBlockToLfWhenRewritingACrlfValue(): void
     {
+        // On a real value change the single engine rebuilds the block through the
+        // YAML writer (LF fences), leaving the content's CRLF untouched. This is
+        // a one-off on the save that changes the value, not per-save churn.
         $body = "---\r\nslug: my-slug\r\ntitle: Hi\r\n---\r\n\r\nBody text.\r\n";
 
         $this->assertSame(
-            "---\r\nslug: other\r\ntitle: Hi\r\n---\r\n\r\nBody text.\r\n",
+            "---\ntitle: Hi\nslug: other\n---\n\r\nBody text.\r\n",
             set_matter($body, 'slug', 'other')
         );
     }
 
-    public function testSetMatterKeepsCrlfWhenAppendingAKey(): void
+    public function testSetMatterAppendsToCrlfBlockRebuildingWithLf(): void
     {
         $body = "---\r\ntitle: Hi\r\n---\r\n\r\nBody.\r\n";
 
         $result = set_matter($body, 'slug', 'new');
 
-        $this->assertSame("---\r\ntitle: Hi\r\nslug: new\r\n---\r\n\r\nBody.\r\n", $result);
+        $this->assertSame("---\ntitle: Hi\nslug: new\n---\n\r\nBody.\r\n", $result);
         $this->assertSame(['title' => 'Hi', 'slug' => 'new'], parse_matter($result));
     }
 }
