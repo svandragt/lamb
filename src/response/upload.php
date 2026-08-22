@@ -67,20 +67,16 @@ function respond_upload(array $_args): void
 
         // Re-encode JPEG/PNG to WebP for smaller files; fall back to the original
         // bytes if conversion fails (assume success, communicate failure).
-        $new_fn = store_webp_copy($f['tmp_name'], $f['ext'], $dir, $seed);
+        $new_fn = store_upload_or_fallback($f['tmp_name'], $f['ext'], $dir, $seed);
         if ($new_fn === null) {
-            $new_fn = $seed . '.' . $f['ext'];
-            $new_fp = sprintf("%s/%s", $dir, $new_fn);
-            if (!move_uploaded_file($f['tmp_name'], $new_fp)) {
-                // Same reasoning as the batch check: the request is failing, so
-                // the files that did land are unreachable. Take them with it.
-                foreach ($stored as $orphan) {
-                    @unlink($orphan);
-                }
-                header('HTTP/1.1 500 Internal Server Error');
-                echo json_encode('Move upload error: ' . $f['tmp_name'], JSON_THROW_ON_ERROR);
-                die();
+            // Same reasoning as the batch check: the request is failing, so
+            // the files that did land are unreachable. Take them with it.
+            foreach ($stored as $orphan) {
+                @unlink($orphan);
             }
+            header('HTTP/1.1 500 Internal Server Error');
+            echo json_encode('Move upload error: ' . $f['tmp_name'], JSON_THROW_ON_ERROR);
+            die();
         }
         $stored[] = $dir . '/' . $new_fn;
         $out .= sprintf("![%s](%s)", $f['name'], asset_url($sub_path, $new_fn));
@@ -364,6 +360,40 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
     }
 
     return null;
+}
+
+/**
+ * Stores an uploaded image: a WebP copy when convertible, otherwise the original
+ * bytes moved into place under "$seed.$ext".
+ *
+ * The store-or-fall-back sequence shared by the two move_uploaded_file() upload
+ * paths — the /upload handler and the Micropub media endpoint. (The Micropub
+ * inline-photo path stores from a PSR-7 UploadedFileInterface via
+ * persist_image_bytes(), a different move semantic, so it is not folded in here.)
+ * Returns the stored filename (basename), or null when the fallback move fails —
+ * each caller reports that its own way (its own error shape and orphan cleanup),
+ * so the failure is surfaced rather than swallowed (#653: never report a file the
+ * move did not store).
+ *
+ * @param string $tmp_name The uploaded file's temp path ($_FILES[...]['tmp_name']).
+ * @param string $ext      The lower-case extension from safe_upload_extension().
+ * @param string $dest_dir The upload directory from get_upload_dir() (no trailing slash).
+ * @param string $seed     The hashed base filename (without extension).
+ * @return string|null The stored filename, or null when the file could not be stored.
+ */
+function store_upload_or_fallback(string $tmp_name, string $ext, string $dest_dir, string $seed): ?string
+{
+    $filename = store_webp_copy($tmp_name, $ext, $dest_dir, $seed);
+    if ($filename !== null) {
+        return $filename;
+    }
+
+    $filename = $seed . '.' . $ext;
+    if (!move_uploaded_file($tmp_name, sprintf('%s/%s', $dest_dir, $filename))) {
+        return null;
+    }
+
+    return $filename;
 }
 
 /**

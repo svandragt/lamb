@@ -1576,15 +1576,12 @@ function respond_micropub_media(): void
     $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
 
     // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
-    $filename = \Lamb\Response\store_webp_copy($file['tmp_name'], $ext, $uploadDir, $seed);
+    $filename = \Lamb\Response\store_upload_or_fallback($file['tmp_name'], $ext, $uploadDir, $seed);
     if ($filename === null) {
-        $filename = $seed . ".$ext";
-        if (!move_uploaded_file($file['tmp_name'], $uploadDir . '/' . $filename)) {
-            // Same reasoning as the web upload endpoint (response/upload.php): a
-            // 201 with a Location the file was never written to would tell the
-            // client its upload durably succeeded when it didn't.
-            micropub_error(500, 'server_error', 'Failed to store the uploaded file.');
-        }
+        // Same reasoning as the web upload endpoint (response/upload.php): a
+        // 201 with a Location the file was never written to would tell the
+        // client its upload durably succeeded when it didn't.
+        micropub_error(500, 'server_error', 'Failed to store the uploaded file.');
     }
 
     // The media endpoint hands this URL back to an external Micropub client, so
