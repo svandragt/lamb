@@ -439,25 +439,29 @@ function build_matter(array $matter, string $content): string
 }
 
 /**
- * Sets a single key in a body's leading YAML front-matter block, leaving all
- * other front matter intact.
+ * Sets a single key in a body's leading YAML front-matter block, without
+ * creating a block and without churning an unchanged save.
  *
- * An existing `key:` line is updated in place (preserving the original key text
- * and indentation, rewriting only the value with a single separating space).
- * When the block has no such line and $append is true, an explicit line is
- * appended to the block. Bodies without a leading front-matter block, or whose
- * key already holds the target value, are returned unchanged (no cosmetic
- * churn).
+ * A thin no-churn/no-create wrapper over set_frontmatter_key(), which is the one
+ * engine that mutates a block (splitting and rebuilding through the YAML writer).
+ * set_matter() adds two guarantees the every-save callers (persist_slug(),
+ * persist_resolved_created()) rely on and that the engine deliberately does not
+ * make:
  *
- * The value is rendered through the YAML writer rather than interpolated, for
- * the reason build_matter() already documents: a slug carrying a colon
- * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
- * *whole* front-matter block — title, draft, created — silently vanished on the
- * next read; one carrying a `#` had everything from it treated as a comment.
- * finalize_slug() reaches both by appending an id suffix to an explicit slug
- * that collides or names a reserved route, and then pinning the result here.
- * Yaml::dump() already quotes anything that needs it, including the
- * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ * - A body with no leading front-matter block is returned unchanged, rather than
+ *   gaining one. set_frontmatter_key() would add a block; a status update or a
+ *   feed item without front matter must not sprout a `slug:`/`created:` fence.
+ * - When the key's line already holds this value, the body is returned
+ *   byte-for-byte — including its CRLF line endings. A browser submits a
+ *   <textarea> with CRLF, so most bodies reaching here carry them; the `\r` must
+ *   not make an unchanged value differ and re-store the post on every save.
+ *
+ * The value only reaches set_frontmatter_key() when it actually changes, so the
+ * engine's rebuild (which quotes anything YAML needs, and cannot leave a stale
+ * list behind under a scalar) happens once per real change, never as cosmetic
+ * churn. finalize_slug() reaches this by pinning an id-suffixed slug that
+ * collides or names a reserved route; apply_scheduling() by pinning a resolved
+ * `created` date.
  *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
@@ -469,45 +473,26 @@ function build_matter(array $matter, string $content): string
 function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+    [$yaml] = split_frontmatter($body);
+    if ($yaml === '') {
         return $body;
     }
 
-    $rendered = Yaml::dump($value);
-    // A browser submits a <textarea> with CRLF line endings, so most bodies
-    // reaching here carry them. The `\r` is matched and carried over rather
-    // than swept into the value: as part of $line[2] it made $current differ
-    // from $value on every save, so the no-churn contract above never held for
-    // an edit-form body and each save rewrote the line (and re-stored the post).
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
-        function (array $line) use ($value, $rendered): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $value) {
-                return $line[0];
-            }
-            return $line[1] . ' ' . $rendered . $line[3];
-        },
-        $m[2],
-        1,
-        $count
-    );
-    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
-    // on a long block). Concatenating that would drop the entire YAML block, so
-    // leave the body alone instead.
-    if ($new_yaml === null) {
-        return $body;
-    }
-
-    if ($count === 0) {
-        if (!$append) {
+    // Read-only probe for the key's column-zero line, in either spelling
+    // (parse_matter() folds hyphen/underscore together). This decides no-churn
+    // and, for $append === false, whether the key is present — matching the
+    // engine's own column-zero, quote-trimming view of the value so an unchanged
+    // save returns the body verbatim.
+    $pattern = '/^' . str_replace('\-', '[-_]', preg_quote($key, '/')) . '[ \t]*:[ \t]*(.*?)[ \t]*\r?$/mi';
+    if (preg_match($pattern, $yaml, $m) === 1) {
+        if (trim($m[1], " \t'\"") === $value) {
             return $body;
         }
-        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
-        $new_yaml = $m[2] . "$key: $rendered" . $eol;
+    } elseif (!$append) {
+        return $body;
     }
 
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_frontmatter_key($body, $key, $value);
 }
 
 /**
