@@ -148,7 +148,8 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
-├── import-lamb.php       # CLI: restore a Lamb export archive (src/restore.php) into the DB
+├── bin/lamb              # CLI: unified importer driver — `bin/lamb import <source> <path>`
+├── import-lamb.php       # CLI: deprecated shim → `bin/lamb import lamb` (removed a release later)
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
