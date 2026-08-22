@@ -11,9 +11,9 @@ use function Lamb\Response\render_sitemap;
 use function Lamb\Response\sitemap_cache_key;
 use function Lamb\Response\sitemap_cache_path;
 use function Lamb\Response\sitemap_urls;
+use function Lamb\Response\store_sitemap_cache;
 
 use const Lamb\Response\SITEMAP_ROOT;
-use function Lamb\Response\store_sitemap_cache;
 
 /**
  * The sitemap lists every publicly visible URL for crawlers. It must reuse the
