@@ -1583,7 +1583,7 @@ function respond_micropub_media(): void
             // Same reasoning as the web upload endpoint (response/upload.php): a
             // 201 with a Location the file was never written to would tell the
             // client its upload durably succeeded when it didn't.
-            micropub_error(500, 'invalid_request', 'Failed to store the uploaded file.');
+            micropub_error(500, 'server_error', 'Failed to store the uploaded file.');
         }
     }
 
