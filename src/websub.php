@@ -102,10 +102,9 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
  */
 function send_ping(string $hub, string $topic): void
 {
-    // fetch_guarded() rather than post_form(): it refuses loopback/private/
-    // link-local destinations and re-validates every redirect hop, so a hub URL
-    // cannot aim the publish request at an internal service. Every other outbound
-    // sink already goes through it; this was the last one that did not.
+    // Every outbound POST goes through fetch_guarded(): it refuses loopback/
+    // private/link-local destinations and re-validates every redirect hop, so a
+    // hub URL cannot aim the publish request at an internal service.
     \Lamb\Http\fetch_guarded($hub, [
         'method' => 'POST',
         'headers' => [

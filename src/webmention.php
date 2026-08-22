@@ -775,9 +775,9 @@ function fetch_target(string $url): ?array
  */
 function send_webmention(string $endpoint, string $source, string $target): int
 {
-    // Unlike Http\post_form(), fetch_guarded() re-validates the destination
-    // on every redirect hop — needed here because $endpoint came from the
-    // target page's own (attacker-influenced) endpoint discovery.
+    // Every outbound POST goes through fetch_guarded(), which re-validates the
+    // destination on every redirect hop — needed here because $endpoint came
+    // from the target page's own (attacker-influenced) endpoint discovery.
     $result = fetch_guarded($endpoint, request_options([
         'method'  => 'POST',
         'headers' => ['Content-Type: application/x-www-form-urlencoded'],
