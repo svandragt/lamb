@@ -46,8 +46,12 @@ class ThemeMenuItemsTest extends TestCase
     /**
      * @param array<string, string> $menu_items
      */
-    private function render(string $slug, string $template_name, array $menu_items): string
-    {
+    private function render(
+        ?string $slug,
+        string $template_name,
+        array $menu_items,
+        string $theme_path = 'base'
+    ): string {
         $bean              = R::dispense('post');
         $bean->slug        = $slug;
         $bean->title       = 'About this site';
@@ -62,7 +66,7 @@ class ThemeMenuItemsTest extends TestCase
         $template = $template_name;
 
         ob_start();
-        include dirname(__DIR__, 2) . '/src/themes/base/parts/_items.php';
+        include dirname(__DIR__, 2) . "/src/themes/$theme_path/parts/_items.php";
         return (string) ob_get_clean();
     }
 
@@ -90,6 +94,29 @@ class ThemeMenuItemsTest extends TestCase
     public function testMenuPageStillRendersOnItsOwnPermalink(): void
     {
         $html = $this->render('about', 'status', ['About' => 'about']);
+
+        $this->assertStringContainsString('menu page body', $html);
+    }
+
+    /**
+     * The 2024 and 2026 themes used to fall back to the post's numeric id
+     * (`$bean->slug ?? $bean->id`) instead of an empty string when a post has
+     * no slug — unlike the base theme, which the assertion above already pins
+     * to `(string) ($bean->slug ?? '')`. A [menu_items] value that happens to
+     * look like a number (e.g. "Foo = 42", plausible under the documented
+     * "slug of an existing post" format) then matched any un-slugged post
+     * whose id equals that number and hid it from every listing.
+     */
+    public function testUnsluggedPostIsNotHiddenByANumericMenuItemIn2024Theme(): void
+    {
+        $html = $this->render(null, 'tag', ['Foo' => '1'], '2024');
+
+        $this->assertStringContainsString('menu page body', $html);
+    }
+
+    public function testUnsluggedPostIsNotHiddenByANumericMenuItemIn2026Theme(): void
+    {
+        $html = $this->render(null, 'tag', ['Foo' => '1'], '2026');
 
         $this->assertStringContainsString('menu page body', $html);
     }
