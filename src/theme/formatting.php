@@ -95,7 +95,11 @@ function the_reply_context(\RedBeanPHP\OODBBean $bean): string
 
     $label = parse_url($url, PHP_URL_HOST) ?: $url;
 
-    return '<p class="reply-context">In reply to <a class="u-in-reply-to" rel="in-reply-to" href="'
+    // No rel="in-reply-to": the rel-in-reply-to proposal is superseded by the
+    // u-in-reply-to h-entry property (which this already carries), the value is
+    // not a registered HTML link type, and nothing consumes it that does not
+    // already read u-in-reply-to. See #585.
+    return '<p class="reply-context">In reply to <a class="u-in-reply-to" href="'
         . escape($url) . '">' . escape($label) . '</a></p>';
 }
 
