@@ -93,4 +93,16 @@ class Acceptance extends Module
     {
         $this->assertSame('', $this->grabResponseHeader($name), "Expected response header $name to be absent");
     }
+
+    /**
+     * Asserts on the raw response body. $I->see() needs a rendered page in the
+     * browser's history, which an AJAX-style request (sendAjaxPostRequest, no
+     * page load) never populates — this reads the InnerBrowser response directly.
+     */
+    public function seeResponseContains(string $needle): void
+    {
+        /** @var \Codeception\Module\PhpBrowser $browser */
+        $browser = $this->getModule('PhpBrowser');
+        $this->assertStringContainsString($needle, (string) $browser->client->getInternalResponse()->getContent());
+    }
 }
