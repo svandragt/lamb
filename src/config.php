@@ -235,7 +235,7 @@ function compose_config(string $stored_ini, string $default_ini): array
 
     // Personal-identity values are kept commented in the seeded INI, so supply
     // them as a last-resort fallback for consumers without an inline default
-    // (e.g. feed.php reads author_name directly).
+    // (e.g. Response\render_atom_feed() reads author_name directly).
     $fallback = [
         'author_email' => 'joe.sheeple@example.com',
         'author_name'  => 'Joe Sheeple',

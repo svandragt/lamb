@@ -46,7 +46,7 @@ class FeedTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         $xml = new \SimpleXMLElement($output);
@@ -362,6 +362,38 @@ class FeedTemplateTest extends TestCase
         $this->assertSame('html', (string) $xml->entry[0]->content['type']);
     }
 
+    /**
+     * Pins the deprecated theme-override path while it exists: a theme that still
+     * ships its own feed.php is detected (and emit_feed() then honours it with a
+     * deprecation notice), while feed_json.php it does not ship is not.
+     *
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedPartOverrideDetectsAThemeSuppliedFeedPart(): void
+    {
+        require_once __DIR__ . '/../../vendor/autoload.php';
+
+        $themeDir = sys_get_temp_dir() . '/lamb_theme_override_' . getmypid() . '/';
+        @mkdir($themeDir, 0777, true);
+        file_put_contents($themeDir . 'feed.php', '<?php echo "THEME OVERRIDE";');
+
+        if (!defined('THEME_DIR')) {
+            define('THEME_DIR', $themeDir);
+        }
+        // THEME_DIR is a process constant; only assert when our fixture won the
+        // define (guaranteed here by the separate process + disabled global state).
+        if (THEME_DIR === $themeDir) {
+            $this->assertSame($themeDir . 'feed.php', \Lamb\Response\feed_part_override('feed'));
+            $this->assertNull(\Lamb\Response\feed_part_override('feed_json'));
+        } else {
+            $this->markTestSkipped('THEME_DIR already defined by another test');
+        }
+
+        @unlink($themeDir . 'feed.php');
+        @rmdir($themeDir);
+    }
+
     private function renderFeedWithPost(array $fields, array $conventionFiles = [], array $extraConfig = []): \SimpleXMLElement
     {
         require_once __DIR__ . '/../../vendor/autoload.php';
@@ -415,7 +447,7 @@ class FeedTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         return new \SimpleXMLElement($output);
@@ -463,7 +495,7 @@ class FeedTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         $xml = new \SimpleXMLElement($output);
