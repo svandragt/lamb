@@ -27,7 +27,7 @@ else :
     endif;
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
-        if ($template !== 'status' && is_menu_item($bean->slug ?? $bean->id)) :
+        if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
             # Backstop for the owner-only views that query everything (drafts,
             # trash, scheduled); public listings exclude menu pages in SQL.
             continue;

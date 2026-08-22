@@ -80,6 +80,52 @@ The `preview` parameter counts even when empty or wrong. A bad token never grant
 
 ---
 
+## 2026-08-22 — The sitemap is cached on disk, keyed on its own ETag inputs
+
+**Status:** Accepted
+
+**Context:** Validating before building already answered a revalidating crawler in 1.8 ms, but a request that legitimately got a 200 still rebuilt the whole document: 88 ms and a 2.6 MB string at 30,000 posts, on every first fetch and after every edit. The sitemap does not have to be assembled per request — it is a function of content that changes a few times a day.
+
+**Decision:** `respond_sitemap()` serves `data/cache/sitemap-<key>.xml`, rendering and storing it only when that key is absent. The key is `md5` of the same inputs the ETag is built from — the newest visible post's `updated` and the config timestamp — plus `ROOT_URL`.
+
+Keying on content rather than on a TTL is the deliberate part. A time-based cache was considered and rejected: the ETag is computed from live content, so serving a body cached under different content would hand the crawler bytes its validator does not describe, and it would then sit on that copy until the *next* change — silently missing everything in between. Content keying means the cache turns over exactly when the validator does, which removes the staleness question rather than answering it.
+
+The cached document is host-independent: `sitemap_urls()` takes the root to build its `<loc>` values from, the cached copy is rendered with a `{ROOT}` placeholder, and `emit_sitemap()` substitutes the current `ROOT_URL` on the way out. This is a security property, not multi-host support — Lamb has never been built for that. An install with no `site_url` (the shipped default: the key is commented out in the seeded INI) derives ROOT_URL from the request's Host header, which index.php already flags as attacker-chosen. Caching a rendered host was confirmed by experiment to be a one-request poisoning: `Host: evil.example` once, and the next ordinary visitor was served a sitemap of evil.example URLs. Keying the cache per host fixes that but introduces a second weakness — an attacker spraying junk Hosts evicts the honest entry and disables the cache — so the root is kept out of the document instead of out of the key. The substituted root is escaped exactly as `render_sitemap()` escaped the surrounding `<loc>`; `htmlspecialchars()` is per-character, so the bytes are identical to escaping the joined URL, which matters because `canonical_site_url()` validates only a scheme and a host and would otherwise let an `&` through raw.
+
+Storage follows the existing `data/cache/` convention (already gitignored, already used by the feed cache). The write is a temp file plus `rename()`, so a concurrent reader cannot see a partial document, and every filesystem call is `@`-suppressed and return-checked — the response is already sent by then, and an unwritable data directory must cost the cache, not the sitemap.
+
+**Consequences:** A 200 sitemap goes from 88 ms to 8.5 ms at 30,000 posts. A hit holds ~5 MB of transient string against the 32 MB the build holds in rows, entries and output at once, so the memory ceiling this endpoint keeps running into is only reached when the document is actually rebuilt. Substituting the root rather than baking it costs ~3 ms of that 8.5 ms; `readfile()` of a pre-rendered document would be 5.5 ms and hold nothing, and was rejected for the poisoning and eviction problems above. A 200-post install is unchanged. One cache entry exists regardless of how many hosts ask, and the cached file is disposable — deleting `data/cache/` costs one rebuild.
+
+---
+
+## 2026-08-22 — A tag scan pages on the rowid; the sitemap validates before it builds
+
+**Status:** Accepted
+
+**Context:** With the post table indexed, `/tag/<tag>` and `/sitemap.xml` were the two endpoints still measured in tens of milliseconds at 30,000 posts. Both spent that time on work the response did not need. The tag scan read its matches with `ORDER BY created DESC LIMIT ? OFFSET ?`: nothing indexes `created`, so every page re-scanned and re-sorted the whole table, and a tag covering 4,000 posts took eight of them — 57 ms of a 63 ms response just to produce a list of ids. `/sitemap.xml` built all 25,000 URLs and a 2.6 MB document and only then called `feed_cache()`, so a crawler revalidating a sitemap it already held paid the full build to be answered 304.
+
+**Decision:** `post_ids_by_tag()` keeps its ordered, early-exiting scan for the limited case (the tag feeds take 20) and delegates the exhaustive case to `all_post_ids_by_tag()`, which pages on the rowid (`id > ?`, which SQLite seeks straight to), walks the table once, and orders the survivors in PHP with a stable `arsort()`. The split is deliberate rather than a unification: ordering in SQL is what lets a limited scan stop after one page — since `updated` is indexed, a tag feed answers in a single query — while an exhaustive scan sees every match regardless and only pays for the ordering. Collapsing the two into one keyset scan was measured and rejected: it made the tag feeds nine times slower for no gain.
+
+`respond_sitemap()` now takes its validator from `newest_visible_update()` — one indexed row — instead of reading it off the finished URL list. The value is the same by construction (the list is ordered by `updated` descending and the home entry inherits the newest post's date), and a unit test pins the two together so they cannot drift.
+
+**Consequences:** Measured end-to-end at 30,000 posts, output byte-identical: `/tag/<tag>` 63 ms → 16 ms, a conditional `/sitemap.xml` 69 ms → 1.8 ms; tag feeds and the full sitemap unchanged, and a 200-post install unchanged throughout. A tie on `created` now resolves to ascending id instead of whatever order SQLite emitted, so which page of a tag a reader finds a post on is no longer arbitrary. The unconditional sitemap is still ~90 ms, three quarters of it `sitemap_date()` calling `strtotime()` and `date('c')` 25,000 times; that is the price of DST-correct formatting and was left alone. The remaining structural cost — the `body LIKE` superset scan every tag lookup depends on — needs a tag index or FTS, not another tweak here.
+
+---
+
+## 2026-08-22 — The post table carries explicit indexes, but not on `created`
+
+**Status:** Accepted
+
+**Context:** RedBeanPHP's fluid mode creates columns but never indexes, so `post` had none beyond its primary key and every lookup was a full table scan. That is invisible on a small blog and quadratic-feeling on a large one: on a 30,000-post install, resolving the request path against `slug` cost ~3 ms, the conditional-GET validator's newest-`updated` row ~5 ms, and the two boot-time migration probes (`version IS NULL`, `feed_name IN ('wordpress','known')`) ~3 ms each — every request, including ones that then answered 304. The probes are the sharpest case: they exist so a finished migration does not take a write lock, and once finished they scan the whole table to prove there is nothing left to do.
+
+**Decision:** `ensure_post_columns()` also ensures a single-column index on `slug`, `updated`, `version`, `feed_name`, `draft` and `deleted` (`Bootstrap\POST_INDEXES`). Creation is gated on a read of `sqlite_master` rather than an unconditional `CREATE INDEX IF NOT EXISTS`, because DDL takes a write lock even when it changes nothing — the same reasoning that turned the backfills into probes. A column the install does not have yet is skipped and indexed on the boot after fluid mode adds it.
+
+`created` is deliberately excluded, though it is the column the listings order by. Adding it does make `ORDER BY created DESC` a seek — measured 7.5 ms → 0.03 ms for a home page at 30,000 posts — but SQLite then also prefers it for the search page's `body LIKE` queries, where scanning the index and fetching each row is slower than the table scan it replaces: 5 ms → 11 ms for a rare term, and the search count 5 ms → 15 ms. A covering `(created, draft, deleted, slug)` index fixes the counts but not that, and over-fits to today's exact `public_posts_clause()`. The listings stay on a scan until there is a cheaper answer for search (a proper full-text index being the obvious one).
+
+**Consequences:** Measured end-to-end at 30,000 posts: home 29 ms → 17 ms, a post permalink 21 ms → 9 ms, `/feed` 16 ms → 2 ms, a 404 11 ms → 2 ms. Writes now maintain six indexes — about +0.2 ms per insert and +0.55 ms per update at 30,000 posts — but the create and edit paths both got faster overall, because `finalize_slug()`'s uniqueness probe on `slug` was itself a scan: measured 4.5 ms → 1.6 ms per post created and 6.1 ms → 4.0 ms per post edited, so imports and feed crawls gain rather than pay. The one-time build costs ~14 ms on the first request after upgrade at 30,000 posts and grows the database ~27% (8.4 MB → 10.7 MB). Existing installs pick the indexes up on their next request; the DDL runs once. Any new hot lookup should be added to `POST_INDEXES` rather than left to a scan — and any candidate on `created` needs the search page measured, not assumed.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted
