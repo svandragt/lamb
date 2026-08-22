@@ -47,13 +47,22 @@ function redirect_created(): void
 
     try {
         finalize_and_store_post($bean);
-        // Remove any existing redirect for this slug — the new post takes priority
-        if (!empty($bean->slug)) {
-            delete_redirect_for_slug($bean->slug);
-            warn_if_manual_redirect((string) $bean->slug);
-        }
     } catch (SQL $e) {
+        // Return, matching redirect_edited(): everything below is a consequence
+        // of the create having been saved. finalize_and_store_post() stores
+        // twice, and if the second store throws (a locked SQLite file while
+        // /_cron holds it is the realistic case) the bean already has an id, so
+        // falling through announced the unsaved post to webmention receivers and
+        // the WebSub hub — a mention whose permalink 404s (#685).
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
+
+        return;
+    }
+
+    // Remove any existing redirect for this slug — the new post takes priority
+    if (!empty($bean->slug)) {
+        delete_redirect_for_slug($bean->slug);
+        warn_if_manual_redirect((string) $bean->slug);
     }
     notify_post_subscribers($bean);
     redirect_uri('/');
