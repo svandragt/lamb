@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimplePie\Item as SimplePieItem;
 
+use function Lamb\Network\crawl_feed_guarded;
 use function Lamb\Network\create_item;
 use function Lamb\Network\get_feeds;
 use function Lamb\Network\ingest_item;
@@ -134,6 +135,31 @@ class NetworkFeedTest extends TestCase
         $this->assertArrayNotHasKey('weird', $result);
 
         $config = $original;
+    }
+
+    // crawl_feed_guarded — one bad feed must not abort the whole /_cron run
+
+    public function testCrawlFeedGuardedReturnsTheCrawlerResult(): void
+    {
+        $result = crawl_feed_guarded('good', 'https://example.com/feed', function (string $name, string $url): array {
+            return ['ok' => true, 'items' => 3, 'error' => null];
+        });
+
+        $this->assertSame(['ok' => true, 'items' => 3, 'error' => null], $result);
+    }
+
+    public function testCrawlFeedGuardedConvertsAThrowIntoTheErrorShapeWithoutPropagating(): void
+    {
+        // A throwing crawl (a JSON/SimplePie parse blow-up, not a caught SQL
+        // error) must not escape and abort the run — it becomes a FAILED line so
+        // the loop reaches the next feed and the notification drains.
+        $result = crawl_feed_guarded('bad', 'https://example.com/feed', function (string $name, string $url): array {
+            throw new \RuntimeException('feed exploded');
+        });
+
+        $this->assertFalse($result['ok']);
+        $this->assertSame(0, $result['items']);
+        $this->assertSame('feed exploded', $result['error']);
     }
 
     // ensure_feed_cache

@@ -43,6 +43,25 @@ an external scheduler — so it defends itself three ways:
    the last **attempt**, not the last success — so a failing feed is retried on
    schedule instead of locked out, and a healthy one isn't re-fetched early.
 
+## Finishing the run
+
+The crawl loop can run for a long time — up to `FEED_FETCH_TIMEOUT` per feed —
+while the notification drains (`Websub\ping_scheduled_publishes()`,
+`Webmention\process_outbound()`) and the rate-limit watermark come after it. If
+the crawl is cut short, both are skipped, and because the watermark is unwritten
+the next run walks the same feeds and dies the same way, so outbound webmentions
+never deliver. Three things keep the run finishing:
+
+- **`set_time_limit(0)`** at the top of `process_feeds()`, so a slow feed cannot
+  hit a web request's PHP limit (typically 30s under FPM) mid-crawl.
+- **A per-feed guard** (`crawl_feed_guarded()`), because `crawl_feed()` only
+  catches `SQL` around individual stores — a throw from the JSON or SimplePie
+  path would otherwise abort the whole run. One bad feed reports a `FAILED` line
+  and the loop continues.
+- **The drains and the watermark run in a `finally`**, so feed fetching can never
+  starve notification delivery, and a partial run still advances the watermark
+  and so cannot immediately re-run and repeat the same failure.
+
 ## The watermark model (the crux)
 
 Three timestamps on the `feedstatus` bean do three different jobs. Conflating

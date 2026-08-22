@@ -103,6 +103,14 @@ function webmention_line(array $sent): string
 {
     header('Content-Type: text/plain');
 
+    // A single feed fetch may take up to FEED_FETCH_TIMEOUT, so a handful of slow
+    // feeds can outlast a web request's PHP limit (typically 30s under FPM). A
+    // timeout mid-crawl skips the notification drains and the watermark write
+    // below, and because the watermark is unwritten the next run walks the same
+    // feeds and dies the same way — webmentions then never deliver. Lift the
+    // limit so the whole run completes. See network/README.md ("The run").
+    set_time_limit(0);
+
     // Serialise overlapping runs before anything else: /_cron is unauthenticated
     // and the rate-limit watermark is only written after all work finishes, so a
     // concurrent burst without this lock would run in parallel on the same stale
@@ -127,25 +135,32 @@ function webmention_line(array $sent): string
     echo count_line(prune_feed_status(), 'Pruned %d stale feed status row(s).');
     echo count_line(\Lamb\flatten_redirects(), 'Flattened %d redirect(s).');
 
-    echo("Updating feeds..." . PHP_EOL);
-    foreach ($feeds as $name => $url) {
-        flush();
-        $status = feed_status_bean($name, $url);
-        if (!feed_fetch_due((int)$status->last_attempt, time())) {
-            echo('Skipped ' . $url . PHP_EOL);
-            continue;
-        }
+    try {
+        echo("Updating feeds..." . PHP_EOL);
+        foreach ($feeds as $name => $url) {
+            flush();
+            $status = feed_status_bean($name, $url);
+            if (!feed_fetch_due((int)$status->last_attempt, time())) {
+                echo('Skipped ' . $url . PHP_EOL);
+                continue;
+            }
 
-        echo crawl_line($name, crawl_feed($name, $url));
+            echo crawl_line($name, crawl_feed_guarded($name, $url));
+        }
+    } finally {
+        // Drain notifications and advance the watermark even if the crawl loop
+        // threw or was cut short: feed fetching must not starve webmention/WebSub
+        // delivery, and a partial run must still rate-limit the next one so it
+        // cannot immediately re-run and repeat the same failure.
+        echo count_line(
+            \Lamb\Websub\ping_scheduled_publishes(),
+            'WebSub: pinged hub for %d scheduled post(s) now published.'
+        );
+        echo webmention_line(\Lamb\Webmention\process_outbound());
+
+        set_option($cron_last_updated, (int)date('U'));
     }
 
-    echo count_line(
-        \Lamb\Websub\ping_scheduled_publishes(),
-        'WebSub: pinged hub for %d scheduled post(s) now published.'
-    );
-    echo webmention_line(\Lamb\Webmention\process_outbound());
-
-    set_option($cron_last_updated, (int)date('U'));
     exit('Done');
 }
 
@@ -210,6 +225,31 @@ function crawl_feed(string $name, string $url): array
     $feed = init_simplepie_feed($url);
     echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
     return record_feed_crawl($name, $url, $feed);
+}
+
+/**
+ * Crawls one feed, turning any throw into the crawl error shape.
+ *
+ * crawl_feed() only catches SQL around individual stores, so a throw from the
+ * JSON or SimplePie path would abort the whole /_cron run and starve the
+ * notification drains — the same outage a mid-crawl timeout causes. Guarding
+ * here lets one bad feed report a failure and the run continue to the next feed
+ * and the drains.
+ *
+ * @param string $name Feed name from config.
+ * @param string $url  Feed URL from config.
+ * @param (callable(string, string): array{ok: bool, items: int, error: ?string})|null $crawler
+ *        The crawler to run; defaults to crawl_feed(). Injectable for tests.
+ * @return array{ok: bool, items: int, error: ?string}
+ */
+function crawl_feed_guarded(string $name, string $url, ?callable $crawler = null): array
+{
+    $crawler ??= crawl_feed(...);
+    try {
+        return $crawler($name, $url);
+    } catch (\Throwable $e) {
+        return ['ok' => false, 'items' => 0, 'error' => $e->getMessage()];
+    }
 }
 
 /** @noinspection PhpUnused */
