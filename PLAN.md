@@ -11,7 +11,7 @@ places where the core does one job two or three ways; the sprawl comes from 44% 
 duplicate mechanism relocates the bug instead of removing it. So: **converge first,
 extract second.** Every stage below is ordered by that constraint, not by appeal.
 
-**Shape:** 15 PRs across 6 stages. Stages 0–1 (7 PRs) are independent of each other
+**Shape:** 16 PRs across 6 stages. Stages 0–1 (7 PRs) are independent of each other
 and of everything after — they can land in any order, in parallel, and each one is
 worth landing even if the rest of this plan is dropped. Stage 2 is the keystone.
 Stages 3–5 are only unlocked by it.
@@ -24,6 +24,17 @@ Stages 3–5 are only unlocked by it.
 2. Make "published" a single event instead of a convention re-derived per subsystem (Stage 2).
 3. Let an install not ship — and not carry the dependency surface of — features it doesn't use (Stages 3–6).
 
+**The premise for objective 3 is a real installed base.** Lamb has other installs,
+so "don't ship what you don't use" is a benefit that lands on actual users rather
+than a hypothetical one. That premise also imposes the constraint below: with real
+installs, every module extraction needs an upgrade path, and shipping a regression
+costs more than the sprawl does. Convergence-before-extraction gets *stronger* under
+that premise, not weaker — a duplicate mechanism relocated behind a module boundary
+is now a bug shipped to other people's blogs.
+
+The clearest single win is `import`: 2,391 lines and `league/html-to-markdown` that
+every install carries forever to serve a migration each install runs at most once.
+
 ## Non-goals
 
 - **No plugin framework.** No hook priorities, no filter chains, no third-party
@@ -35,9 +46,22 @@ Stages 3–5 are only unlocked by it.
   implementation. Offering a choice there is what caused D1–D6.
 - **Not a global-state cleanup.** `global $routes, $config, $data, $template` stays.
   It caps how isolated a module can be; that is accepted and stated, not fixed here.
+- **Not a third-party plugin ecosystem — even though other installs exist.** An
+  installed base justifies *modules* (an install can drop what it doesn't run); it
+  does not justify a public extension API, which is a support commitment and a
+  compatibility surface forever. The README sells "no plugin needed" as a feature.
+  Modules stay an internal seam that happens to be toggleable.
 
 ## Ground rules (house process, per AGENTS.md)
 
+- **Every extraction ships an upgrade path.** Other installs are upgrading through
+  this work, so no module may default to off for an install that is already using
+  the feature: derive the enabled set from existing config (a populated `[feeds]`
+  means `feeds` is on) rather than from a new default. The precedents are
+  `Config\ensure_explicit_theme()` and `Bootstrap\backfill_imported_post_identity()`
+  — boot-time, idempotent, safe to run on every request. A moved route, config key
+  or CLI entry point keeps a deprecated shim for one release, warning rather than
+  breaking.
 - Branch from `main`. **Open an issue per PR first** and get maintainer agreement —
   AGENTS.md requires it for feature work, and Stage 2 onward is feature work.
 - **Red-green TDD is mandatory.** Every step below names its failing test. No
@@ -303,6 +327,12 @@ and **already gated behind `experimental_features`** (`src/config.php:436`) — 
 switch that exists today, with `EXPERIMENTAL_GATE_VERSION` machinery for forcing
 re-opt-in when the gated set changes.
 
+It is also the **highest-value** extraction, not just the safest: an importer is
+run once per install, at migration time, and never again. Today every install
+carries 2,391 lines and a `league/html-to-markdown` dependency in perpetuity to
+serve that one-off. No other module has that profile — the rest are features people
+actually keep using.
+
 Moves `import.php`, `wordpress.php`, `known.php`, `restore.php` into
 `src/modules/import/`. Adds the **importer registry** that collapses D9:
 
@@ -340,10 +370,18 @@ author entirely — this one did, and it is the default theme."*
 
 Move Atom and JSON Feed to a serializer registry owned by code, not themes. Themes
 keep presentation; formats stop being overridable by omission.
-- Test first: `tests/Unit/` feed-shape assertions; `TagFeedCest` and the feed
+
+**Because third-party themes are real, this cannot be a hard break.** Ship it in two
+steps: the registry resolves a theme-supplied `feed.php`/`feed_json.php` first and
+emits a deprecation notice when it finds one, so existing themes keep working; the
+fallback is removed a release later. That inverts the current footgun — a theme that
+*omits* the part silently loses syndication today, whereas after this a theme that
+omits it inherits a correct feed and only an override is deprecated.
+- Test first: `tests/Unit/` feed-shape assertions, plus a fixture theme overriding a
+  feed part to pin the deprecated path while it exists. `TagFeedCest` and the feed
   conditional-GET Cests already guard the routes.
-- Risk: medium — this is a **breaking change for any third-party theme** that
-  overrides a feed part. Announce it; it is the one user-visible change in the plan.
+- Risk: medium — the only user-visible change in the plan. The two-step lands it
+  without breaking a theme mid-release; `docs/` needs a theme-author note.
 
 **PR 13 · Extract `indieweb`** (2,558 LOC)
 
@@ -389,11 +427,25 @@ This is the payoff for the whole plan given how much of AGENTS.md is dependency 
 advisory management: a minimal install stops carrying CVE surface for a Micropub
 endpoint it never exposes.
 
-- Risk: **this is where the plan can bite users.** An existing install that runs
-  `composer install --no-dev` after upgrading loses packages its enabled modules
-  need. Needs a boot-time probe with an actionable message, `RELEASING.md` coverage,
-  and a docs note — do not ship it as a silent `composer.json` edit.
+- Risk: **this is where the plan can bite users, and with a real installed base it
+  will.** An existing install that runs `composer install --no-dev` after upgrading
+  loses packages its enabled modules still need, and finds out when a route 500s.
+  Requirements, not suggestions: a boot-time `requires` probe that names the missing
+  package and the module needing it; the enabled-module set derived from existing
+  config per the upgrade rule above; a `RELEASING.md` checklist item; an upgrade
+  note in `docs/`. Land it at a **release boundary**, never mid-release, so
+  `release` never carries a half-applied dependency change.
 - **DECISIONS.md entry:** "Feature-only dependencies are suggested, not required."
+
+**PR 16 · Document modules for operators**
+
+Added because there is an installed base: from PR 10 on, "which features does this
+install run" becomes something an operator has to be able to answer. `docs/` is
+end-user-only (2026-05-29 decision), so this is one page — what a module is, the
+enabled set, how upgrades derive it, and what disabling one does and does not remove
+(orphan tables stay; see risk 5). The `src/modules/<name>/README.md` files stay
+contributor-facing per the 2026-08-21 decision; this is the operator-facing half.
+- Size: small. Risk: none. Do not start it before PR 10 settles the vocabulary.
 
 ---
 
@@ -419,7 +471,9 @@ PR 8  Post\save() + events  ◄─── needs PR 4, 5 (or Micropub/importers ge
            └──► PR 11 import module
                 PR 12 serializer registry
                 PR 14 export, highlight
-                     └──► PR 15 optional deps  (last: needs every module extracted)
+                     └──► PR 15 optional deps  (last: needs every module extracted,
+                          │                       and lands at a release boundary)
+                          └──► PR 16 operator docs (needs PR 10's vocabulary settled)
 ```
 
 **Stop-anywhere property.** Stages 0–1 pay for themselves with no architectural
@@ -448,7 +502,15 @@ Overall, measured against MODULARITY.md's numbers:
 | Copies of the post-list template | 3 | 1 |
 | Importer CLI scripts | 3 | 1 driver |
 | Runtime deps required by a minimal install | 8 | 4 |
+| Deps required by a *typical* install (keeps IndieWeb + feeds) | 8 | 6 |
 | Optional-feature LOC inside the core | 7,184 (44%) | ~0 |
+
+The two dependency rows are the honest pair. Most installs run the IndieWeb and feed
+features — that is why they chose Lamb — so their surface drops by two
+(`league/html-to-markdown` once `import` is extracted, `phiki` if they forgo
+highlighting), not four. The full drop to four is real but applies to the stripped
+install, not the median one. `import` supplies most of the typical win, because it is
+the one module nobody keeps using.
 
 ---
 
@@ -459,19 +521,27 @@ Overall, measured against MODULARITY.md's numbers:
    characterise before touching, and diff a real `--dry-run` import both sides.
 2. **PR 8 touches every write path.** Land the funnel with one site converted, then
    convert the rest incrementally. Do not convert nine sites in one commit.
-3. **PR 12 breaks third-party themes** that override a feed part. It is the only
-   user-visible break in the plan; announce rather than absorb it.
+3. **PR 12 would break third-party themes** that override a feed part — which, with
+   a real installed base, means someone's live blog loses its feed. Hence the
+   two-step deprecation rather than a clean cut. Do not collapse it back into one PR
+   because the fallback looks like dead weight.
 4. **PR 15 can break existing installs' `composer install`.** Boot-time probe with an
-   actionable message, or don't ship it.
-5. **RedBean fluid mode means "disabled" is not "uninstalled."** `webmention`,
+   actionable message, at a release boundary, or don't ship it.
+5. **The upgrade path is the part most likely to be skipped, and the most expensive
+   to get wrong.** Defaulting a module to off for an install already using the
+   feature silently removes it — webmentions stop being delivered and nothing errors.
+   Every extraction PR needs a boot-time derivation test against a config that
+   predates it, not just a fresh-install test. This risk did not exist when the plan
+   assumed one install; it is now the top operational risk in Stages 4–6.
+6. **RedBean fluid mode means "disabled" is not "uninstalled."** `webmention`,
    `webmentionoutbox` and `feedstatus` are created lazily on first write; disabling a
    module leaves orphan tables. Acceptable — but say it in the module READMEs so it
    isn't discovered as a bug.
-6. **CI must pin the enabled module set from PR 10 onward.** Five acceptance Cests
+7. **CI must pin the enabled module set from PR 10 onward.** Five acceptance Cests
    (`MicropubDiscoveryCest`, `MicropubMediaCest`, `WebmentionCest`, `UploadCest`,
    `TagFeedCest`) exercise routes that become module-provided; coverage drops
    silently otherwise.
-7. **Philosophy drift is the real long-term risk.** "Simple over complex",
+8. **Philosophy drift is the real long-term risk.** "Simple over complex",
    "opinionated defaults over settings". The moment this grows hook priorities, a
    filter chain, or a plugin settings page, it has stopped being this plan. The
    non-goals above are the guardrail; revisit them at Stage 4, which is where the
