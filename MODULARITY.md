@@ -1,29 +1,15 @@
-# Modularity investigation — duplicate mechanisms and plugin seams
+# Duplicate mechanisms in Lamb
 
-**Status:** findings, nothing implemented. Written in response to "the project is
-sprawled, we keep finding bugs — find where there are multiple ways to do
-something and how we can split them off into plugins."
+Where the codebase does one job two or three different ways, with file:line evidence
+for each. This is the findings document behind [PLAN.md](PLAN.md), which sequences the
+work; it records what is duplicated, not what to do about it.
 
-**The sequenced plan derived from these findings is [PLAN.md](PLAN.md).** This
-document is the evidence base — what the plan cites — and is not itself a plan.
-
-**§1 and §2 stand. §3, §4 and §5 are superseded: the module system they propose was
-rejected.** The reason is in PLAN.md §Decision and is a product one, not a technical
-one — Lamb promises a plug-and-play install, and a `src/modules/` tree puts a disable
-switch ten lines away, which is the step toward plug-many-things-and-configure. The
-duplication findings in §2 are unaffected and are what the plan acts on; three items
-§3–4 justified as module plumbing survived as standalone bug-class fixes (the `/_cron`
-ordering, the importer registry, feeds moving out of themes). Read §3–5 as the
-rejected option, kept for the record.
-
-The finding in one line: **the sprawl and the bugs are two different problems, and
-only one of them is fixed by plugins.** The bugs come from ~10 places where the
-same job is done two or three different ways inside the core. The sprawl comes from
-~44% of `src/` being optional features fused into that core. Extracting a plugin
-does not fix a duplicate mechanism — it copies it into a module boundary and makes
-it harder to see. So the order matters: **converge first, extract second.**
-
----
+The through-line: **the bugs and the sprawl are separate problems.** The bugs come
+from the ten hotspots in §2, where the same job has more than one implementation and
+the copies have drifted. The sprawl is §1 — 44% of `src/` being optional features in a
+flat namespace. Fixing the duplication does not require touching the sprawl, and the
+reverse is not true: consolidating behind a boundary before the implementations agree
+just hides the divergence somewhere harder to see.
 
 ## 1. What "sprawled" measures
 
@@ -40,16 +26,18 @@ it harder to see. So the order matters: **converge first, extract second.**
 | Syntax highlighting | 91 | post render | `phiki/phiki` |
 
 Optional features are **7,184 lines — 44% of the PHP in `src/`** — and **4 of the 8
-runtime composer dependencies exist only to serve them.** Given how much of
-`AGENTS.md` is dedicated to dependency and advisory management, a minimal install
-carrying CVE surface for a Micropub endpoint it never exposes is a real cost, not a
-theoretical one.
+runtime composer dependencies exist only to serve them.**
 
-There is currently **no extension mechanism at all**: no hooks, no filters, no
-module registry. The only existing seams are `Theme\part()`'s base-theme fallback
-and the `?callable $fetcher` / `$sender` / `$downloader` / `$resolver` injection
-parameters used for testing. That injection idiom is the right seed — the proposal
-below builds on it rather than importing a hook system.
+That ratio is worth knowing but is not, on its own, a defect: every one of those areas
+is a headline feature in `README.md`, so for most installs this is the product rather
+than dead weight. It matters here for a narrower reason — those 7,184 lines share a
+flat namespace with the core and with each other, which is the condition under which
+§2's duplication keeps appearing. Two features that never reference each other can
+still grow two copies of the same helper.
+
+The only existing seams in the codebase are `Theme\part()`'s base-theme fallback and
+the `?callable $fetcher` / `$sender` / `$downloader` / `$resolver` injection parameters
+used for testing. The latter idiom is worth reusing where §2's fixes need a seam.
 
 ---
 
@@ -202,143 +190,3 @@ scripts. `constants.php` also mixes core constants with feature constants
 (`FEED_FETCH_*`, `IMAGE_UPLOAD_EXTENSIONS`, `VIDEO_UPLOAD_EXTENSIONS`).
 
 ---
-
-## 3. What is plugin-shaped, and what must stay one way
-
-This is the distinction that decides whether this work reduces bugs or multiplies
-them.
-
-**Extract to a module** — optional, feature-complete, owns its own routes/tables/deps:
-
-| Module | Absorbs | Provides | Drops dep |
-|---|---|---|---|
-| `indieweb` | `micropub.php`, `webmention.php`, `websub.php`, `parts/_webmentions.php`, `index.php`'s 4 `Link:` headers | 3 routes, 1 cron job, 1 theme part, `webmention`/`webmentionoutbox` tables | `taproot/micropub-adapter` |
-| `feeds` | `network.php`, `network/` | `/_cron` ingest job, `feedstatus` table, `FEED_FETCH_*` | `simplepie/simplepie` |
-| `import` | `import.php`, `wordpress.php`, `known.php`, `restore.php`, 3 CLIs | 3 registered import sources, 1 CLI driver | `league/html-to-markdown` |
-| `export` | `export.php`, `response/export.php` | `/export`, needs `ext-zip` | — |
-| `highlight` | `highlight.php` | a render filter, `POST_VERSION` participant | `phiki/phiki` |
-
-**Consolidate, never make pluggable** — these need *one* implementation, and offering
-a choice is precisely what caused D1-D6:
-
-routing · config · `Lamb\Post` (front matter, slug, render) · visibility · HTTP
-egress guarding · HTML escaping and sanitizing · the upload security checks
-(`safe_upload_extension`, `upload_content_allowed`, `max_upload_pixels`) · session
-and CSRF.
-
-The project's own philosophy — *"opinionated defaults over settings"*, *"prefer the
-minimal implementation"* — argues for exactly this split: modules are an **internal
-seam for optional features**, not a third-party plugin market. No hook priorities,
-no filter chains, no plugin API to support.
-
----
-
-## 4. The minimal mechanism
-
-Four seams. Three of them already half-exist.
-
-**1. Route registration — already done.** `Route\register_route()` /
-`register_private_route()` is a registry, and `register_private_route()` already
-derives `robots.txt` and the `noindex` header from one source of truth. A module
-just calls it. Zero new machinery; this is why routes are the cheapest thing to move.
-
-**2. A post lifecycle funnel — the prerequisite for everything else.** One
-`Post\save(OODBBean $bean, array $context): void` that all nine D1 sites call,
-emitting `post.created`, `post.updated`, `post.published`, `post.deleted`,
-`post.restored`. Subscribers: outbound webmentions, WebSub pings, slug-change
-redirects, feed-lock. `$context` carries the flags each site currently expresses by
-*omitting a call* (`notify: false` for imports, `finalize_slug: false` for edits) —
-so the convention becomes a parameter that can be tested instead of a comment in
-eight files. This is the fix for D1 **and** the seam that makes `indieweb`
-extractable, because webmention/websub stop being called by name from the write paths.
-
-**3. A cron registry.** `Network\process_feeds()` `network.php:142-146` hardcodes
-`Websub\ping_scheduled_publishes()` and `Webmention\process_outbound()` inside the
-feed-ingestion loop. That single coupling means **outbound webmentions stop being
-delivered if you remove the feed reader.** Replace with `Cron\register(name,
-callable)` and a `/_cron` driver that runs whatever registered.
-
-**4. An importer registry.** `Import\register_source(['name' =>, 'parse' =>,
-'extract' =>, 'skip_reason' =>, 'uuid' =>, 'import' =>])` plus one
-`bin/lamb import <source> <path> [--dry-run] [--replace]` driver. `run_import()` is
-already the shared loop and already takes exactly these callables — this is
-mechanical, and it collapses D9 to zero while making a fourth importer a drop-in.
-
-A module is then a directory with a manifest, loaded from config:
-
-```php
-// src/modules/indieweb/module.php
-return [
-    'name'     => 'indieweb',
-    'requires' => [],                        // ext-*/composer checks, cf. Export\zip_available()
-    'register' => function (): void {
-        Route\register_route('micropub', 'Lamb\Micropub\respond_micropub');
-        Route\register_route('webmention', 'Lamb\Webmention\respond_webmention');
-        Post\on('post.published', 'Lamb\Webmention\enqueue_for_post');
-        Post\on('post.published', 'Lamb\Websub\ping_for_post');
-        Cron\register('webmention-outbox', 'Lamb\Webmention\process_outbound');
-        Http\link_header('micropub', ROOT_URL . '/micropub');
-    },
-];
-```
-
-Modules ship **enabled by default** — this is a code-organisation seam, not a new
-settings page. `experimental_features` + `EXPERIMENTAL_GATE_VERSION`
-(`config.php:436-479`) already establishes the precedent for gating a feature set
-and forcing re-opt-in when that set changes.
-
----
-
-## 5. Sequencing
-
-**Phase 0 — pure convergence, no architecture change.** Each item is independently
-shippable and removes a class of divergence. Do this first; it is where the bug
-reduction actually is.
-
-1. Delete `Http\post_form()` (D2) — dead, and its existence invites use of the
-   unguarded transport.
-2. One escaper (D3): namespaced, XML variant as an explicit argument; delete the
-   global `escape()` in `themes/base/feed.php`.
-3. One front-matter engine (D4): keep `set_frontmatter_key()`'s split/rebuild
-   semantics, re-express `set_matter()` and the four assemblers on top of it.
-4. One upload store (D5): one `store_upload()` taking either a path or bytes.
-5. Dedupe the theme parts (D8): `2024` and `2026` differ by two lines — promote the
-   shared version, keep only genuine overrides.
-6. One `Bootstrap\data_dir()` for the CLIs (D10).
-
-**Phase 1 — the post lifecycle funnel.** Convert all nine D1 write sites. This is
-the highest-value single change in the document and the gate for everything after it.
-
-**Phase 2 — cron registry.** Unhook webmention/websub from `process_feeds()`.
-
-**Phase 3 — first module: `import`.** Lowest risk by a wide margin: CLI-only, no
-web routes, no theme surface, and *already gated behind `experimental_features`* —
-a kill switch that exists today. Proves the manifest end to end.
-
-**Phase 4 — `indieweb`, `export`, `highlight`.** Move Atom and JSON Feed out of
-`themes/` into a serializer registry (D7) so themes stop owning syndication.
-
-**Phase 5 — optional dependencies.** Move the four feature-only composer packages to
-`suggest` with runtime capability checks, following `Export\zip_available()`.
-
----
-
-## 6. Risks worth stating up front
-
-- **Philosophy.** A plugin *framework* would contradict "simple over complex". The
-  answer is that this adds no user-facing configuration and no third-party API: one
-  manifest array, four registries, modules on by default.
-- **Global state is the real coupling.** `global $routes, $config, $data, $template`
-  is what any module system inherits. Not worth fixing now, but it caps how isolated
-  a module can ever be, and it should be named rather than discovered later.
-- **RedBean fluid mode and module-owned tables.** `webmention`, `webmentionoutbox`,
-  `feedstatus` are created lazily on first write. Disabling a module leaves orphan
-  tables. Acceptable, but it means "disabled" is not "uninstalled".
-- **Test suite pinning.** 100 unit tests and 22 acceptance Cests, several of which
-  (`MicropubDiscoveryCest`, `MicropubMediaCest`, `WebmentionCest`, `UploadCest`,
-  `TagFeedCest`) exercise routes that would become module-provided. CI must pin the
-  enabled module set or coverage silently drops when a default changes.
-- **Do not extract before converging.** Extracting `indieweb` while Micropub still
-  carries its own front-matter assembler, its own HTML sanitizer, and its own upload
-  pipeline just relocates D3, D4, and D5 behind a module boundary where they are
-  harder to see and easier to justify.

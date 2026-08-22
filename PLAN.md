@@ -1,74 +1,41 @@
-# Plan: converge the duplicate mechanisms. No module system.
+# Plan: converge the duplicate mechanisms
 
-Deliverable plan for the sprawl/duplicate-mechanism work. The evidence behind every
-claim here — file:line for all ten duplication findings, D1–D10 — is in
-[MODULARITY.md](MODULARITY.md); this document does not restate it, it sequences the
-work.
-
-## Decision
-
-**The module system is rejected. The convergence work proceeds.**
-
-The investigation was asked where the project does one job several ways and how those
-could be split into plugins. It found the first (ten hotspots) and proposed the second
-(five modules behind a manifest). The second half is now declined, for a product
-reason rather than a technical one: Lamb's promise is a **plug-and-play install**, and
-a module set is a step toward a plug-many-things-and-configure install. The README
-sells "no plugin needed" as a feature and `PRODUCT.md` says "opinionated defaults over
-settings". A `src/modules/` tree makes a disable switch a ten-line change away, and
-that switch is what erodes the promise. Not building the tree is the cheapest way to
-never have that argument.
-
-What is *not* declined is everything the module proposal was carrying. Three of its
-parts turned out to be de-duplication fixes wearing a module costume, and they stand
-on their own with no module boundary anywhere:
-
-| Was justified as | Is actually | Kept as |
-|---|---|---|
-| "unhook webmentions so `feeds` can be removed" | a live availability bug in `/_cron` | Stage 3 |
-| "an importer registry so a module can register sources" | the D9 fix — 3 CLIs → 1 | Stage 4 |
-| "move feeds out of themes so a module owns formats" | the D7 fix — themes silently drop syndication | Stage 5 |
+Lamb keeps producing the same kinds of bug because ten jobs in the codebase have two
+or three implementations each, and the copies drift. This plan collapses each of them
+to one. The evidence — file:line for all ten, D1–D10 — is in
+[MODULARITY.md](MODULARITY.md); this document sequences the work.
 
 **Shape:** 11 PRs across 5 stages. Stages 0–1 (7 PRs) are independent of each other
 and of everything after — any order, in parallel, each worth landing alone. Stage 2 is
-the keystone. Stages 3–5 are three unrelated bug-class fixes that happen to be the
-salvage from the rejected half.
+the largest change and the one with the most reach. Stages 3–5 are three unrelated
+bug-class fixes.
+
+Only one real dependency edge exists in the whole plan: PR 8 after PRs 4–5. Nothing
+here is a prerequisite for a larger architectural change, and nothing requires
+committing to one.
 
 ## Objectives
 
-1. Remove the divergence that is producing the bugs (Stages 0–2, 4, 5).
+1. Give each duplicated job one implementation (Stages 0–1, 4, 5).
 2. Make "published" a single event instead of a convention re-derived per subsystem (Stage 2).
 3. Stop `/_cron` from being able to lose webmention delivery (Stage 3).
 
-## Non-goals
+## Scope boundaries
 
-- **No module system, no plugin framework, no extension API.** No `src/modules/`, no
-  manifest, no registries-for-registries' sake, no hook priorities, no filter chains.
-  `src/` stays flat and greppable. A PR that creates a module directory has left this
-  plan.
-- **Nothing operator-visible.** No new configuration, no feature toggles, no docs page
-  explaining which features are on. An install upgrading through all 11 PRs sees the
-  same routes, the same features and the same `composer install`. The only intended
-  operator-visible change in the whole plan is a *bug stopping happening*.
-- **No dependency reduction.** All 8 runtime deps stay in `require`. The earlier draft
-  targeted 8 → 4; collecting that requires asking operators which features they run.
-- **No pluggability for the core.** Routing, config, `Lamb\Post`, visibility, HTTP
-  egress guarding, escaping, upload security, session/CSRF each get *one*
-  implementation. Offering a choice there is what caused D1–D6 in the first place.
+- **`src/` stays flat.** Optional features are not moved into a module tree and there
+  is no manifest, loader, hook system or extension API. The sprawl in MODULARITY.md §1
+  is out of scope: 44% of `src/` is optional features and stays that way. Lamb promises
+  a plug-and-play install, so anything that would make a feature set something an
+  operator selects is out of scope by design, not by omission.
+- **Nothing operator-visible.** No new configuration, no feature toggles, no
+  dependency changes — all 8 runtime deps stay in `require`. An install upgrading
+  through all 11 PRs sees the same routes, the same features and the same
+  `composer install`. The only intended operator-visible effect is a bug stopping
+  happening.
+- **The core stays single-implementation.** Routing, config, `Lamb\Post`, visibility,
+  HTTP egress guarding, escaping, upload security, session/CSRF each get exactly one
+  way to do the job. Offering a choice is what produced D1–D6.
 - **Not a global-state cleanup.** `global $routes, $config, $data, $template` stays.
-
-## What this gives up, stated plainly
-
-7,184 lines — 44% of the PHP in `src/` — are optional features, and they all still
-ship to every install, in a flat namespace, with no enforced ownership. That is the
-cost of this decision and it is accepted, not solved. Two mitigations already exist
-and should be used rather than replaced: the `src/<module>/README.md` convention
-(2026-08-21 decision) gives a subsystem a place to describe itself without a code
-boundary, and `experimental_features` already gates the importers.
-
-Revisit only if a concrete need appears — a real operator asking to run Lamb without
-the IndieWeb stack, or a feature whose dependency becomes a recurring advisory
-burden. "The codebase would be tidier" is not that need.
 
 ## Ground rules (house process, per AGENTS.md)
 
@@ -80,17 +47,15 @@ burden. "The codebase would be tidier" is not that need.
   `composer coverage` (**≥70%**), `pnpm test`, `composer audit`.
 - A refactor PR that touches no behaviour still needs its characterisation test
   written first, so "no behaviour change" is enforced rather than asserted.
-- **Every change is invisible to an operator** except where it stops a bug. Other
-  installs are upgrading through this work. Anything addressed *by name* — a route, a
-  config key, a CLI entry point, a theme part — keeps a deprecated shim for one
-  release, warning rather than breaking.
-- `DECISIONS.md` entries at two points: the funnel (Stage 2), and this rejection —
-  "Lamb stays a flat codebase; optional features are not modules", recording the
-  plug-and-play reasoning so the question does not get re-opened from scratch.
+- **Other installs are upgrading through this work.** Anything addressed *by name* —
+  a route, a config key, a CLI entry point, a theme part — keeps a deprecated shim for
+  one release, warning rather than breaking.
+- `DECISIONS.md` entry at one point: the post lifecycle funnel (Stage 2), which
+  changes an invariant every write path depends on.
 
 ---
 
-## Stage 0 — The bug that proves the thesis
+## Stage 0 — The bug that makes the case
 
 **PR 1 · Fix the notify-after-failed-write twin on the create path**
 
@@ -215,7 +180,7 @@ three CLI scripts. Route the CLIs through `Bootstrap\data_dir()`. Optionally mov
 feature-only constants out of `src/constants.php` (`FEED_FETCH_*`,
 `IMAGE_UPLOAD_EXTENSIONS`, `VIDEO_UPLOAD_EXTENSIONS`) next to their owners — the
 file's own docblock says it holds "application-wide" constants, and these are not.
-Skip it if it reads worse; with no module extraction coming, nothing forces it.
+Skip it if it reads worse; nothing downstream depends on it.
 - Test first: `UpgradeScriptTest`/`LambRestoreTest` already spawn CLI subprocesses
   with a seeded data dir — extend to assert the resolved path.
 - Size: small. Risk: low. Note the default differs by design (`../data` for web,
@@ -227,7 +192,7 @@ Coverage ≥70% and the PHPStan baseline still empty.
 
 ---
 
-## Stage 2 — The post lifecycle funnel (keystone)
+## Stage 2 — The post lifecycle funnel
 
 **PR 8 · `Post\save()` and the lifecycle events**
 
@@ -282,7 +247,7 @@ returns hits only inside `src/post.php`. No write path outside the funnel.
 
 **PR 9 · Isolate and order the cron jobs**
 
-Kept from the rejected half, but not for its original reason. `Network\process_feeds()`
+`Network\process_feeds()`
 (`src/network.php:102-149`) is one straight-line function running five unrelated jobs,
 with the two notification drains **last**:
 
@@ -318,8 +283,7 @@ Fix, smallest first — the ordering change alone removes the reported failure:
    immediate re-run that repeats the same failure.
 4. Optional, only if 1–3 leave the function unwieldy: a small `Cron\register(name,
    callable)` list so `/_cron` iterates jobs instead of naming them. This is the piece
-   the module plan wanted; it is now a readability nicety, not a requirement. Skip it
-   if the guarded version reads fine.
+   a readability nicety, not a requirement. Skip it if the guarded version reads fine.
 
 - **Test first:** a feed whose crawl throws, asserting `process_outbound()` still ran
   and the watermark advanced; then a second run asserting it is rate-limited rather
@@ -339,7 +303,7 @@ with the outbound queue undrained and the watermark unwritten.
 
 **PR 10 · Importer registry and a single CLI driver**
 
-The D9 fix, with no module directory. `import-wordpress.php`, `import-known.php` and
+The D9 fix. `import-wordpress.php`, `import-known.php` and
 `import-lamb.php` are ~65 lines each of the same sequence — SAPI check,
 `define('ROOT_DIR')`, `parse_import_args()`, readability check, `data_dir()`,
 `bootstrap_db()`, `Config\load()`, `apply_timezone()`, experimental gate, parse,
@@ -374,7 +338,7 @@ unmoved. A fourth importer becomes a registration instead of a fourth script.
 
 **PR 11 · Feed output moves from theme parts into code**
 
-The D7 fix, with no serializer registry abstraction beyond what this needs. Atom and
+The D7 fix. Atom and
 JSON Feed live as **theme parts** (`themes/base/feed.php`, `feed_json.php`), so a
 theme owns the syndication contract, and a theme that simply *omits* the part loses
 the site's feed. That exact class of failure is already recorded in
@@ -425,12 +389,11 @@ PR 10 importer registry      ─── independent (PR 7 first if both touch the
 PR 11 feeds out of themes    ─── independent (after PR 3, which touches feed.php)
 ```
 
-Only one real edge in the whole plan (PR 8 after PR 4/5). Stages 3–5 are three
-unrelated fixes and can go in any order, before or after the funnel.
+Stages 3–5 are three unrelated fixes and can go in any order, before or after Stage 2.
 
-**Stop-anywhere property.** Stages 0–1 pay for themselves with no architectural
-commitment. Stage 2 is the D1 fix and stands alone. Stages 3–5 are each a single
-bug-class fix. Nothing in this plan requires believing in anything.
+**Stop-anywhere property.** Stages 0–1 pay for themselves immediately. Stage 2 is the
+D1 fix and stands alone. Stages 3–5 are each a single bug-class fix. Any subset of
+this plan is coherent on its own.
 
 ---
 
@@ -454,11 +417,10 @@ Measured against MODULARITY.md's numbers:
 | Copies of the post-list template | 3 | 1 |
 | Importer CLI scripts | 3 | 1 driver |
 | Feed formats a theme can silently drop | 2 | 0 |
-| Runtime deps required | 8 | 8 — unchanged, by choice |
-| Optional-feature LOC in a flat `src/` | 7,184 (44%) | 7,184 — unchanged, by choice |
+| Runtime deps required | 8 | 8 |
+| Optional-feature LOC in a flat `src/` | 7,184 (44%) | 7,184 (44%) |
 
-The last two rows are the shape of the decision: the duplication goes, the sprawl
-stays.
+The last two rows are the shape of the plan: the duplication goes, the sprawl stays.
 
 ---
 
@@ -473,14 +435,9 @@ stays.
    someone's live blog losing its feed, hence the two-step deprecation. Do not
    collapse it into one PR because the fallback looks like dead weight.
 4. **PR 9 is easy to under-fix.** Reordering the drains removes the reported symptom
-   but leaves an unguarded loop and an all-or-nothing watermark. Do all of 1–3 in that
-   PR, or the next slow feed produces a different version of the same outage.
-5. **RedBean fluid mode.** Unchanged by this plan, but worth stating since the module
-   proposal raised it: `webmention`, `webmentionoutbox` and `feedstatus` are created
-   lazily on first write. With no modules there is nothing to disable, so no orphan
-   tables — one fewer thing to reason about.
-6. **The module idea will come back.** It is a genuinely appealing refactor and each of
-   these PRs makes the seams cleaner, which makes it *more* appealing. The rejection
-   is on plug-and-play grounds, not code-health grounds, so a code-health argument for
-   reinstating it does not answer the objection. Put the `DECISIONS.md` entry in early
-   (Stage 2 at the latest) so the reasoning outlives this conversation.
+   but leaves an unguarded loop and an all-or-nothing watermark. Do all four parts in
+   that PR, or the next slow feed produces a different version of the same outage.
+5. **Every one of these PRs makes the seams cleaner, which makes a larger refactor
+   look more tractable.** That is a good outcome to notice and a bad one to act on
+   mid-plan. Each PR's value is the duplication it removes; finish the list before
+   re-opening the question of how `src/` is organised.
