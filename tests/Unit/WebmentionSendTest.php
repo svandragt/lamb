@@ -184,6 +184,20 @@ class WebmentionSendTest extends TestCase
         $this->assertSame(0, R::count('webmentionoutbox'));
     }
 
+    public function testEnqueueForPostQueuesMultipleReplyTargets(): void
+    {
+        $post = $this->dispenseReply(
+            '<p>A reply with no links</p>',
+            'https://other.example/their-post https://third.example/their-post'
+        );
+
+        enqueue_for_post($post);
+
+        $this->assertNotNull(R::findOne('webmentionoutbox', ' target = ? ', ['https://other.example/their-post']));
+        $this->assertNotNull(R::findOne('webmentionoutbox', ' target = ? ', ['https://third.example/their-post']));
+        $this->assertSame(2, R::count('webmentionoutbox'));
+    }
+
     public function testEnqueueForPostDeduplicatesReplyTargetAlsoInBody(): void
     {
         $target = 'https://other.example/their-post';
@@ -223,6 +237,31 @@ class WebmentionSendTest extends TestCase
         enqueue_for_post($post);
 
         $this->assertSame(0, R::count('webmentionoutbox'));
+    }
+
+    public function testEnqueueOutboundQueuesEachSpaceSeparatedReplyTarget(): void
+    {
+        // #583: `in_reply_to` may hold several space-separated targets, the
+        // same convention `syndicated_to` uses; each becomes its own row.
+        $source = ROOT_URL . '/status/1';
+        $replyTo = 'https://other.example/a https://third.example/b';
+
+        $count = enqueue_outbound($this->postId, $source, '<p>No links</p>', $replyTo);
+
+        $this->assertSame(2, $count);
+        $this->assertNotNull(R::findOne('webmentionoutbox', ' target = ? ', ['https://other.example/a']));
+        $this->assertNotNull(R::findOne('webmentionoutbox', ' target = ? ', ['https://third.example/b']));
+    }
+
+    public function testEnqueueOutboundSkipsSameSiteTargetAmongMultiple(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        $replyTo = 'https://other.example/a ' . ROOT_URL . '/status/1';
+
+        $count = enqueue_outbound($this->postId, $source, '<p>No links</p>', $replyTo);
+
+        $this->assertSame(1, $count);
+        $this->assertSame(0, R::count('webmentionoutbox', ' target = ? ', [ROOT_URL . '/status/1']));
     }
 
     // enqueue_outbound (stale rows) ------------------------------------------
