@@ -15,6 +15,7 @@ use RedBeanPHP\R;
 use RuntimeException;
 
 use function Lamb\get_tags;
+use function Lamb\Config\is_menu_item;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
@@ -393,6 +394,83 @@ function syndication_links(OODBBean $bean): string
         return '';
     }
     return '<small>Also on: ' . implode(', ', $links) . '</small>';
+}
+
+/**
+ * Renders the post-list loop shared by the 2024 and 2026 themes' _items.php.
+ *
+ * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
+ * outside their own permalink, and prints each post as an h-entry. The only
+ * difference between the two themes is whether the per-post author is shown
+ * inline (2024) or kept screen-reader-only (2026), controlled by $hide_author.
+ *
+ * @param bool $hide_author Hide the per-post author visually instead of showing it inline.
+ * @return void
+ */
+function render_post_list(bool $hide_author): void
+{
+    global $data;
+    global $template;
+
+    // Column positions below intentionally mirror the original per-theme
+    // _items.php templates: the leading whitespace of any line adjacent to a
+    // PHP tag is part of the rendered HTML, so it cannot be re-indented for
+    // being nested inside a function without changing the output.
+    if (empty($data['posts'])) :
+        ?><p>Sorry no items found.</p>
+    <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+    else :
+        if (count($data['posts']) > 1) :
+            echo '<ul>';
+        endif;
+        foreach ($data['posts'] as $bean) :
+            /** @var \RedBeanPHP\OODBBean $bean */
+            if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
+                # Backstop for the owner-only views that query everything (drafts,
+                # trash, scheduled); public listings exclude menu pages in SQL.
+                continue;
+            endif;
+            if (count($data['posts']) > 1) :
+                echo '<li>';
+            endif;
+
+            ?>
+
+        <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
+            <header>
+                <?php // On a post page the h1 already shows the title, and the
+                      // stylesheet hides this h2 — but the h-entry still needs a
+                      // p-name, so the element is emitted and hidden rather than
+                      // skipped. Same expression as the base theme.
+                ?>
+                <?php if (!empty($bean->title)) : ?>
+                    <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
+                <?php endif; ?>
+                <div class="meta">
+                    <?= ($hide_author
+                        ? '<span itemprop="author" class="screen-reader-text">' . author_card() . '</span>'
+                        : '<span itemprop="author">' . author_card() . '</span> @') . "\n" ?>
+                    <?= date_created($bean) ?>
+                </div>
+            </header>
+            <?= the_reply_context($bean) ?>
+            <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
+            <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
+            <?= syndication_links($bean) ?>
+
+            <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
+                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+            <?php endif; ?>
+        </article>
+        <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+            if (count($data['posts']) > 1) :
+                echo '</li>';
+            endif;
+        endforeach;
+        if (count($data['posts']) > 1) :
+            echo '</ul>';
+        endif;
+    endif;
 }
 
 /**
