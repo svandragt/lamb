@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 
 use function Lamb\Bootstrap\should_start_session;
 use function Lamb\Bootstrap\cache_headers;
@@ -178,5 +179,40 @@ class SessionBootstrapTest extends TestCase
 
         @rmdir($expected);
         @rmdir($data_dir);
+    }
+
+    /**
+     * configure_session_save_path() used to ignore mkdir()'s return value:
+     * if the sessions directory couldn't be created, ini_set() still pointed
+     * session.save_path at a nonexistent path, and session_start() would then
+     * silently fail to persist any session data — a login that looks like it
+     * succeeded but never actually stays logged in. It must now fail loudly,
+     * matching bootstrap_db()'s existing check-and-throw for the data dir.
+     */
+    public function testThrowsWhenSessionsDirectoryCannotBeCreated(): void
+    {
+        $data_dir = sys_get_temp_dir() . '/lamb-session-test-' . getmypid() . '-blocked';
+        @mkdir($data_dir, 0700, true);
+        // A plain file at the exact path mkdir() needs to create makes it fail
+        // regardless of the running user's permissions (even root can't mkdir
+        // over an existing file), so this reproduces the failure deterministically.
+        touch($data_dir . '/sessions');
+
+        // mkdir() itself raises E_WARNING on this exact failure; the test
+        // runner's default handler turns that into its own exception before
+        // the function's own `!mkdir() && !is_dir()` check ever runs. Silence
+        // just that warning here so the assertion is on this function's
+        // handling of the failure, not on the runner's warning conversion —
+        // production leaves the warning intact (unsuppressed, like
+        // bootstrap_db()'s equivalent check) so it still reaches the error log.
+        set_error_handler(static fn () => true, E_WARNING);
+        try {
+            $this->expectException(RuntimeException::class);
+            configure_session_save_path($data_dir);
+        } finally {
+            restore_error_handler();
+            @unlink($data_dir . '/sessions');
+            @rmdir($data_dir);
+        }
     }
 }

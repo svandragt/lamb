@@ -435,7 +435,12 @@ function li_items(array $nav_items): string
     $format = '<li><a href="%s">%s</a></li>';
     $items = [];
     foreach ($nav_items as $label => $url) {
-        if (str_starts_with($url, 'http') || str_starts_with($url, '/')) {
+        // Any URI with a scheme (http:, https:, mailto:, tel:, ...) or a
+        // root-relative path is used as-is; a bare slug gets ROOT_URL prefixed.
+        // str_starts_with($url, 'http') alone missed mailto:/tel: links, which
+        // footer_items documents as a valid entry ("social links" etc.) — those
+        // got ROOT_URL wrongly prefixed onto them, producing a dead link.
+        if (parse_url($url, PHP_URL_SCHEME) !== null || str_starts_with($url, '/')) {
             $items[] = sprintf($format, escape($url), escape($label));
         } else {
             $items[] = sprintf($format, ROOT_URL . '/' . escape($url), escape($label));

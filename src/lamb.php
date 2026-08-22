@@ -4,14 +4,17 @@ namespace Lamb;
 
 use RedBeanPHP\OODBBean;
 
-// SQL fragments for common post visibility filters.
+// SQL fragments for common post visibility filters. SQL_PUBLISHED/SQL_IS_DRAFT/
+// SQL_IS_SCHEDULED compose from SQL_NOT_DRAFT/SQL_NOT_DELETED rather than
+// re-spelling the NULL-handling, so a future change to what "not draft" or
+// "not deleted" means only has to happen in one place.
 const SQL_NOT_DRAFT  = ' (draft IS NULL OR draft != 1) ';
 const SQL_NOT_DELETED = ' (deleted IS NULL OR deleted != 1) ';
-const SQL_PUBLISHED  = ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
-const SQL_IS_DRAFT   = ' draft = 1 AND (deleted IS NULL OR deleted != 1) ';
+const SQL_PUBLISHED  = SQL_NOT_DRAFT . ' AND ' . SQL_NOT_DELETED;
+const SQL_IS_DRAFT   = ' draft = 1 AND ' . SQL_NOT_DELETED;
 const SQL_IS_DELETED = ' deleted = 1 ';
 // SQL fragment selecting posts that are scheduled for the future (and not draft/deleted).
-const SQL_IS_SCHEDULED = ' created > ? AND (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) ';
+const SQL_IS_SCHEDULED = ' created > ? AND ' . SQL_NOT_DRAFT . ' AND ' . SQL_NOT_DELETED;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
