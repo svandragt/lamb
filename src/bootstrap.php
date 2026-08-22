@@ -49,13 +49,22 @@ function load_dotenv(string $root): void
  *
  * The default is relative to the web root, which is the working directory of a
  * request (php-fpm and `php -S -t src` both chdir there). CLI entry points pass
- * their own absolute path.
+ * their own absolute path via $cli_base, whose data dir is "$cli_base/data" —
+ * relative to the repo root rather than to src/, which is why the two defaults
+ * must stay distinct.
  *
+ * @param string|null $cli_base Absolute base path for a CLI entry point (pass
+ *                              __DIR__), or null for a web request.
  * @return string The data directory path.
  */
-function data_dir(): string
+function data_dir(?string $cli_base = null): string
 {
-    return getenv('LAMB_DATA_DIR') ?: '../data';
+    $env = getenv('LAMB_DATA_DIR');
+    if ($env !== false && $env !== '') {
+        return $env;
+    }
+
+    return $cli_base !== null ? $cli_base . '/data' : '../data';
 }
 
 /**
