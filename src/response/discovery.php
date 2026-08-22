@@ -138,10 +138,14 @@ function newest_visible_update(): ?string
  * exactly when the validator does and a served copy always matches the ETag
  * sent with it — no staleness window to reason about.
  *
- * `$root_url` is in the key because it is not a constant of the install: an
- * install with no configured canonical URL falls back to the request's own
- * Host (see index.php), and every `<loc>` in the document is built from it.
- * A cache keyed only on time would hand one host's sitemap to another.
+ * `$root_url` is in the key because an install with no configured canonical
+ * URL builds ROOT_URL — and so every `<loc>` here — from the request's own
+ * Host header, which index.php documents as attacker-chosen. Without it in
+ * the key, one request carrying a forged Host caches a document full of that
+ * host's URLs and every later visitor is served it until the content changes.
+ * Uncached, a bad Host only spoils the response that sent it; caching is what
+ * would make it persist, so the cache is what has to account for it. Setting
+ * `site_url` pins ROOT_URL and the term becomes inert.
  *
  * @param string $updated   The newest visible post's stored datetime.
  * @param int    $config_ts The config's last-modified timestamp.
@@ -176,10 +180,8 @@ function sitemap_cache_path(string $key): string
  * sitemap.
  *
  * Older keys are removed once the new one is in place, so the directory holds
- * one sitemap rather than one per edit. An install serving several hosts
- * *without* a configured canonical URL therefore keeps only the last host's
- * copy and the others miss — still correct, and no slower than not caching at
- * all; setting `site_url` pins ROOT_URL and the thrashing goes away.
+ * one sitemap rather than one per edit — and, on an install with no canonical
+ * URL, cannot be grown by requests carrying junk Host headers.
  *
  * Every call is `@`-suppressed on purpose. These are best-effort filesystem
  * operations on a path the operator controls, each already handled by its

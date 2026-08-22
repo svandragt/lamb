@@ -250,9 +250,23 @@ class SitemapTest extends TestCase
 
         $this->assertNotSame($base, sitemap_cache_key('2026-06-02 09:00:00', 1000, 'https://example.com'));
         $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000, 'https://example.com'));
-        // An install with no canonical URL builds every <loc> from the request
-        // Host, so two hosts must not share one cached document.
-        $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://other.example'));
+    }
+
+    /**
+     * With no `site_url` configured, ROOT_URL comes from the request's own Host
+     * header — attacker-chosen, as index.php says — and every <loc> is built
+     * from it. Uncached that only spoils the response that sent the bad Host;
+     * a cache that ignored it would store that document under the current
+     * content key and serve it to every later visitor until the content
+     * changed. Verified as a real poisoning before this term was added, so it
+     * is a security property, not a multi-host feature.
+     */
+    public function testCacheKeySeparatesDocumentsBuiltForADifferentHost(): void
+    {
+        $honest = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://example.com');
+        $forged = sitemap_cache_key('2026-06-01 09:00:00', 1000, 'https://evil.example');
+
+        $this->assertNotSame($honest, $forged);
     }
 
     public function testCacheKeyIsFilenameSafe(): void

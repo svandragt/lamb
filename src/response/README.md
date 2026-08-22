@@ -205,10 +205,12 @@ request that does get a 200 streams a file instead of rebuilding 25,000
 entries. Keying on the content is what keeps the cache honest: it turns over
 exactly when the ETag does, so the bytes sent always match the validator sent
 with them, and there is no staleness window to reason about. `ROOT_URL` is in
-the key because an install with no configured canonical URL builds every
-`<loc>` from the request's own `Host` — a cache keyed only on time would serve
-one host's sitemap to another. Every filesystem operation is best-effort: an
-unwritable data directory costs the cache, never the response.
+the key for a different reason: with no `site_url` configured it comes from
+the request's own `Host`, which index.php flags as attacker-chosen, so without
+it one forged Host would cache a document of that host's URLs and serve it to
+everyone else until the content next changed. Every filesystem operation is
+best-effort: an unwritable data directory costs the cache, never the
+response.
 
 `should_noindex()`/`mark_noindex()` mark a response noindex for any private
 route or any request carrying a `preview` parameter (valid or not); this
