@@ -251,7 +251,7 @@ class ReplyContextTest extends TestCase
         $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         $this->assertStringContainsString('xmlns:thr', $output);
@@ -289,7 +289,7 @@ class ReplyContextTest extends TestCase
         $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         $content = (string) (new \SimpleXMLElement($output))->entry->content;
@@ -324,7 +324,7 @@ class ReplyContextTest extends TestCase
         $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed.php';
+        \Lamb\Response\render_atom_feed($data, $config);
         $output = ob_get_clean();
 
         $content = (string) (new \SimpleXMLElement($output))->entry->content;
@@ -358,7 +358,7 @@ class ReplyContextTest extends TestCase
         $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed.json', 'updated' => '2024-01-01 12:00:00'];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed_json.php';
+        \Lamb\Response\render_json_feed($data, $config);
         $output = ob_get_clean();
 
         $json = json_decode($output, true);
