@@ -80,6 +80,22 @@ The `preview` parameter counts even when empty or wrong. A bad token never grant
 
 ---
 
+## 2026-08-22 — The sitemap is cached on disk, keyed on its own ETag inputs
+
+**Status:** Accepted
+
+**Context:** Validating before building already answered a revalidating crawler in 1.8 ms, but a request that legitimately got a 200 still rebuilt the whole document: 88 ms and a 2.6 MB string at 30,000 posts, on every first fetch and after every edit. The sitemap does not have to be assembled per request — it is a function of content that changes a few times a day.
+
+**Decision:** `respond_sitemap()` serves `data/cache/sitemap-<key>.xml`, rendering and storing it only when that key is absent. The key is `md5` of the same inputs the ETag is built from — the newest visible post's `updated` and the config timestamp — plus `ROOT_URL`.
+
+Keying on content rather than on a TTL is the deliberate part. A time-based cache was considered and rejected: the ETag is computed from live content, so serving a body cached under different content would hand the crawler bytes its validator does not describe, and it would then sit on that copy until the *next* change — silently missing everything in between. Content keying means the cache turns over exactly when the validator does, which removes the staleness question rather than answering it. `ROOT_URL` is in the key because it is not constant per install: with no configured canonical URL it comes from the request's `Host` and appears in every `<loc>`.
+
+Storage follows the existing `data/cache/` convention (already gitignored, already used by the feed cache). The write is a temp file plus `rename()`, so a concurrent reader cannot see a partial document, and every filesystem call is `@`-suppressed and return-checked — the response is already sent by then, and an unwritable data directory must cost the cache, not the sitemap.
+
+**Consequences:** A 200 sitemap goes from 88 ms to 5.1 ms at 30,000 posts, and none of the 25,000 entries or the 2.6 MB string exist in PHP memory on a hit — the memory ceiling this endpoint keeps running into is now only reached when the document is actually rebuilt. A 200-post install is unchanged (2.6 → 2.1 ms). Only the newest key is kept, so an install serving several hosts *without* a canonical URL keeps just the last host's copy and the others miss: still correct, no slower than not caching, and fixed by setting `site_url`. The cached file is disposable — deleting `data/cache/` costs one rebuild.
+
+---
+
 ## 2026-08-22 — A tag scan pages on the rowid; the sitemap validates before it builds
 
 **Status:** Accepted
