@@ -420,7 +420,11 @@ function render_post_list(bool $hide_author): void
         ?><p>Sorry no items found.</p>
     <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
     else :
-        if (count($data['posts']) > 1) :
+        // Wrap the list in <ul>/<li> only when there is more than one post, so a
+        // single post renders as a bare <article>. Computed once; the menu-item
+        // skip below uses `continue`, so this matches the pre-extraction total.
+        $is_list = count($data['posts']) > 1;
+        if ($is_list) :
             echo '<ul>';
         endif;
         foreach ($data['posts'] as $bean) :
@@ -430,7 +434,7 @@ function render_post_list(bool $hide_author): void
                 # trash, scheduled); public listings exclude menu pages in SQL.
                 continue;
             endif;
-            if (count($data['posts']) > 1) :
+            if ($is_list) :
                 echo '<li>';
             endif;
 
@@ -463,11 +467,11 @@ function render_post_list(bool $hide_author): void
             <?php endif; ?>
         </article>
         <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
-            if (count($data['posts']) > 1) :
+            if ($is_list) :
                 echo '</li>';
             endif;
         endforeach;
-        if (count($data['posts']) > 1) :
+        if ($is_list) :
             echo '</ul>';
         endif;
     endif;

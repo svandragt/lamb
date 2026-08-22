@@ -158,4 +158,48 @@ class ThemeModernItemsPartTest extends TestCase
 
         $this->assertSame($expected, $html);
     }
+
+    // The author line is the ONE line the two themes differ on and the whole
+    // point of the refactor to preserve. The fixture tests above substitute the
+    // same literal the implementation builds, so a typo there would be copied
+    // into both sides and pass — pin it here with hardcoded literals instead.
+    public function test2024ShowsTheAuthorInlineWithTrailingAt(): void
+    {
+        $html = $this->render('2024', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
+        $this->assertStringContainsString('<span itemprop="author">', $html);
+        $this->assertStringContainsString('</span> @', $html);
+        $this->assertStringNotContainsString('screen-reader-text', $html);
+    }
+
+    public function test2026HidesTheAuthorForScreenReadersWithNoTrailingAt(): void
+    {
+        $html = $this->render('2026', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
+        $this->assertStringContainsString('<span itemprop="author" class="screen-reader-text">', $html);
+        $this->assertStringNotContainsString('</span> @', $html);
+    }
+
+    public function testEmptyPostsRendersTheNoItemsMessageIdenticallyForBothThemes(): void
+    {
+        $html2024 = $this->render('2024', 'tag', []);
+        $html2026 = $this->render('2026', 'tag', []);
+
+        $this->assertStringContainsString('<p>Sorry no items found.</p>', $html2024);
+        $this->assertStringNotContainsString('<article', $html2024);
+        // Both themes share the one implementation, so the empty branch is byte-identical.
+        $this->assertSame($html2024, $html2026);
+    }
+
+    public function testLoggedInAuthorGetsTheActionsFooterAnonymousDoesNot(): void
+    {
+        // The actions <small> block is the only <small> in this markup and is
+        // gated on the login session — pins the moved logged-in hunk.
+        $bean = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
+
+        $anon = $this->render('2026', 'tag', [$bean]);
+        $this->assertStringNotContainsString('<small>', $anon);
+
+        $_SESSION[SESSION_LOGIN] = true;
+        $loggedIn = $this->render('2026', 'tag', [$bean]);
+        $this->assertStringContainsString('<small>', $loggedIn);
+    }
 }
