@@ -10,6 +10,7 @@ use RedBeanPHP\R;
 use function Lamb\get_option;
 use function Lamb\set_option;
 
+use const Lamb\SQL_PUBLISHED;
 use const ROOT_URL;
 
 /**
@@ -153,7 +154,7 @@ function ping_scheduled_publishes(?array $config = null, ?callable $sender = nul
 
     $posts = R::find(
         'post',
-        ' (draft IS NULL OR draft != 1) AND (deleted IS NULL OR deleted != 1) '
+        SQL_PUBLISHED
         . " AND (feed_name IS NULL OR feed_name = '') "
         . ' AND created > updated AND created > ? AND created <= ? ',
         [$since, $now_str]
