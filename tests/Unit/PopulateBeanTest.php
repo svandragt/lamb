@@ -289,6 +289,31 @@ class PopulateBeanTest extends TestCase
         $this->assertSame('myfeed-hello-world', $bean->slug);
     }
 
+    public function testCronUpdatePreservesOriginalCreatedDate(): void
+    {
+        // Renaming an upstream entry bumps its feed date, which trips update_item().
+        // The re-sync must keep the original `created` — only `updated` tracks the
+        // feed — or the post jumps to the top of a created-sorted listing.
+        $first = $this->createMock(SimplePieItem::class);
+        $first->method('get_date')->willReturn('2020-01-01 00:00:00');
+        $first->method('get_updated_date')->willReturn('2020-01-01 00:00:00');
+        $first->method('get_id')->willReturn('rel-1');
+
+        $bean = populate_bean('Release notes', $first, 'gh');
+        R::store($bean);
+        $this->assertSame('2020-01-01 00:00:00', $bean->created);
+
+        $renamed = $this->createMock(SimplePieItem::class);
+        $renamed->method('get_date')->willReturn('2026-08-22 12:00:00');
+        $renamed->method('get_updated_date')->willReturn('2026-08-22 12:00:00');
+        $renamed->method('get_id')->willReturn('rel-1');
+
+        $bean = populate_bean('Release notes', $renamed, 'gh', $bean);
+
+        $this->assertSame('2020-01-01 00:00:00', $bean->created);
+        $this->assertSame('2026-08-22 12:00:00', $bean->updated);
+    }
+
     public function testNonFeedPostSlugIsNotPrefixed(): void
     {
         $bean = populate_bean("---\ntitle: Hello World\n---\nContent.");

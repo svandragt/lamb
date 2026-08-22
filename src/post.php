@@ -35,10 +35,20 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
     }
     $bean->body = $text;
     $bean->slug = $matter['slug'] ?? '';
-    $bean->created = \Lamb\now();
+    // Stamp `created` only when the row is new. A re-sync (feed cron update, or a
+    // manual edit) keeps the stored date, so an upstream entry being renamed —
+    // which bumps its feed date and trips update_item() — no longer re-dates the
+    // post to now and reorders created-sorted listings. `updated` always tracks
+    // the current write. Front matter can still override created via apply_scheduling().
+    $is_new = empty($bean->id);
+    if ($is_new) {
+        $bean->created = \Lamb\now();
+    }
     $bean->updated = \Lamb\now();
     if ($feed_item) {
-        $bean->created = $feed_item->get_date("Y-m-d H:i:s");
+        if ($is_new) {
+            $bean->created = $feed_item->get_date("Y-m-d H:i:s");
+        }
         $bean->updated = $feed_item->get_updated_date("Y-m-d H:i:s");
         if ($feed_name) {
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
