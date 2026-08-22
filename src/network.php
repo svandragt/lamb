@@ -109,6 +109,11 @@ function webmention_line(array $sent): string
     // below, and because the watermark is unwritten the next run walks the same
     // feeds and dies the same way — webmentions then never deliver. Lift the
     // limit so the whole run completes. See network/README.md ("The run").
+    //
+    // This removes the wall-clock backstop, so the cron flock's liveness now
+    // rests on every outbound path being independently time-bounded: curl sets
+    // CURLOPT_TIMEOUT and SimplePie set_timeout(FEED_FETCH_TIMEOUT). Keep it that
+    // way — an unbounded fetch here would hold the flock and wedge every later run.
     set_time_limit(0);
 
     // Serialise overlapping runs before anything else: /_cron is unauthenticated
@@ -148,17 +153,19 @@ function webmention_line(array $sent): string
             echo crawl_line($name, crawl_feed_guarded($name, $url));
         }
     } finally {
-        // Drain notifications and advance the watermark even if the crawl loop
-        // threw or was cut short: feed fetching must not starve webmention/WebSub
-        // delivery, and a partial run must still rate-limit the next one so it
-        // cannot immediately re-run and repeat the same failure.
+        // Advance the watermark first, before draining: a partial run must
+        // rate-limit the next one even if a drain itself throws, otherwise the
+        // starvation loop just moves from the crawl to the drain. The drains then
+        // retry on the next scheduled run rather than re-running immediately.
+        set_option($cron_last_updated, (int)date('U'));
+
+        // Drain notifications even if the crawl loop threw or was cut short, so
+        // feed fetching cannot starve webmention/WebSub delivery.
         echo count_line(
             \Lamb\Websub\ping_scheduled_publishes(),
             'WebSub: pinged hub for %d scheduled post(s) now published.'
         );
         echo webmention_line(\Lamb\Webmention\process_outbound());
-
-        set_option($cron_last_updated, (int)date('U'));
     }
 
     exit('Done');
