@@ -6,7 +6,15 @@ something and how we can split them off into plugins."
 
 **The sequenced plan derived from these findings is [PLAN.md](PLAN.md).** This
 document is the evidence base — what the plan cites — and is not itself a plan.
-§5 below is the outline PLAN.md supersedes with per-PR detail.
+
+**§1 and §2 stand. §3, §4 and §5 are superseded: the module system they propose was
+rejected.** The reason is in PLAN.md §Decision and is a product one, not a technical
+one — Lamb promises a plug-and-play install, and a `src/modules/` tree puts a disable
+switch ten lines away, which is the step toward plug-many-things-and-configure. The
+duplication findings in §2 are unaffected and are what the plan acts on; three items
+§3–4 justified as module plumbing survived as standalone bug-class fixes (the `/_cron`
+ordering, the importer registry, feeds moving out of themes). Read §3–5 as the
+rejected option, kept for the record.
 
 The finding in one line: **the sprawl and the bugs are two different problems, and
 only one of them is fixed by plugins.** The bugs come from ~10 places where the
