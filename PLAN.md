@@ -11,7 +11,7 @@ places where the core does one job two or three ways; the sprawl comes from 44% 
 duplicate mechanism relocates the bug instead of removing it. So: **converge first,
 extract second.** Every stage below is ordered by that constraint, not by appeal.
 
-**Shape:** 16 PRs across 6 stages. Stages 0–1 (7 PRs) are independent of each other
+**Shape:** 14 PRs across 5 stages. Stages 0–1 (7 PRs) are independent of each other
 and of everything after — they can land in any order, in parallel, and each one is
 worth landing even if the rest of this plan is dropped. Stage 2 is the keystone.
 Stages 3–5 are only unlocked by it.
@@ -22,46 +22,60 @@ Stages 3–5 are only unlocked by it.
 
 1. Remove the divergence that is producing the bugs (Stages 0–2).
 2. Make "published" a single event instead of a convention re-derived per subsystem (Stage 2).
-3. Let an install not ship — and not carry the dependency surface of — features it doesn't use (Stages 3–6).
+3. Give each optional feature one owner, one directory and one registered seam, so a
+   change to it cannot reach the rest of the codebase by accident (Stages 3–5).
 
-**The premise for objective 3 is a real installed base.** Lamb has other installs,
-so "don't ship what you don't use" is a benefit that lands on actual users rather
-than a hypothetical one. That premise also imposes the constraint below: with real
-installs, every module extraction needs an upgrade path, and shipping a regression
-costs more than the sprawl does. Convergence-before-extraction gets *stronger* under
-that premise, not weaker — a duplicate mechanism relocated behind a module boundary
-is now a bug shipped to other people's blogs.
+**Objective 3 is maintainability, not a shippable subset.** An earlier draft of this
+plan justified modules by "let an install not ship what it doesn't use". That is
+struck: Lamb's promise is a **plug-and-play install**, and the moment an operator has
+to decide which modules to enable, that promise is gone — replaced by a
+plug-many-things-and-configure install, which is what people choose Lamb to avoid.
+The README sells "no plugin needed" as a feature and `PRODUCT.md` says "opinionated
+defaults over settings"; a module set an operator picks contradicts both.
 
-The clearest single win is `import`: 2,391 lines and `league/html-to-markdown` that
-every install carries forever to serve a migration each install runs at most once.
+So modules are **internal organisation only. Every module always loads.** There is no
+disable switch, no per-install module set, and nothing about them in the operator's
+config. An operator upgrading through Stages 3–5 sees no change whatsoever: same
+routes, same features, same `composer install`.
+
+What the seam buys is bounded and worth having on its own: the cron coupling fixed
+(Stage 3), a fourth importer becoming a drop-in instead of a fourth CLI (PR 11),
+syndication formats stopping being a theme's responsibility (PR 12), and each
+feature's blast radius being one directory instead of the whole of `src/`.
+
+**A real installed base is what makes this split the right one.** It raises the value
+of clear ownership — a regression now reaches other people's blogs — and raises the
+cost of anything operator-visible, because that needs an upgrade path, a docs page
+and a deprecation cycle. Convergence-before-extraction gets *stronger* for the same
+reason: a duplicate mechanism relocated behind a module boundary is a bug shipped to
+someone else's site.
 
 ## Non-goals
 
 - **No plugin framework.** No hook priorities, no filter chains, no third-party
   plugin API, no plugin admin UI. Four registries and a manifest array.
-- **No new user-facing configuration.** Modules ship enabled by default. This is an
-  internal code-organisation seam.
+- **No new user-facing configuration, and no disable switch.** Modules always load.
+  There is no enabled/disabled set, in config or anywhere else. If a PR in Stages 3–5
+  adds an operator-visible knob, it has left this plan.
 - **No pluggability for the core.** Routing, config, `Lamb\Post`, visibility, HTTP
   egress guarding, escaping, upload security, session/CSRF each get *one*
   implementation. Offering a choice there is what caused D1–D6.
 - **Not a global-state cleanup.** `global $routes, $config, $data, $template` stays.
   It caps how isolated a module can be; that is accepted and stated, not fixed here.
 - **Not a third-party plugin ecosystem — even though other installs exist.** An
-  installed base justifies *modules* (an install can drop what it doesn't run); it
+  installed base justifies *internal* modules (one owner per feature); it
   does not justify a public extension API, which is a support commitment and a
   compatibility surface forever. The README sells "no plugin needed" as a feature.
   Modules stay an internal seam that happens to be toggleable.
 
 ## Ground rules (house process, per AGENTS.md)
 
-- **Every extraction ships an upgrade path.** Other installs are upgrading through
-  this work, so no module may default to off for an install that is already using
-  the feature: derive the enabled set from existing config (a populated `[feeds]`
-  means `feeds` is on) rather than from a new default. The precedents are
-  `Config\ensure_explicit_theme()` and `Bootstrap\backfill_imported_post_identity()`
-  — boot-time, idempotent, safe to run on every request. A moved route, config key
-  or CLI entry point keeps a deprecated shim for one release, warning rather than
-  breaking.
+- **Every extraction is invisible to an operator.** Other installs are upgrading
+  through this work and must see no change: same routes, same features, same
+  `composer install`, nothing new to configure. Modules always load, so there is no
+  enabled set to migrate. What does need care is anything an operator or theme author
+  *addresses by name* — a moved route, config key, CLI entry point or theme part keeps
+  a deprecated shim for one release, warning rather than breaking.
 - Branch from `main`. **Open an issue per PR first** and get maintainer agreement —
   AGENTS.md requires it for feature work, and Stage 2 onward is feature work.
 - **Red-green TDD is mandatory.** Every step below names its failing test. No
@@ -302,21 +316,22 @@ registered job among several.
 // src/modules/<name>/module.php
 return [
     'name'     => 'import',
-    'requires' => [],          // ext-*/composer probes, cf. Export\zip_available()
+    // No 'enabled' key and no 'requires' probe: every module loads, always.
+    // A module needing an extension states it in composer.json like any core code.
     'register' => function (): void { /* route/cron/event/import registrations */ },
 ];
 ```
 
-`index.php` loads enabled modules and calls `register()` before
-`Route\call_route()`. Enabled-by-default; the enabled set is resolved in one place so
-CI can pin it. `Route\is_reserved_route()` rebuilds the registry on demand for CLI
+`index.php` loads every module and calls `register()` before `Route\call_route()` —
+a fixed list discovered from `src/modules/`, with no configuration consulted. The
+manifest is a wiring convention, not a feature flag. `Route\is_reserved_route()` rebuilds the registry on demand for CLI
 callers (`src/routes.php:170`) — module registration must participate in that
 rebuild or an importer will stop seeing module routes as reserved, which is exactly
 the `/login`-shadowing bug that function was added to fix.
 
 - Test first: a fixture module registering a route and a cron job; assert both
-  reachable, and assert a module whose `requires` probe fails is skipped without
-  fataling.
+  reachable, and assert a module whose `register()` throws fails loudly at boot
+  rather than silently dropping its routes.
 - Size: medium. Risk: medium. **DECISIONS.md entry:** "Optional features live in
   `src/modules/<name>/` behind a manifest."
 
@@ -397,8 +412,8 @@ jobs (Stage 3). Drops `taproot/micropub-adapter`.
   HTML, a different job from rendering trusted author Markdown. Say so in the module
   README rather than leaving it looking like a stray fourth copy.
 - Test first: acceptance coverage already exists (`MicropubDiscoveryCest`,
-  `MicropubMediaCest`, `WebmentionCest`) — add a module-disabled case asserting the
-  routes 404 and the `Link:` headers are absent.
+  `MicropubMediaCest`, `WebmentionCest`) — they must pass unchanged, which is the
+  whole acceptance criterion: the extraction is invisible from outside.
 - Size: large (mostly moves). Risk: medium-high — it is the largest module and owns
   security-sensitive endpoints.
 
@@ -406,46 +421,39 @@ jobs (Stage 3). Drops `taproot/micropub-adapter`.
 
 - `feeds` (1,042 LOC, `network.php` + `network/`): the ingest cron job. Drops
   `simplepie/simplepie`. `src/network/README.md` already exists — move it along.
-- `export` (439 LOC): `/export`, `ext-zip`. `Export\zip_available()` is already the
-  `requires`-probe pattern the loader borrows.
-- `highlight` (91 LOC): a render filter, and a `POST_VERSION` participant — disabling
-  it changes rendered output, so the module must be part of the version stamp or
-  every post re-parses on read. Call that out in its README.
+- `export` (439 LOC): `/export`. Keeps its own `Export\zip_available()` runtime check
+  for `ext-zip`, exactly as today — that is a capability probe, not a feature flag.
+- `highlight` (91 LOC): a render filter and a `POST_VERSION` participant. Because it
+  always loads, the version stamp keeps its current meaning and no post re-parses;
+  note in its README that this is *why* it is not switchable.
 - Size: medium each. Risk: low-medium.
 
 ---
 
-## Stage 6 — Optional dependencies
+## Stage 6 — Struck
 
-**PR 15 · Move feature-only deps to `suggest`**
+**Cut: "move feature-only deps to `suggest`" and "document modules for operators".**
 
-`taproot/micropub-adapter`, `simplepie/simplepie`, `league/html-to-markdown`,
-`phiki/phiki` — **4 of 8 runtime deps** — exist only for modules. Move to `suggest`
-with runtime capability probes in each module's `requires`.
+Both were the operator-visible half of the plan, and both are gone with the
+disable switch. If every module always loads, every module's dependencies are always
+needed, so `taproot/micropub-adapter`, `simplepie/simplepie` and `phiki/phiki` stay
+in `require` where they belong — and there is nothing for an operator to read about,
+because there is nothing for them to decide.
 
-This is the payoff for the whole plan given how much of AGENTS.md is dependency and
-advisory management: a minimal install stops carrying CVE surface for a Micropub
-endpoint it never exposes.
+This is a deliberate trade. It gives up the dependency-surface reduction that
+objective 3 originally claimed, and that reduction was real: a stripped install would
+have dropped from 8 runtime deps to 4. It is given up because collecting it requires
+asking the operator which features they run, and that question is the thing Lamb
+exists not to ask.
 
-- Risk: **this is where the plan can bite users, and with a real installed base it
-  will.** An existing install that runs `composer install --no-dev` after upgrading
-  loses packages its enabled modules still need, and finds out when a route 500s.
-  Requirements, not suggestions: a boot-time `requires` probe that names the missing
-  package and the module needing it; the enabled-module set derived from existing
-  config per the upgrade rule above; a `RELEASING.md` checklist item; an upgrade
-  note in `docs/`. Land it at a **release boundary**, never mid-release, so
-  `release` never carries a half-applied dependency change.
-- **DECISIONS.md entry:** "Feature-only dependencies are suggested, not required."
-
-**PR 16 · Document modules for operators**
-
-Added because there is an installed base: from PR 10 on, "which features does this
-install run" becomes something an operator has to be able to answer. `docs/` is
-end-user-only (2026-05-29 decision), so this is one page — what a module is, the
-enabled set, how upgrades derive it, and what disabling one does and does not remove
-(orphan tables stay; see risk 5). The `src/modules/<name>/README.md` files stay
-contributor-facing per the 2026-08-21 decision; this is the operator-facing half.
-- Size: small. Risk: none. Do not start it before PR 10 settles the vocabulary.
+**The one case worth revisiting later** is `import`: CLI-only, already gated behind
+`experimental_features`, run at most once per install, and carrying
+`league/html-to-markdown` in perpetuity for that one run. Moving *that* dependency to
+`suggest` degrades a CLI script into a clear error message rather than degrading the
+website, so it does not put the site's behaviour in the operator's hands. Even so:
+not now. It is a separate decision on its own merits once PR 11 has landed and the
+module seam has proven itself, and it needs `composer install --no-dev` on a real
+install to behave correctly first.
 
 ---
 
@@ -471,14 +479,13 @@ PR 8  Post\save() + events  ◄─── needs PR 4, 5 (or Micropub/importers ge
            └──► PR 11 import module
                 PR 12 serializer registry
                 PR 14 export, highlight
-                     └──► PR 15 optional deps  (last: needs every module extracted,
-                          │                       and lands at a release boundary)
-                          └──► PR 16 operator docs (needs PR 10's vocabulary settled)
+                          (PR 15 optional deps, PR 16 operator docs: struck — see
+                           Stage 6. They were the operator-visible half.)
 ```
 
 **Stop-anywhere property.** Stages 0–1 pay for themselves with no architectural
-commitment. Stage 2 is worth landing even if Stages 3–6 never happen — it is the
-D1 fix. Stages 3–6 are the only part that requires believing in the module idea, and
+commitment. Stage 2 is worth landing even if Stages 3–5 never happen — it is the
+D1 fix. Stages 3–5 are the only part that requires believing in the module idea, and
 they are last on purpose.
 
 ---
@@ -501,16 +508,13 @@ Overall, measured against MODULARITY.md's numbers:
 | Upload store pipelines | 3 | 1 |
 | Copies of the post-list template | 3 | 1 |
 | Importer CLI scripts | 3 | 1 driver |
-| Runtime deps required by a minimal install | 8 | 4 |
-| Deps required by a *typical* install (keeps IndieWeb + feeds) | 8 | 6 |
-| Optional-feature LOC inside the core | 7,184 (44%) | ~0 |
+| Optional-feature LOC in a flat `src/` | 7,184 (44%) | 0 (owned by a module dir) |
+| Runtime deps required | 8 | 8 — unchanged, by choice |
 
-The two dependency rows are the honest pair. Most installs run the IndieWeb and feed
-features — that is why they chose Lamb — so their surface drops by two
-(`league/html-to-markdown` once `import` is extracted, `phiki` if they forgo
-highlighting), not four. The full drop to four is real but applies to the stripped
-install, not the median one. `import` supplies most of the typical win, because it is
-the one module nobody keeps using.
+The dependency row is deliberately flat. An earlier draft targeted 8 → 4; that
+required an operator-selectable module set, which is struck (see Stage 6). The 44%
+still *ships* — it just stops being spread through a flat namespace with no owner.
+That is a smaller claim than the earlier draft made, and it is the honest one.
 
 ---
 
@@ -525,24 +529,32 @@ the one module nobody keeps using.
    a real installed base, means someone's live blog loses its feed. Hence the
    two-step deprecation rather than a clean cut. Do not collapse it back into one PR
    because the fallback looks like dead weight.
-4. **PR 15 can break existing installs' `composer install`.** Boot-time probe with an
-   actionable message, at a release boundary, or don't ship it.
-5. **The upgrade path is the part most likely to be skipped, and the most expensive
-   to get wrong.** Defaulting a module to off for an install already using the
-   feature silently removes it — webmentions stop being delivered and nothing errors.
-   Every extraction PR needs a boot-time derivation test against a config that
-   predates it, not just a fresh-install test. This risk did not exist when the plan
-   assumed one install; it is now the top operational risk in Stages 4–6.
+4. **The dependency reduction is struck, and should stay struck.** It is the most
+   tempting thing to reinstate, because 8 → 4 deps reads well against AGENTS.md's
+   advisory burden. Reinstating it means asking the operator which features they run.
+   See Stage 6 for the one narrow exception worth a separate decision later.
+5. **The upgrade path.** Largely dissolved by always-loading modules: with no
+   enabled set there is nothing to derive, and an operator upgrading sees no change.
+   What remains is narrow and still needs testing — a moved route or CLI entry point
+   must keep its deprecated shim for a release (PR 11's `import-*.php`, PR 12's theme
+   feed parts). Test each against a config and a theme that predate the move, not
+   just a fresh install.
 6. **RedBean fluid mode means "disabled" is not "uninstalled."** `webmention`,
    `webmentionoutbox` and `feedstatus` are created lazily on first write; disabling a
    module leaves orphan tables. Acceptable — but say it in the module READMEs so it
    isn't discovered as a bug.
-7. **CI must pin the enabled module set from PR 10 onward.** Five acceptance Cests
-   (`MicropubDiscoveryCest`, `MicropubMediaCest`, `WebmentionCest`, `UploadCest`,
-   `TagFeedCest`) exercise routes that become module-provided; coverage drops
-   silently otherwise.
-8. **Philosophy drift is the real long-term risk.** "Simple over complex",
-   "opinionated defaults over settings". The moment this grows hook priorities, a
+7. **CI needs no module pinning — and that is the test that the seam stayed
+   internal.** Five acceptance Cests (`MicropubDiscoveryCest`, `MicropubMediaCest`,
+   `WebmentionCest`, `UploadCest`, `TagFeedCest`) exercise routes that become
+   module-provided. They must keep passing untouched, with no module configuration in
+   the suite. The day CI needs to know which modules are on, this plan has drifted.
+8. **Philosophy drift is the real long-term risk, and it has a specific shape here.**
+   Not hook priorities first — a *disable switch*. Once `src/modules/` exists, adding
+   one is a ten-line change and will look obviously useful. That is the change that
+   turns a plug-and-play install into a plug-many-things-and-configure install, and
+   it should be refused on those grounds rather than debated on its merits.
+   "Simple over complex", "opinionated defaults over settings". The moment this grows
+   hook priorities, a
    filter chain, or a plugin settings page, it has stopped being this plan. The
    non-goals above are the guardrail; revisit them at Stage 4, which is where the
    temptation arrives.
