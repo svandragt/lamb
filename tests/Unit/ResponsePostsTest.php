@@ -330,6 +330,89 @@ class ResponsePostsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // redirect_created — a failed save must have no side effects
+    // -------------------------------------------------------------------------
+
+    /**
+     * Creates the `redirect` and `webmentionoutbox` tables (empty), so a count
+     * of them means "none were written" rather than "the table does not exist".
+     */
+    private function seedNotifyTables(): void
+    {
+        $redirect = R::dispense('redirect');
+        $redirect->from_slug = '';
+        $redirect->to_url = '';
+        R::store($redirect);
+        R::exec('DELETE FROM redirect');
+
+        $outbox = R::dispense('webmentionoutbox');
+        $outbox->source = '';
+        $outbox->target = '';
+        $outbox->status = '';
+        R::store($outbox);
+        R::exec('DELETE FROM webmentionoutbox');
+    }
+
+    /**
+     * Submits a create whose second write fails.
+     *
+     * A post already owns the slug `taken`, so finalize_slug() suffixes the new
+     * post's slug and pins the changed value into its body — the second of
+     * finalize_and_store_post()'s two R::store() calls. Blocking only UPDATE lets
+     * the first store (INSERT) mint the id and makes the second throw, which is
+     * the #685 shape: the bean already has an id, so the notify guards that
+     * early-return on `!id` do not fire.
+     */
+    private function submitCreateWithFailingSecondWrite(): void
+    {
+        $existing = R::dispense('post');
+        $existing->body        = "---\nslug: taken\n---\n\ntaken\n";
+        $existing->transformed = '<p>taken</p>';
+        $existing->slug        = 'taken';
+        $existing->created     = date('Y-m-d H:i:s', time() - 3600);
+        $existing->updated     = date('Y-m-d H:i:s', time() - 3600);
+        $existing->version     = POST_VERSION;
+        R::store($existing);
+
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'ctok';
+        $_POST[HIDDEN_CSRF_NAME]    = 'ctok';
+        $_POST['submit']            = SUBMIT_CREATE;
+        $_POST['contents']          = "---\nslug: taken\n---\n\nsee [elsewhere](https://other.example/a)\n";
+
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+        try {
+            redirect_created();
+        } finally {
+            R::exec('DROP TRIGGER IF EXISTS post_block_update');
+        }
+    }
+
+    public function testRedirectCreatedFlashesWhenTheSaveFails(): void
+    {
+        $this->seedNotifyTables();
+
+        $this->submitCreateWithFailingSecondWrite();
+
+        $this->assertNotEmpty(array_filter(
+            $_SESSION['flash'] ?? [],
+            fn ($m) => str_contains((string) $m, 'Failed to save')
+        ));
+    }
+
+    public function testRedirectCreatedDoesNotNotifySubscribersWhenTheSaveFails(): void
+    {
+        // Announcing a create that was not stored: the queued mention carries a
+        // permalink built from the unsaved slug, so a receiver fetching it to
+        // verify the mention gets a 404.
+        $this->seedNotifyTables();
+
+        $this->submitCreateWithFailingSecondWrite();
+
+        $this->assertCount(0, R::findAll('webmentionoutbox'));
+    }
+
+    // -------------------------------------------------------------------------
     // redirect_edited — the post id is read from $_POST
     // -------------------------------------------------------------------------
     // FILTER_SANITIZE_NUMBER_INT over $_POST, as filter_input(INPUT_POST, ...)
