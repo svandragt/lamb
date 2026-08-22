@@ -2211,6 +2211,26 @@ class MicropubAdapterTest extends TestCase
         );
     }
 
+    public function testUpdateAddAppendsEveryTargetInOneAddNotJustTheFirst(): void
+    {
+        // A single add carrying several in-reply-to values must store all of
+        // them — not silently keep only the first (review of #583).
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://a.example/post', 'https://b.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://other.example/post https://a.example/post https://b.example/post',
+            $updated->in_reply_to
+        );
+    }
+
     public function testUpdateAddDuplicateInReplyToTargetIsANoOp(): void
     {
         $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");

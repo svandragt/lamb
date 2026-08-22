@@ -600,19 +600,21 @@ class LambMicropubAdapter extends MicropubAdapter
             if ($values === []) {
                 return true;
             }
-            // But a value carrying no URL is an add that cannot be honoured, and
-            // reporting success for it reads to the client as "saved" — the same
-            // reason applyReplace() refuses it.
-            $target = $this->replyTargetUrl($values[0] ?? null);
-            if ($target === null) {
-                return false;
-            }
-            // A post may record several reply targets (#583): `add` appends
-            // this one to whatever is already stored, rather than refusing a
-            // second target outright as it used to (#582).
+            // A post may record several reply targets (#583): `add` appends every
+            // value the client sent to whatever is already stored (deduplicated),
+            // rather than refusing a second target outright as it used to (#582)
+            // or silently keeping only the first. A value carrying no URL is an
+            // add that cannot be honoured — refuse it, as applyReplace() does,
+            // rather than report a success the storage did not have.
             $targets = $this->currentReplyToList($bean);
-            if (!in_array($target, $targets, true)) {
-                $targets[] = $target;
+            foreach ($values as $value) {
+                $target = $this->replyTargetUrl($value);
+                if ($target === null) {
+                    return false;
+                }
+                if (!in_array($target, $targets, true)) {
+                    $targets[] = $target;
+                }
             }
             $bean->body = set_reply_to($bean->body ?? '', $targets);
             return true;
