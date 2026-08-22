@@ -13,6 +13,7 @@ use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
+use function Lamb\Post\split_reply_targets;
 
 use const ROOT_URL;
 
@@ -466,23 +467,26 @@ function enqueue_for_post(OODBBean $bean): void
  * Pending rows whose target no longer appears in the post are cancelled, so a
  * scheduled post edited to remove a link before publication does not notify it.
  *
- * The reply target (from a post's `in-reply-to` front matter) is treated as an
- * outbound link even when it does not appear in the body, so replies notify the
- * parent. It is subject to the same external-host filter as body links.
+ * The reply target(s) (from a post's `in-reply-to` front matter, space-
+ * separated when there is more than one — #583) are each treated as an
+ * outbound link even when they do not appear in the body, so every reply
+ * parent gets notified. Each is subject to the same external-host filter as
+ * body links.
  *
  * @param int    $post_id
  * @param string $source   This post's permalink.
  * @param string $html     The post's rendered HTML.
- * @param string $reply_to Optional `in-reply-to` target URL.
+ * @param string $reply_to Optional `in-reply-to` target URL(s), space-separated.
  * @return int Number of newly created queue rows.
  */
 function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
 {
     $targets = extract_outbound_links($html);
 
-    $reply_to = trim($reply_to);
-    if ($reply_to !== '' && is_external_http_url($reply_to) && !in_array($reply_to, $targets, true)) {
-        $targets[] = $reply_to;
+    foreach (split_reply_targets($reply_to) as $target) {
+        if (is_external_http_url($target) && !in_array($target, $targets, true)) {
+            $targets[] = $target;
+        }
     }
 
     // Cancel pending rows for links the post no longer contains.

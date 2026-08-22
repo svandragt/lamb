@@ -26,12 +26,14 @@ use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\matter_string;
+use function Lamb\Post\matter_url_list;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\set_frontmatter_key;
 use function Lamb\Post\set_reply_to;
 use function Lamb\Post\split_frontmatter;
+use function Lamb\Post\split_reply_targets;
 
 class LambMicropubAdapter extends MicropubAdapter
 {
@@ -39,7 +41,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * Micropub properties an update writes to a single front-matter key.
      *
      * `in-reply-to` is deliberately absent: it needs h-cite unwrapping and its
-     * own single-target rules, so it keeps its own branch in each apply method.
+     * own multi-target rules, so it keeps its own branch in each apply method.
      */
     private const MATTER_PROPERTIES = [
         'name'            => 'title',
@@ -121,8 +123,12 @@ class LambMicropubAdapter extends MicropubAdapter
             $props['category'] = $tags;
         }
 
-        if (!empty($bean->in_reply_to)) {
-            $props['in-reply-to'] = [(string) $bean->in_reply_to];
+        // A post may record several reply targets (#583); the source query
+        // reports every one, space-separated in the stored column just like
+        // syndicated_to.
+        $reply_targets = split_reply_targets((string) ($bean->in_reply_to ?? ''));
+        if ($reply_targets !== []) {
+            $props['in-reply-to'] = $reply_targets;
         }
 
         if (!empty($bean->syndicated_to)) {
@@ -601,13 +607,14 @@ class LambMicropubAdapter extends MicropubAdapter
             if ($target === null) {
                 return false;
             }
-            // A post stores a single reply target, so adding a second one would
-            // have to either overwrite the first or be dropped; both lie about
-            // what happened.
-            if ($this->currentReplyTo($bean) !== '') {
-                return false;
+            // A post may record several reply targets (#583): `add` appends
+            // this one to whatever is already stored, rather than refusing a
+            // second target outright as it used to (#582).
+            $targets = $this->currentReplyToList($bean);
+            if (!in_array($target, $targets, true)) {
+                $targets[] = $target;
             }
-            $bean->body = set_reply_to($bean->body ?? '', $target);
+            $bean->body = set_reply_to($bean->body ?? '', $targets);
             return true;
         }
 
@@ -660,14 +667,20 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         if ($property === 'in-reply-to') {
-            // Value-scoped delete: only the target the client named goes, so a
-            // stale value in a client's copy cannot clear the current reply.
-            $current = $this->currentReplyTo($bean);
-            foreach ($values as $value) {
-                if ($current !== '' && $this->replyTargetUrl($value) === $current) {
-                    $bean->body = set_reply_to($bean->body ?? '', '');
-                    return true;
-                }
+            // Value-scoped delete: only the target(s) the client named go, so a
+            // stale value in a client's copy cannot clear a target still in
+            // use, and (#583) deleting one of several leaves the rest intact.
+            $current = $this->currentReplyToList($bean);
+            if ($current === []) {
+                return true;
+            }
+            $remove = array_filter(
+                array_map(fn($value) => $this->replyTargetUrl($value), $values),
+                fn(?string $target) => $target !== null
+            );
+            $remaining = array_values(array_diff($current, $remove));
+            if ($remaining !== $current) {
+                $bean->body = set_reply_to($bean->body ?? '', $remaining);
             }
             return true;
         }
@@ -731,11 +744,22 @@ class LambMicropubAdapter extends MicropubAdapter
                 return true;
             }
 
-            $target = $this->replyTargetUrl($values[0] ?? null);
-            if ($target === null) {
-                return false;
+            // A post may record several reply targets (#583): every value the
+            // client sent becomes the new (deduplicated) set.
+            $targets = [];
+            foreach ($values as $value) {
+                $target = $this->replyTargetUrl($value);
+                // A value carrying no URL is a replace that cannot be
+                // honoured; reporting success for it reads to the client as
+                // "saved", as the single-target path already guarded against.
+                if ($target === null) {
+                    return false;
+                }
+                if (!in_array($target, $targets, true)) {
+                    $targets[] = $target;
+                }
             }
-            $bean->body = set_reply_to($bean->body ?? '', $target);
+            $bean->body = set_reply_to($bean->body ?? '', $targets);
             return true;
         }
 
@@ -804,20 +828,22 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
-     * The reply target currently recorded in a bean's front matter.
+     * The reply target(s) currently recorded in a bean's front matter.
      *
      * Read from the body rather than $bean->in_reply_to: an update applies a
      * sequence of operations to the body, and the column is only refreshed by
-     * the parse_bean() call at the end of updateCallback().
+     * the parse_bean() call at the end of updateCallback(). matter_url_list(),
+     * not matter_string(): a post may record several targets (#583), and
+     * collapsing to the first here would make `add`/`delete` blind to the rest.
      *
      * @param OODBBean $bean
-     * @return string The target URL, or '' when the post is not a reply.
+     * @return list<string> The target URLs, in order, or [] when the post is not a reply.
      */
-    private function currentReplyTo(OODBBean $bean): string
+    private function currentReplyToList(OODBBean $bean): array
     {
         $matter = parse_matter((string) ($bean->body ?? ''));
 
-        return trim(matter_string($matter['in-reply-to'] ?? null) ?? '');
+        return matter_url_list($matter['in-reply-to'] ?? null);
     }
 
     /**
@@ -879,18 +905,20 @@ class LambMicropubAdapter extends MicropubAdapter
      * that keys this class does not know about survive.
      *
      * @param string|null $title
-     * @param string|null $replyTo
+     * @param list<string> $replyTo One or more reply targets (#583), or [] for none.
      * @param string|null $syndicatedTo
-     * @return array<string, string>
+     * @return array<string, string|list<string>>
      */
-    private function assembleFrontMatter(?string $title, ?string $replyTo, ?string $syndicatedTo): array
+    private function assembleFrontMatter(?string $title, array $replyTo, ?string $syndicatedTo): array
     {
         $matter = [];
         if ($title !== null) {
             $matter['title'] = $title;
         }
-        if ($replyTo !== null && $replyTo !== '') {
-            $matter['in-reply-to'] = $replyTo;
+        if ($replyTo !== []) {
+            // A single target keeps the plain `in-reply-to: url` shape every
+            // existing post already has; two or more become a YAML list.
+            $matter['in-reply-to'] = count($replyTo) === 1 ? $replyTo[0] : $replyTo;
         }
         if ($syndicatedTo !== null && $syndicatedTo !== '') {
             $matter['syndicated-to'] = $syndicatedTo;
@@ -985,7 +1013,17 @@ class LambMicropubAdapter extends MicropubAdapter
         // `name`. Both reached the ?string parameters of assembleFrontMatter()
         // as arrays and 500ed the create.
         $title = matter_string($props['name'][0] ?? null);
-        $replyTo = $this->replyTargetUrl($props['in-reply-to'][0] ?? null);
+
+        // A client may legitimately send several reply targets (#583):
+        // u-in-reply-to repeats in mf2, so `in-reply-to` here can carry more
+        // than one value.
+        $replyTargets = [];
+        foreach ($props['in-reply-to'] ?? [] as $value) {
+            $target = $this->replyTargetUrl($value);
+            if ($target !== null && !in_array($target, $replyTargets, true)) {
+                $replyTargets[] = $target;
+            }
+        }
 
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
@@ -1012,7 +1050,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
         return build_matter(
-            $this->assembleFrontMatter($title, $replyTo, $syndicatedTo),
+            $this->assembleFrontMatter($title, $replyTargets, $syndicatedTo),
             $content
         );
     }

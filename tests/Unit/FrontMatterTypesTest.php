@@ -125,11 +125,16 @@ class FrontMatterTypesTest extends TestCase
         $this->assertSame('https://a.example', parse_matter($body)['syndicated-to']);
     }
 
-    public function testParseMatterKeepsAListInReplyToCollapsed(): void
+    public function testParseMatterLeavesAListInReplyToUncollapsed(): void
     {
+        // Unlike every other MATTER_TEXT_KEYS entry, `in-reply-to` is
+        // deliberately excluded from that coercion (#583): a post may record
+        // several reply targets, and collapsing here would drop all but the
+        // first before Lamb\normalize_in_reply_to() (which keeps every entry
+        // via matter_url_list()) ever sees the rest.
         $body = "---\nin-reply-to:\n  - https://a.example\n  - https://b.example\n---\nBody";
 
-        $this->assertSame('https://a.example', parse_matter($body)['in-reply-to']);
+        $this->assertSame(['https://a.example', 'https://b.example'], parse_matter($body)['in-reply-to']);
     }
 
     // The save path must survive every shape

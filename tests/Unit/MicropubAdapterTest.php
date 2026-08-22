@@ -1971,6 +1971,45 @@ class MicropubAdapterTest extends TestCase
         $this->assertArrayNotHasKey('in-reply-to', $result['properties']);
     }
 
+    public function testSourceQueryReturnsMultipleInReplyToTargets(): void
+    {
+        // #583: a YAML list front-matter value keeps every target in the
+        // column (space-separated); the source query reports every one, not
+        // just the first.
+        $bean = $this->storeReply(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertSame(
+            ['https://first.example/post', 'https://second.example/post'],
+            $result['properties']['in-reply-to']
+        );
+    }
+
+    public function testCreateCallbackAcceptsMultipleInReplyToTargets(): void
+    {
+        // #583: mf2 u-in-reply-to may repeat, so a client sending an array of
+        // targets must have all of them stored, not just the first.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['Replying to two posts'],
+                'in-reply-to' => ['https://first.example/post', 'https://second.example/post'],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Replying to two posts%']);
+        $this->assertNotNull($post);
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $post->in_reply_to
+        );
+    }
+
     public function testUpdateReplaceInReplyToSetsTarget(): void
     {
         $bean = $this->storeReply('Turning this into a reply');
@@ -2041,6 +2080,25 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
+    public function testUpdateReplaceInReplyToSetsMultipleTargets(): void
+    {
+        // #583: replace accepts every value the client sends, not just the first.
+        $bean = $this->storeReply('Turning this into a multi-target reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => ['https://first.example/post', 'https://second.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $updated->in_reply_to
+        );
+    }
+
     public function testUpdateReplaceInReplyToWithEmptyValueClearsTarget(): void
     {
         $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nNo longer a reply");
@@ -2100,6 +2158,24 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
+    public function testUpdateDeleteInReplyToValueRemovesOneOfSeveralTargets(): void
+    {
+        // #583: deleting one of several targets leaves the rest in place,
+        // rather than clearing the whole property.
+        $bean = $this->storeReply(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://first.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://second.example/post', $updated->in_reply_to);
+    }
+
     public function testUpdateAddInReplyToSetsTargetWhenAbsent(): void
     {
         $bean = $this->storeReply('Not yet a reply');
@@ -2115,11 +2191,10 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
-    public function testUpdateAddSecondInReplyToIsRejected(): void
+    public function testUpdateAddSecondInReplyToAppendsTarget(): void
     {
-        // Storage holds one reply target, so a second one cannot be honoured:
-        // Micropub requires an unsupported operation to fail rather than return
-        // success the client will read as "saved".
+        // #583: a post may record several reply targets, so `add`ing a second
+        // one now appends rather than being refused as it was pre-#583 (#582).
         $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
 
         $adapter = new LambMicropubAdapter();
@@ -2128,7 +2203,25 @@ class MicropubAdapterTest extends TestCase
             ['add' => ['in-reply-to' => ['https://second.example/post']]]
         );
 
-        $this->assertSame('invalid_request', $result);
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://other.example/post https://second.example/post',
+            $updated->in_reply_to
+        );
+    }
+
+    public function testUpdateAddDuplicateInReplyToTargetIsANoOp(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
         $updated = R::load('post', $bean->id);
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
