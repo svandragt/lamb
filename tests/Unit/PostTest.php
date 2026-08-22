@@ -441,6 +441,10 @@ class PostTest extends TestCase
 
         $this->assertCount(2, post_ids_by_tag('php', false, 2));
         $this->assertCount(5, post_ids_by_tag('php'));
+        // 0 means "every match" and is handled before the limited scan runs;
+        // anything below that asks for fewer than none, and gets none. Pinned
+        // because the limited loop now stops on the count alone.
+        $this->assertSame([], post_ids_by_tag('php', false, -1));
     }
 
     /**

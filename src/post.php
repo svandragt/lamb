@@ -868,9 +868,11 @@ function post_ids_by_tag(string $tag, bool $by_updated = false, int $limit = 0):
         . 'ORDER BY ' . $order . ' DESC LIMIT ? OFFSET ?';
     $params = array_merge($conditions['params'], $public['params']);
 
+    // Past the early return $limit is never 0, so the loop no longer has to
+    // carry the "0 means everything" case: it stops on the count alone.
     $ids = [];
     $offset = 0;
-    while ($limit === 0 || count($ids) < $limit) {
+    while (count($ids) < $limit) {
         $rows = R::getAll($sql, array_merge($params, [TAG_SCAN_PAGE, $offset]));
         if ($rows === []) {
             break;
@@ -881,7 +883,7 @@ function post_ids_by_tag(string $tag, bool $by_updated = false, int $limit = 0):
                 continue;
             }
             $ids[] = (int) $row['id'];
-            if ($limit !== 0 && count($ids) >= $limit) {
+            if (count($ids) >= $limit) {
                 break;
             }
         }
