@@ -83,6 +83,13 @@ foreach ($data['posts'] as $bean) {
         $Thread = $Entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');
         $Thread->addAttribute('ref', $bean->in_reply_to);
         $Thread->addAttribute('href', $bean->in_reply_to);
+        // The RFC 4685 media-type hint for the resource being retrieved.
+        $Thread->addAttribute('type', 'text/html');
+        // Belt-and-braces for readers that ignore the thr: namespace: a plain
+        // rel="related" makes the reply relationship visible to them too.
+        $Related = $Entry->addChild('link');
+        $Related->addAttribute('rel', 'related');
+        $Related->addAttribute('href', $bean->in_reply_to);
     }
     $Link = $Entry->addChild('link');
     $Link->addAttribute('rel', 'alternate');
