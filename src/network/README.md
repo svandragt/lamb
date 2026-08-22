@@ -52,8 +52,13 @@ the crawl is cut short, both are skipped, and because the watermark is unwritten
 the next run walks the same feeds and dies the same way, so outbound webmentions
 never deliver. Three things keep the run finishing:
 
-- **`set_time_limit(0)`** at the top of `process_feeds()`, so a slow feed cannot
-  hit a web request's PHP limit (typically 30s under FPM) mid-crawl.
+- **`set_time_limit(1800)`** at the top of `process_feeds()`, so a slow feed
+  cannot hit a web request's PHP limit (typically 30s under FPM) mid-crawl. It's
+  a finite cap, not `0`: the run holds the cron flock until the process ends, so
+  an unbounded run that wedged would leave every later `/_cron` stuck on "already
+  running". 30 minutes clears any legitimate run yet still frees the lock if one
+  hangs — though on Unix it only catches a CPU-bound wedge, so a hung socket
+  still relies on the per-fetch curl/SimplePie timeouts.
 - **A per-feed guard** (`crawl_feed_guarded()`), because `crawl_feed()` only
   catches `SQL` around individual stores — a throw from the JSON or SimplePie
   path would otherwise abort the whole run. One bad feed reports a `FAILED` line

@@ -107,14 +107,18 @@ function webmention_line(array $sent): string
     // feeds can outlast a web request's PHP limit (typically 30s under FPM). A
     // timeout mid-crawl skips the notification drains and the watermark write
     // below, and because the watermark is unwritten the next run walks the same
-    // feeds and dies the same way — webmentions then never deliver. Lift the
-    // limit so the whole run completes. See network/README.md ("The run").
+    // feeds and dies the same way — webmentions then never deliver. Raise the
+    // limit so a normal run (each fetch bounded to FEED_FETCH_TIMEOUT) finishes
+    // well within it. See network/README.md ("Finishing the run").
     //
-    // This removes the wall-clock backstop, so the cron flock's liveness now
-    // rests on every outbound path being independently time-bounded: curl sets
-    // CURLOPT_TIMEOUT and SimplePie set_timeout(FEED_FETCH_TIMEOUT). Keep it that
-    // way — an unbounded fetch here would hold the flock and wedge every later run.
-    set_time_limit(0);
+    // A finite cap, not 0: the run holds the cron flock until the process ends,
+    // so an unbounded run that wedged would leave every later /_cron stuck on
+    // "Already running". 30 minutes is far above any legitimate run yet still
+    // frees the lock if one hangs. The cap only bites a CPU-bound wedge, though —
+    // on Unix max_execution_time excludes time blocked in a syscall, so a hung
+    // socket is still caught only by the per-fetch curl/SimplePie timeouts, which
+    // must stay in place.
+    set_time_limit(1800);
 
     // Serialise overlapping runs before anything else: /_cron is unauthenticated
     // and the rate-limit watermark is only written after all work finishes, so a
