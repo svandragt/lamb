@@ -320,13 +320,19 @@ function start_session(): void
  *
  * @param string $data_dir The app data directory (same one that holds lamb.db).
  * @return void
+ * @throws RuntimeException If the sessions directory cannot be created.
  */
 function configure_session_save_path(string $data_dir): void
 {
     $path = $data_dir . '/sessions';
     if (!is_dir($path)) {
-        // 0700: only the web-server/PHP user should read session files.
-        mkdir($path, 0700, true);
+        // 0700: only the web-server/PHP user should read session files. Same
+        // check-and-throw as bootstrap_db()'s data dir: an ini_set() pointing
+        // at a directory that was never created would silently degrade every
+        // session to "starts, never persists" rather than fail loudly.
+        if (!mkdir($path, 0700, true) && !is_dir($path)) {
+            throw new RuntimeException(sprintf('Directory "%s" was not created', $path));
+        }
     }
     ini_set('session.save_path', $path);
 }
