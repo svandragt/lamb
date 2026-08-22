@@ -80,6 +80,20 @@ The `preview` parameter counts even when empty or wrong. A bad token never grant
 
 ---
 
+## 2026-08-22 — The post table carries explicit indexes, but not on `created`
+
+**Status:** Accepted
+
+**Context:** RedBeanPHP's fluid mode creates columns but never indexes, so `post` had none beyond its primary key and every lookup was a full table scan. That is invisible on a small blog and quadratic-feeling on a large one: on a 30,000-post install, resolving the request path against `slug` cost ~3 ms, the conditional-GET validator's newest-`updated` row ~5 ms, and the two boot-time migration probes (`version IS NULL`, `feed_name IN ('wordpress','known')`) ~3 ms each — every request, including ones that then answered 304. The probes are the sharpest case: they exist so a finished migration does not take a write lock, and once finished they scan the whole table to prove there is nothing left to do.
+
+**Decision:** `ensure_post_columns()` also ensures a single-column index on `slug`, `updated`, `version`, `feed_name`, `draft` and `deleted` (`Bootstrap\POST_INDEXES`). Creation is gated on a read of `sqlite_master` rather than an unconditional `CREATE INDEX IF NOT EXISTS`, because DDL takes a write lock even when it changes nothing — the same reasoning that turned the backfills into probes. A column the install does not have yet is skipped and indexed on the boot after fluid mode adds it.
+
+`created` is deliberately excluded, though it is the column the listings order by. Adding it does make `ORDER BY created DESC` a seek — measured 7.5 ms → 0.03 ms for a home page at 30,000 posts — but SQLite then also prefers it for the search page's `body LIKE` queries, where scanning the index and fetching each row is slower than the table scan it replaces: 5 ms → 11 ms for a rare term, and the search count 5 ms → 15 ms. A covering `(created, draft, deleted, slug)` index fixes the counts but not that, and over-fits to today's exact `public_posts_clause()`. The listings stay on a scan until there is a cheaper answer for search (a proper full-text index being the obvious one).
+
+**Consequences:** Measured end-to-end at 30,000 posts: home 29 ms → 17 ms, a post permalink 21 ms → 9 ms, `/feed` 16 ms → 2 ms, a 404 11 ms → 2 ms. Writes now maintain six indexes, which for a single-author microblog is noise. Existing installs pick the indexes up on their next request; the DDL runs once. Any new hot lookup should be added to `POST_INDEXES` rather than left to a scan — and any candidate on `created` needs the search page measured, not assumed.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

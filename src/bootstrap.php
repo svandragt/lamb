@@ -106,6 +106,73 @@ function ensure_post_columns(): void
     }
     backfill_post_version($columns);
     backfill_imported_post_identity($columns);
+    // The backfills above want the columns as they were; the indexes want them
+    // as they now are, so the three the ALTERs just guaranteed are folded back
+    // in — otherwise indexing `draft`/`deleted` would lag a boot behind the
+    // upgrade that added them.
+    ensure_post_indexes(array_merge($columns, ['deleted', 'draft', 'import_uuid']));
+}
+
+/**
+ * The single-column indexes the post table is queried through, and the column
+ * each one covers.
+ *
+ * RedBeanPHP's fluid mode creates columns but never indexes, so every one of
+ * these lookups was a full table scan of `post` on every request that ran it:
+ *
+ * - `slug`      — index.php resolves the request path against it before any
+ *                 route runs, and Micropub/Webmention map a URL back to a post
+ *                 the same way. finalize_slug() also probes it once per save.
+ * - `updated`   — latest_content_timestamp() takes the newest row by it for the
+ *                 conditional-GET validator, on every anonymous page view, and
+ *                 the feeds order by it.
+ * - `version`   — backfill_post_version()'s "is there anything left to migrate"
+ *                 probe. Once nothing is, the answer costs a whole scan to find.
+ * - `feed_name` — same, for backfill_imported_post_identity().
+ * - `draft`,
+ *   `deleted`   — the admin toolbar's drafts/trash counts, on every logged-in
+ *                 page render.
+ *
+ * `created` is deliberately absent: it would serve the listings' `ORDER BY
+ * created DESC`, but SQLite then also picks it for the search page's `body
+ * LIKE` queries, where an index scan plus a row lookup per row is slower than
+ * the table scan it replaces. Measured on 30,000 posts, that trade cost the
+ * search page about as much as it saved the home page.
+ */
+const POST_INDEXES = [
+    'idx_post_slug'      => 'slug',
+    'idx_post_updated'   => 'updated',
+    'idx_post_version'   => 'version',
+    'idx_post_feed_name' => 'feed_name',
+    'idx_post_draft'     => 'draft',
+    'idx_post_deleted'   => 'deleted',
+];
+
+/**
+ * Creates any missing index from POST_INDEXES.
+ *
+ * Gated on a read of sqlite_master rather than issuing `CREATE INDEX IF NOT
+ * EXISTS` unconditionally: DDL takes a write lock even when it changes nothing,
+ * and writers serialise, so the unconditional form would make every request —
+ * an anonymous page view included — queue behind whatever else holds the lock
+ * (the same reasoning as backfill_post_version()'s probe). The statement still
+ * carries IF NOT EXISTS so two requests racing on a fresh upgrade both succeed.
+ *
+ * A column the install does not have yet is skipped; fluid mode adds it on the
+ * first write that needs it, and the next boot indexes it.
+ *
+ * @param list<string> $columns Column names of the post table.
+ * @return void
+ */
+function ensure_post_indexes(array $columns): void
+{
+    $existing = R::getCol("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='post'");
+    foreach (POST_INDEXES as $name => $column) {
+        if (in_array($name, $existing, true) || !in_array($column, $columns, true)) {
+            continue;
+        }
+        R::exec('CREATE INDEX IF NOT EXISTS ' . $name . ' ON post(' . $column . ')');
+    }
 }
 
 /**

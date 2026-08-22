@@ -44,9 +44,10 @@ function sitemap_date(?string $datetime): ?string
  * loading whole post beans put every body and every rendered `transformed`
  * blob in memory at once: about 14 MB at 2,000 posts, and a fatal
  * "Allowed memory size of 134217728 bytes exhausted" at 20,000 against the
- * images' default 128M limit, which is a blank 500 for every crawler. The rows
- * become beans one at a time so permalink() stays the only place a post URL is
- * built.
+ * images' default 128M limit, which is a blank 500 for every crawler. The URL
+ * is built from the row via Lamb\post_path(), which is also what permalink()
+ * resolves to, so the rule stays in one place without a bean per row — making
+ * one cost about 130 ms of this response at 30,000 posts.
  *
  * @return list<array{loc: string, lastmod: string|null}>
  */
@@ -61,18 +62,14 @@ function sitemap_urls(): array
     $entries = [];
     $seen = [];
     foreach ($rows as $row) {
-        $post = R::convertToBean('post', $row);
-        if ($post === null) {
-            continue;
-        }
-        $loc = \Lamb\permalink($post);
+        $loc = ROOT_URL . \Lamb\post_path((string) $row['slug'], (int) $row['id']);
         if (isset($seen[$loc])) {
             continue;
         }
         $seen[$loc] = true;
         $entries[] = [
             'loc'     => $loc,
-            'lastmod' => sitemap_date($post->updated),
+            'lastmod' => sitemap_date((string) ($row['updated'] ?? '')),
         ];
     }
 
