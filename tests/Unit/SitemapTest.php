@@ -5,8 +5,15 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Response\emit_sitemap;
+use function Lamb\Response\newest_visible_update;
 use function Lamb\Response\render_sitemap;
+use function Lamb\Response\sitemap_cache_key;
+use function Lamb\Response\sitemap_cache_path;
 use function Lamb\Response\sitemap_urls;
+use function Lamb\Response\store_sitemap_cache;
+
+use const Lamb\Response\SITEMAP_ROOT;
 
 /**
  * The sitemap lists every publicly visible URL for crawlers. It must reuse the
@@ -171,6 +178,162 @@ class SitemapTest extends TestCase
                 'the sitemap must not read post bodies: ' . $sql
             );
         }
+    }
+
+    /**
+     * respond_sitemap() answers a conditional GET from this one row instead of
+     * building all 25,000 URLs to read the date off the first one. It therefore
+     * has to be the same date, or a crawler is handed a validator that does not
+     * match the document it would have been sent.
+     */
+    public function testNewestVisibleUpdateMatchesTheSitemapsOwnLastmod(): void
+    {
+        $this->makePost(['slug' => 'old', 'updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'new', 'updated' => '2026-06-03 09:00:00']);
+        $this->makePost(['slug' => 'mid', 'updated' => '2026-06-02 09:00:00']);
+
+        $urls = sitemap_urls();
+
+        $this->assertSame($urls[0]['lastmod'], date('c', (int) strtotime((string) newest_visible_update())));
+    }
+
+    public function testNewestVisibleUpdateIgnoresPostsTheSitemapOmits(): void
+    {
+        $this->makePost(['slug' => 'live', 'updated' => '2026-06-01 09:00:00']);
+        // Each of these is newer, and each is excluded from the sitemap — so
+        // none of them may become the validator either.
+        $this->makePost(['slug' => 'draft', 'draft' => 1, 'updated' => '2026-07-01 09:00:00']);
+        $this->makePost(['slug' => 'trash', 'deleted' => 1, 'updated' => '2026-07-02 09:00:00']);
+        $this->makePost(['slug' => 'future', 'created' => '2099-01-01 00:00:00', 'updated' => '2026-07-03 09:00:00']);
+
+        $this->assertSame('2026-06-01 09:00:00', newest_visible_update());
+    }
+
+    public function testNewestVisibleUpdateIsNullWithNoVisiblePosts(): void
+    {
+        $this->makePost(['slug' => 'draft', 'draft' => 1]);
+
+        $this->assertNull(newest_visible_update());
+    }
+
+    private function cacheDir(): string
+    {
+        $dir = sys_get_temp_dir() . '/lamb-sitemap-cache-' . getmypid();
+        if (!is_dir($dir)) {
+            mkdir($dir, 0700, true);
+        }
+        foreach (glob($dir . '/*') ?: [] as $f) {
+            unlink($f);
+        }
+        return $dir;
+    }
+
+    private function emit(string $path): string
+    {
+        ob_start();
+        emit_sitemap($path);
+        return (string) ob_get_clean();
+    }
+
+    // The cache key turns over exactly when the ETag does, so a cached copy is
+    // never served under a validator describing something else.
+
+    public function testCacheKeyIsStableForTheSameInputs(): void
+    {
+        $this->assertSame(
+            sitemap_cache_key('2026-06-01 09:00:00', 1000),
+            sitemap_cache_key('2026-06-01 09:00:00', 1000)
+        );
+    }
+
+    public function testCacheKeyChangesWithEachInput(): void
+    {
+        $base = sitemap_cache_key('2026-06-01 09:00:00', 1000);
+
+        $this->assertNotSame($base, sitemap_cache_key('2026-06-02 09:00:00', 1000));
+        $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000));
+    }
+
+    public function testCacheKeyIsFilenameSafe(): void
+    {
+        $key = sitemap_cache_key('2026-06-01 09:00:00', 1000);
+
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{32}$/', $key);
+        $this->assertStringContainsString($key, sitemap_cache_path($key));
+    }
+
+    /**
+     * The cached document must carry no host at all. With no `site_url`
+     * configured ROOT_URL comes from the request's own Host header, so a cache
+     * holding a rendered host would serve whatever host one visitor claimed to
+     * every later visitor — and keying the cache per host instead would let
+     * junk Host headers evict the honest entry. Storing a placeholder and
+     * substituting on the way out removes both problems.
+     */
+    public function testTheCachedCopyHoldsNoHost(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        $path = $this->cacheDir() . '/sitemap-nohost.xml';
+
+        $this->emit($path);
+        $cached = (string) file_get_contents($path);
+
+        $this->assertStringContainsString('<loc>' . SITEMAP_ROOT . '/hello</loc>', $cached);
+        $this->assertStringNotContainsString(ROOT_URL, $cached);
+    }
+
+    public function testAMissRendersTheCurrentHostAndWritesTheCache(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        $path = $this->cacheDir() . '/sitemap-miss.xml';
+
+        $body = $this->emit($path);
+
+        // Byte-for-byte what a direct render produces, so the cache can never
+        // change the document — only where it comes from.
+        $this->assertSame(render_sitemap(sitemap_urls()), $body);
+        $this->assertFileExists($path);
+    }
+
+    public function testAHitSubstitutesTheHostIntoTheCachedTemplate(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        $path = $this->cacheDir() . '/sitemap-hit.xml';
+        $this->emit($path);
+
+        // Prove it came from the file, not the database: the row is gone.
+        R::exec('DELETE FROM post');
+
+        $body = $this->emit($path);
+
+        $this->assertStringContainsString('<loc>' . ROOT_URL . '/hello</loc>', $body);
+        $this->assertStringNotContainsString(SITEMAP_ROOT, $body);
+    }
+
+    public function testStoringACopyRemovesTheOlderOnes(): void
+    {
+        $dir = $this->cacheDir();
+        $stale = $dir . '/sitemap-oldkey.xml';
+        file_put_contents($stale, 'old');
+        $current = $dir . '/sitemap-newkey.xml';
+
+        store_sitemap_cache($current, 'new');
+
+        $this->assertFileExists($current);
+        $this->assertFileDoesNotExist($stale);
+        $this->assertSame([], glob($dir . '/*.tmp') ?: []);
+    }
+
+    public function testAnUnwritableCacheDirectoryStillServesTheSitemap(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        // A path under a file, so neither mkdir() nor the write can succeed.
+        $blocker = $this->cacheDir() . '/not-a-dir';
+        file_put_contents($blocker, 'x');
+
+        $body = $this->emit($blocker . '/sitemap-x.xml');
+
+        $this->assertStringContainsString('<loc>' . ROOT_URL . '/hello</loc>', $body);
     }
 
     public function testRenderSitemapWrapsUrlsInUrlset(): void

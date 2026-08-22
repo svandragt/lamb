@@ -13,6 +13,7 @@ use function Lamb\now;
 use function Lamb\permalink;
 use function Lamb\permalink_path;
 use function Lamb\post_has_slug;
+use function Lamb\post_path;
 use function Lamb\set_option;
 
 class LambHelpersTest extends TestCase
@@ -157,6 +158,25 @@ class LambHelpersTest extends TestCase
         R::store($bean);
         $bean->slug = '';
         $this->assertSame('/status/' . $bean->id, permalink_path($bean));
+    }
+
+    public function testPostPathMatchesPermalinkPathForTheSameSlugAndId(): void
+    {
+        // /sitemap.xml builds its URLs with post_path() straight from the row,
+        // rather than making a bean per post to call permalink_path() on. The
+        // two have to agree, or the sitemap advertises URLs the site does not
+        // serve.
+        $bean = R::dispense('post');
+        R::store($bean);
+
+        foreach (['hello-world', 'my post', 'café', 'tea-&-cake', ''] as $slug) {
+            $bean->slug = $slug;
+            $this->assertSame(
+                permalink_path($bean),
+                post_path($slug, (int) $bean->id),
+                'slug: ' . var_export($slug, true)
+            );
+        }
     }
 
     public function testFindPostByPathDecodesTheSlug(): void
