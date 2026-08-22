@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Response\newest_visible_update;
 use function Lamb\Response\render_sitemap;
 use function Lamb\Response\sitemap_urls;
 
@@ -171,6 +172,42 @@ class SitemapTest extends TestCase
                 'the sitemap must not read post bodies: ' . $sql
             );
         }
+    }
+
+    /**
+     * respond_sitemap() answers a conditional GET from this one row instead of
+     * building all 25,000 URLs to read the date off the first one. It therefore
+     * has to be the same date, or a crawler is handed a validator that does not
+     * match the document it would have been sent.
+     */
+    public function testNewestVisibleUpdateMatchesTheSitemapsOwnLastmod(): void
+    {
+        $this->makePost(['slug' => 'old', 'updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'new', 'updated' => '2026-06-03 09:00:00']);
+        $this->makePost(['slug' => 'mid', 'updated' => '2026-06-02 09:00:00']);
+
+        $urls = sitemap_urls();
+
+        $this->assertSame($urls[0]['lastmod'], date('c', (int) strtotime((string) newest_visible_update())));
+    }
+
+    public function testNewestVisibleUpdateIgnoresPostsTheSitemapOmits(): void
+    {
+        $this->makePost(['slug' => 'live', 'updated' => '2026-06-01 09:00:00']);
+        // Each of these is newer, and each is excluded from the sitemap — so
+        // none of them may become the validator either.
+        $this->makePost(['slug' => 'draft', 'draft' => 1, 'updated' => '2026-07-01 09:00:00']);
+        $this->makePost(['slug' => 'trash', 'deleted' => 1, 'updated' => '2026-07-02 09:00:00']);
+        $this->makePost(['slug' => 'future', 'created' => '2099-01-01 00:00:00', 'updated' => '2026-07-03 09:00:00']);
+
+        $this->assertSame('2026-06-01 09:00:00', newest_visible_update());
+    }
+
+    public function testNewestVisibleUpdateIsNullWithNoVisiblePosts(): void
+    {
+        $this->makePost(['slug' => 'draft', 'draft' => 1]);
+
+        $this->assertNull(newest_visible_update());
     }
 
     public function testRenderSitemapWrapsUrlsInUrlset(): void

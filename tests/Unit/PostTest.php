@@ -443,6 +443,54 @@ class PostTest extends TestCase
         $this->assertCount(5, post_ids_by_tag('php'));
     }
 
+    /**
+     * The exhaustive scan walks the table in rowid order and sorts the
+     * survivors in PHP, because asking SQL to order it made every page a fresh
+     * scan of the whole table. The order callers see must not have changed:
+     * newest first, whichever column is being ordered on.
+     */
+    public function testPostIdsByTagReturnsNewestFirst(): void
+    {
+        $this->setUpDb();
+
+        $oldest = $this->tagPost('one #php', '2020-01-01 00:00:00');
+        $newest = $this->tagPost('two #php', '2026-01-01 00:00:00');
+        $middle = $this->tagPost('three #php', '2023-01-01 00:00:00');
+
+        $this->assertSame([$newest, $middle, $oldest], post_ids_by_tag('php'));
+    }
+
+    /**
+     * Posts written in the same second used to come back in whatever order
+     * SQLite emitted them, which decided which page of /tag/<tag> a reader
+     * found them on. The PHP sort is stable, so a tie now falls to ascending id.
+     */
+    public function testPostIdsByTagBreaksTimestampTiesByAscendingId(): void
+    {
+        $this->setUpDb();
+
+        $first  = $this->tagPost('one #php', '2026-01-01 00:00:00');
+        $second = $this->tagPost('two #php', '2026-01-01 00:00:00');
+        $third  = $this->tagPost('three #php', '2026-01-01 00:00:00');
+
+        $this->assertSame([$first, $second, $third], post_ids_by_tag('php'));
+    }
+
+    /**
+     * visible_clause() treats a null `created` as visible, and SQLite sorted
+     * those rows last under ORDER BY created DESC. The PHP sort has to agree.
+     */
+    public function testPostIdsByTagSortsUndatedPostsLast(): void
+    {
+        $this->setUpDb();
+
+        $undated = $this->tagPost('undated #php', '2026-01-01 00:00:00');
+        R::exec('UPDATE post SET created = NULL WHERE id = ?', [$undated]);
+        $dated = $this->tagPost('dated #php', '2020-01-01 00:00:00');
+
+        $this->assertSame([$dated, $undated], post_ids_by_tag('php'));
+    }
+
     public function testLoadPostsInOrderKeepsTheGivenOrder(): void
     {
         $this->setUpDb();

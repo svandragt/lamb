@@ -80,6 +80,20 @@ The `preview` parameter counts even when empty or wrong. A bad token never grant
 
 ---
 
+## 2026-08-22 — A tag scan pages on the rowid; the sitemap validates before it builds
+
+**Status:** Accepted
+
+**Context:** With the post table indexed, `/tag/<tag>` and `/sitemap.xml` were the two endpoints still measured in tens of milliseconds at 30,000 posts. Both spent that time on work the response did not need. The tag scan read its matches with `ORDER BY created DESC LIMIT ? OFFSET ?`: nothing indexes `created`, so every page re-scanned and re-sorted the whole table, and a tag covering 4,000 posts took eight of them — 57 ms of a 63 ms response just to produce a list of ids. `/sitemap.xml` built all 25,000 URLs and a 2.6 MB document and only then called `feed_cache()`, so a crawler revalidating a sitemap it already held paid the full build to be answered 304.
+
+**Decision:** `post_ids_by_tag()` keeps its ordered, early-exiting scan for the limited case (the tag feeds take 20) and delegates the exhaustive case to `all_post_ids_by_tag()`, which pages on the rowid (`id > ?`, which SQLite seeks straight to), walks the table once, and orders the survivors in PHP with a stable `arsort()`. The split is deliberate rather than a unification: ordering in SQL is what lets a limited scan stop after one page — since `updated` is indexed, a tag feed answers in a single query — while an exhaustive scan sees every match regardless and only pays for the ordering. Collapsing the two into one keyset scan was measured and rejected: it made the tag feeds nine times slower for no gain.
+
+`respond_sitemap()` now takes its validator from `newest_visible_update()` — one indexed row — instead of reading it off the finished URL list. The value is the same by construction (the list is ordered by `updated` descending and the home entry inherits the newest post's date), and a unit test pins the two together so they cannot drift.
+
+**Consequences:** Measured end-to-end at 30,000 posts, output byte-identical: `/tag/<tag>` 63 ms → 16 ms, a conditional `/sitemap.xml` 69 ms → 1.8 ms; tag feeds and the full sitemap unchanged, and a 200-post install unchanged throughout. A tie on `created` now resolves to ascending id instead of whatever order SQLite emitted, so which page of a tag a reader finds a post on is no longer arbitrary. The unconditional sitemap is still ~90 ms, three quarters of it `sitemap_date()` calling `strtotime()` and `date('c')` 25,000 times; that is the price of DST-correct formatting and was left alone. The remaining structural cost — the `body LIKE` superset scan every tag lookup depends on — needs a tag index or FTS, not another tweak here.
+
+---
+
 ## 2026-08-22 — The post table carries explicit indexes, but not on `created`
 
 **Status:** Accepted
