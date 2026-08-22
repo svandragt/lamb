@@ -761,6 +761,27 @@ class ResponsePostsTest extends TestCase
         $this->assertSame("- [x] parent\n\n      - [ ] nested\n", R::load('post', $post->id)->body);
     }
 
+    public function testApplyCheckboxToggleDoesNotNotifySubscribers(): void
+    {
+        // Routed through Post\save() with an empty context: ticking a box is a
+        // minor edit and must not queue a webmention, even with the funnel's
+        // default subscribers wired. Byte-for-byte the pre-funnel behaviour.
+        $this->seedNotifyTables();
+        \Lamb\Post\reset_subscribers();
+        \Lamb\Post\register_default_subscribers();
+
+        $post          = R::dispense('post');
+        $post->body    = "- [ ] one\n\nsee [elsewhere](https://other.example/a)\n";
+        $post->version = 1;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $this->assertTrue(apply_checkbox_toggle($post->id, 0, true));
+        $this->assertCount(0, R::findAll('webmentionoutbox'));
+
+        \Lamb\Post\reset_subscribers();
+    }
+
     // -------------------------------------------------------------------------
     // lock_if_feed_sourced
     // -------------------------------------------------------------------------
