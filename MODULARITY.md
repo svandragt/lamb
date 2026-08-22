@@ -1,8 +1,12 @@
 # Modularity investigation — duplicate mechanisms and plugin seams
 
-**Status:** proposal, nothing implemented. Written in response to "the project is
+**Status:** findings, nothing implemented. Written in response to "the project is
 sprawled, we keep finding bugs — find where there are multiple ways to do
 something and how we can split them off into plugins."
+
+**The sequenced plan derived from these findings is [PLAN.md](PLAN.md).** This
+document is the evidence base — what the plan cites — and is not itself a plan.
+§5 below is the outline PLAN.md supersedes with per-PR detail.
 
 The finding in one line: **the sprawl and the bugs are two different problems, and
 only one of them is fixed by plugins.** The bugs come from ~10 places where the
