@@ -3,21 +3,14 @@
 global $config;
 global $data;
 
-if (!function_exists('escape')) {
-    function escape(string $html): string
-    {
-        return htmlspecialchars($html, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
-    }
-}
-
 header('Content-type: application/atom+xml');
 $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed';
 
 $Xml = new SimpleXMLElement(
     '<feed xmlns="http://www.w3.org/2005/Atom" xmlns:thr="http://purl.org/syndication/thread/1.0"></feed>'
 );
-$Xml->addChild('title', escape($data['title'] ?? $config['site_title']));
-$Xml->addChild('id', escape($channel_link));
+$Xml->addChild('title', \Lamb\Theme\escape_xml($data['title'] ?? $config['site_title']));
+$Xml->addChild('id', \Lamb\Theme\escape_xml($channel_link));
 $Xml->addChild('updated', date(DATE_ATOM, strtotime($data['updated'])));
 $Xml->addChild('generator', 'Lamb');
 
@@ -28,7 +21,7 @@ $Xml->addChild('generator', 'Lamb');
 if (defined('ROOT_DIR')) {
     foreach (['favicon.png' => 'icon', 'logo.png' => 'logo'] as $file => $element) {
         if (file_exists(ROOT_DIR . '/' . $file)) {
-            $Xml->addChild($element, escape(ROOT_URL . '/' . $file));
+            $Xml->addChild($element, \Lamb\Theme\escape_xml(ROOT_URL . '/' . $file));
         }
     }
 }
@@ -47,7 +40,7 @@ foreach (Lamb\Websub\hub_urls($config) as $websub_hub) {
 }
 
 $Author = $Xml->addChild('author');
-$Author->addChild('name', escape($config['author_name']));
+$Author->addChild('name', \Lamb\Theme\escape_xml($config['author_name']));
 $Author->addChild('uri', ROOT_URL);
 
 foreach ($data['posts'] as $bean) {
@@ -55,8 +48,8 @@ foreach ($data['posts'] as $bean) {
     // addChild(), unlike addAttribute(), does not escape: a permalink carrying a
     // `&` (a slug is stored close to verbatim) raised "unterminated entity
     // reference" and emitted an empty <id/>, making the whole feed malformed.
-    $Entry->addChild('id', escape(Lamb\permalink($bean)));
-    $Entry->addChild('title', escape($bean->title ?: ''));
+    $Entry->addChild('id', \Lamb\Theme\escape_xml(Lamb\permalink($bean)));
+    $Entry->addChild('title', \Lamb\Theme\escape_xml($bean->title ?: ''));
     $Entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
     $Entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
     // The reply context travels inside <content>, not only in the theme: thr:

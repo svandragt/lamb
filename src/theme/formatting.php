@@ -16,6 +16,23 @@ function escape(string $html): string
 }
 
 /**
+ * Escapes a string for safe XML output (Atom feed, sitemap).
+ *
+ * Uses ENT_XML1 rather than ENT_HTML5 so a single quote becomes `&apos;` (a
+ * defined XML entity) and no HTML-only named entities are emitted. ENT_SUBSTITUTE
+ * keeps a malformed UTF-8 byte from making htmlspecialchars() return '' for the
+ * whole string — it degrades to U+FFFD instead, so one bad byte cannot empty an
+ * entire <loc> or <title>.
+ *
+ * @param string $xml The raw string to escape.
+ * @return string XML-safe escaped string.
+ */
+function escape_xml(string $xml): string
+{
+    return htmlspecialchars($xml, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+}
+
+/**
  * Re-levels a post body's headings so its highest heading sits at $top, keeping
  * the levels relative to each other. Open and close tags shift identically,
  * attributes are preserved, and a body with no headings is returned unchanged.

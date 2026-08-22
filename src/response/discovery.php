@@ -99,11 +99,11 @@ function render_sitemap(array $urls): string
     ];
     foreach ($urls as $url) {
         $lines[] = '  <url>';
-        // Match the Atom feed's escaping (themes/base/feed.php): ENT_SUBSTITUTE
-        // means a malformed UTF-8 byte degrades to U+FFFD instead of making
-        // htmlspecialchars() return '' for the whole string — which would emit
-        // an empty, invalid <loc>.
-        $lines[] = '    <loc>' . htmlspecialchars($url['loc'], ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE) . '</loc>';
+        // Theme\escape_xml() is the one XML escaper (ENT_XML1|ENT_QUOTES|
+        // ENT_SUBSTITUTE): a malformed UTF-8 byte degrades to U+FFFD instead of
+        // making htmlspecialchars() return '' for the whole string — which would
+        // emit an empty, invalid <loc>.
+        $lines[] = '    <loc>' . \Lamb\Theme\escape_xml($url['loc']) . '</loc>';
         if (!empty($url['lastmod'])) {
             $lines[] = '    <lastmod>' . $url['lastmod'] . '</lastmod>';
         }
