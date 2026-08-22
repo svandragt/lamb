@@ -177,6 +177,51 @@ class FeedTemplateTest extends TestCase
         $this->assertNotEmpty((string) $link['href']);
     }
 
+    public function testReplyEntryCarriesThreadTypeAndRelatedLink(): void
+    {
+        $target = 'https://other.example/post';
+        $xml = $this->renderFeedWithPost([
+            'title'       => 'A reply',
+            'transformed' => '<p>Replying</p>',
+            'in_reply_to' => $target,
+        ]);
+
+        // RFC 4685 item 1: the thr:in-reply-to carries ref/href and the
+        // text/html media-type hint.
+        $thr = $xml->entry[0]->children('http://purl.org/syndication/thread/1.0');
+        $inReplyTo = $thr->{'in-reply-to'};
+        // ref/href/type are in no namespace, so read them off attributes() rather
+        // than $inReplyTo[...] (which resolves in the thr: namespace context here).
+        $attrs = $inReplyTo->attributes();
+        $this->assertSame($target, (string) $attrs->ref);
+        $this->assertSame($target, (string) $attrs->href);
+        $this->assertSame('text/html', (string) $attrs->type);
+
+        // Item 4: a plain rel="related" link for readers that ignore the thr: ns.
+        $related = null;
+        foreach ($xml->entry[0]->link as $link) {
+            if ((string) $link['rel'] === 'related') {
+                $related = $link;
+            }
+        }
+        $this->assertNotNull($related, 'entry should carry a rel="related" link');
+        $this->assertSame($target, (string) $related['href']);
+    }
+
+    public function testNonReplyEntryHasNoThreadOrRelatedLink(): void
+    {
+        $xml = $this->renderFeedWithPost([
+            'title'       => 'Not a reply',
+            'transformed' => '<p>Body</p>',
+        ]);
+
+        $thr = $xml->entry[0]->children('http://purl.org/syndication/thread/1.0');
+        $this->assertSame(0, $thr->{'in-reply-to'}->count());
+        foreach ($xml->entry[0]->link as $link) {
+            $this->assertNotSame('related', (string) $link['rel']);
+        }
+    }
+
     /**
      * @runInSeparateProcess
      * @preserveGlobalState disabled
@@ -351,6 +396,7 @@ class FeedTemplateTest extends TestCase
         $bean->title = $fields['title'] ?? '';
         $bean->description = $fields['description'] ?? '';
         $bean->transformed = $fields['transformed'] ?? '';
+        $bean->in_reply_to = $fields['in_reply_to'] ?? '';
         $bean->created = '2024-01-01 12:00:00';
         $bean->updated = '2024-01-01 12:00:00';
         R::store($bean);
