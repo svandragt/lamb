@@ -1,0 +1,146 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * Lamb's operator CLI. Currently one subcommand:
+ *
+ *   bin/lamb import <source> <path> [--dry-run] [--replace]
+ *
+ * <source> is one of the registered importers (wordpress, known, lamb — see
+ * the registrations below). Each parses its own file format into items, then
+ * shares run_import()'s dedupe, progress and summary output.
+ *
+ * --dry-run     Parse and convert every item but write nothing to the DB
+ *               or filesystem. Use this first to surface parsing errors.
+ * --replace     Re-apply every already-imported item over its existing post
+ *               instead of skipping it. Local edits made since the import
+ *               are lost. For re-running an export after a conversion fix.
+ *
+ * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
+ *
+ * Replaces the three import-*.php scripts' hand-rolled copies of this
+ * bootstrap; they now delegate here and print a deprecation warning.
+ */
+
+namespace Lamb;
+
+use Lamb\Import;
+use Lamb\Known;
+use Lamb\Restore;
+use Lamb\WordPress;
+use RedBeanPHP\OODBBean;
+use RedBeanPHP\R;
+use RuntimeException;
+
+if (PHP_SAPI !== 'cli') {
+    fwrite(STDERR, "bin/lamb must be run from the command line.\n");
+    exit(1);
+}
+
+define('ROOT_DIR', dirname(__DIR__) . '/src');
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+Import\register_source([
+    'name'        => 'wordpress',
+    'parse'       => WordPress\parse_wxr_file(...),
+    'extract'     => WordPress\extract_items(...),
+    'skip_reason' => WordPress\skip_reason(...),
+    'uuid'        => static fn(array $item): string => WordPress\wordpress_uuid((string) $item['guid']),
+    'import'      => WordPress\import_item(...),
+]);
+
+Import\register_source([
+    'name'        => 'known',
+    'parse'       => Import\parse_rss_file(...),
+    'extract'     => Known\extract_items(...),
+    'skip_reason' => Known\skip_reason(...),
+    'uuid'        => static fn(array $item): string => Known\known_uuid((string) $item['guid']),
+    'import'      => Known\import_item(...),
+]);
+
+Import\register_source([
+    'name'        => 'lamb',
+    'args'        => Restore\parse_restore_args(...),
+    'parse'       => static function (string $path): array {
+        [, $reader] = Restore\open_source($path);
+        return [Restore\read_manifest($reader), $reader];
+    },
+    'extract'     => static function (array $parsed, ?string $site_url = null): array {
+        [$manifest, $reader] = $parsed;
+        $origin = Restore\origin_id($manifest, $site_url);
+        if ($origin === '') {
+            fwrite(STDERR, "Warning: this archive names no site URL, so imported ids are namespaced by an empty origin. Pass --site-url=<url> to keep two sites' posts apart.\n");
+        }
+        return Restore\manifest_items($manifest, $reader, $origin);
+    },
+    'skip_reason' => Restore\item_skip_reason(...),
+    'uuid'        => static fn(array $item): string => (string) $item['import_uuid'],
+    'import'      => Restore\import_post(...),
+    'after'       => static function (array $parsed, bool $dry_run): void {
+        [$manifest, $reader] = $parsed;
+        $assets = Restore\restore_assets($manifest, ROOT_DIR . '/assets', $reader, $dry_run);
+        echo "Assets: restored={$assets['restored']} skipped={$assets['skipped']} rejected={$assets['rejected']}\n";
+    },
+]);
+
+if (($argv[1] ?? null) !== 'import') {
+    fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace]\n");
+    fwrite(STDERR, 'Sources: ' . implode(', ', Import\source_names()) . "\n");
+    exit(1);
+}
+
+$name = $argv[2] ?? null;
+$source = $name !== null ? Import\get_source($name) : null;
+if ($source === null) {
+    fwrite(STDERR, 'Unknown import source' . ($name !== null ? ": $name" : '') . ".\n");
+    fwrite(STDERR, 'Valid sources: ' . implode(', ', Import\source_names()) . "\n");
+    exit(1);
+}
+
+// [$name, <path and flags>...] — the shape parse_import_args() expects of a
+// normal $argv, where index 0 is a script name it ignores.
+$rest = array_slice($argv, 2);
+$args_fn = $source['args'] ?? static fn(array $argv): array => Import\parse_import_args($argv);
+$parsed_args = $args_fn($rest);
+[$path, $dry_run, $replace] = $parsed_args;
+$extra = array_slice($parsed_args, 3);
+
+if ($path === null) {
+    fwrite(STDERR, "Usage: bin/lamb import {$source['name']} <path> [--dry-run] [--replace]\n");
+    exit(1);
+}
+
+$data_dir = Bootstrap\data_dir(dirname(__DIR__));
+Bootstrap\bootstrap_db($data_dir);
+
+global $config;
+$config = Config\load();
+Config\apply_timezone($config);
+
+if (!Config\experimental_features_enabled($config)) {
+    fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: set experimental_features = true in Settings.\n");
+    exit(1);
+}
+
+try {
+    $parsed = ($source['parse'])($path);
+} catch (RuntimeException $e) {
+    fwrite(STDERR, $e->getMessage() . "\n");
+    exit(1);
+}
+
+$items = ($source['extract'])($parsed, ...$extra);
+
+Import\run_import(
+    $items,
+    $source['skip_reason'],
+    $source['uuid'],
+    $source['import'],
+    $dry_run,
+    static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
+    $replace,
+);
+
+if (isset($source['after'])) {
+    ($source['after'])($parsed, $dry_run);
+}
