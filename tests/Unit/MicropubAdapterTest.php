@@ -1113,6 +1113,30 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    public function testUpdateCallbackAdvancesTheContentTimestamp(): void
+    {
+        // Unique slug so this test's row can't collide with the other
+        // updateCallback tests (this suite does not reset the DB between tests).
+        $post = R::dispense('post');
+        $post->body = "---\ntitle: Timestamp Bump\n---\n\nbody";
+        $post->slug = 'ts-bump-post';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        // Seed the monotonic mark in the past: a Micropub update is a content
+        // change, so it must move the 304 validator forward, or the edit is
+        // invisible to a date-only cache (#669).
+        \Lamb\set_option(\Lamb\get_option('content_modified_ts', 0), strtotime('2000-01-01 00:00:00'));
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback('http://localhost/ts-bump-post', ['replace' => ['content' => ['updated body']]]);
+
+        $this->assertGreaterThan(
+            strtotime('2000-01-01 00:00:00'),
+            \Lamb\Response\latest_content_timestamp()
+        );
+    }
+
     public function testUpdateCallbackReturnsInvalidRequestForTrashedPost(): void
     {
         // Regression: a soft-deleted post is meant to stay immutable until
