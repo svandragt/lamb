@@ -594,6 +594,23 @@ class UploadTest extends TestCase
         $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.gif');
     }
 
+    public function testStoreUploadOrFallbackReturnsNullForConvertibleExtensionWhenWebpAndMoveBothFail(): void
+    {
+        // The more common real-world shape of #653: a convertible extension
+        // (jpg/png) whose bytes aren't a real image, so store_webp_copy() also
+        // fails and the code falls through to the same move_uploaded_file() that
+        // cannot succeed outside a real HTTP upload. Both branches failing must
+        // still surface as null, not a filename nothing was written to.
+        $src = $this->tempRootDir . '/plain.jpg';
+        file_put_contents($src, 'not really a jpeg');
+
+        $result = @store_upload_or_fallback($src, 'jpg', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.jpg');
+    }
+
     // asset_dimensions — pixel size of a locally stored asset, for intrinsic
     // width/height attributes on rendered <img> tags.
 
