@@ -8,10 +8,10 @@ use function Lamb\Theme\action_edit;
 use function Lamb\Theme\action_preview;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\date_created;
-use function Lamb\Config\is_menu_item;
 use function Lamb\Theme\anchor_headings;
 use function Lamb\Theme\author_card;
 use function Lamb\Theme\escape;
+use function Lamb\Theme\is_hidden_menu_item;
 use function Lamb\Theme\link_source;
 use function Lamb\Theme\syndication_links;
 use function Lamb\Theme\the_reply_context;
@@ -23,12 +23,8 @@ if (empty($data['posts'])) :
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
-        // Menu pages stay out of listings. Public listings already exclude them
-        // in SQL (public_posts_clause), so this is the backstop for the owner-only
-        // views that deliberately query everything — drafts, trash, scheduled. The
-        // `status` guard is load-bearing: on a permalink the menu page *is* the
-        // requested post, so skipping it there renders an empty page.
-        if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
+        // See Lamb\Theme\is_hidden_menu_item() for why this check exists.
+        if (is_hidden_menu_item($template, $bean)) :
             continue;
         endif;
         ?>
