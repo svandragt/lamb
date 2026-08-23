@@ -1537,9 +1537,19 @@ function micropub_error(int $status, string $error, string $description, ?string
  * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
  * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
  *
+ * @param mixed $args The router's positional route arguments. Unused — this
+ *     endpoint reads $_FILES/$_POST directly — but declared first because
+ *     call_route() invokes every handler as $callback($args); a typed first
+ *     parameter would receive that array and fatal (a 500 on every request).
+ * @param LambMicropubAdapter|null $adapter The adapter to verify the bearer token against;
+ *     defaults to a new LambMicropubAdapter. Injectable so tests can stub token
+ *     introspection instead of hitting the real token endpoint over HTTP. Typed to
+ *     the concrete class, not the MicropubAdapter base, because this function relies
+ *     on LambMicropubAdapter's narrower verifyAccessTokenCallback() return shape
+ *     (array{me, scope}|false) rather than the base's array|string|false|ResponseInterface.
  * @return void
  */
-function respond_micropub_media(): void
+function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapter = null): void
 {
     $headers = getallheaders() ?: [];
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
@@ -1563,7 +1573,7 @@ function respond_micropub_media(): void
         micropub_error(401, 'unauthorized', 'Missing bearer token.', bearer_challenge());
     }
 
-    $adapter = new LambMicropubAdapter();
+    $adapter ??= new LambMicropubAdapter();
     if (mp_debug_enabled()) {
         $adapter->logger = mp_adapter_logger();
     }
