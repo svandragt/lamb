@@ -65,12 +65,24 @@ class ReplyContextTest extends TestCase
         $this->assertNull($bean->{'reading_time'});
     }
 
-    public function testListInReplyToUsesFirstEntry(): void
+    public function testListInReplyToKeepsAllEntries(): void
     {
-        // A YAML list (Micropub clients may send multiple reply targets) collapses
-        // to its first entry rather than being stored verbatim.
+        // A YAML list (Micropub clients may send multiple reply targets, and mf2
+        // u-in-reply-to/RFC 4685 thr:in-reply-to both allow several — #583) keeps
+        // every entry, stored space-separated like syndicated_to.
         $bean = populate_bean(
             "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $bean->in_reply_to
+        );
+    }
+
+    public function testListInReplyToDedupesEntries(): void
+    {
+        $bean = populate_bean(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://first.example/post\n---\nHi"
         );
         $this->assertSame('https://first.example/post', $bean->in_reply_to);
     }
@@ -140,6 +152,37 @@ class ReplyContextTest extends TestCase
 
         $this->assertStringContainsString('href="https://e.test/a?b=1&amp;c=2"', $html);
         $this->assertStringContainsString('u-in-reply-to', $html);
+    }
+
+    public function testReplyContextRendersEachOfMultipleTargets(): void
+    {
+        // #583: a post may reply to several URLs at once, space-separated in
+        // the stored column like syndicated_to.
+        $bean = R::dispense('post');
+        $bean->in_reply_to = 'https://first.example/post https://second.example/post';
+
+        $html = the_reply_context($bean);
+
+        $this->assertSame(2, substr_count($html, 'u-in-reply-to'));
+        $this->assertStringContainsString('href="https://first.example/post"', $html);
+        $this->assertStringContainsString('href="https://second.example/post"', $html);
+        $this->assertStringContainsString('In reply to', $html);
+    }
+
+    public function testReplyContextShowsNonHttpTargetAsTextAmongValidOnes(): void
+    {
+        // One bad scheme among several valid targets loses only its own link;
+        // the valid targets are still linked.
+        $bean = R::dispense('post');
+        $bean->in_reply_to = 'https://first.example/post javascript:alert(1) https://second.example/post';
+
+        $html = the_reply_context($bean);
+
+        $this->assertSame(2, substr_count($html, 'u-in-reply-to'));
+        $this->assertStringContainsString('href="https://first.example/post"', $html);
+        $this->assertStringContainsString('href="https://second.example/post"', $html);
+        $this->assertStringContainsString('javascript:alert(1)', $html);
+        $this->assertStringNotContainsString('href="javascript:alert(1)"', $html);
     }
 
     public function testReplyContextHelperEmptyWhenUnset(): void
@@ -220,6 +263,33 @@ class ReplyContextTest extends TestCase
         $this->assertStringContainsString('other: keep-me', $body);
         $this->assertStringContainsString('in-reply-to: https://old.example/x', $body);
         $this->assertSame('https://new.example/post', populate_bean($body)->in_reply_to);
+    }
+
+    public function testSetReplyToAcceptsMultipleTargets(): void
+    {
+        // #583: set_reply_to() (and set_frontmatter_key() underneath) can now
+        // write more than one target, as a YAML list.
+        $body = set_reply_to(
+            'Status',
+            ['https://first.example/post', 'https://second.example/post']
+        );
+
+        $bean = populate_bean($body);
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $bean->in_reply_to
+        );
+    }
+
+    public function testSetReplyToSingleElementListWritesScalarShape(): void
+    {
+        // A one-element list is indistinguishable in effect from the plain
+        // scalar call: same value, same YAML shape (not a one-item list).
+        $listBody = set_reply_to('Status', ['https://first.example/post']);
+        $scalarBody = set_reply_to('Status', 'https://first.example/post');
+
+        $this->assertSame($scalarBody, $listBody);
+        $this->assertStringNotContainsString('- https://first.example/post', $listBody);
     }
 
     // Atom feed -------------------------------------------------------------
@@ -367,5 +437,81 @@ class ReplyContextTest extends TestCase
         // same relationship has to be visible in content_html as well.
         $this->assertStringContainsString('u-in-reply-to', $json['items'][0]['content_html']);
         $this->assertStringContainsString('<p>A reply</p>', $json['items'][0]['content_html']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testAtomFeedEmitsThrInReplyToAndRelatedPerTarget(): void
+    {
+        // #583: a post replying to several URLs gets one thr:in-reply-to and
+        // one rel="related" link per target, not just the first.
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+
+        $bean = R::dispense('post');
+        $bean->title = '';
+        $bean->transformed = '<p>A reply</p>';
+        $bean->in_reply_to = 'https://first.example/post https://second.example/post';
+        $bean->created = '2024-01-01 12:00:00';
+        $bean->updated = '2024-01-01 12:00:00';
+
+        global $config, $data;
+        $config = ['site_title' => 'Blog', 'author_name' => 'Author'];
+        $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed', 'updated' => '2024-01-01 12:00:00'];
+
+        ob_start();
+        \Lamb\Response\render_atom_feed($data, $config);
+        $output = ob_get_clean();
+
+        $this->assertSame(2, substr_count($output, 'thr:in-reply-to'));
+        $this->assertSame(2, substr_count($output, 'rel="related"'));
+        $this->assertStringContainsString('https://first.example/post', $output);
+        $this->assertStringContainsString('https://second.example/post', $output);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testJsonFeedMicroblogInReplyToUsesFirstValidTargetOnly(): void
+    {
+        // `_microblog.in_reply_to_url` is a micro.blog convention for a single
+        // target, so a multi-target post (#583) reports only the first —
+        // every target still reaches the reader via content_html.
+        require_once __DIR__ . '/../../vendor/autoload.php';
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+
+        $bean = R::dispense('post');
+        $bean->title = '';
+        $bean->transformed = '<p>A reply</p>';
+        $bean->in_reply_to = 'https://first.example/post https://second.example/post';
+        $bean->created = '2024-01-01 12:00:00';
+        $bean->updated = '2024-01-01 12:00:00';
+
+        global $config, $data;
+        $config = ['site_title' => 'Blog', 'author_name' => 'Author'];
+        $data = ['posts' => [$bean], 'title' => 'Blog', 'feed_url' => 'http://localhost/feed.json', 'updated' => '2024-01-01 12:00:00'];
+
+        ob_start();
+        \Lamb\Response\render_json_feed($data, $config);
+        $output = ob_get_clean();
+
+        $json = json_decode($output, true);
+        $this->assertSame('https://first.example/post', $json['items'][0]['_microblog']['in_reply_to_url']);
+        $this->assertSame(2, substr_count($json['items'][0]['content_html'], 'u-in-reply-to'));
     }
 }

@@ -12,6 +12,7 @@ use RedBeanPHP\R;
 use function Lamb\Http\request_string;
 use function Lamb\Post\load_posts_in_order;
 use function Lamb\Post\post_ids_by_tag;
+use function Lamb\Post\split_reply_targets;
 
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
@@ -290,15 +291,21 @@ function render_atom_feed(array $data, array $config): void
         }
 
         // in_reply_to is not author-only (a Micropub `create` token sets it,
-        // unvalidated), so a non-http(s) scheme must not be syndicated as a link.
-        if (!empty($bean->in_reply_to) && \Lamb\Http\is_valid_http_url((string) $bean->in_reply_to)) {
+        // unvalidated), so a non-http(s) scheme must not be syndicated as a
+        // link. A post may carry several targets (#583, RFC 4685 allows
+        // multiple thr:in-reply-to elements per entry): each gets its own
+        // thr:in-reply-to and rel="related" link, independently guarded.
+        foreach (split_reply_targets((string) ($bean->in_reply_to ?? '')) as $target) {
+            if (!\Lamb\Http\is_valid_http_url($target)) {
+                continue;
+            }
             $thread = $entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');
-            $thread->addAttribute('ref', $bean->in_reply_to);
-            $thread->addAttribute('href', $bean->in_reply_to);
+            $thread->addAttribute('ref', $target);
+            $thread->addAttribute('href', $target);
             $thread->addAttribute('type', 'text/html');
             $related = $entry->addChild('link');
             $related->addAttribute('rel', 'related');
-            $related->addAttribute('href', $bean->in_reply_to);
+            $related->addAttribute('href', $target);
         }
         $alt = $entry->addChild('link');
         $alt->addAttribute('rel', 'alternate');
@@ -361,9 +368,15 @@ function render_json_feed(array $data, array $config): void
             $item['title'] = $bean->title;
         }
         // Guarded like content_html above: the consumer links this, and
-        // in_reply_to is not author-only.
-        if (!empty($bean->in_reply_to) && \Lamb\Http\is_valid_http_url((string) $bean->in_reply_to)) {
-            $item['_microblog'] = ['in_reply_to_url' => $bean->in_reply_to];
+        // in_reply_to is not author-only. `_microblog.in_reply_to_url` is a
+        // micro.blog convention for a single target, so a post with several
+        // (#583) reports only the first valid one here — every target still
+        // reaches the reader via content_html's u-in-reply-to links above.
+        foreach (split_reply_targets((string) ($bean->in_reply_to ?? '')) as $target) {
+            if (\Lamb\Http\is_valid_http_url($target)) {
+                $item['_microblog'] = ['in_reply_to_url' => $target];
+                break;
+            }
         }
         $feed['items'][] = $item;
     }
