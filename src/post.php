@@ -182,9 +182,14 @@ function parse_matter(string $body): array
  *
  * These are the values normalize_matter_values() coerces to a string (or drops
  * as absent). Keys outside this list — `created`, `draft` — carry their own
- * type handling downstream and are left as YAML parsed them.
+ * type handling downstream and are left as YAML parsed them. `in-reply-to` is
+ * also outside it: unlike every other text key it may legitimately be a list
+ * (mf2 `u-in-reply-to` repeats, RFC 4685 allows several `thr:in-reply-to`
+ * elements — #583), and coercing it here would collapse that list to its
+ * first entry before \Lamb\normalize_in_reply_to() gets a chance to keep
+ * every target via matter_url_list().
  */
-const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'in-reply-to', 'syndicated-to'];
+const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'syndicated-to'];
 
 /**
  * Coerces a front-matter value to the string its readers assume, or null when
@@ -201,8 +206,8 @@ const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'in-reply-t
  *
  * The coercion:
  *  - strings, integers and floats become their textual form;
- *  - a list collapses to its first entry — the shape `in-reply-to` already
- *    accepted, generalised, so `title: [a, b]` reads as `a`;
+ *  - a list collapses to its first entry, so `title: [a, b]` reads as `a`
+ *    (see matter_url_list() for the counterpart that keeps every entry);
  *  - dates are formatted back to the wall-clock text the author typed;
  *  - a map, a nested list, a boolean or null have no faithful text (neither
  *    "1" nor "true" is what `title: yes` meant), so they are reported as
@@ -230,6 +235,77 @@ function matter_string(mixed $value): ?string
     }
 
     return null;
+}
+
+/**
+ * Coerces a front-matter value to every one of its distinct textual entries,
+ * the list-preserving counterpart to matter_string().
+ *
+ * Where matter_string() collapses a YAML list to its first entry, this keeps
+ * them all: `in-reply-to: [a, b]` yields both targets instead of silently
+ * dropping the second (#583 — mf2 `u-in-reply-to` may repeat, RFC 4685 allows
+ * several `thr:in-reply-to` elements, and a Micropub client legitimately sends
+ * an array of targets). A scalar value is treated as a one-element list,
+ * matching matter_string()'s handling of that shape.
+ *
+ * Each list entry is coerced through matter_string()'s own scalar rules, so a
+ * date entry is formatted the same way a scalar date would be; a nested list
+ * or map entry has no single textual form and is skipped rather than aborting
+ * the whole value. Duplicate entries (after trimming) are removed, and an
+ * absent or entirely non-textual value returns [] rather than [''].
+ *
+ * @param mixed $value The raw front-matter value.
+ * @return list<string> The value's distinct textual entries, in order.
+ */
+function matter_url_list(mixed $value): array
+{
+    if (is_array($value) && !array_is_list($value)) {
+        // A map has no textual form, matching matter_string()'s handling.
+        return [];
+    }
+    $items = is_array($value) ? $value : [$value];
+
+    $entries = [];
+    foreach ($items as $item) {
+        if (is_array($item)) {
+            // A nested list/map entry carries no single URL; skip rather than
+            // guess at one of its values.
+            continue;
+        }
+        $text = matter_string($item);
+        if ($text === null) {
+            continue;
+        }
+        $text = trim($text);
+        if ($text === '' || in_array($text, $entries, true)) {
+            continue;
+        }
+        $entries[] = $text;
+    }
+
+    return $entries;
+}
+
+/**
+ * Splits a space-separated multi-target column value into its individual
+ * targets.
+ *
+ * `in_reply_to` and `syndicated_to` both store one or more targets as a
+ * space-separated string in a single column (see Theme\syndication_links()):
+ * a URL never contains a literal space, so joining with one and splitting on
+ * runs of whitespace round-trips losslessly. Every consumer of a possibly
+ * multi-target `in_reply_to` — the reply-context markup, both feed renderers,
+ * the outbound webmention queue, and the Micropub source query — goes through
+ * this rather than repeating the split.
+ *
+ * @param string $raw The raw column value.
+ * @return list<string> The individual targets, in order, with no empty entries.
+ */
+function split_reply_targets(string $raw): array
+{
+    $raw = trim($raw);
+
+    return $raw === '' ? [] : (preg_split('/\s+/', $raw) ?: []);
 }
 
 /**
@@ -419,7 +495,8 @@ function slugify(string $text): string
  * the single place that assembles a fresh front-matter block from scratch
  * (used by Micropub create/update).
  *
- * @param array<string, string> $matter Ordered front-matter key/value pairs.
+ * @param array<string, string|list<string>> $matter Ordered front-matter key/value pairs.
+ *        A list value (e.g. a multi-target `in-reply-to`, #583) dumps as a YAML list.
  * @param string $content The post content to place after the fence.
  * @return string The assembled body.
  */
@@ -513,19 +590,43 @@ function set_matter(string $body, string $key, string $value, bool $append = tru
  * outright — so it can also remove one, and cannot leave a stale YAML list
  * behind under a key whose new value is a scalar.
  *
+ * $value may be a list of strings as well as a single string, so a key that
+ * legitimately repeats (`in-reply-to`, #583) can be written with several
+ * targets. A list of zero or one entries is treated exactly like the scalar
+ * case (removes the key, or writes a plain `key: value` line) so every
+ * existing single-target caller is unaffected; two or more entries are
+ * written as a YAML list, the same shape parse_matter() already accepts.
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set, in its hyphenated spelling.
- * @param string $value The value to write, or '' to remove the key.
+ * @param string|list<string> $value The value(s) to write, or '' / [] to remove the key.
  * @return string The body with its front-matter key set.
  */
-function set_frontmatter_key(string $body, string $key, string $value): string
+function set_frontmatter_key(string $body, string $key, string|array $value): string
 {
-    $body  = normalize_frontmatter_fence($body);
-    $value = trim($value);
+    $body = normalize_frontmatter_fence($body);
+
+    if (is_array($value)) {
+        $value = array_values(array_unique(array_filter(
+            array_map('trim', $value),
+            static fn(string $entry): bool => $entry !== ''
+        )));
+        // A single entry (or none) is the scalar case: writing it as a
+        // one-element list would change the on-disk shape of every existing
+        // single-target caller for no behavioural difference.
+        if (count($value) <= 1) {
+            $value = $value[0] ?? '';
+        }
+    } else {
+        $value = trim($value);
+    }
+    // The array branch above always collapses to a string when 0 or 1 entries
+    // survive filtering, so $value here is either a string or a non-empty list.
+    $is_empty = $value === '';
     [$yaml, $content] = split_frontmatter($body);
 
     if ($yaml === '') {
-        return $value === '' ? $body : build_matter([$key => $value], $body);
+        return $is_empty ? $body : build_matter([$key => $value], $body);
     }
 
     // Matches whichever spelling the author used, the way normalize_matter_keys()
@@ -552,7 +653,7 @@ function set_frontmatter_key(string $body, string $key, string $value): string
     }
 
     $new_yaml = rtrim(implode("\n", $kept), "\n");
-    if ($value !== '') {
+    if (!$is_empty) {
         $new_yaml = ($new_yaml === '' ? '' : $new_yaml . "\n") . trim(Yaml::dump([$key => $value]));
     }
 
@@ -564,13 +665,13 @@ function set_frontmatter_key(string $body, string $key, string $value): string
 }
 
 /**
- * Sets (or clears) the reply target in a body's leading YAML front-matter block.
+ * Sets (or clears) the reply target(s) in a body's leading YAML front-matter block.
  *
  * @param string $body The raw post body.
- * @param string $value The reply target URL, or '' to remove it.
- * @return string The body with its front-matter reply target set.
+ * @param string|list<string> $value The reply target URL(s), or '' / [] to remove them.
+ * @return string The body with its front-matter reply target(s) set.
  */
-function set_reply_to(string $body, string $value): string
+function set_reply_to(string $body, string|array $value): string
 {
     return set_frontmatter_key($body, 'in-reply-to', $value);
 }

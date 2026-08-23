@@ -236,8 +236,7 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 **Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
-- `feed.php` — Atom feed output
-- `feed_json.php` — JSON Feed output
+- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme that still ships `feed.php` / `feed_json.php` overrides them for one release with a deprecation notice, then loses the override; base no longer ships either.
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `scheduled.php`, `trash.php`
 - `parts/_items.php` — post list partial
 - `parts/_pagination.php` — pagination partial
@@ -447,7 +446,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the base feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically.
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` override is deprecated.)
 
 ### Typical file set (for a full redesign)
 
@@ -464,7 +463,7 @@ src/themes/<name>/
     └── search.php            # search results
 ```
 
-Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `feed.php`, `_related.php`, `_pagination.php`.
+Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `_related.php`, `_pagination.php`.
 
 ### Security
 

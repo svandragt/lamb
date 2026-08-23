@@ -195,7 +195,7 @@ class FeedJsonTemplateTest extends TestCase
         ];
 
         ob_start();
-        require __DIR__ . '/../../src/themes/base/feed_json.php';
+        \Lamb\Response\render_json_feed($data, $config);
         $output = ob_get_clean();
 
         $decoded = json_decode($output, true);

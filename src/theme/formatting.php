@@ -84,23 +84,27 @@ function anchor_headings(string $html, int $top): string
  */
 function the_reply_context(\RedBeanPHP\OODBBean $bean): string
 {
-    $url = trim((string) ($bean->in_reply_to ?? ''));
-    if ($url === '') {
+    $targets = \Lamb\Post\split_reply_targets((string) ($bean->in_reply_to ?? ''));
+    if ($targets === []) {
         return '';
     }
-
-    if (!\Lamb\Http\is_valid_http_url($url)) {
-        return '<p class="reply-context">In reply to ' . escape($url) . '</p>';
-    }
-
-    $label = parse_url($url, PHP_URL_HOST) ?: $url;
 
     // No rel="in-reply-to": the rel-in-reply-to proposal is superseded by the
     // u-in-reply-to h-entry property (which this already carries), the value is
     // not a registered HTML link type, and nothing consumes it that does not
     // already read u-in-reply-to. See #585.
-    return '<p class="reply-context">In reply to <a class="u-in-reply-to" href="'
-        . escape($url) . '">' . escape($label) . '</a></p>';
+    $parts = [];
+    foreach ($targets as $url) {
+        if (!\Lamb\Http\is_valid_http_url($url)) {
+            $parts[] = escape($url);
+            continue;
+        }
+        $label = parse_url($url, PHP_URL_HOST) ?: $url;
+        $parts[] = '<a class="u-in-reply-to" href="'
+            . escape($url) . '">' . escape($label) . '</a>';
+    }
+
+    return '<p class="reply-context">In reply to ' . implode(', ', $parts) . '</p>';
 }
 
 /**

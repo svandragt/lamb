@@ -12,7 +12,7 @@ use RedBeanPHP\R;
 use function Lamb\Http\request_string;
 use function Lamb\Post\load_posts_in_order;
 use function Lamb\Post\post_ids_by_tag;
-use function Lamb\Theme\part;
+use function Lamb\Post\split_reply_targets;
 
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
@@ -217,11 +217,206 @@ function sanitize_tag_arg(array $args): string
 }
 
 /**
- * Renders a feed template with the given feed data and terminates the request.
+ * Renders the Atom feed for the given view data.
+ *
+ * Feeds live in code, not the theme layer: a theme that omitted feed.php used to
+ * lose the site's feed silently — the same omission-by-default failure #684 (D7)
+ * records for other parts. emit_feed() still honours a theme shipping its own
+ * feed.php, with a deprecation notice, for one release.
+ *
+ * @param array<string, mixed> $data   Feed view data (posts, title, feed_url, updated).
+ * @param array<string, mixed> $config Site configuration.
+ * @return void
+ */
+function render_atom_feed(array $data, array $config): void
+{
+    header('Content-type: application/atom+xml');
+    $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed';
+
+    $xml = new \SimpleXMLElement(
+        '<feed xmlns="http://www.w3.org/2005/Atom" xmlns:thr="http://purl.org/syndication/thread/1.0"></feed>'
+    );
+    $xml->addChild('title', \Lamb\Theme\escape_xml($data['title'] ?? $config['site_title']));
+    $xml->addChild('id', \Lamb\Theme\escape_xml($channel_link));
+    $xml->addChild('updated', date(DATE_ATOM, strtotime($data['updated'])));
+    $xml->addChild('generator', 'Lamb');
+
+    // Atom <icon>/<logo> by convention from the web root: favicon.png / logo.png
+    // next to index.php. Emitted only when present, so no broken image URL.
+    if (defined('ROOT_DIR')) {
+        foreach (['favicon.png' => 'icon', 'logo.png' => 'logo'] as $file => $element) {
+            if (file_exists(ROOT_DIR . '/' . $file)) {
+                $xml->addChild($element, \Lamb\Theme\escape_xml(ROOT_URL . '/' . $file));
+            }
+        }
+    }
+
+    $self = $xml->addChild('atom:link');
+    $self->addAttribute('rel', 'self');
+    // Raw URL: addAttribute() escapes for us, so pre-escaping would double-encode
+    // a query-string `&`.
+    $self->addAttribute('href', $channel_link);
+
+    foreach (\Lamb\Websub\hub_urls($config) as $websub_hub) {
+        $hub = $xml->addChild('link');
+        $hub->addAttribute('rel', 'hub');
+        $hub->addAttribute('href', $websub_hub);
+    }
+
+    $author = $xml->addChild('author');
+    $author->addChild('name', \Lamb\Theme\escape_xml($config['author_name']));
+    $author->addChild('uri', ROOT_URL);
+
+    foreach ($data['posts'] as $bean) {
+        $entry = $xml->addChild('entry');
+        // addChild() does not escape, so a permalink carrying `&` would break the
+        // element — escape_xml() first (an empty <id/> made the whole feed invalid).
+        $entry->addChild('id', \Lamb\Theme\escape_xml(\Lamb\permalink($bean)));
+        $entry->addChild('title', \Lamb\Theme\escape_xml($bean->title ?: ''));
+        $entry->addChild('published', date(DATE_ATOM, strtotime($bean->created)));
+        $entry->addChild('updated', date(DATE_ATOM, strtotime($bean->updated)));
+
+        // Content via a DOM text node, not addChild(): addChild() escapes `<` but
+        // not `&`, stripping one layer off the stored (already safe-mode-escaped)
+        // HTML and handing subscribers live markup. A text node escapes both.
+        $content = $entry->addChild('content');
+        $content->addAttribute('type', 'html');
+        $content_html = \Lamb\normalize_utf8(
+            \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed)
+        );
+        $content_node = dom_import_simplexml($content);
+        $content_document = $content_node->ownerDocument;
+        if ($content_document !== null) {
+            $content_node->appendChild($content_document->createTextNode($content_html));
+        }
+
+        // in_reply_to is not author-only (a Micropub `create` token sets it,
+        // unvalidated), so a non-http(s) scheme must not be syndicated as a
+        // link. A post may carry several targets (#583, RFC 4685 allows
+        // multiple thr:in-reply-to elements per entry): each gets its own
+        // thr:in-reply-to and rel="related" link, independently guarded.
+        foreach (split_reply_targets((string) ($bean->in_reply_to ?? '')) as $target) {
+            if (!\Lamb\Http\is_valid_http_url($target)) {
+                continue;
+            }
+            $thread = $entry->addChild('in-reply-to', null, 'http://purl.org/syndication/thread/1.0');
+            $thread->addAttribute('ref', $target);
+            $thread->addAttribute('href', $target);
+            $thread->addAttribute('type', 'text/html');
+            $related = $entry->addChild('link');
+            $related->addAttribute('rel', 'related');
+            $related->addAttribute('href', $target);
+        }
+        $alt = $entry->addChild('link');
+        $alt->addAttribute('rel', 'alternate');
+        $alt->addAttribute('type', 'text/html');
+        $alt->addAttribute('href', \Lamb\permalink($bean));
+    }
+    echo $xml->asXML();
+}
+
+/**
+ * Renders the JSON Feed (jsonfeed.org 1.1) for the given view data.
+ *
+ * The JSON counterpart of {@see render_atom_feed}; see that docblock for why
+ * feeds are rendered in code rather than the theme layer.
+ *
+ * @param array<string, mixed> $data   Feed view data (posts, title, feed_url, updated).
+ * @param array<string, mixed> $config Site configuration.
+ * @return void
+ */
+function render_json_feed(array $data, array $config): void
+{
+    header('Content-type: application/feed+json');
+    $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed.json';
+
+    $feed = [
+        'version'       => 'https://jsonfeed.org/version/1.1',
+        'title'         => $data['title'] ?? $config['site_title'],
+        'home_page_url' => ROOT_URL,
+        'feed_url'      => $channel_link,
+        'authors'       => [
+            [
+                'name' => $config['author_name'] ?? '',
+                'url'  => ROOT_URL,
+            ],
+        ],
+        'items'         => [],
+    ];
+
+    $websub_hubs = \Lamb\Websub\hub_urls($config);
+    if ($websub_hubs !== []) {
+        $feed['hubs'] = array_map(
+            fn($hub) => ['type' => 'WebSub', 'url' => $hub],
+            $websub_hubs
+        );
+    }
+
+    foreach ($data['posts'] as $bean) {
+        $url = \Lamb\permalink($bean);
+        $item = [
+            'id'             => $url,
+            'url'            => $url,
+            // Reply context inside content_html as well as _microblog below: the
+            // extension is a micro.blog convention, the u-in-reply-to markup is
+            // what a plain reader shows and what mf2 consumers parse.
+            'content_html'   => \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed),
+            'date_published' => date(DATE_RFC3339, strtotime($bean->created)),
+            'date_modified'  => date(DATE_RFC3339, strtotime($bean->updated)),
+        ];
+        if (!empty($bean->title)) {
+            $item['title'] = $bean->title;
+        }
+        // Guarded like content_html above: the consumer links this, and
+        // in_reply_to is not author-only. `_microblog.in_reply_to_url` is a
+        // micro.blog convention for a single target, so a post with several
+        // (#583) reports only the first valid one here — every target still
+        // reaches the reader via content_html's u-in-reply-to links above.
+        foreach (split_reply_targets((string) ($bean->in_reply_to ?? '')) as $target) {
+            if (\Lamb\Http\is_valid_http_url($target)) {
+                $item['_microblog'] = ['in_reply_to_url' => $target];
+                break;
+            }
+        }
+        $feed['items'][] = $item;
+    }
+
+    // JSON_INVALID_UTF8_SUBSTITUTE: one invalid byte would otherwise make
+    // json_encode() return false for the whole document (an empty 200); degrade
+    // that character to U+FFFD instead.
+    echo json_encode(
+        $feed,
+        JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT | JSON_INVALID_UTF8_SUBSTITUTE
+    );
+}
+
+/**
+ * The active theme's own feed part path, or null when it does not ship one.
+ *
+ * The built-in renderers above are the default; a theme that still carries its
+ * own feed.php / feed_json.php keeps working for one release, via emit_feed(),
+ * with a deprecation notice. base no longer ships either part, so this returns
+ * a path only for a genuine third-party override.
+ *
+ * @param string $template 'feed' or 'feed_json'.
+ * @return string|null The override file path, or null.
+ */
+function feed_part_override(string $template): ?string
+{
+    if (!defined('THEME_DIR')) {
+        return null;
+    }
+    $path = THEME_DIR . \Lamb\Theme\sanitize_filename($template) . '.php';
+
+    return is_readable($path) ? $path : null;
+}
+
+/**
+ * Renders a feed with the given feed data and terminates the request.
  *
  * Shared tail of all four feed responders: merge the feed data into the global
  * view data, emit cache headers (with a conditional-GET 304 short-circuit),
- * upgrade stale posts, render, die.
+ * upgrade stale posts, render (built-in, or a deprecated theme override), die.
  *
  * @param array<string, mixed> $feed_data As built by get_feed_data()/get_tag_feed_data().
  * @param string      $template  Feed template name ('feed' or 'feed_json').
@@ -230,7 +425,7 @@ function sanitize_tag_arg(array $args): string
  */
 function emit_feed(array $feed_data, string $template, ?string $feed_url = null): never
 {
-    global $data;
+    global $data, $config;
 
     foreach ($feed_data as $key => $value) {
         $data[$key] = $value;
@@ -241,7 +436,25 @@ function emit_feed(array $feed_data, string $template, ?string $feed_url = null)
     feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
-    part($template, '');
+    $override = feed_part_override($template);
+    if ($override !== null) {
+        // The one developer-visible change in #684 (D7): a theme feed part still
+        // works, but only an override is now deprecated — omitting it inherits a
+        // correct feed instead of losing it.
+        @trigger_error(
+            sprintf(
+                "Theme feed part '%s.php' is deprecated and will be removed; feeds are rendered by "
+                . 'Lamb\\Response now. Remove the theme part to inherit the built-in feed.',
+                $template
+            ),
+            E_USER_DEPRECATED
+        );
+        require $override;
+    } elseif ($template === 'feed_json') {
+        render_json_feed($data, $config);
+    } else {
+        render_atom_feed($data, $config);
+    }
     die();
 }
 
