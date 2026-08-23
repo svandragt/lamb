@@ -17,8 +17,8 @@ use function Lamb\Import\prepare_imported_html;
 use function Lamb\Import\store_redirect;
 use function Lamb\Import\unwrap_element;
 use function Lamb\Post\body_has_tag;
-use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 
 // Known's RSS export borrows two fields from the WordPress WXR namespace
 // (wp:post_type, wp:status) without adopting the rest of WXR. Known has its
@@ -304,7 +304,7 @@ function normalize_known_html_in_dom(DOMDocument $dom): void
  * aren't duplicated.
  *
  * No outbound webmentions or WebSub pings are emitted: the call path stops at
- * finalize_and_store_post(), which never invokes notify_post_subscribers().
+ * save() without `notify`, so no post.published event fires.
  *
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
@@ -368,7 +368,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
         return $bean;
     }
 
-    finalize_and_store_post($bean);
+    save($bean, ['finalize_slug' => true]);
     store_source_redirects($item, $bean);
     return $bean;
 }

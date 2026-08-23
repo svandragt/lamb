@@ -851,7 +851,8 @@ function register_default_subscribers(): void
  * The context flags carry the behaviours each site used to express by omitting a
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
- *    into the front matter (the create paths' finalize_and_store_post()).
+ *    into the front matter (what every create path used to get from
+ *    finalize_and_store_post(), now superseded by this funnel).
  *  - `notify` — emit `post.published` after a successful store.
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).

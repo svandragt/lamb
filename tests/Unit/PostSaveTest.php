@@ -209,4 +209,23 @@ class PostSaveTest extends TestCase
 
         $this->assertCount(0, R::findAll('webmentionoutbox'));
     }
+
+    // Migrated from the now-deleted Lamb\notify_post_subscribers(), which fanned
+    // publish notifications out to both subsystems directly. That call is gone
+    // (#717); the same guarantee — a publish reaches both webmention and
+    // websub — now lives in register_default_subscribers() wiring both to
+    // post.published. The webmention half is exercised end-to-end above
+    // (testDefaultSubscribersQueueAWebmentionOnPublish); websub's own ping
+    // behaviour is unit-tested in WebsubTest, so this only has to prove both
+    // are actually on the post.published registry.
+    public function testRegisterDefaultSubscribersWiresBothWebmentionAndWebsubToPublish(): void
+    {
+        reset_subscribers();
+        register_default_subscribers();
+
+        $this->assertSame(
+            ['\Lamb\Webmention\enqueue_for_post', '\Lamb\Websub\ping_for_post'],
+            \Lamb\Post\event_subscribers()['post.published'] ?? []
+        );
+    }
 }
