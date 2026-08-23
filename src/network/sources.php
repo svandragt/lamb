@@ -152,7 +152,7 @@ class SafeFile extends SimplePieFile
  */
 function ensure_feed_cache(string $dir): string|false
 {
-    if (!is_dir($dir) && !mkdir($dir, 0775, true)) {
+    if (!is_dir($dir) && !mkdir($dir, 0775, true) && !is_dir($dir)) {
         return false;
     }
     return is_writable($dir) ? $dir : false;
