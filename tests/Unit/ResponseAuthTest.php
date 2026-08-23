@@ -255,6 +255,56 @@ class ResponseAuthTest extends TestCase
         $this->assertSame($before, \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now));
     }
 
+    // decode_throttle_state — a corrupt row must fail open, not lock the author out
+
+    public function testDecodeThrottleStateParsesAWellFormedCounter(): void
+    {
+        $this->assertSame(
+            ['count' => 3, 'expires' => 1000],
+            \Lamb\Response\decode_throttle_state('3:1000')
+        );
+    }
+
+    /**
+     * @dataProvider corruptThrottleStateProvider
+     */
+    public function testDecodeThrottleStateFailsOpenOnCorruptInput(mixed $raw): void
+    {
+        $this->assertSame(
+            ['count' => 0, 'expires' => 0],
+            \Lamb\Response\decode_throttle_state($raw)
+        );
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function corruptThrottleStateProvider(): array
+    {
+        return [
+            'not a string or int' => [['count' => 5, 'expires' => 9999999999]],
+            'null'                => [null],
+            'boolean'             => [true],
+            'missing a part'      => ['5'],
+            'too many parts'      => ['5:1000:extra'],
+            'non-numeric count'   => ['abc:1000'],
+            'non-numeric expiry'  => ['5:abc'],
+            'empty string'        => [''],
+        ];
+    }
+
+    /**
+     * A corrupt throttle row must never block a login — decode_throttle_state()
+     * falling open to count=0 has to actually reach throttle_retry_after() and
+     * come out as "go ahead", not merely decode to a harmless-looking shape.
+     */
+    public function testCorruptThrottleStateNeverBlocksAnAttempt(): void
+    {
+        $state = \Lamb\Response\decode_throttle_state('not-a-valid-counter');
+
+        $this->assertSame(0, \Lamb\Response\throttle_retry_after($state, time()));
+    }
+
     // local_redirect_target — the post-login redirect must stay on this site
 
     public function testLocalRedirectTargetAllowsLocalPath(): void
