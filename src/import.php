@@ -9,9 +9,9 @@ use League\HTMLToMarkdown\HtmlConverter;
 use RedBeanPHP\R;
 use RuntimeException;
 use SimpleXMLElement;
-use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\fetch_guarded;
+use function Lamb\Post\build_matter;
 use function Lamb\Response\asset_url;
 
 /**
@@ -359,11 +359,12 @@ function build_post_body(string $title, string $markdown_body, array $tags, stri
     if ($slug !== '') {
         $front['slug'] = $slug;
     }
-    if ($front === []) {
-        return $body;
-    }
-    $matter = rtrim(Yaml::dump($front), "\n");
-    return "---\n" . $matter . "\n---\n\n" . $body;
+
+    // build_matter() is the single place a front-matter block is assembled from
+    // a key/value map. The leading "\n" reproduces the blank line this importer
+    // has always kept between the fence and the body; an empty map returns the
+    // content verbatim (no fence).
+    return build_matter($front, $front === [] ? $body : "\n" . $body);
 }
 
 /**

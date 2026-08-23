@@ -162,6 +162,24 @@ class NetworkFeedTest extends TestCase
         $this->assertSame('feed exploded', $result['error']);
     }
 
+    public function testCrawlFeedGuardedStampsLastAttemptWhenTheCrawlerThrows(): void
+    {
+        // A throw before begin_crawl() (a SimplePie init() blow-up fetches before
+        // the outcome recorder stamps last_attempt) must still advance the
+        // attempt, or the per-feed 30-minute gate never engages and the feed is
+        // re-attempted every run (#705).
+        $name = 'throwing';
+        $url  = 'https://example.com/throwing';
+
+        crawl_feed_guarded($name, $url, function (string $n, string $u): array {
+            throw new \RuntimeException('init blew up before begin_crawl');
+        });
+
+        $status = R::findOne('feedstatus', ' feedkey = ? ', [md5($name . $url)]);
+        $this->assertNotNull($status);
+        $this->assertGreaterThan(0, (int) $status->last_attempt);
+    }
+
     // ensure_feed_cache
 
     public function testEnsureFeedCacheCreatesMissingDirectory(): void

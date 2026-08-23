@@ -259,6 +259,13 @@ function crawl_feed_guarded(string $name, string $url, ?callable $crawler = null
     try {
         return $crawler($name, $url);
     } catch (\Throwable $e) {
+        // Stamp the attempt so a feed that throws before begin_crawl() runs backs
+        // off on the per-feed gate instead of being re-attempted every run. The
+        // Atom path fetches inside init_simplepie_feed() *before* record_feed_crawl()
+        // stamps last_attempt, so a SimplePie init() throw would otherwise leave
+        // the feed permanently due (#705). begin_crawl() is idempotent, so a throw
+        // after it already ran just re-stamps.
+        begin_crawl($name, $url);
         return ['ok' => false, 'items' => 0, 'error' => $e->getMessage()];
     }
 }
