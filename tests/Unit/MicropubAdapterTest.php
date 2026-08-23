@@ -9,6 +9,8 @@ use Lamb\Micropub\LambMicropubAdapter;
 use Tests\Support\StubMicropubAdapter;
 
 use function Lamb\Micropub\has_micropub_scope;
+use function Lamb\Post\on;
+use function Lamb\Post\reset_subscribers;
 
 class MicropubAdapterTest extends TestCase
 {
@@ -2624,5 +2626,57 @@ class MicropubAdapterTest extends TestCase
         $renamed = R::load('post', $post->id);
         $this->assertSame('original', $renamed->slug);
         $this->assertSame('Renamed Entirely', $renamed->title);
+    }
+
+    // --- Post\save() event matrix (#717) ---
+    // Both callbacks now route through Post\save() instead of calling
+    // finalize_and_store_post()/notify_post_subscribers() directly, so this
+    // proves the funnel's events fire the same way through the Micropub seam.
+
+    public function testCreateCallbackEmitsCreatedThenPublished(): void
+    {
+        reset_subscribers();
+        $events = [];
+        foreach (['post.created', 'post.updated', 'post.published'] as $event) {
+            on($event, function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ['Event matrix: create']],
+        ]);
+
+        reset_subscribers();
+        $this->assertSame(['post.created', 'post.published'], $events);
+    }
+
+    public function testUpdateCallbackEmitsUpdatedThenPublished(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Event matrix: original';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        reset_subscribers();
+        $events = [];
+        foreach (['post.created', 'post.updated', 'post.published'] as $event) {
+            on($event, function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Event matrix: updated']]]
+        );
+
+        reset_subscribers();
+        $this->assertSame(['post.updated', 'post.published'], $events);
     }
 }

@@ -8,7 +8,6 @@ use Nyholm\Psr7\Stream;
 use Nyholm\Psr7\UploadedFile;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
-use RedBeanPHP\R;
 use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
@@ -17,19 +16,17 @@ use function Lamb\get_tags;
 use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
 use function Lamb\normalize_datetime;
-use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\remove_body_tags;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
-use function Lamb\Post\finalize_and_store_post;
-use function Lamb\Post\finalize_slug;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\matter_url_list;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 use function Lamb\Post\set_frontmatter_key;
 use function Lamb\Post\set_reply_to;
 use function Lamb\Post\split_frontmatter;
@@ -393,11 +390,9 @@ class LambMicropubAdapter extends MicropubAdapter
         $needs_preview = $bean->draft == 1 || is_scheduled($bean);
         \Lamb\ensure_preview_token($bean);
 
-        // Stores and pins the final slug, which must be settled before the
-        // Location permalink is computed below.
-        finalize_and_store_post($bean);
-
-        notify_post_subscribers($bean);
+        // Stores, pins the final slug, and emits post.published — the slug must
+        // be settled before the Location permalink is computed below.
+        save($bean, ['finalize_slug' => true, 'notify' => true]);
 
         $location = permalink($bean);
         if ($needs_preview) {
@@ -561,12 +556,10 @@ class LambMicropubAdapter extends MicropubAdapter
         // keeps it untouched (pinSlug() writes it into the front matter before
         // a rename): moving a live permalink — the URL the client just used to
         // address the post — is worse than leaving a pre-existing duplicate be.
-        if ($slug_before === '') {
-            finalize_slug($bean);
-        }
-        R::store($bean);
-
-        notify_post_subscribers($bean);
+        // Captured here, before save(), since it depends on $slug_before (the
+        // pre-edit state) rather than anything the store changes.
+        $needs_slug = $slug_before === '';
+        save($bean, ['finalize_slug' => $needs_slug, 'notify' => true]);
 
         return true;
     }
