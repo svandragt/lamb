@@ -191,6 +191,20 @@ class ReplyContextTest extends TestCase
         $this->assertSame('', the_reply_context($bean));
     }
 
+    public function testReplyContextDoesNotEmitSupersededRelInReplyTo(): void
+    {
+        // rel="in-reply-to" is superseded by the u-in-reply-to h-entry property
+        // and is not a registered HTML link type — validators flag it and nothing
+        // reads it that does not already read the class (#585).
+        $bean = R::dispense('post');
+        $bean->in_reply_to = 'https://other.example/post';
+
+        $html = the_reply_context($bean);
+
+        $this->assertStringContainsString('u-in-reply-to', $html);
+        $this->assertStringNotContainsString('rel="in-reply-to"', $html);
+    }
+
     // set_reply_to helper ----------------------------------------------------
 
     public function testSetReplyToAddsFrontMatterBlockToPlainBody(): void

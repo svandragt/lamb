@@ -68,41 +68,39 @@ function anchor_headings(string $html, int $top): string
 
 
 /**
- * Renders the reply-context line for a post that is a reply to one or more
- * URLs, or '' when the post has no `in_reply_to` target. Each target gets its
- * own link carrying the `u-in-reply-to` microformats2 class, so Webmention
- * receivers categorise every mention as a reply (mf2 `u-in-reply-to` may
- * repeat, and RFC 4685 allows several `thr:in-reply-to` elements — #583).
+ * Renders the reply-context line for a post that is a reply to another URL,
+ * or '' when the post has no `in_reply_to` target. The link carries the
+ * `u-in-reply-to` microformats2 class so Webmention receivers categorise the
+ * mention as a reply.
  *
  * `in_reply_to` is not author-only (a Micropub client holding just `create`
  * scope can set it) and this markup is also served inside the Atom/JSON
  * feeds' content_html, so a target that isn't a genuine http(s) URL is shown
- * as text rather than linked — independently per target, so one bad scheme
- * among several valid targets only loses its own link. See theme/README.md
- * ("Escaping is per-context, not per-file").
+ * as text rather than linked. See theme/README.md ("Escaping is per-context,
+ * not per-file").
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return string
  */
 function the_reply_context(\RedBeanPHP\OODBBean $bean): string
 {
-    $targets = \Lamb\Post\split_reply_targets((string) ($bean->in_reply_to ?? ''));
-    if ($targets === []) {
+    $url = trim((string) ($bean->in_reply_to ?? ''));
+    if ($url === '') {
         return '';
     }
 
-    $parts = [];
-    foreach ($targets as $url) {
-        if (!\Lamb\Http\is_valid_http_url($url)) {
-            $parts[] = escape($url);
-            continue;
-        }
-        $label = parse_url($url, PHP_URL_HOST) ?: $url;
-        $parts[] = '<a class="u-in-reply-to" rel="in-reply-to" href="'
-            . escape($url) . '">' . escape($label) . '</a>';
+    if (!\Lamb\Http\is_valid_http_url($url)) {
+        return '<p class="reply-context">In reply to ' . escape($url) . '</p>';
     }
 
-    return '<p class="reply-context">In reply to ' . implode(', ', $parts) . '</p>';
+    $label = parse_url($url, PHP_URL_HOST) ?: $url;
+
+    // No rel="in-reply-to": the rel-in-reply-to proposal is superseded by the
+    // u-in-reply-to h-entry property (which this already carries), the value is
+    // not a registered HTML link type, and nothing consumes it that does not
+    // already read u-in-reply-to. See #585.
+    return '<p class="reply-context">In reply to <a class="u-in-reply-to" href="'
+        . escape($url) . '">' . escape($label) . '</a></p>';
 }
 
 /**

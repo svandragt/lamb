@@ -12,6 +12,7 @@ require '../vendor/autoload.php';
 $data_dir = Bootstrap\data_dir();
 Bootstrap\bootstrap_db($data_dir);
 Bootstrap\bootstrap_session($data_dir);
+Post\register_default_subscribers();
 
 $config = Config\load();
 Config\apply_timezone($config);

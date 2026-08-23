@@ -516,25 +516,29 @@ function build_matter(array $matter, string $content): string
 }
 
 /**
- * Sets a single key in a body's leading YAML front-matter block, leaving all
- * other front matter intact.
+ * Sets a single key in a body's leading YAML front-matter block, without
+ * creating a block and without churning an unchanged save.
  *
- * An existing `key:` line is updated in place (preserving the original key text
- * and indentation, rewriting only the value with a single separating space).
- * When the block has no such line and $append is true, an explicit line is
- * appended to the block. Bodies without a leading front-matter block, or whose
- * key already holds the target value, are returned unchanged (no cosmetic
- * churn).
+ * A thin no-churn/no-create wrapper over set_frontmatter_key(), which is the one
+ * engine that mutates a block (splitting and rebuilding through the YAML writer).
+ * set_matter() adds two guarantees the every-save callers (persist_slug(),
+ * persist_resolved_created()) rely on and that the engine deliberately does not
+ * make:
  *
- * The value is rendered through the YAML writer rather than interpolated, for
- * the reason build_matter() already documents: a slug carrying a colon
- * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
- * *whole* front-matter block — title, draft, created — silently vanished on the
- * next read; one carrying a `#` had everything from it treated as a comment.
- * finalize_slug() reaches both by appending an id suffix to an explicit slug
- * that collides or names a reserved route, and then pinning the result here.
- * Yaml::dump() already quotes anything that needs it, including the
- * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ * - A body with no leading front-matter block is returned unchanged, rather than
+ *   gaining one. set_frontmatter_key() would add a block; a status update or a
+ *   feed item without front matter must not sprout a `slug:`/`created:` fence.
+ * - When the key's line already holds this value, the body is returned
+ *   byte-for-byte — including its CRLF line endings. A browser submits a
+ *   <textarea> with CRLF, so most bodies reaching here carry them; the `\r` must
+ *   not make an unchanged value differ and re-store the post on every save.
+ *
+ * The value only reaches set_frontmatter_key() when it actually changes, so the
+ * engine's rebuild (which quotes anything YAML needs, and cannot leave a stale
+ * list behind under a scalar) happens once per real change, never as cosmetic
+ * churn. finalize_slug() reaches this by pinning an id-suffixed slug that
+ * collides or names a reserved route; apply_scheduling() by pinning a resolved
+ * `created` date.
  *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
@@ -546,45 +550,26 @@ function build_matter(array $matter, string $content): string
 function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+    [$yaml] = split_frontmatter($body);
+    if ($yaml === '') {
         return $body;
     }
 
-    $rendered = Yaml::dump($value);
-    // A browser submits a <textarea> with CRLF line endings, so most bodies
-    // reaching here carry them. The `\r` is matched and carried over rather
-    // than swept into the value: as part of $line[2] it made $current differ
-    // from $value on every save, so the no-churn contract above never held for
-    // an edit-form body and each save rewrote the line (and re-stored the post).
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
-        function (array $line) use ($value, $rendered): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $value) {
-                return $line[0];
-            }
-            return $line[1] . ' ' . $rendered . $line[3];
-        },
-        $m[2],
-        1,
-        $count
-    );
-    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
-    // on a long block). Concatenating that would drop the entire YAML block, so
-    // leave the body alone instead.
-    if ($new_yaml === null) {
-        return $body;
-    }
-
-    if ($count === 0) {
-        if (!$append) {
+    // Read-only probe for the key's column-zero line, in either spelling
+    // (parse_matter() folds hyphen/underscore together). This decides no-churn
+    // and, for $append === false, whether the key is present — matching the
+    // engine's own column-zero, quote-trimming view of the value so an unchanged
+    // save returns the body verbatim.
+    $pattern = '/^' . str_replace('\-', '[-_]', preg_quote($key, '/')) . '[ \t]*:[ \t]*(.*?)[ \t]*\r?$/mi';
+    if (preg_match($pattern, $yaml, $m) === 1) {
+        if (trim($m[1], " \t'\"") === $value) {
             return $body;
         }
-        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
-        $new_yaml = $m[2] . "$key: $rendered" . $eol;
+    } elseif (!$append) {
+        return $body;
     }
 
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_frontmatter_key($body, $key, $value);
 }
 
 /**
@@ -771,6 +756,139 @@ function finalize_and_store_post(OODBBean $bean): void
     R::store($bean);
     if (finalize_slug($bean)) {
         R::store($bean);
+    }
+}
+
+/**
+ * The registry of post-lifecycle event subscribers, keyed by event name.
+ *
+ * A by-reference accessor so on() and reset_subscribers() mutate the one static
+ * array emit() reads. See save() for the events and the funnel that emits them.
+ *
+ * @return array<string, list<callable>> The mutable subscriber registry.
+ */
+function &event_subscribers(): array
+{
+    static $subscribers = [];
+
+    return $subscribers;
+}
+
+/**
+ * Registers a subscriber for a post-lifecycle event.
+ *
+ * Events are emitted by save(): `post.created`, `post.updated`, `post.published`
+ * (and, as more write sites convert, `post.deleted` and `post.restored`). A
+ * subscriber is called with the stored bean.
+ *
+ * @param string   $event      The event name to subscribe to.
+ * @param callable $subscriber fn(OODBBean $bean): void.
+ * @return void
+ */
+function on(string $event, callable $subscriber): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers[$event][] = $subscriber;
+}
+
+/**
+ * Calls every subscriber registered for an event, in registration order.
+ *
+ * @param string   $event The event name to emit.
+ * @param OODBBean $bean  The stored post bean to hand each subscriber.
+ * @return void
+ */
+function emit(string $event, OODBBean $bean): void
+{
+    foreach (event_subscribers()[$event] ?? [] as $subscriber) {
+        $subscriber($bean);
+    }
+}
+
+/**
+ * Clears the subscriber registry. For test isolation between cases that each
+ * register their own subscribers; production wiring runs once per request.
+ *
+ * @return void
+ */
+function reset_subscribers(): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers = [];
+}
+
+/**
+ * Wires the subscribers every request needs at the seam.
+ *
+ * Publication is an event: notify-requested saves emit `post.published`, and the
+ * two notification subsystems subscribe here rather than each re-deriving
+ * "published" from a different signal. Each callee self-filters ineligible posts
+ * (drafts, feed items, future-dated), so subscribing them unconditionally is
+ * safe. Called once from the request bootstrap (src/index.php).
+ *
+ * @return void
+ */
+function register_default_subscribers(): void
+{
+    on('post.published', '\Lamb\Webmention\enqueue_for_post');
+    on('post.published', '\Lamb\Websub\ping_for_post');
+}
+
+/**
+ * The single funnel every post write goes through.
+ *
+ * Stores the bean and emits the lifecycle events that used to be a convention
+ * spread across the write sites: `post.created` for a new row or `post.updated`
+ * for an existing one, and `post.published` when the caller asks for
+ * notification (subscribers registered by register_default_subscribers() then
+ * queue webmentions and ping the WebSub hubs). Moving notification onto the
+ * funnel's success path makes #685's "never notify a failed write" fix
+ * structural rather than a per-site habit.
+ *
+ * The context flags carry the behaviours each site used to express by omitting a
+ * call:
+ *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
+ *    into the front matter (the create paths' finalize_and_store_post()).
+ *  - `notify` — emit `post.published` after a successful store.
+ *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
+ *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
+ *  - `redirect_on_slug_change` — reserved for the edit-site conversion, which
+ *    also has the pre-edit slug this funnel does not; not yet honoured.
+ *
+ * The store is not caught here: each call site flashes its own message and
+ * decides what to do on failure, so the RedException\SQL propagates.
+ *
+ * @param OODBBean $bean A populated post bean.
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool} $context
+ * @return void
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ */
+function save(OODBBean $bean, array $context = []): void
+{
+    $context += [
+        'finalize_slug'           => false,
+        'notify'                  => false,
+        'lock_if_feed_sourced'    => false,
+        'redirect_on_slug_change' => false,
+    ];
+
+    $is_new = empty($bean->id);
+
+    // Before the store: feed_locked is a column on the row being written.
+    if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
+        $bean->feed_locked = 1;
+    }
+
+    R::store($bean);
+    // finalize_slug() needs the minted id for any dedup suffix, so it runs after
+    // the first store and re-stores only when it changed the slug or body.
+    if ($context['finalize_slug'] && finalize_slug($bean)) {
+        R::store($bean);
+    }
+
+    emit($is_new ? 'post.created' : 'post.updated', $bean);
+    if ($context['notify']) {
+        emit('post.published', $bean);
     }
 }
 
