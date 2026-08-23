@@ -802,6 +802,31 @@ function is_scheduled(OODBBean $post): bool
 }
 
 /**
+ * Returns true when a post is a draft. The in-memory counterpart to
+ * SQL_NOT_DRAFT: an unset column is not a draft, so a loaded bean and a SQL
+ * listing agree on the definition.
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_draft(OODBBean $post): bool
+{
+    return ($post->draft ?? null) == 1;
+}
+
+/**
+ * Returns true when a post is soft-deleted. The in-memory counterpart to
+ * SQL_NOT_DELETED: an unset column is not deleted, matching the SQL listings.
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_deleted(OODBBean $post): bool
+{
+    return ($post->deleted ?? null) == 1;
+}
+
+/**
  * Returns true when a post may be shown for a direct permalink request
  * (/status/<id> or a slug URL).
  *
@@ -816,13 +841,13 @@ function is_scheduled(OODBBean $post): bool
  */
 function is_viewable(OODBBean $post): bool
 {
-    if (empty($post->id) || $post->deleted == 1) {
+    if (empty($post->id) || is_deleted($post)) {
         return false;
     }
     if (isset($_SESSION[SESSION_LOGIN])) {
         return true;
     }
-    return $post->draft != 1 && !is_scheduled($post);
+    return !is_draft($post) && !is_scheduled($post);
 }
 
 /**
@@ -842,7 +867,7 @@ function is_viewable(OODBBean $post): bool
  */
 function is_publicly_visible(OODBBean $post): bool
 {
-    if (empty($post->id) || $post->deleted == 1 || $post->draft == 1) {
+    if (empty($post->id) || is_deleted($post) || is_draft($post)) {
         return false;
     }
     return !is_scheduled($post);
