@@ -246,6 +246,10 @@ function soft_delete_post(OODBBean $post): void
     // Re-send any webmentions this post previously sent so receivers re-fetch
     // the now-gone source and drop the displayed mention (#331).
     \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
+
+    // Trashing can remove the post currently holding MAX(updated); bump the
+    // monotonic mark so latest_content_timestamp() can't fall backwards (#669).
+    bump_content_timestamp();
 }
 
 /**
@@ -264,6 +268,10 @@ function restore_post(OODBBean $post): void
     // and re-queue any it already delivered so receivers re-display the mention
     // (#331).
     \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
+
+    // A restore is a content mutation too; keep the monotonic mark moving
+    // forward so latest_content_timestamp() reflects it (#669).
+    bump_content_timestamp();
 }
 
 /**
@@ -336,6 +344,10 @@ function redirect_edited(): void
 
         return;
     }
+
+    // An edit is a content change: advance the monotonic mark so the 304
+    // validator does not serve a stale cache for the just-edited post (#669).
+    bump_content_timestamp();
 
     $new_slug = $bean->slug;
     if (!empty($old_slug) && $old_slug !== $new_slug) {
