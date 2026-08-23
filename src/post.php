@@ -757,6 +757,9 @@ function finalize_and_store_post(OODBBean $bean): void
     if (finalize_slug($bean)) {
         R::store($bean);
     }
+    // Funnel point for every create/edit path: bumps the monotonic content
+    // high-water mark latest_content_timestamp() reads (#669).
+    \Lamb\Response\bump_content_timestamp();
 }
 
 /**
