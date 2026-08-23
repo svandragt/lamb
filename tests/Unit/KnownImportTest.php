@@ -22,9 +22,8 @@ use function Lamb\Theme\link_source;
 /**
  * Covers parsing, Known-specific DOM normalisation, body assembly and
  * idempotent import for the Known CMS importer. Outbound webmentions/WebSub
- * pings are NOT triggered because import_item() uses the low-level pipeline
- * (populate_bean → finalize_and_store_post) which never calls
- * notify_post_subscribers().
+ * pings are NOT triggered because import_item() calls save() without
+ * `notify`, so no post.published event fires.
  *
  * The fixture below is minimised from the real ~445-item /home/sander/Downloads/export.rss
  * export: a photo post (data-gallery anchor + img + duplicate enclosure), a

@@ -8,9 +8,9 @@ use RedBeanPHP\RedException\SQL;
 use SimplePie\Item as SimplePieItem;
 
 use function Lamb\Post\build_matter;
-use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 
 /**
  * Decides whether a single feed item is created, updated, or skipped, keyed on
@@ -141,8 +141,9 @@ function create_item(SimplePieItem|JsonFeedItem $item, string $name): bool
     try {
         // Reserved-route and duplicate slugs (e.g. two same-titled items in
         // one feed) get an id suffix; the final slug is pinned into the
-        // body's front matter so cron updates re-derive it unchanged.
-        finalize_and_store_post($bean);
+        // body's front matter so cron updates re-derive it unchanged. No
+        // notify: ingested feed content must never fire webmention/websub.
+        save($bean, ['finalize_slug' => true]);
     } catch (SQL) {
         return false;
     }

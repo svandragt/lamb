@@ -135,6 +135,53 @@ class PostSaveTest extends TestCase
         $this->assertEmpty($bean->feed_locked);
     }
 
+    public function testRedirectOnSlugChangeRecordsARedirectFromTheOldSlug(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+        $bean = populate_bean("---\nslug: old\n---\nContent.");
+        R::store($bean);
+        $bean->slug = 'new';
+
+        save($bean, ['redirect_on_slug_change' => true, 'old_slug' => 'old']);
+
+        $redirect = R::findOne('redirect', ' from_slug = ? ', ['old']);
+        $this->assertNotNull($redirect);
+        $this->assertSame('/new', $redirect->to_url);
+    }
+
+    public function testRedirectOnSlugChangeRecordsNothingWhenTheSlugIsUnchanged(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+        $bean = populate_bean("---\nslug: same\n---\nContent.");
+        R::store($bean);
+
+        save($bean, ['redirect_on_slug_change' => true, 'old_slug' => 'same']);
+
+        $this->assertCount(0, R::findAll('redirect'));
+    }
+
+    public function testRedirectOnSlugChangeRecordsNothingWhenOldSlugIsEmpty(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+        $bean = populate_bean("---\nslug: new\n---\nContent.");
+
+        save($bean, ['redirect_on_slug_change' => true, 'old_slug' => '']);
+
+        $this->assertCount(0, R::findAll('redirect'));
+    }
+
+    public function testWithoutRedirectOnSlugChangeNoRedirectIsRecordedEvenWhenTheSlugChanged(): void
+    {
+        R::exec('DELETE FROM redirect WHERE 1');
+        $bean = populate_bean("---\nslug: old\n---\nContent.");
+        R::store($bean);
+        $bean->slug = 'new';
+
+        save($bean, ['old_slug' => 'old']);
+
+        $this->assertCount(0, R::findAll('redirect'));
+    }
+
     public function testDefaultSubscribersQueueAWebmentionOnPublish(): void
     {
         // Proves the real wiring, not just the spy: register_default_subscribers()
@@ -161,5 +208,24 @@ class PostSaveTest extends TestCase
         save($bean);
 
         $this->assertCount(0, R::findAll('webmentionoutbox'));
+    }
+
+    // Migrated from the now-deleted Lamb\notify_post_subscribers(), which fanned
+    // publish notifications out to both subsystems directly. That call is gone
+    // (#717); the same guarantee — a publish reaches both webmention and
+    // websub — now lives in register_default_subscribers() wiring both to
+    // post.published. The webmention half is exercised end-to-end above
+    // (testDefaultSubscribersQueueAWebmentionOnPublish); websub's own ping
+    // behaviour is unit-tested in WebsubTest, so this only has to prove both
+    // are actually on the post.published registry.
+    public function testRegisterDefaultSubscribersWiresBothWebmentionAndWebsubToPublish(): void
+    {
+        reset_subscribers();
+        register_default_subscribers();
+
+        $this->assertSame(
+            ['\Lamb\Webmention\enqueue_for_post', '\Lamb\Websub\ping_for_post'],
+            \Lamb\Post\event_subscribers()['post.published'] ?? []
+        );
     }
 }

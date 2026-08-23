@@ -851,18 +851,21 @@ function register_default_subscribers(): void
  * The context flags carry the behaviours each site used to express by omitting a
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
- *    into the front matter (the create paths' finalize_and_store_post()).
+ *    into the front matter (what every create path used to get from
+ *    finalize_and_store_post(), now superseded by this funnel).
  *  - `notify` — emit `post.published` after a successful store.
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
- *  - `redirect_on_slug_change` — reserved for the edit-site conversion, which
- *    also has the pre-edit slug this funnel does not; not yet honoured.
+ *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
+ *    different from `old_slug`, record a 301 from `old_slug` to the new one
+ *    (the edit form's store_slug_change_redirect() call). The funnel has no
+ *    pre-edit slug of its own, so the caller passes it in.
  *
  * The store is not caught here: each call site flashes its own message and
  * decides what to do on failure, so the RedException\SQL propagates.
  *
  * @param OODBBean $bean A populated post bean.
- * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool} $context
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
  * @return void
  * @throws \RedBeanPHP\RedException\SQL When the store fails.
  */
@@ -873,6 +876,7 @@ function save(OODBBean $bean, array $context = []): void
         'notify'                  => false,
         'lock_if_feed_sourced'    => false,
         'redirect_on_slug_change' => false,
+        'old_slug'                => '',
     ];
 
     $is_new = empty($bean->id);
@@ -894,6 +898,12 @@ function save(OODBBean $bean, array $context = []): void
     // not call (#669). Without this, posts saved through save() (the #692 site
     // and every #717 conversion) would never move latest_content_timestamp().
     \Lamb\Response\bump_content_timestamp();
+
+    // On the store's success path only (#685): a failed store must never leave
+    // a 301 pointing at content that was never saved.
+    if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
+        \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
+    }
 
     emit($is_new ? 'post.created' : 'post.updated', $bean);
     if ($context['notify']) {

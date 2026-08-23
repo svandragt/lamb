@@ -354,7 +354,7 @@ function import_post(array $item, callable $_downloader, bool $dry_run = false, 
 
     $bean = Post\populate_bean((string) ($item['body'] ?? ''), null, null, $bean);
     apply_manifest_state($bean, $item);
-    Post\finalize_and_store_post($bean);
+    Post\save($bean, ['finalize_slug' => true]);
 
     return $bean;
 }

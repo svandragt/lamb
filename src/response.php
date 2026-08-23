@@ -55,7 +55,7 @@ function get_cookie_options(int $expires): array
  * holding that max gets trashed, which could serve a stale 304 to a
  * date-only cache/client for content that has since changed. This mark is
  * bumped forward-only by the content-mutation chokepoints instead
- * (finalize_and_store_post(), soft_delete_post(), restore_post()), so trash/
+ * (the save() write funnel, soft_delete_post(), restore_post()), so trash/
  * restore can never pull the validator backwards.
  */
 const CONTENT_MODIFIED_TS = 'content_modified_ts';

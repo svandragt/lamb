@@ -13,8 +13,8 @@ use function Lamb\Import\parse_rss_file;
 use function Lamb\Import\parse_rss_string;
 use function Lamb\Import\prepare_imported_html;
 use function Lamb\Import\store_redirect;
-use function Lamb\Post\finalize_and_store_post;
 use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 
 const WXR_NS = 'http://wordpress.org/export/1.2/';
 const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
@@ -200,7 +200,7 @@ function html_to_markdown(string $html): string
  * original import is lost.
  *
  * No outbound webmentions or WebSub pings are emitted: the call path stops at
- * finalize_and_store_post(), which never invokes notify_post_subscribers().
+ * save() without `notify`, so no post.published event fires.
  *
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
@@ -246,7 +246,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
         return $bean;
     }
 
-    finalize_and_store_post($bean);
+    save($bean, ['finalize_slug' => true]);
     store_source_redirect($item, $bean);
     return $bean;
 }
