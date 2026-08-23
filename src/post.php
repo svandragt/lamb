@@ -889,6 +889,12 @@ function save(OODBBean $bean, array $context = []): void
         R::store($bean);
     }
 
+    // save() is the write funnel, so the content high-water mark must advance
+    // here too — not only in finalize_and_store_post(), which the funnel does
+    // not call (#669). Without this, posts saved through save() (the #692 site
+    // and every #717 conversion) would never move latest_content_timestamp().
+    \Lamb\Response\bump_content_timestamp();
+
     emit($is_new ? 'post.created' : 'post.updated', $bean);
     if ($context['notify']) {
         emit('post.published', $bean);

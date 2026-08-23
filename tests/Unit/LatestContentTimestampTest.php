@@ -8,6 +8,8 @@ use RedBeanPHP\R;
 
 use function Lamb\Config\save_ini_text;
 use function Lamb\get_option;
+use function Lamb\Post\reset_subscribers;
+use function Lamb\Post\save;
 use function Lamb\Response\bump_content_timestamp;
 use function Lamb\Response\latest_content_timestamp;
 use function Lamb\Response\restore_post;
@@ -132,5 +134,25 @@ class LatestContentTimestampTest extends TestCase
         bump_content_timestamp();
 
         $this->assertGreaterThan($future, latest_content_timestamp());
+    }
+
+    /**
+     * save() is the write funnel (#692) and does not route through
+     * finalize_and_store_post(), so it must advance the mark itself. Without
+     * this, the existing checkbox-toggle site and every #717 conversion would
+     * write a post without moving the validator, serving stale 304s.
+     */
+    public function testSaveAdvancesTheMark(): void
+    {
+        reset_subscribers();
+        $past = strtotime('2000-01-01 00:00:00');
+        set_option(get_option('content_modified_ts', 0), $past);
+
+        $post = R::dispense('post');
+        $post->draft = 0;
+        $post->deleted = 0;
+        save($post);
+
+        $this->assertGreaterThan($past, latest_content_timestamp());
     }
 }
