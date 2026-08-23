@@ -144,7 +144,7 @@ register_shutdown_function(function () {
     ]));
 });
 
-\\Lamb\\Micropub\\respond_micropub_media(\$adapter);
+\\Lamb\\Micropub\\respond_micropub_media(null, \$adapter);
 PHP;
     }
 
