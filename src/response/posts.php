@@ -13,12 +13,10 @@ use RedBeanPHP\RedException\SQL;
 
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\Http\request_string;
-use function Lamb\notify_post_subscribers;
 use function Lamb\parse_bean;
-use function Lamb\Post\finalize_and_store_post;
-use function Lamb\Post\finalize_slug;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\sanitize_explicit_slug;
+use function Lamb\Post\save;
 use function Lamb\Post\toggle_rendered_checkbox;
 use function Lamb\Route\is_reserved_route;
 
@@ -46,10 +44,10 @@ function redirect_created(): void
     \Lamb\ensure_preview_token($bean);
 
     try {
-        finalize_and_store_post($bean);
+        save($bean, ['finalize_slug' => true, 'notify' => true]);
     } catch (SQL $e) {
         // Return, matching redirect_edited(): everything below is a consequence
-        // of the create having been saved. finalize_and_store_post() stores
+        // of the create having been saved. save()'s finalize_slug step stores
         // twice, and if the second store throws (a locked SQLite file while
         // /_cron holds it is the realistic case) the bean already has an id, so
         // falling through announced the unsaved post to webmention receivers and
@@ -64,7 +62,6 @@ function redirect_created(): void
         delete_redirect_for_slug($bean->slug);
         warn_if_manual_redirect((string) $bean->slug);
     }
-    notify_post_subscribers($bean);
     redirect_uri('/');
 }
 
@@ -323,16 +320,20 @@ function redirect_edited(): void
         return;
     }
 
-    // A slug claimed by another post gets an id suffix, and the final slug is
-    // pinned into the body's front matter so the edit form shows it.
-    finalize_slug($bean);
-
-    // Editing a feed-sourced post through the form marks it author-owned, so
-    // later crawls stop overwriting it (they still never duplicate it).
-    lock_if_feed_sourced($bean);
-
     try {
-        R::store($bean);
+        // finalize_slug: a slug claimed by another post gets an id suffix,
+        // pinned into the body's front matter so the edit form shows it.
+        // lock_if_feed_sourced: editing a feed-sourced post through the form
+        // marks it author-owned, so later crawls stop overwriting it.
+        // redirect_on_slug_change/old_slug: records the 301 from the pre-edit
+        // slug once the store succeeds.
+        save($bean, [
+            'finalize_slug'           => true,
+            'notify'                  => true,
+            'lock_if_feed_sourced'    => true,
+            'redirect_on_slug_change' => true,
+            'old_slug'                => (string) $old_slug,
+        ]);
     } catch (SQL $e) {
         // Return, like the reserved-slug check above: everything below this
         // point is a consequence of the edit having been saved. Falling through
@@ -345,14 +346,7 @@ function redirect_edited(): void
         return;
     }
 
-    $new_slug = $bean->slug;
-    if (!empty($old_slug) && $old_slug !== $new_slug) {
-        store_slug_change_redirect((string) $old_slug, (string) $new_slug);
-    }
-
-    warn_if_manual_redirect((string) $new_slug);
-
-    notify_post_subscribers($bean);
+    warn_if_manual_redirect((string) $bean->slug);
 
     $redirect = safe_referer_path($_SESSION['edit-referrer'] ?? null);
     unset($_SESSION['edit-referrer']);
