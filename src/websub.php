@@ -8,6 +8,7 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
 use function Lamb\get_option;
+use function Lamb\is_scheduled;
 use function Lamb\set_option;
 
 use const Lamb\SQL_PUBLISHED;
@@ -86,7 +87,7 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
     if (!$bean->id || !empty($bean->feed_name) || !empty($bean->draft)) {
         return;
     }
-    if (!empty($bean->created) && strtotime((string) $bean->created) > time()) {
+    if (is_scheduled($bean)) {
         return;
     }
 
