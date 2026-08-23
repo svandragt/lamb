@@ -181,4 +181,26 @@ class DeleteRestoreCest
         $I->dontSee('Fatal error');
         $I->dontSee('Warning:');
     }
+
+    // require_login() runs before the empty-POST guard (#722): an unauthenticated
+    // POST to delete/restore now bounces to /login carrying the original path in
+    // redirect_to, matching create/edit — instead of the empty-POST guard firing
+    // first and redirecting to / or /trash before the login check ever runs.
+    //
+    // Assert on redirect_to, not just landing on /login: an unauthenticated
+    // restore under the old order redirected to /trash, which is itself
+    // login-gated and bounces to /login too — so only the redirect_to target
+    // distinguishes the fixed order from the bug.
+
+    public function testDeleteWithoutLoginRedirectsToLogin(AcceptanceTester $I): void
+    {
+        $I->sendEmptyPost('/delete/1');
+        $I->seeInCurrentUrl('/login?redirect_to=%2Fdelete%2F1');
+    }
+
+    public function testRestoreWithoutLoginRedirectsToLogin(AcceptanceTester $I): void
+    {
+        $I->sendEmptyPost('/restore/1');
+        $I->seeInCurrentUrl('/login?redirect_to=%2Frestore%2F1');
+    }
 }

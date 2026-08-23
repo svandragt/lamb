@@ -105,4 +105,17 @@ class Acceptance extends Module
         $browser = $this->getModule('PhpBrowser');
         $this->assertStringContainsString($needle, (string) $browser->client->getInternalResponse()->getContent());
     }
+
+    /**
+     * Issues a form-less POST with an empty body to the given path, following any
+     * redirect. Lets a test hit a POST-only route (e.g. /delete) without a page
+     * rendering its form first; assert the landing spot with $I->seeInCurrentUrl().
+     *
+     * @param string $url The path to POST to.
+     * @return void
+     */
+    public function sendEmptyPost(string $url): void
+    {
+        $this->getModule('PhpBrowser')->_request('POST', $url);
+    }
 }
