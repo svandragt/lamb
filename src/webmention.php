@@ -11,6 +11,8 @@ use RedBeanPHP\R;
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\is_deleted;
+use function Lamb\is_draft;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 use function Lamb\Post\split_reply_targets;
@@ -691,7 +693,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
         // 410/404 source and drops the mention. If the post is alive again
         // (restored before this ran), abandon the re-send rather than falsely
         // report it as deleted.
-        if ($post->id && $post->deleted != 1) {
+        if ($post->id && !is_deleted($post)) {
             $row->status = 'sent';
             $row->resend = 0;
             $row->processed_at = \Lamb\now();
@@ -699,7 +701,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
             return 'cancelled';
         }
     } else {
-        if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+        if (!$post->id || is_deleted($post) || is_draft($post)) {
             $row->status = 'cancelled';
             $row->processed_at = \Lamb\now();
             R::store($row);
