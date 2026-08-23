@@ -193,10 +193,10 @@ function delete_return_path(?string $referer, string $own_path): string
 #[NoReturn]
 function redirect_deleted(mixed $args): void
 {
+    Security\require_login();
     if (empty($_POST)) {
         redirect_uri('/');
     }
-    Security\require_login();
     Security\require_csrf();
 
     [$id] = $args;
@@ -217,10 +217,10 @@ function redirect_deleted(mixed $args): void
 #[NoReturn]
 function redirect_restored(mixed $args): void
 {
+    Security\require_login();
     if (empty($_POST)) {
         redirect_uri('/trash');
     }
-    Security\require_login();
     Security\require_csrf();
 
     [$id] = $args;
