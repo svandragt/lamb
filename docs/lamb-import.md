@@ -28,6 +28,16 @@ php import-lamb.php /path/to/lamb-export-2026-07-26.zip --dry-run
 php import-lamb.php /path/to/lamb-export-2026-07-26.zip
 ```
 
+The preferred entry point is the unified driver, which takes the same flags
+(including `--site-url=`):
+
+```bash
+bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-run
+```
+
+`import-lamb.php` still works but is a deprecated shim that delegates to
+`bin/lamb import lamb` and prints a warning; it is removed a release later.
+
 An already-unpacked export directory works too. Pass its path instead of the `.zip`:
 
 ```bash
