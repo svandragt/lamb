@@ -438,7 +438,10 @@ function apply_checkbox_toggle(int $id, int $index, bool $checked): bool
     $bean->updated = \Lamb\now();
 
     try {
-        R::store($bean);
+        // Through the funnel with an empty context: an existing post, no slug
+        // finalize, and no notify — ticking a box is a minor edit that must not
+        // re-notify subscribers. Emits post.updated only.
+        \Lamb\Post\save($bean);
     } catch (SQL $e) {
         $_SESSION['flash'][] = 'Failed to update checkbox: ' . $e->getMessage();
         return false;

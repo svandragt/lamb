@@ -126,6 +126,20 @@ Storage follows the existing `data/cache/` convention (already gitignored, alrea
 
 ---
 
+## 2026-08-22 — Post writes go through one funnel; publication is an event
+
+**Status:** Accepted
+
+**Context:** Nine write sites each decided independently what a save entailed — whether to finalise the slug, whether to notify subscribers, whether to feed-lock — and expressed those choices by which shared helper they called or omitted (`Post\finalize_and_store_post()`, `Lamb\notify_post_subscribers()`). The asymmetry was held only by a comment copied verbatim into two importers, and that is how #685 (notifying subscribers after a failed write) came to be fixed on one save path and not its twin. Separately, "published" was not a thing that happened but a condition two subsystems each re-derived from a different signal (`Webmention` from `is_publicly_visible()`, `WebSub` from a `created > updated` watermark), with nothing structural keeping them in agreement.
+
+**Decision:** All post writes route through `Post\save(OODBBean $bean, array $context = [])`. The context flags carry the behaviours the write sites used to express by omission — `finalize_slug`, `notify`, `lock_if_feed_sourced`, `redirect_on_slug_change` — so a test can assert them instead of a convention holding by hand. Publication is an event: `save()` emits `post.created`/`post.updated`, and `post.published` when `notify` is set; subscribers register through `Post\on()` (`register_default_subscribers()` wires `Webmention\enqueue_for_post` and `Websub\ping_for_post` to `post.published`). Notification lives on the funnel's success path, so #685's fix is structural rather than a per-site habit.
+
+The conversion is deliberately incremental: this decision lands the funnel with a single call site converted (`Response\apply_checkbox_toggle()`, an existing post with an empty context, which must not notify). The other eight sites still call `finalize_and_store_post()`/`notify_post_subscribers()` directly and convert one commit at a time behind the same green suite; `post.deleted`/`post.restored` and `redirect_on_slug_change` arrive with the sites that need them. The exit criterion — `grep -rn 'notify_post_subscribers\|finalize_and_store_post' src/` hitting only `src/post.php` — is the end state of the whole conversion, not of this first step.
+
+**Consequences:** The flag-to-event matrix is executable (`tests/Unit/PostSaveTest.php`) rather than a comment. Until every site is converted, two ways to save a post coexist, and the funnel's event set grows as sites move onto it. Part of #692 / #684 (D1).
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

@@ -659,6 +659,139 @@ function finalize_and_store_post(OODBBean $bean): void
 }
 
 /**
+ * The registry of post-lifecycle event subscribers, keyed by event name.
+ *
+ * A by-reference accessor so on() and reset_subscribers() mutate the one static
+ * array emit() reads. See save() for the events and the funnel that emits them.
+ *
+ * @return array<string, list<callable>> The mutable subscriber registry.
+ */
+function &event_subscribers(): array
+{
+    static $subscribers = [];
+
+    return $subscribers;
+}
+
+/**
+ * Registers a subscriber for a post-lifecycle event.
+ *
+ * Events are emitted by save(): `post.created`, `post.updated`, `post.published`
+ * (and, as more write sites convert, `post.deleted` and `post.restored`). A
+ * subscriber is called with the stored bean.
+ *
+ * @param string   $event      The event name to subscribe to.
+ * @param callable $subscriber fn(OODBBean $bean): void.
+ * @return void
+ */
+function on(string $event, callable $subscriber): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers[$event][] = $subscriber;
+}
+
+/**
+ * Calls every subscriber registered for an event, in registration order.
+ *
+ * @param string   $event The event name to emit.
+ * @param OODBBean $bean  The stored post bean to hand each subscriber.
+ * @return void
+ */
+function emit(string $event, OODBBean $bean): void
+{
+    foreach (event_subscribers()[$event] ?? [] as $subscriber) {
+        $subscriber($bean);
+    }
+}
+
+/**
+ * Clears the subscriber registry. For test isolation between cases that each
+ * register their own subscribers; production wiring runs once per request.
+ *
+ * @return void
+ */
+function reset_subscribers(): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers = [];
+}
+
+/**
+ * Wires the subscribers every request needs at the seam.
+ *
+ * Publication is an event: notify-requested saves emit `post.published`, and the
+ * two notification subsystems subscribe here rather than each re-deriving
+ * "published" from a different signal. Each callee self-filters ineligible posts
+ * (drafts, feed items, future-dated), so subscribing them unconditionally is
+ * safe. Called once from the request bootstrap (src/index.php).
+ *
+ * @return void
+ */
+function register_default_subscribers(): void
+{
+    on('post.published', '\Lamb\Webmention\enqueue_for_post');
+    on('post.published', '\Lamb\Websub\ping_for_post');
+}
+
+/**
+ * The single funnel every post write goes through.
+ *
+ * Stores the bean and emits the lifecycle events that used to be a convention
+ * spread across the write sites: `post.created` for a new row or `post.updated`
+ * for an existing one, and `post.published` when the caller asks for
+ * notification (subscribers registered by register_default_subscribers() then
+ * queue webmentions and ping the WebSub hubs). Moving notification onto the
+ * funnel's success path makes #685's "never notify a failed write" fix
+ * structural rather than a per-site habit.
+ *
+ * The context flags carry the behaviours each site used to express by omitting a
+ * call:
+ *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
+ *    into the front matter (the create paths' finalize_and_store_post()).
+ *  - `notify` — emit `post.published` after a successful store.
+ *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
+ *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
+ *  - `redirect_on_slug_change` — reserved for the edit-site conversion, which
+ *    also has the pre-edit slug this funnel does not; not yet honoured.
+ *
+ * The store is not caught here: each call site flashes its own message and
+ * decides what to do on failure, so the RedException\SQL propagates.
+ *
+ * @param OODBBean $bean A populated post bean.
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool} $context
+ * @return void
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ */
+function save(OODBBean $bean, array $context = []): void
+{
+    $context += [
+        'finalize_slug'           => false,
+        'notify'                  => false,
+        'lock_if_feed_sourced'    => false,
+        'redirect_on_slug_change' => false,
+    ];
+
+    $is_new = empty($bean->id);
+
+    // Before the store: feed_locked is a column on the row being written.
+    if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
+        $bean->feed_locked = 1;
+    }
+
+    R::store($bean);
+    // finalize_slug() needs the minted id for any dedup suffix, so it runs after
+    // the first store and re-stores only when it changed the slug or body.
+    if ($context['finalize_slug'] && finalize_slug($bean)) {
+        R::store($bean);
+    }
+
+    emit($is_new ? 'post.created' : 'post.updated', $bean);
+    if ($context['notify']) {
+        emit('post.published', $bean);
+    }
+}
+
+/**
  * Matches a line that could carry a task-list marker: optional blockquote
  * markers, an optional bullet or ordered list marker, then `[ ]`/`[x]`/`[X]`
  * followed by whitespace and a non-empty label.
