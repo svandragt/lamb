@@ -15,6 +15,12 @@ use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
 {
+    protected function tearDown(): void
+    {
+        unset($_SERVER['HTTPS']);
+        parent::tearDown();
+    }
+
     // get_cookie_options
 
     public function testGetCookieOptionsReturnsArray()
@@ -47,8 +53,19 @@ class ResponseTest extends TestCase
         $this->assertSame('Strict', get_cookie_options(time())['samesite']);
     }
 
-    public function testGetCookieOptionsSecureIsTrue()
+    public function testGetCookieOptionsSecureIsFalseOverPlainHttp()
     {
+        unset($_SERVER['HTTPS']);
+        $this->assertFalse(
+            get_cookie_options(time())['secure'],
+            'A secure cookie is silently dropped by the browser over plain HTTP, which would '
+                . 'break login persistence on any install served without TLS'
+        );
+    }
+
+    public function testGetCookieOptionsSecureIsTrueOverHttps()
+    {
+        $_SERVER['HTTPS'] = 'on';
         $this->assertTrue(get_cookie_options(time())['secure']);
     }
 
