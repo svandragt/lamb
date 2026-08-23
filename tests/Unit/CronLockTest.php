@@ -44,10 +44,24 @@ class CronLockTest extends TestCase
         $this->assertSame('../data', data_dir());
     }
 
+    public function testDataDirDefaultsToACliBaseSiblingForCliEntryPoints(): void
+    {
+        // The two defaults must stay distinct: the web default is relative to
+        // src/, a CLI script's is relative to the repo root it passes in.
+        putenv('LAMB_DATA_DIR');
+        $this->assertSame('/opt/lamb/data', data_dir('/opt/lamb'));
+    }
+
     public function testDataDirHonoursTheEnvironmentOverride(): void
     {
         putenv('LAMB_DATA_DIR=' . $this->tmp);
         $this->assertSame($this->tmp, data_dir());
+    }
+
+    public function testDataDirEnvironmentOverrideWinsOverTheCliBase(): void
+    {
+        putenv('LAMB_DATA_DIR=' . $this->tmp);
+        $this->assertSame($this->tmp, data_dir('/opt/lamb'));
     }
 
     public function testCronLockLivesInTheConfiguredDataDir(): void

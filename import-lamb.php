@@ -53,7 +53,7 @@ try {
     exit(1);
 }
 
-$data_dir = getenv('LAMB_DATA_DIR') ?: __DIR__ . '/data';
+$data_dir = Bootstrap\data_dir(__DIR__);
 Bootstrap\bootstrap_db($data_dir);
 
 global $config;
