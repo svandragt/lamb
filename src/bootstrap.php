@@ -68,6 +68,23 @@ function data_dir(?string $cli_base = null): string
 }
 
 /**
+ * The per-install login credential: a base64-encoded bcrypt hash of the admin
+ * password, read from LAMB_LOGIN_PASSWORD.
+ *
+ * response.php's LOGIN_PASSWORD constant and should_start_session()'s marker
+ * verification used to call getenv('LAMB_LOGIN_PASSWORD') independently —
+ * the same "read independently" duplication LAMB_DATA_DIR had before
+ * data_dir() converged it (issue #732, building on #691). Both now go
+ * through this single resolver.
+ *
+ * @return string The bcrypt hash (base64-encoded), or '' when unset.
+ */
+function login_password(): string
+{
+    return (string) (getenv('LAMB_LOGIN_PASSWORD') ?: '');
+}
+
+/**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.
  *
  * @param string $data_dir The directory path where the database file will be stored.
@@ -362,7 +379,7 @@ function should_start_session(array $cookies): bool
     if (!is_string($marker)) {
         return false;
     }
-    return valid_login_marker($marker, (string) getenv('LAMB_LOGIN_PASSWORD'));
+    return valid_login_marker($marker, login_password());
 }
 
 /**
