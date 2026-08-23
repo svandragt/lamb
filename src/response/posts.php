@@ -345,6 +345,10 @@ function redirect_edited(): void
         return;
     }
 
+    // An edit is a content change: advance the monotonic mark so the 304
+    // validator does not serve a stale cache for the just-edited post (#669).
+    bump_content_timestamp();
+
     $new_slug = $bean->slug;
     if (!empty($old_slug) && $old_slug !== $new_slug) {
         store_slug_change_redirect((string) $old_slug, (string) $new_slug);

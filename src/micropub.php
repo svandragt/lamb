@@ -566,6 +566,10 @@ class LambMicropubAdapter extends MicropubAdapter
         }
         R::store($bean);
 
+        // A Micropub update is a content change: advance the monotonic mark so
+        // the 304 validator does not serve a stale cache for it (#669).
+        \Lamb\Response\bump_content_timestamp();
+
         notify_post_subscribers($bean);
 
         return true;
