@@ -217,6 +217,23 @@ function sanitize_tag_arg(array $args): string
 }
 
 /**
+ * Composes a feed item's content_html: the reply-context line followed by the
+ * post body with relative URLs absolutised. Shared by the Atom and JSON
+ * renderers so the two feeds cannot drift on what an item's content holds.
+ *
+ * The caller applies any feed-specific wrapping: the Atom renderer passes the
+ * result through normalize_utf8() for the XML text node; the JSON renderer
+ * relies on json_encode()'s JSON_INVALID_UTF8_SUBSTITUTE instead.
+ *
+ * @param \RedBeanPHP\OODBBean $bean The post bean.
+ * @return string The item content as HTML.
+ */
+function feed_item_content_html(\RedBeanPHP\OODBBean $bean): string
+{
+    return \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed);
+}
+
+/**
  * Renders the Atom feed for the given view data.
  *
  * Feeds live in code, not the theme layer: a theme that omitted feed.php used to
@@ -281,9 +298,7 @@ function render_atom_feed(array $data, array $config): void
         // HTML and handing subscribers live markup. A text node escapes both.
         $content = $entry->addChild('content');
         $content->addAttribute('type', 'html');
-        $content_html = \Lamb\normalize_utf8(
-            \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed)
-        );
+        $content_html = \Lamb\normalize_utf8(feed_item_content_html($bean));
         $content_node = dom_import_simplexml($content);
         $content_document = $content_node->ownerDocument;
         if ($content_document !== null) {
@@ -360,7 +375,7 @@ function render_json_feed(array $data, array $config): void
             // Reply context inside content_html as well as _microblog below: the
             // extension is a micro.blog convention, the u-in-reply-to markup is
             // what a plain reader shows and what mf2 consumers parse.
-            'content_html'   => \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed),
+            'content_html'   => feed_item_content_html($bean),
             'date_published' => date(DATE_RFC3339, strtotime($bean->created)),
             'date_modified'  => date(DATE_RFC3339, strtotime($bean->updated)),
         ];
@@ -441,14 +456,22 @@ function emit_feed(array $feed_data, string $template, ?string $feed_url = null)
         // The one developer-visible change in #684 (D7): a theme feed part still
         // works, but only an override is now deprecated — omitting it inherits a
         // correct feed instead of losing it.
-        @trigger_error(
-            sprintf(
-                "Theme feed part '%s.php' is deprecated and will be removed; feeds are rendered by "
-                . 'Lamb\\Response now. Remove the theme part to inherit the built-in feed.',
-                $template
-            ),
-            E_USER_DEPRECATED
-        );
+        //
+        // Warn at most once per template per process: feeds are polled hard by
+        // aggregators, and a logging error handler that ignores error_reporting()
+        // would otherwise record the same notice on every hit.
+        static $warned = [];
+        if (!isset($warned[$template])) {
+            $warned[$template] = true;
+            @trigger_error(
+                sprintf(
+                    "Theme feed part '%s.php' is deprecated and will be removed; feeds are rendered by "
+                    . 'Lamb\\Response now. Remove the theme part to inherit the built-in feed.',
+                    $template
+                ),
+                E_USER_DEPRECATED
+            );
+        }
         require $override;
     } elseif ($template === 'feed_json') {
         render_json_feed($data, $config);
