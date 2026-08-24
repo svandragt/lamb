@@ -5,6 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\is_deleted;
+use function Lamb\is_draft;
 use function Lamb\is_publicly_visible;
 use function Lamb\is_viewable;
 use function Lamb\Response\respond_post;
@@ -134,6 +136,27 @@ class PostVisibilityTest extends TestCase
     {
         $bean = R::load('post', 999999);
         $this->assertFalse(is_publicly_visible($bean));
+    }
+
+    // ---- is_draft() / is_deleted() predicates ------------------------------
+    // NULL-safe, mirroring SQL_NOT_DRAFT / SQL_NOT_DELETED: an unset column is
+    // "not draft" / "not deleted", so the SQL listings and the PHP checks agree
+    // on one definition (D6, #684).
+
+    public function testIsDraftMatchesSqlNullSafeSemantics(): void
+    {
+        $this->assertTrue(is_draft($this->makePost(['draft' => 1])));
+        $this->assertTrue(is_draft($this->makePost(['draft' => '1'])), 'a string "1" counts, as SQL "draft != 1" would');
+        $this->assertFalse(is_draft($this->makePost(['draft' => 0])));
+        $this->assertFalse(is_draft(R::dispense('post')), 'an unset draft column is not a draft');
+    }
+
+    public function testIsDeletedMatchesSqlNullSafeSemantics(): void
+    {
+        $this->assertTrue(is_deleted($this->makePost(['deleted' => 1])));
+        $this->assertTrue(is_deleted($this->makePost(['deleted' => '1'])));
+        $this->assertFalse(is_deleted($this->makePost(['deleted' => 0])));
+        $this->assertFalse(is_deleted(R::dispense('post')), 'an unset deleted column is not deleted');
     }
 
     // ---- respond_status (/status/<id>) ------------------------------------

@@ -29,5 +29,13 @@ parameters:
         - RedBeanPHP\OODBBean
     # ROOT_URL is derived from site config at runtime; don't constant-fold the
     # placeholder value defined in phpstan-bootstrap.php.
+    #
+    # LOGIN_PASSWORD is derived from LAMB_LOGIN_PASSWORD at runtime via
+    # Bootstrap\login_password(). Routing it through a named function (rather
+    # than the inline `getenv(...) ?: ''` this replaced) makes PHPStan actually
+    # call it while resolving the define() value — unset in the analysis
+    # environment, so it folds to the literal '', which makes auth.php's
+    # `LOGIN_PASSWORD === ''` misconfiguration check look like dead code.
     dynamicConstantNames:
         - ROOT_URL
+        - LOGIN_PASSWORD

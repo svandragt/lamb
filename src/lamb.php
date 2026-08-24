@@ -20,6 +20,7 @@ use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\consume_leading_heading;
 use function Lamb\Post\matter_string;
+use function Lamb\Post\matter_url_list;
 use function Lamb\Post\normalize_frontmatter_fence;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\set_matter;
@@ -538,25 +539,31 @@ function highlight_and_link(string $markdown): string
 }
 
 /**
- * Normalises the reply target from front matter into a single string.
+ * Normalises the reply target(s) from front matter into a single
+ * space-separated string, the same storage convention `syndicated_to` uses
+ * (Theme\syndication_links() splits it back on whitespace to render it).
  *
  * Reads the `in-reply-to` key (parse_matter() has already canonicalised the
- * `in_reply_to` spelling onto it and collapsed a YAML list to its first entry
- * via matter_string()). The key is removed from the passed-by-reference front
- * matter so the hyphenated key is never written as an invalid column by the
- * blind copy in apply_frontmatter().
+ * `in_reply_to` spelling onto it, but deliberately leaves its value alone —
+ * see MATTER_TEXT_KEYS) via matter_url_list(), which keeps every entry of a
+ * YAML list rather than collapsing to the first: mf2 `u-in-reply-to` may
+ * repeat, RFC 4685 allows several `thr:in-reply-to` elements, and a Micropub
+ * client legitimately sends multiple targets (#583). A URL never contains a
+ * literal space, so joining with one round-trips losslessly. The key is
+ * removed from the passed-by-reference front matter so the hyphenated key is
+ * never written as an invalid column by the blind copy in apply_frontmatter().
  *
  * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
- * @return string The normalised reply target, or '' when absent.
+ * @return string The normalised reply target(s), space-separated, or '' when absent.
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
  */
 function normalize_in_reply_to(array &$front_matter): string
 {
-    $in_reply_to = matter_string($front_matter['in-reply-to'] ?? null);
+    $targets = matter_url_list($front_matter['in-reply-to'] ?? null);
     unset($front_matter['in-reply-to']);
 
-    return $in_reply_to !== null ? trim($in_reply_to) : '';
+    return implode(' ', $targets);
 }
 
 /**
@@ -578,8 +585,8 @@ function normalize_in_reply_to(array &$front_matter): string
  */
 function apply_frontmatter(OODBBean $bean, array $front_matter): void
 {
-    // Normalise the reply target. Empty when absent, so removing it from front
-    // matter on edit clears the stored value.
+    // Normalise the reply target(s). Empty when absent, so removing it from
+    // front matter on edit clears the stored value.
     $bean->in_reply_to = normalize_in_reply_to($front_matter);
 
     // Normalise syndication record. Hyphenated key can't map via the loop below.
@@ -795,6 +802,31 @@ function is_scheduled(OODBBean $post): bool
 }
 
 /**
+ * Returns true when a post is a draft. The in-memory counterpart to
+ * SQL_NOT_DRAFT: an unset column is not a draft, so a loaded bean and a SQL
+ * listing agree on the definition.
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_draft(OODBBean $post): bool
+{
+    return ($post->draft ?? null) == 1;
+}
+
+/**
+ * Returns true when a post is soft-deleted. The in-memory counterpart to
+ * SQL_NOT_DELETED: an unset column is not deleted, matching the SQL listings.
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_deleted(OODBBean $post): bool
+{
+    return ($post->deleted ?? null) == 1;
+}
+
+/**
  * Returns true when a post may be shown for a direct permalink request
  * (/status/<id> or a slug URL).
  *
@@ -809,13 +841,13 @@ function is_scheduled(OODBBean $post): bool
  */
 function is_viewable(OODBBean $post): bool
 {
-    if (empty($post->id) || $post->deleted == 1) {
+    if (empty($post->id) || is_deleted($post)) {
         return false;
     }
     if (isset($_SESSION[SESSION_LOGIN])) {
         return true;
     }
-    return $post->draft != 1 && !is_scheduled($post);
+    return !is_draft($post) && !is_scheduled($post);
 }
 
 /**
@@ -835,7 +867,7 @@ function is_viewable(OODBBean $post): bool
  */
 function is_publicly_visible(OODBBean $post): bool
 {
-    if (empty($post->id) || $post->deleted == 1 || $post->draft == 1) {
+    if (empty($post->id) || is_deleted($post) || is_draft($post)) {
         return false;
     }
     return !is_scheduled($post);
@@ -891,23 +923,6 @@ function ensure_preview_token(OODBBean $post): void
     }
     $post->preview_token         = bin2hex(random_bytes(16));
     $post->preview_token_expires = date('Y-m-d H:i:s', time() + 86400);
-}
-
-/**
- * Fans out publish notifications for a freshly stored post.
- *
- * Both the web form and Micropub run the same two steps after saving: queue
- * outbound webmentions for the post's external links and ping the WebSub hubs.
- * Each callee already skips ineligible posts (drafts, feed items, future-dated
- * scheduled posts), so this is safe to call unconditionally from every save path.
- *
- * @param OODBBean $bean A stored post bean.
- * @return void
- */
-function notify_post_subscribers(OODBBean $bean): void
-{
-    Webmention\enqueue_for_post($bean);
-    Websub\ping_for_post($bean);
 }
 
 /**

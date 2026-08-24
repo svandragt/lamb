@@ -148,7 +148,8 @@ lamb/
 ├── composer.json
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
-├── import-lamb.php       # CLI: restore a Lamb export archive (src/restore.php) into the DB
+├── bin/lamb              # CLI: unified importer driver — `bin/lamb import <source> <path>`
+├── import-lamb.php       # CLI: deprecated shim → `bin/lamb import lamb` (removed a release later)
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
@@ -235,8 +236,7 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 **Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
-- `feed.php` — Atom feed output
-- `feed_json.php` — JSON Feed output
+- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme that still ships `feed.php` / `feed_json.php` overrides them for one release with a deprecation notice, then loses the override; base no longer ships either.
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `scheduled.php`, `trash.php`
 - `parts/_items.php` — post list partial
 - `parts/_pagination.php` — pagination partial
@@ -446,7 +446,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add `feed.php` only if the Atom output differs from the base feed template. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically.
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` override is deprecated.)
 
 ### Typical file set (for a full redesign)
 
@@ -463,7 +463,7 @@ src/themes/<name>/
     └── search.php            # search results
 ```
 
-Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `feed.php`, `_related.php`, `_pagination.php`.
+Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `_related.php`, `_pagination.php`.
 
 ### Security
 
@@ -646,6 +646,8 @@ For contributors: always branch from `main` for new features. Open an issue firs
 When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
 
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
+
+Before any bulk PR operation — merging, rebasing, or force-pushing across several PRs — check whether the branches are stacked. Branches can be built on each other even when every PR targets `main`, so a diff or a squash can carry a lower branch's content, and a PR's real base may be another feature branch (check `baseRefName`). Merge stacked PRs bottom-up, re-check each remaining PR's mergeable state after every merge (earlier merges turn later ones `DIRTY`), and never force-push a shared branch without confirming the remote tip is what you expect — another session or GitHub's base-retargeting may have moved it. Prefer merging `main` into the branch over rebasing, so the push stays a fast-forward. When resolving the merge, keep the content the stacked branch legitimately owns rather than blindly taking `main`'s side, and run the tests locally before pushing.
 
 ## Philosophy (from README)
 

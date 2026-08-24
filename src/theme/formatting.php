@@ -16,6 +16,23 @@ function escape(string $html): string
 }
 
 /**
+ * Escapes a string for safe XML output (Atom feed, sitemap).
+ *
+ * Uses ENT_XML1 rather than ENT_HTML5 so a single quote becomes `&apos;` (a
+ * defined XML entity) and no HTML-only named entities are emitted. ENT_SUBSTITUTE
+ * keeps a malformed UTF-8 byte from making htmlspecialchars() return '' for the
+ * whole string — it degrades to U+FFFD instead, so one bad byte cannot empty an
+ * entire <loc> or <title>.
+ *
+ * @param string $xml The raw string to escape.
+ * @return string XML-safe escaped string.
+ */
+function escape_xml(string $xml): string
+{
+    return htmlspecialchars($xml, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
+}
+
+/**
  * Re-levels a post body's headings so its highest heading sits at $top, keeping
  * the levels relative to each other. Open and close tags shift identically,
  * attributes are preserved, and a body with no headings is returned unchanged.
@@ -67,19 +84,27 @@ function anchor_headings(string $html, int $top): string
  */
 function the_reply_context(\RedBeanPHP\OODBBean $bean): string
 {
-    $url = trim((string) ($bean->in_reply_to ?? ''));
-    if ($url === '') {
+    $targets = \Lamb\Post\split_reply_targets((string) ($bean->in_reply_to ?? ''));
+    if ($targets === []) {
         return '';
     }
 
-    if (!\Lamb\Http\is_valid_http_url($url)) {
-        return '<p class="reply-context">In reply to ' . escape($url) . '</p>';
+    // No rel="in-reply-to": the rel-in-reply-to proposal is superseded by the
+    // u-in-reply-to h-entry property (which this already carries), the value is
+    // not a registered HTML link type, and nothing consumes it that does not
+    // already read u-in-reply-to. See #585.
+    $parts = [];
+    foreach ($targets as $url) {
+        if (!\Lamb\Http\is_valid_http_url($url)) {
+            $parts[] = escape($url);
+            continue;
+        }
+        $label = parse_url($url, PHP_URL_HOST) ?: $url;
+        $parts[] = '<a class="u-in-reply-to" href="'
+            . escape($url) . '">' . escape($label) . '</a>';
     }
 
-    $label = parse_url($url, PHP_URL_HOST) ?: $url;
-
-    return '<p class="reply-context">In reply to <a class="u-in-reply-to" rel="in-reply-to" href="'
-        . escape($url) . '">' . escape($label) . '</a></p>';
+    return '<p class="reply-context">In reply to ' . implode(', ', $parts) . '</p>';
 }
 
 /**

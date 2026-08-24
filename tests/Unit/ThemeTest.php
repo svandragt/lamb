@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\Theme\action_restore;
 use function Lamb\Theme\admin_toolbar_html;
 use function Lamb\Theme\escape;
+use function Lamb\Theme\escape_xml;
 use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\og_escape;
@@ -111,6 +112,33 @@ class ThemeTest extends TestCase
     public function testEscapeConvertsAmpersand()
     {
         $this->assertSame('foo &amp; bar', escape('foo & bar'));
+    }
+
+    // escape_xml
+
+    public function testEscapeXmlConvertsAmpersand()
+    {
+        $this->assertSame('foo &amp; bar', escape_xml('foo & bar'));
+    }
+
+    public function testEscapeXmlConvertsAngleBrackets()
+    {
+        $this->assertSame('&lt;loc&gt;', escape_xml('<loc>'));
+    }
+
+    public function testEscapeXmlConvertsSingleQuoteToApos()
+    {
+        // ENT_XML1 encodes the single quote as the defined XML entity &apos;.
+        $this->assertSame('it&apos;s', escape_xml("it's"));
+    }
+
+    public function testEscapeXmlSubstitutesInvalidUtf8ByteInsteadOfEmptyingTheString()
+    {
+        // ENT_SUBSTITUTE: a lone invalid byte degrades to U+FFFD rather than
+        // making htmlspecialchars() return '' for the whole value.
+        $result = escape_xml("ok\xB1");
+        $this->assertNotSame('', $result);
+        $this->assertSame("ok\u{FFFD}", $result);
     }
 
     // og_escape

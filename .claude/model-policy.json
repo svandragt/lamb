@@ -1,10 +1,10 @@
 {
   "$schema": "https://github.com/akshatagarwal/calibrate/policy/schema.json",
   "version": 1,
-  "calibratedAt": "2026-07-29",
+  "calibratedAt": "2026-08-22",
   "complexity": {
     "score": "medium",
-    "rationale": "Single PHP app, ~13.7k LOC across 56 files in src/, namespaced-function style with no framework and no distributed components — but a real security surface (IndieAuth/Micropub tokens, session auth with login throttling, file uploads, webmention fetches) and a strict safety net that catches most mechanical error."
+    "rationale": "Single PHP app, ~16.5k LOC across 57 files in src/, namespaced-function style with no framework and no distributed components — but a real security surface (IndieAuth/Micropub tokens, session auth with login throttling, file uploads, webmention fetches) and a strict safety net that catches most mechanical error."
   },
   "phases": {
     "plan": {
@@ -13,7 +13,7 @@
     },
     "code": {
       "model": "sonnet",
-      "rationale": "Strong safety net makes mid-tier safe: 1489 unit tests across 118 files, PHPStan level 8 with a baseline, phpcs, a 70% coverage gate, and a 2-version CI matrix (PHP 8.4-8.5) plus Playwright e2e. Not lowered further — 13.7k LOC of hand-rolled routing and auth is not boilerplate CRUD."
+      "rationale": "Strong safety net makes mid-tier safe: 1831 unit tests across 101 files, PHPStan level 8 with an effectively empty baseline, phpcs, a 70% coverage gate, and a 2-version CI matrix (PHP 8.4-8.5) plus Playwright e2e. Not lowered further — 16.5k LOC of hand-rolled routing and auth is not boilerplate CRUD."
     },
     "review": {
       "model": "sonnet",

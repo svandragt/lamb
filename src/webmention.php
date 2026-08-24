@@ -11,8 +11,11 @@ use RedBeanPHP\R;
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\is_deleted;
+use function Lamb\is_draft;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
+use function Lamb\Post\split_reply_targets;
 
 use const ROOT_URL;
 
@@ -466,23 +469,26 @@ function enqueue_for_post(OODBBean $bean): void
  * Pending rows whose target no longer appears in the post are cancelled, so a
  * scheduled post edited to remove a link before publication does not notify it.
  *
- * The reply target (from a post's `in-reply-to` front matter) is treated as an
- * outbound link even when it does not appear in the body, so replies notify the
- * parent. It is subject to the same external-host filter as body links.
+ * The reply target(s) (from a post's `in-reply-to` front matter, space-
+ * separated when there is more than one — #583) are each treated as an
+ * outbound link even when they do not appear in the body, so every reply
+ * parent gets notified. Each is subject to the same external-host filter as
+ * body links.
  *
  * @param int    $post_id
  * @param string $source   This post's permalink.
  * @param string $html     The post's rendered HTML.
- * @param string $reply_to Optional `in-reply-to` target URL.
+ * @param string $reply_to Optional `in-reply-to` target URL(s), space-separated.
  * @return int Number of newly created queue rows.
  */
 function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
 {
     $targets = extract_outbound_links($html);
 
-    $reply_to = trim($reply_to);
-    if ($reply_to !== '' && is_external_http_url($reply_to) && !in_array($reply_to, $targets, true)) {
-        $targets[] = $reply_to;
+    foreach (split_reply_targets($reply_to) as $target) {
+        if (is_external_http_url($target) && !in_array($target, $targets, true)) {
+            $targets[] = $target;
+        }
     }
 
     // Cancel pending rows for links the post no longer contains.
@@ -687,7 +693,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
         // 410/404 source and drops the mention. If the post is alive again
         // (restored before this ran), abandon the re-send rather than falsely
         // report it as deleted.
-        if ($post->id && $post->deleted != 1) {
+        if ($post->id && !is_deleted($post)) {
             $row->status = 'sent';
             $row->resend = 0;
             $row->processed_at = \Lamb\now();
@@ -695,7 +701,7 @@ function process_outbound_row(OODBBean $row, callable $fetcher, callable $sender
             return 'cancelled';
         }
     } else {
-        if (!$post->id || $post->deleted == 1 || $post->draft == 1) {
+        if (!$post->id || is_deleted($post) || is_draft($post)) {
             $row->status = 'cancelled';
             $row->processed_at = \Lamb\now();
             R::store($row);
@@ -775,9 +781,9 @@ function fetch_target(string $url): ?array
  */
 function send_webmention(string $endpoint, string $source, string $target): int
 {
-    // Unlike Http\post_form(), fetch_guarded() re-validates the destination
-    // on every redirect hop — needed here because $endpoint came from the
-    // target page's own (attacker-influenced) endpoint discovery.
+    // Every outbound POST goes through fetch_guarded(), which re-validates the
+    // destination on every redirect hop — needed here because $endpoint came
+    // from the target page's own (attacker-influenced) endpoint discovery.
     $result = fetch_guarded($endpoint, request_options([
         'method'  => 'POST',
         'headers' => ['Content-Type: application/x-www-form-urlencoded'],

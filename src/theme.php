@@ -15,13 +15,14 @@ use RedBeanPHP\R;
 use RuntimeException;
 
 use function Lamb\get_tags;
+use function Lamb\Config\is_menu_item;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
 use function Lamb\permalink_path;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
-use function Lamb\visible_clause;
+use function Lamb\Response\public_posts_clause;
 
 /**
  * Returns true when the user is authenticated and the bean has an ID.
@@ -285,7 +286,11 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     $related_posts = [];
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
-        $visible = visible_clause();
+        // public_posts_clause(), not visible_clause(): related posts appear on
+        // public permalinks and must also exclude menu pages. The two
+        // _related.php templates used to attempt this filter themselves, on a
+        // non-existent $bean->is_menu_item property, so it never fired (#101).
+        $visible = public_posts_clause();
         $sql = '(' . $conditions['sql'] . ') AND' . $visible['sql'];
         $params = array_merge($conditions['params'], $visible['params']);
         if ($exclude_id > 0) {
@@ -393,6 +398,109 @@ function syndication_links(OODBBean $bean): string
         return '';
     }
     return '<small>Also on: ' . implode(', ', $links) . '</small>';
+}
+
+/**
+ * Returns true when a post-list row should be hidden for being a menu page —
+ * a post pinned in [menu_items] and reachable from the nav instead of the
+ * chronological stream.
+ *
+ * Public listings already exclude menu pages in SQL (public_posts_clause());
+ * this is the backstop for owner-only views that deliberately query
+ * everything (drafts, trash, scheduled). Never hides on a permalink
+ * ($template === 'status'): there the menu page *is* the requested post, so
+ * hiding it would render an empty page.
+ *
+ * The single definition shared by render_post_list() (2024/2026 themes) and
+ * the base theme's parts/_items.php, which each hand-copied this check
+ * before (#731).
+ *
+ * @param string|null $template The current template name.
+ * @param OODBBean    $bean     The post bean being considered for the listing.
+ * @return bool
+ */
+function is_hidden_menu_item(?string $template, OODBBean $bean): bool
+{
+    return $template !== 'status' && is_menu_item((string) ($bean->slug ?? ''));
+}
+
+/**
+ * Renders the post-list loop shared by the 2024 and 2026 themes' _items.php.
+ *
+ * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
+ * outside their own permalink, and prints each post as an h-entry. The only
+ * difference between the two themes is whether the per-post author is shown
+ * inline (2024) or kept screen-reader-only (2026), controlled by $hide_author.
+ *
+ * @param bool $hide_author Hide the per-post author visually instead of showing it inline.
+ * @return void
+ */
+function render_post_list(bool $hide_author): void
+{
+    global $data;
+    global $template;
+
+    // Column positions below intentionally mirror the original per-theme
+    // _items.php templates: the leading whitespace of any line adjacent to a
+    // PHP tag is part of the rendered HTML, so it cannot be re-indented for
+    // being nested inside a function without changing the output.
+    if (empty($data['posts'])) :
+        ?><p>Sorry no items found.</p>
+    <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+    else :
+        // Wrap the list in <ul>/<li> only when there is more than one post, so a
+        // single post renders as a bare <article>. Computed once; the menu-item
+        // skip below uses `continue`, so this matches the pre-extraction total.
+        $is_list = count($data['posts']) > 1;
+        if ($is_list) :
+            echo '<ul>';
+        endif;
+        foreach ($data['posts'] as $bean) :
+            /** @var \RedBeanPHP\OODBBean $bean */
+            if (is_hidden_menu_item($template, $bean)) :
+                continue;
+            endif;
+            if ($is_list) :
+                echo '<li>';
+            endif;
+
+            ?>
+
+        <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
+            <header>
+                <?php // On a post page the h1 already shows the title, and the
+                      // stylesheet hides this h2 — but the h-entry still needs a
+                      // p-name, so the element is emitted and hidden rather than
+                      // skipped. Same expression as the base theme.
+                ?>
+                <?php if (!empty($bean->title)) : ?>
+                    <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
+                <?php endif; ?>
+                <div class="meta">
+                    <?= ($hide_author
+                        ? '<span itemprop="author" class="screen-reader-text">' . author_card() . '</span>'
+                        : '<span itemprop="author">' . author_card() . '</span> @') . "\n" ?>
+                    <?= date_created($bean) ?>
+                </div>
+            </header>
+            <?= the_reply_context($bean) ?>
+            <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
+            <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
+            <?= syndication_links($bean) ?>
+
+            <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
+                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+            <?php endif; ?>
+        </article>
+        <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+            if ($is_list) :
+                echo '</li>';
+            endif;
+        endforeach;
+        if ($is_list) :
+            echo '</ul>';
+        endif;
+    endif;
 }
 
 /**

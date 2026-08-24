@@ -103,6 +103,23 @@ function webmention_line(array $sent): string
 {
     header('Content-Type: text/plain');
 
+    // A single feed fetch may take up to FEED_FETCH_TIMEOUT, so a handful of slow
+    // feeds can outlast a web request's PHP limit (typically 30s under FPM). A
+    // timeout mid-crawl skips the notification drains and the watermark write
+    // below, and because the watermark is unwritten the next run walks the same
+    // feeds and dies the same way — webmentions then never deliver. Raise the
+    // limit so a normal run (each fetch bounded to FEED_FETCH_TIMEOUT) finishes
+    // well within it. See network/README.md ("Finishing the run").
+    //
+    // A finite cap, not 0: the run holds the cron flock until the process ends,
+    // so an unbounded run that wedged would leave every later /_cron stuck on
+    // "Already running". 30 minutes is far above any legitimate run yet still
+    // frees the lock if one hangs. The cap only bites a CPU-bound wedge, though —
+    // on Unix max_execution_time excludes time blocked in a syscall, so a hung
+    // socket is still caught only by the per-fetch curl/SimplePie timeouts, which
+    // must stay in place.
+    set_time_limit(1800);
+
     // Serialise overlapping runs before anything else: /_cron is unauthenticated
     // and the rate-limit watermark is only written after all work finishes, so a
     // concurrent burst without this lock would run in parallel on the same stale
@@ -127,25 +144,34 @@ function webmention_line(array $sent): string
     echo count_line(prune_feed_status(), 'Pruned %d stale feed status row(s).');
     echo count_line(\Lamb\flatten_redirects(), 'Flattened %d redirect(s).');
 
-    echo("Updating feeds..." . PHP_EOL);
-    foreach ($feeds as $name => $url) {
-        flush();
-        $status = feed_status_bean($name, $url);
-        if (!feed_fetch_due((int)$status->last_attempt, time())) {
-            echo('Skipped ' . $url . PHP_EOL);
-            continue;
-        }
+    try {
+        echo("Updating feeds..." . PHP_EOL);
+        foreach ($feeds as $name => $url) {
+            flush();
+            $status = feed_status_bean($name, $url);
+            if (!feed_fetch_due((int)$status->last_attempt, time())) {
+                echo('Skipped ' . $url . PHP_EOL);
+                continue;
+            }
 
-        echo crawl_line($name, crawl_feed($name, $url));
+            echo crawl_line($name, crawl_feed_guarded($name, $url));
+        }
+    } finally {
+        // Advance the watermark first, before draining: a partial run must
+        // rate-limit the next one even if a drain itself throws, otherwise the
+        // starvation loop just moves from the crawl to the drain. The drains then
+        // retry on the next scheduled run rather than re-running immediately.
+        set_option($cron_last_updated, (int)date('U'));
+
+        // Drain notifications even if the crawl loop threw or was cut short, so
+        // feed fetching cannot starve webmention/WebSub delivery.
+        echo count_line(
+            \Lamb\Websub\ping_scheduled_publishes(),
+            'WebSub: pinged hub for %d scheduled post(s) now published.'
+        );
+        echo webmention_line(\Lamb\Webmention\process_outbound());
     }
 
-    echo count_line(
-        \Lamb\Websub\ping_scheduled_publishes(),
-        'WebSub: pinged hub for %d scheduled post(s) now published.'
-    );
-    echo webmention_line(\Lamb\Webmention\process_outbound());
-
-    set_option($cron_last_updated, (int)date('U'));
     exit('Done');
 }
 
@@ -210,6 +236,38 @@ function crawl_feed(string $name, string $url): array
     $feed = init_simplepie_feed($url);
     echo PHP_EOL . "Processing " . $feed->get_title() . PHP_EOL;
     return record_feed_crawl($name, $url, $feed);
+}
+
+/**
+ * Crawls one feed, turning any throw into the crawl error shape.
+ *
+ * crawl_feed() only catches SQL around individual stores, so a throw from the
+ * JSON or SimplePie path would abort the whole /_cron run and starve the
+ * notification drains — the same outage a mid-crawl timeout causes. Guarding
+ * here lets one bad feed report a failure and the run continue to the next feed
+ * and the drains.
+ *
+ * @param string $name Feed name from config.
+ * @param string $url  Feed URL from config.
+ * @param (callable(string, string): array{ok: bool, items: int, error: ?string})|null $crawler
+ *        The crawler to run; defaults to crawl_feed(). Injectable for tests.
+ * @return array{ok: bool, items: int, error: ?string}
+ */
+function crawl_feed_guarded(string $name, string $url, ?callable $crawler = null): array
+{
+    $crawler ??= crawl_feed(...);
+    try {
+        return $crawler($name, $url);
+    } catch (\Throwable $e) {
+        // Stamp the attempt so a feed that throws before begin_crawl() runs backs
+        // off on the per-feed gate instead of being re-attempted every run. The
+        // Atom path fetches inside init_simplepie_feed() *before* record_feed_crawl()
+        // stamps last_attempt, so a SimplePie init() throw would otherwise leave
+        // the feed permanently due (#705). begin_crawl() is idempotent, so a throw
+        // after it already ran just re-stamps.
+        begin_crawl($name, $url);
+        return ['ok' => false, 'items' => 0, 'error' => $e->getMessage()];
+    }
 }
 
 /** @noinspection PhpUnused */

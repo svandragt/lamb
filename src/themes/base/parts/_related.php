@@ -24,8 +24,7 @@ if (!empty($related_posts['posts'])) :
                 if (!isset($bean->title)) :
                     $bean->title = '';
                 endif;
-                if (empty($bean->is_menu_item)) :
-                    ?>
+                ?>
                     <li>
                         <?php if (!empty($bean->title)) : ?>
                             <?php // mb_strimwidth(), as the 2026 theme's own _related.php uses:
@@ -45,7 +44,6 @@ if (!empty($related_posts['posts'])) :
                         </p>
                     </li>
                     <?php
-                endif;
             endforeach;
             ?>
             </ul>

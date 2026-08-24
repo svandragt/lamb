@@ -14,6 +14,8 @@ use function Lamb\Import\response_is_image;
 use function Lamb\Import\run_import;
 use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
+use function Lamb\Post\on;
+use function Lamb\Post\reset_subscribers;
 use function Lamb\Response\persist_image_bytes;
 use function Lamb\Theme\link_source;
 use function Lamb\WordPress\extract_items;
@@ -28,8 +30,8 @@ use function Lamb\WordPress\wordpress_uuid;
 /**
  * Covers parsing, sanitisation, body assembly, image rewriting and
  * idempotent import. Outbound webmentions/WebSub pings are NOT triggered
- * because import_item() uses the low-level pipeline (populate_bean →
- * finalize_and_store_post) which never calls notify_post_subscribers().
+ * because import_item() calls save() without `notify`, so no post.published
+ * event fires.
  */
 class WordPressImportTest extends TestCase
 {
@@ -787,6 +789,42 @@ XML;
         $this->assertSame('2024-03-03 10:00:00', $bean->created);
         $this->assertStringContainsString('**world**', (string) $bean->body);
         $this->assertStringContainsString('#news', (string) $bean->body);
+    }
+
+    /**
+     * Characterises the class-level claim above with an executable check:
+     * import_item() calls save() without `notify`, so post.published must
+     * never fire for imported content (imported posts must never trigger
+     * outbound webmention/WebSub).
+     */
+    public function testImportItemDoesNotEmitPostPublished(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        reset_subscribers();
+        $fired = [];
+        on('post.published', function () use (&$fired): void {
+            $fired[] = true;
+        });
+
+        $item = [
+            'title' => 'Hello World',
+            'guid' => 'https://oldsite.example/?p=43',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Hello <strong>world</strong>.</p>',
+            'tags' => ['news'],
+            'status' => 'publish',
+            'post_type' => 'post',
+        ];
+
+        $bean = import_item($item, fn() => null, false);
+
+        reset_subscribers();
+        $this->assertNotNull($bean);
+        $this->assertNotEmpty($bean->id);
+        $this->assertSame([], $fired, 'Importing must never emit post.published');
     }
 
     public function testImportItemDoesNotPinNumericSlugForWordpressStatusUrl(): void

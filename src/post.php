@@ -35,10 +35,20 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
     }
     $bean->body = $text;
     $bean->slug = $matter['slug'] ?? '';
-    $bean->created = \Lamb\now();
+    // Stamp `created` only when the row is new. A re-sync (feed cron update, or a
+    // manual edit) keeps the stored date, so an upstream entry being renamed —
+    // which bumps its feed date and trips update_item() — no longer re-dates the
+    // post to now and reorders created-sorted listings. `updated` always tracks
+    // the current write. Front matter can still override created via apply_scheduling().
+    $is_new = empty($bean->id);
+    if ($is_new) {
+        $bean->created = \Lamb\now();
+    }
     $bean->updated = \Lamb\now();
     if ($feed_item) {
-        $bean->created = $feed_item->get_date("Y-m-d H:i:s");
+        if ($is_new) {
+            $bean->created = $feed_item->get_date("Y-m-d H:i:s");
+        }
         $bean->updated = $feed_item->get_updated_date("Y-m-d H:i:s");
         if ($feed_name) {
             $bean->feeditem_uuid = md5($feed_name . $feed_item->get_id());
@@ -172,9 +182,14 @@ function parse_matter(string $body): array
  *
  * These are the values normalize_matter_values() coerces to a string (or drops
  * as absent). Keys outside this list — `created`, `draft` — carry their own
- * type handling downstream and are left as YAML parsed them.
+ * type handling downstream and are left as YAML parsed them. `in-reply-to` is
+ * also outside it: unlike every other text key it may legitimately be a list
+ * (mf2 `u-in-reply-to` repeats, RFC 4685 allows several `thr:in-reply-to`
+ * elements — #583), and coercing it here would collapse that list to its
+ * first entry before \Lamb\normalize_in_reply_to() gets a chance to keep
+ * every target via matter_url_list().
  */
-const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'in-reply-to', 'syndicated-to'];
+const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'syndicated-to'];
 
 /**
  * Coerces a front-matter value to the string its readers assume, or null when
@@ -191,8 +206,8 @@ const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'in-reply-t
  *
  * The coercion:
  *  - strings, integers and floats become their textual form;
- *  - a list collapses to its first entry — the shape `in-reply-to` already
- *    accepted, generalised, so `title: [a, b]` reads as `a`;
+ *  - a list collapses to its first entry, so `title: [a, b]` reads as `a`
+ *    (see matter_url_list() for the counterpart that keeps every entry);
  *  - dates are formatted back to the wall-clock text the author typed;
  *  - a map, a nested list, a boolean or null have no faithful text (neither
  *    "1" nor "true" is what `title: yes` meant), so they are reported as
@@ -220,6 +235,77 @@ function matter_string(mixed $value): ?string
     }
 
     return null;
+}
+
+/**
+ * Coerces a front-matter value to every one of its distinct textual entries,
+ * the list-preserving counterpart to matter_string().
+ *
+ * Where matter_string() collapses a YAML list to its first entry, this keeps
+ * them all: `in-reply-to: [a, b]` yields both targets instead of silently
+ * dropping the second (#583 — mf2 `u-in-reply-to` may repeat, RFC 4685 allows
+ * several `thr:in-reply-to` elements, and a Micropub client legitimately sends
+ * an array of targets). A scalar value is treated as a one-element list,
+ * matching matter_string()'s handling of that shape.
+ *
+ * Each list entry is coerced through matter_string()'s own scalar rules, so a
+ * date entry is formatted the same way a scalar date would be; a nested list
+ * or map entry has no single textual form and is skipped rather than aborting
+ * the whole value. Duplicate entries (after trimming) are removed, and an
+ * absent or entirely non-textual value returns [] rather than [''].
+ *
+ * @param mixed $value The raw front-matter value.
+ * @return list<string> The value's distinct textual entries, in order.
+ */
+function matter_url_list(mixed $value): array
+{
+    if (is_array($value) && !array_is_list($value)) {
+        // A map has no textual form, matching matter_string()'s handling.
+        return [];
+    }
+    $items = is_array($value) ? $value : [$value];
+
+    $entries = [];
+    foreach ($items as $item) {
+        if (is_array($item)) {
+            // A nested list/map entry carries no single URL; skip rather than
+            // guess at one of its values.
+            continue;
+        }
+        $text = matter_string($item);
+        if ($text === null) {
+            continue;
+        }
+        $text = trim($text);
+        if ($text === '' || in_array($text, $entries, true)) {
+            continue;
+        }
+        $entries[] = $text;
+    }
+
+    return $entries;
+}
+
+/**
+ * Splits a space-separated multi-target column value into its individual
+ * targets.
+ *
+ * `in_reply_to` and `syndicated_to` both store one or more targets as a
+ * space-separated string in a single column (see Theme\syndication_links()):
+ * a URL never contains a literal space, so joining with one and splitting on
+ * runs of whitespace round-trips losslessly. Every consumer of a possibly
+ * multi-target `in_reply_to` — the reply-context markup, both feed renderers,
+ * the outbound webmention queue, and the Micropub source query — goes through
+ * this rather than repeating the split.
+ *
+ * @param string $raw The raw column value.
+ * @return list<string> The individual targets, in order, with no empty entries.
+ */
+function split_reply_targets(string $raw): array
+{
+    $raw = trim($raw);
+
+    return $raw === '' ? [] : (preg_split('/\s+/', $raw) ?: []);
 }
 
 /**
@@ -409,7 +495,8 @@ function slugify(string $text): string
  * the single place that assembles a fresh front-matter block from scratch
  * (used by Micropub create/update).
  *
- * @param array<string, string> $matter Ordered front-matter key/value pairs.
+ * @param array<string, string|list<string>> $matter Ordered front-matter key/value pairs.
+ *        A list value (e.g. a multi-target `in-reply-to`, #583) dumps as a YAML list.
  * @param string $content The post content to place after the fence.
  * @return string The assembled body.
  */
@@ -429,25 +516,29 @@ function build_matter(array $matter, string $content): string
 }
 
 /**
- * Sets a single key in a body's leading YAML front-matter block, leaving all
- * other front matter intact.
+ * Sets a single key in a body's leading YAML front-matter block, without
+ * creating a block and without churning an unchanged save.
  *
- * An existing `key:` line is updated in place (preserving the original key text
- * and indentation, rewriting only the value with a single separating space).
- * When the block has no such line and $append is true, an explicit line is
- * appended to the block. Bodies without a leading front-matter block, or whose
- * key already holds the target value, are returned unchanged (no cosmetic
- * churn).
+ * A thin no-churn/no-create wrapper over set_frontmatter_key(), which is the one
+ * engine that mutates a block (splitting and rebuilding through the YAML writer).
+ * set_matter() adds two guarantees the every-save callers (persist_slug(),
+ * persist_resolved_created()) rely on and that the engine deliberately does not
+ * make:
  *
- * The value is rendered through the YAML writer rather than interpolated, for
- * the reason build_matter() already documents: a slug carrying a colon
- * (`slug: a: b`) is not valid YAML, so parse_matter() returned nothing and the
- * *whole* front-matter block — title, draft, created — silently vanished on the
- * next read; one carrying a `#` had everything from it treated as a comment.
- * finalize_slug() reaches both by appending an id suffix to an explicit slug
- * that collides or names a reserved route, and then pinning the result here.
- * Yaml::dump() already quotes anything that needs it, including the
- * `Y-m-d H:i:s` created stamp, so no caller has to ask for quoting.
+ * - A body with no leading front-matter block is returned unchanged, rather than
+ *   gaining one. set_frontmatter_key() would add a block; a status update or a
+ *   feed item without front matter must not sprout a `slug:`/`created:` fence.
+ * - When the key's line already holds this value, the body is returned
+ *   byte-for-byte — including its CRLF line endings. A browser submits a
+ *   <textarea> with CRLF, so most bodies reaching here carry them; the `\r` must
+ *   not make an unchanged value differ and re-store the post on every save.
+ *
+ * The value only reaches set_frontmatter_key() when it actually changes, so the
+ * engine's rebuild (which quotes anything YAML needs, and cannot leave a stale
+ * list behind under a scalar) happens once per real change, never as cosmetic
+ * churn. finalize_slug() reaches this by pinning an id-suffixed slug that
+ * collides or names a reserved route; apply_scheduling() by pinning a resolved
+ * `created` date.
  *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set.
@@ -459,45 +550,26 @@ function build_matter(array $matter, string $content): string
 function set_matter(string $body, string $key, string $value, bool $append = true): string
 {
     // Only touch a front-matter block at the very start of the body.
-    if (!preg_match('/\A(\s*---\s*\n)(.*?\n)(---\s*\n?)/s', $body, $m)) {
+    [$yaml] = split_frontmatter($body);
+    if ($yaml === '') {
         return $body;
     }
 
-    $rendered = Yaml::dump($value);
-    // A browser submits a <textarea> with CRLF line endings, so most bodies
-    // reaching here carry them. The `\r` is matched and carried over rather
-    // than swept into the value: as part of $line[2] it made $current differ
-    // from $value on every save, so the no-churn contract above never held for
-    // an edit-form body and each save rewrote the line (and re-stored the post).
-    $new_yaml = preg_replace_callback(
-        '/^([ \t]*' . preg_quote($key, '/') . '[ \t]*:)[ \t]*(.*?)[ \t]*(\r?)$/mi',
-        function (array $line) use ($value, $rendered): string {
-            $current = trim($line[2], " \t'\"");
-            if ($current === $value) {
-                return $line[0];
-            }
-            return $line[1] . ' ' . $rendered . $line[3];
-        },
-        $m[2],
-        1,
-        $count
-    );
-    // preg_replace_callback() returns null on a PCRE failure (a backtrack limit
-    // on a long block). Concatenating that would drop the entire YAML block, so
-    // leave the body alone instead.
-    if ($new_yaml === null) {
-        return $body;
-    }
-
-    if ($count === 0) {
-        if (!$append) {
+    // Read-only probe for the key's column-zero line, in either spelling
+    // (parse_matter() folds hyphen/underscore together). This decides no-churn
+    // and, for $append === false, whether the key is present — matching the
+    // engine's own column-zero, quote-trimming view of the value so an unchanged
+    // save returns the body verbatim.
+    $pattern = '/^' . str_replace('\-', '[-_]', preg_quote($key, '/')) . '[ \t]*:[ \t]*(.*?)[ \t]*\r?$/mi';
+    if (preg_match($pattern, $yaml, $m) === 1) {
+        if (trim($m[1], " \t'\"") === $value) {
             return $body;
         }
-        $eol = str_ends_with($m[1], "\r\n") ? "\r\n" : "\n";
-        $new_yaml = $m[2] . "$key: $rendered" . $eol;
+    } elseif (!$append) {
+        return $body;
     }
 
-    return $m[1] . $new_yaml . $m[3] . substr($body, strlen($m[0]));
+    return set_frontmatter_key($body, $key, $value);
 }
 
 /**
@@ -518,19 +590,43 @@ function set_matter(string $body, string $key, string $value, bool $append = tru
  * outright — so it can also remove one, and cannot leave a stale YAML list
  * behind under a key whose new value is a scalar.
  *
+ * $value may be a list of strings as well as a single string, so a key that
+ * legitimately repeats (`in-reply-to`, #583) can be written with several
+ * targets. A list of zero or one entries is treated exactly like the scalar
+ * case (removes the key, or writes a plain `key: value` line) so every
+ * existing single-target caller is unaffected; two or more entries are
+ * written as a YAML list, the same shape parse_matter() already accepts.
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set, in its hyphenated spelling.
- * @param string $value The value to write, or '' to remove the key.
+ * @param string|list<string> $value The value(s) to write, or '' / [] to remove the key.
  * @return string The body with its front-matter key set.
  */
-function set_frontmatter_key(string $body, string $key, string $value): string
+function set_frontmatter_key(string $body, string $key, string|array $value): string
 {
-    $body  = normalize_frontmatter_fence($body);
-    $value = trim($value);
+    $body = normalize_frontmatter_fence($body);
+
+    if (is_array($value)) {
+        $value = array_values(array_unique(array_filter(
+            array_map('trim', $value),
+            static fn(string $entry): bool => $entry !== ''
+        )));
+        // A single entry (or none) is the scalar case: writing it as a
+        // one-element list would change the on-disk shape of every existing
+        // single-target caller for no behavioural difference.
+        if (count($value) <= 1) {
+            $value = $value[0] ?? '';
+        }
+    } else {
+        $value = trim($value);
+    }
+    // The array branch above always collapses to a string when 0 or 1 entries
+    // survive filtering, so $value here is either a string or a non-empty list.
+    $is_empty = $value === '';
     [$yaml, $content] = split_frontmatter($body);
 
     if ($yaml === '') {
-        return $value === '' ? $body : build_matter([$key => $value], $body);
+        return $is_empty ? $body : build_matter([$key => $value], $body);
     }
 
     // Matches whichever spelling the author used, the way normalize_matter_keys()
@@ -557,7 +653,7 @@ function set_frontmatter_key(string $body, string $key, string $value): string
     }
 
     $new_yaml = rtrim(implode("\n", $kept), "\n");
-    if ($value !== '') {
+    if (!$is_empty) {
         $new_yaml = ($new_yaml === '' ? '' : $new_yaml . "\n") . trim(Yaml::dump([$key => $value]));
     }
 
@@ -569,13 +665,13 @@ function set_frontmatter_key(string $body, string $key, string $value): string
 }
 
 /**
- * Sets (or clears) the reply target in a body's leading YAML front-matter block.
+ * Sets (or clears) the reply target(s) in a body's leading YAML front-matter block.
  *
  * @param string $body The raw post body.
- * @param string $value The reply target URL, or '' to remove it.
- * @return string The body with its front-matter reply target set.
+ * @param string|list<string> $value The reply target URL(s), or '' / [] to remove them.
+ * @return string The body with its front-matter reply target(s) set.
  */
-function set_reply_to(string $body, string $value): string
+function set_reply_to(string $body, string|array $value): string
 {
     return set_frontmatter_key($body, 'in-reply-to', $value);
 }
@@ -660,6 +756,158 @@ function finalize_and_store_post(OODBBean $bean): void
     R::store($bean);
     if (finalize_slug($bean)) {
         R::store($bean);
+    }
+    // Funnel point for every create/edit path: bumps the monotonic content
+    // high-water mark latest_content_timestamp() reads (#669).
+    \Lamb\Response\bump_content_timestamp();
+}
+
+/**
+ * The registry of post-lifecycle event subscribers, keyed by event name.
+ *
+ * A by-reference accessor so on() and reset_subscribers() mutate the one static
+ * array emit() reads. See save() for the events and the funnel that emits them.
+ *
+ * @return array<string, list<callable>> The mutable subscriber registry.
+ */
+function &event_subscribers(): array
+{
+    static $subscribers = [];
+
+    return $subscribers;
+}
+
+/**
+ * Registers a subscriber for a post-lifecycle event.
+ *
+ * Events are emitted by save(): `post.created`, `post.updated`, `post.published`
+ * (and, as more write sites convert, `post.deleted` and `post.restored`). A
+ * subscriber is called with the stored bean.
+ *
+ * @param string   $event      The event name to subscribe to.
+ * @param callable $subscriber fn(OODBBean $bean): void.
+ * @return void
+ */
+function on(string $event, callable $subscriber): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers[$event][] = $subscriber;
+}
+
+/**
+ * Calls every subscriber registered for an event, in registration order.
+ *
+ * @param string   $event The event name to emit.
+ * @param OODBBean $bean  The stored post bean to hand each subscriber.
+ * @return void
+ */
+function emit(string $event, OODBBean $bean): void
+{
+    foreach (event_subscribers()[$event] ?? [] as $subscriber) {
+        $subscriber($bean);
+    }
+}
+
+/**
+ * Clears the subscriber registry. For test isolation between cases that each
+ * register their own subscribers; production wiring runs once per request.
+ *
+ * @return void
+ */
+function reset_subscribers(): void
+{
+    $subscribers = &event_subscribers();
+    $subscribers = [];
+}
+
+/**
+ * Wires the subscribers every request needs at the seam.
+ *
+ * Publication is an event: notify-requested saves emit `post.published`, and the
+ * two notification subsystems subscribe here rather than each re-deriving
+ * "published" from a different signal. Each callee self-filters ineligible posts
+ * (drafts, feed items, future-dated), so subscribing them unconditionally is
+ * safe. Called once from the request bootstrap (src/index.php).
+ *
+ * @return void
+ */
+function register_default_subscribers(): void
+{
+    on('post.published', '\Lamb\Webmention\enqueue_for_post');
+    on('post.published', '\Lamb\Websub\ping_for_post');
+}
+
+/**
+ * The single funnel every post write goes through.
+ *
+ * Stores the bean and emits the lifecycle events that used to be a convention
+ * spread across the write sites: `post.created` for a new row or `post.updated`
+ * for an existing one, and `post.published` when the caller asks for
+ * notification (subscribers registered by register_default_subscribers() then
+ * queue webmentions and ping the WebSub hubs). Moving notification onto the
+ * funnel's success path makes #685's "never notify a failed write" fix
+ * structural rather than a per-site habit.
+ *
+ * The context flags carry the behaviours each site used to express by omitting a
+ * call:
+ *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
+ *    into the front matter (what every create path used to get from
+ *    finalize_and_store_post(), now superseded by this funnel).
+ *  - `notify` — emit `post.published` after a successful store.
+ *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
+ *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
+ *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
+ *    different from `old_slug`, record a 301 from `old_slug` to the new one
+ *    (the edit form's store_slug_change_redirect() call). The funnel has no
+ *    pre-edit slug of its own, so the caller passes it in.
+ *
+ * The store is not caught here: each call site flashes its own message and
+ * decides what to do on failure, so the RedException\SQL propagates.
+ *
+ * @param OODBBean $bean A populated post bean.
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
+ * @return void
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ */
+function save(OODBBean $bean, array $context = []): void
+{
+    $context += [
+        'finalize_slug'           => false,
+        'notify'                  => false,
+        'lock_if_feed_sourced'    => false,
+        'redirect_on_slug_change' => false,
+        'old_slug'                => '',
+    ];
+
+    $is_new = empty($bean->id);
+
+    // Before the store: feed_locked is a column on the row being written.
+    if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
+        $bean->feed_locked = 1;
+    }
+
+    R::store($bean);
+    // finalize_slug() needs the minted id for any dedup suffix, so it runs after
+    // the first store and re-stores only when it changed the slug or body.
+    if ($context['finalize_slug'] && finalize_slug($bean)) {
+        R::store($bean);
+    }
+
+    // save() is the write funnel, so the content high-water mark must advance
+    // here too — not only in finalize_and_store_post(), which the funnel does
+    // not call (#669). Without this, posts saved through save() (the #692 site
+    // and every #717 conversion) would never move latest_content_timestamp().
+    \Lamb\Response\bump_content_timestamp();
+
+    // On the store's success path only (#685): a failed store must never leave
+    // a 301 pointing at content that was never saved.
+    if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
+        \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
+    }
+
+    emit($is_new ? 'post.created' : 'post.updated', $bean);
+    if ($context['notify']) {
+        emit('post.published', $bean);
     }
 }
 

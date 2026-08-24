@@ -426,38 +426,6 @@ function parse_status_line(string $line): int
 }
 
 /**
- * POST a www-form-urlencoded body and return the response HTTP status code.
- *
- * The shared outbound notification primitive: webmention sending and WebSub
- * hub pings both POST a small form and only care about the status (WebSub
- * ignores even that — it is fire-and-forget). Built on {@see fetch};
- * follow_location/max_redirects are omitted so PHP's stream defaults apply,
- * matching the hand-rolled contexts this replaces.
- *
- * @param string               $url        The endpoint to POST to.
- * @param array<string, mixed> $fields     Form fields for the request body.
- * @param int                  $timeout    Socket timeout in seconds.
- * @param string               $user_agent User-Agent header value.
- * @return int HTTP status code, or 0 on transport failure.
- */
-function post_form(string $url, array $fields, int $timeout, string $user_agent): int
-{
-    $result = fetch($url, [
-        'method' => 'POST',
-        'headers' => [
-            'Content-Type: application/x-www-form-urlencoded',
-            'User-Agent: ' . $user_agent,
-        ],
-        'content' => http_build_query($fields),
-        'timeout' => $timeout,
-        'follow_location' => null,
-        'max_redirects' => null,
-    ]);
-
-    return $result === null ? 0 : $result['status'];
-}
-
-/**
  * Perform a single HTTP request pinned to a specific IP via curl, so the
  * connection reaches the exact address {@see resolve_validated_ip} validated
  * instead of letting the transport re-resolve the host itself (the
@@ -568,7 +536,7 @@ function fetch_pinned(string $url, array $opts, array $pin): ?array
  *
  * Pass `pin => ['host' => string, 'ip' => string]` to route the request
  * through {@see fetch_pinned} instead — see its docblock for why. Every
- * other caller (`post_form()`, Micropub's `introspectToken`) is unaffected.
+ * other caller (Micropub's `introspectToken`) is unaffected.
  *
  * @param string               $url
  * @param array<string, mixed> $opts

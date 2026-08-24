@@ -8,9 +8,11 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\get_option;
 use function Lamb\parse_bean;
 use function Lamb\Post\inject_title_matter;
 use function Lamb\Post\parse_matter;
+use function Lamb\set_option;
 
 // The built-in dev server (`composer serve`) does not load .env, so read it here
 // before LOGIN_PASSWORD is captured. Restricted to the cli-server SAPI so it only
@@ -19,12 +21,18 @@ if (PHP_SAPI === 'cli-server') {
     \Lamb\Bootstrap\load_dotenv(dirname(__DIR__));
 }
 
-define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
+define('LOGIN_PASSWORD', \Lamb\Bootstrap\login_password());
 
 // IMAGE_FILES is defined in constants.php
 
 /**
  * Returns cookie options with the given expiry timestamp.
+ *
+ * `secure` tracks the connection scheme rather than being forced on, matching
+ * the session cookie (Bootstrap\configure_session()): a cookie marked secure
+ * over plain HTTP is silently dropped by the browser, which would otherwise
+ * break login persistence on any install served without TLS (e.g. behind a
+ * proxy that never sets HTTPS=on, or during initial local setup).
  *
  * @param int $expires Unix timestamp for cookie expiry.
  * @return array<string, mixed> Cookie options array.
@@ -34,26 +42,66 @@ function get_cookie_options(int $expires): array
     return [
         'expires'  => $expires,
         'path'     => '/',
-        'secure'   => true,
+        'secure'   => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'),
         'httponly' => true,
         'samesite' => 'Strict',
     ];
 }
 
 /**
- * Returns the Unix timestamp of the most recently updated published post.
+ * Option key holding the monotonic content high-water mark (#669).
  *
- * Used as a coarse, monotonic content validator for conditional GETs: any post
- * edit/publish moves it forward, so anonymous pages revalidate; the max-age
- * window covers edge cases (config edits, scheduled posts going live).
+ * A plain MAX(updated) over published posts moves backwards when the post
+ * holding that max gets trashed, which could serve a stale 304 to a
+ * date-only cache/client for content that has since changed. This mark is
+ * bumped forward-only by the content-mutation chokepoints instead
+ * (the save() write funnel, soft_delete_post(), restore_post()), so trash/
+ * restore can never pull the validator backwards.
+ */
+const CONTENT_MODIFIED_TS = 'content_modified_ts';
+
+/**
+ * Advances the stored content high-water mark to a value strictly greater
+ * than its current one.
+ *
+ * Mirrors save_ini_text()'s config-timestamp idiom: max(time(), previous + 1)
+ * guarantees forward movement even when two mutations land in the same
+ * wall-clock second, so the conditional-GET validator always changes on a
+ * content mutation.
+ *
+ * @return void
+ */
+function bump_content_timestamp(): void
+{
+    $option = get_option(CONTENT_MODIFIED_TS, 0);
+    $previous = (int) ($option->value ?: 0);
+    set_option($option, max(time(), $previous + 1));
+}
+
+/**
+ * Returns the Unix timestamp of the content high-water mark: the most recent
+ * of any published post's `updated` and any trash/restore, tracked via the
+ * stored, monotonic mark (see bump_content_timestamp()).
+ *
+ * Lazily backfills the mark from the current MAX(updated) the first time it's
+ * read as unset, so an install upgrading to #669 doesn't have its validator
+ * reset to 0 (which would look like "everything just changed" to every
+ * client). After that, the mark is authoritative and never recomputed here.
  *
  * @return int Unix timestamp, or 0 when there is no published content yet.
  */
 function latest_content_timestamp(): int
 {
-    $latest = R::findOne('post', \Lamb\SQL_PUBLISHED . ' ORDER BY updated DESC LIMIT 1');
-    $post_ts = ($latest !== null && !empty($latest->updated)) ? (strtotime($latest->updated) ?: 0) : 0;
-    return max($post_ts, \Lamb\Config\config_modified_timestamp());
+    $option = get_option(CONTENT_MODIFIED_TS, 0);
+    $mark = (int) ($option->value ?: 0);
+    if ($mark === 0) {
+        $latest = R::findOne('post', \Lamb\SQL_PUBLISHED . ' ORDER BY updated DESC LIMIT 1');
+        $mark = ($latest !== null && !empty($latest->updated)) ? (strtotime($latest->updated) ?: 0) : 0;
+        if ($mark > 0) {
+            set_option($option, $mark);
+        }
+    }
+    return max($mark, \Lamb\Config\config_modified_timestamp());
 }
 
 /**

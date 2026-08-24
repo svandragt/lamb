@@ -9,6 +9,8 @@ use Lamb\Micropub\LambMicropubAdapter;
 use Tests\Support\StubMicropubAdapter;
 
 use function Lamb\Micropub\has_micropub_scope;
+use function Lamb\Post\on;
+use function Lamb\Post\reset_subscribers;
 
 class MicropubAdapterTest extends TestCase
 {
@@ -1111,6 +1113,30 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
     }
 
+    public function testUpdateCallbackAdvancesTheContentTimestamp(): void
+    {
+        // Unique slug so this test's row can't collide with the other
+        // updateCallback tests (this suite does not reset the DB between tests).
+        $post = R::dispense('post');
+        $post->body = "---\ntitle: Timestamp Bump\n---\n\nbody";
+        $post->slug = 'ts-bump-post';
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        // Seed the monotonic mark in the past: a Micropub update is a content
+        // change, so it must move the 304 validator forward, or the edit is
+        // invisible to a date-only cache (#669).
+        \Lamb\set_option(\Lamb\get_option('content_modified_ts', 0), strtotime('2000-01-01 00:00:00'));
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback('http://localhost/ts-bump-post', ['replace' => ['content' => ['updated body']]]);
+
+        $this->assertGreaterThan(
+            strtotime('2000-01-01 00:00:00'),
+            \Lamb\Response\latest_content_timestamp()
+        );
+    }
+
     public function testUpdateCallbackReturnsInvalidRequestForTrashedPost(): void
     {
         // Regression: a soft-deleted post is meant to stay immutable until
@@ -1971,6 +1997,45 @@ class MicropubAdapterTest extends TestCase
         $this->assertArrayNotHasKey('in-reply-to', $result['properties']);
     }
 
+    public function testSourceQueryReturnsMultipleInReplyToTargets(): void
+    {
+        // #583: a YAML list front-matter value keeps every target in the
+        // column (space-separated); the source query reports every one, not
+        // just the first.
+        $bean = $this->storeReply(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
+
+        $this->assertSame(
+            ['https://first.example/post', 'https://second.example/post'],
+            $result['properties']['in-reply-to']
+        );
+    }
+
+    public function testCreateCallbackAcceptsMultipleInReplyToTargets(): void
+    {
+        // #583: mf2 u-in-reply-to may repeat, so a client sending an array of
+        // targets must have all of them stored, not just the first.
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type'       => ['h-entry'],
+            'properties' => [
+                'content'     => ['Replying to two posts'],
+                'in-reply-to' => ['https://first.example/post', 'https://second.example/post'],
+            ],
+        ]);
+
+        $post = R::findOne('post', ' body LIKE ? ', ['%Replying to two posts%']);
+        $this->assertNotNull($post);
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $post->in_reply_to
+        );
+    }
+
     public function testUpdateReplaceInReplyToSetsTarget(): void
     {
         $bean = $this->storeReply('Turning this into a reply');
@@ -2041,6 +2106,25 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
+    public function testUpdateReplaceInReplyToSetsMultipleTargets(): void
+    {
+        // #583: replace accepts every value the client sends, not just the first.
+        $bean = $this->storeReply('Turning this into a multi-target reply');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['in-reply-to' => ['https://first.example/post', 'https://second.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://first.example/post https://second.example/post',
+            $updated->in_reply_to
+        );
+    }
+
     public function testUpdateReplaceInReplyToWithEmptyValueClearsTarget(): void
     {
         $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nNo longer a reply");
@@ -2100,6 +2184,24 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
+    public function testUpdateDeleteInReplyToValueRemovesOneOfSeveralTargets(): void
+    {
+        // #583: deleting one of several targets leaves the rest in place,
+        // rather than clearing the whole property.
+        $bean = $this->storeReply(
+            "---\nin-reply-to:\n  - https://first.example/post\n  - https://second.example/post\n---\nHi"
+        );
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['delete' => ['in-reply-to' => ['https://first.example/post']]]
+        );
+
+        $updated = R::load('post', $bean->id);
+        $this->assertSame('https://second.example/post', $updated->in_reply_to);
+    }
+
     public function testUpdateAddInReplyToSetsTargetWhenAbsent(): void
     {
         $bean = $this->storeReply('Not yet a reply');
@@ -2115,11 +2217,10 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
 
-    public function testUpdateAddSecondInReplyToIsRejected(): void
+    public function testUpdateAddSecondInReplyToAppendsTarget(): void
     {
-        // Storage holds one reply target, so a second one cannot be honoured:
-        // Micropub requires an unsupported operation to fail rather than return
-        // success the client will read as "saved".
+        // #583: a post may record several reply targets, so `add`ing a second
+        // one now appends rather than being refused as it was pre-#583 (#582).
         $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
 
         $adapter = new LambMicropubAdapter();
@@ -2128,7 +2229,45 @@ class MicropubAdapterTest extends TestCase
             ['add' => ['in-reply-to' => ['https://second.example/post']]]
         );
 
-        $this->assertSame('invalid_request', $result);
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://other.example/post https://second.example/post',
+            $updated->in_reply_to
+        );
+    }
+
+    public function testUpdateAddAppendsEveryTargetInOneAddNotJustTheFirst(): void
+    {
+        // A single add carrying several in-reply-to values must store all of
+        // them — not silently keep only the first (review of #583).
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://a.example/post', 'https://b.example/post']]]
+        );
+
+        $this->assertTrue($result);
+        $updated = R::load('post', $bean->id);
+        $this->assertSame(
+            'https://other.example/post https://a.example/post https://b.example/post',
+            $updated->in_reply_to
+        );
+    }
+
+    public function testUpdateAddDuplicateInReplyToTargetIsANoOp(): void
+    {
+        $bean = $this->storeReply("---\nin-reply-to: https://other.example/post\n---\nHi");
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['in-reply-to' => ['https://other.example/post']]]
+        );
+
+        $this->assertTrue($result);
         $updated = R::load('post', $bean->id);
         $this->assertSame('https://other.example/post', $updated->in_reply_to);
     }
@@ -2511,5 +2650,57 @@ class MicropubAdapterTest extends TestCase
         $renamed = R::load('post', $post->id);
         $this->assertSame('original', $renamed->slug);
         $this->assertSame('Renamed Entirely', $renamed->title);
+    }
+
+    // --- Post\save() event matrix (#717) ---
+    // Both callbacks now route through Post\save() instead of calling
+    // finalize_and_store_post()/notify_post_subscribers() directly, so this
+    // proves the funnel's events fire the same way through the Micropub seam.
+
+    public function testCreateCallbackEmitsCreatedThenPublished(): void
+    {
+        reset_subscribers();
+        $events = [];
+        foreach (['post.created', 'post.updated', 'post.published'] as $event) {
+            on($event, function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ['Event matrix: create']],
+        ]);
+
+        reset_subscribers();
+        $this->assertSame(['post.created', 'post.published'], $events);
+    }
+
+    public function testUpdateCallbackEmitsUpdatedThenPublished(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = 'Event matrix: original';
+        $bean->slug = '';
+        $bean->created = date('Y-m-d H:i:s');
+        $bean->updated = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        reset_subscribers();
+        $events = [];
+        foreach (['post.created', 'post.updated', 'post.published'] as $event) {
+            on($event, function () use (&$events, $event): void {
+                $events[] = $event;
+            });
+        }
+
+        $adapter = new LambMicropubAdapter();
+        $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => ['Event matrix: updated']]]
+        );
+
+        reset_subscribers();
+        $this->assertSame(['post.updated', 'post.published'], $events);
     }
 }

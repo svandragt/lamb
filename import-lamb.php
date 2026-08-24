@@ -23,69 +23,23 @@
  *
  * The script intentionally does NOT emit outbound webmentions or WebSub
  * pings — restored posts are pre-existing content, not new publications.
+ *
+ * @deprecated Delegates to `bin/lamb import lamb`. Kept for one release as a
+ *             documented entry point; will be removed after that.
  */
 
 namespace Lamb;
-
-use Lamb\Import;
-use Lamb\Restore;
-use RedBeanPHP\R;
-use RuntimeException;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "import-lamb.php must be run from the command line.\n");
     exit(1);
 }
 
-define('ROOT_DIR', __DIR__ . '/src');
-require __DIR__ . '/vendor/autoload.php';
+fwrite(STDERR, "import-lamb.php is deprecated and will be removed in a future release; use `bin/lamb import lamb` instead.\n");
 
-[$path, $dry_run, $replace, $site_url] = Restore\parse_restore_args($argv);
-if ($path === null) {
-    fwrite(STDERR, "Usage: php import-lamb.php <lamb-export.zip|directory> [--dry-run] [--replace] [--site-url=<url>]\n");
-    exit(1);
-}
-
-try {
-    [, $reader] = Restore\open_source($path);
-} catch (RuntimeException $e) {
-    fwrite(STDERR, $e->getMessage() . "\n");
-    exit(1);
-}
-
-$data_dir = getenv('LAMB_DATA_DIR') ?: __DIR__ . '/data';
-Bootstrap\bootstrap_db($data_dir);
-
-global $config;
-$config = Config\load();
-Config\apply_timezone($config);
-
-if (!Config\experimental_features_enabled($config)) {
-    fwrite(STDERR, "The Lamb export importer is experimental. Enable it first: set experimental_features = true in Settings.\n");
-    exit(1);
-}
-
-try {
-    $manifest = Restore\read_manifest($reader);
-} catch (RuntimeException $e) {
-    fwrite(STDERR, $e->getMessage() . "\n");
-    exit(1);
-}
-
-$origin = Restore\origin_id($manifest, $site_url);
-if ($origin === '') {
-    fwrite(STDERR, "Warning: this archive names no site URL, so imported ids are namespaced by an empty origin. Pass --site-url=<url> to keep two sites' posts apart.\n");
-}
-
-Import\run_import(
-    Restore\manifest_items($manifest, $reader, $origin),
-    Restore\item_skip_reason(...),
-    static fn(array $item): string => (string) $item['import_uuid'],
-    Restore\import_post(...),
-    $dry_run,
-    static fn(string $uuid): ?\RedBeanPHP\OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
-    $replace,
+$command = array_merge(
+    [PHP_BINARY, __DIR__ . '/bin/lamb', 'import', 'lamb'],
+    array_slice($argv, 1)
 );
-
-$assets = Restore\restore_assets($manifest, ROOT_DIR . '/assets', $reader, $dry_run);
-echo "Assets: restored={$assets['restored']} skipped={$assets['skipped']} rejected={$assets['rejected']}\n";
+passthru(implode(' ', array_map('escapeshellarg', $command)), $exit_code);
+exit($exit_code);

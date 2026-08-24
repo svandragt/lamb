@@ -262,8 +262,12 @@ function build_manifest(array $posts, array $assets, string $exported_at, array 
  *
  * @param list<array<string, mixed>> $posts Rows from collect_posts().
  * @param array<string, mixed>       $site  Descriptive site info for the manifest.
+ * @param ZipArchive|null $zip Injected for tests that need to force a write
+ *                             failure; production callers leave this null.
  * @return array<string, mixed> The manifest as written.
- * @throws RuntimeException When the archive cannot be created or finalised.
+ * @throws RuntimeException When the archive cannot be created, a post or the
+ *                           manifest cannot be written, or the archive cannot
+ *                           be finalised.
  * @throws JsonException
  */
 function build_export_archive(
@@ -271,9 +275,10 @@ function build_export_archive(
     string $assets_root,
     string $zip_path,
     string $exported_at,
-    array $site = []
+    array $site = [],
+    ?ZipArchive $zip = null
 ): array {
-    $zip = new ZipArchive();
+    $zip ??= new ZipArchive();
     if ($zip->open($zip_path, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
         throw new RuntimeException("Could not create export archive at $zip_path");
     }
@@ -284,7 +289,12 @@ function build_export_archive(
     foreach ($posts as $post) {
         $path = post_export_path($post, $taken);
         $body = (string) ($post['body'] ?? '');
-        $zip->addFromString($path, $body);
+        // Checked: an unnoticed failure here would still add a manifest entry
+        // for a post whose file never made it into the archive — an export
+        // that reports success while silently dropping a post from the backup.
+        if (!$zip->addFromString($path, $body)) {
+            throw new RuntimeException("Could not write post export file: $path");
+        }
         $entries[] = manifest_post_entry($post, $path);
         foreach (referenced_assets($body) as $relative) {
             $referenced[$relative] = true;
@@ -314,7 +324,9 @@ function build_export_archive(
         JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
         | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR
     );
-    $zip->addFromString('manifest.json', $json . "\n");
+    if (!$zip->addFromString('manifest.json', $json . "\n")) {
+        throw new RuntimeException("Could not write export manifest");
+    }
 
     if (!$zip->close()) {
         throw new RuntimeException("Could not finalise export archive at $zip_path");

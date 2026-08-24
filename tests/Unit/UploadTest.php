@@ -17,6 +17,7 @@ use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
 use function Lamb\Response\should_convert_to_webp;
+use function Lamb\Response\store_upload_or_fallback;
 use function Lamb\Response\store_webp_copy;
 
 class UploadTest extends TestCase
@@ -560,6 +561,54 @@ class UploadTest extends TestCase
 
         $this->assertNull($result);
         $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+    }
+
+    // store_upload_or_fallback — the store-or-fall-back sequence shared by the
+    // /upload handler and the Micropub media endpoint: a WebP copy when
+    // convertible, otherwise move_uploaded_file() the original bytes into place.
+
+    public function testStoreUploadOrFallbackReturnsWebpFilenameForConvertibleImage(): void
+    {
+        $src = $this->makePng(40, 30);
+
+        $result = store_upload_or_fallback($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertSame('seedhash.webp', $result);
+        $this->assertFileExists($this->tempRootDir . '/seedhash.webp');
+        $this->assertSame('image/webp', mime_content_type($this->tempRootDir . '/seedhash.webp'));
+    }
+
+    public function testStoreUploadOrFallbackReturnsNullWhenConversionSkippedAndMoveFails(): void
+    {
+        // A non-convertible extension skips the WebP path, so the code falls back
+        // to move_uploaded_file() — which refuses a path that did not arrive via
+        // an HTTP upload, so the helper returns null and stores nothing. (The
+        // successful-move branch needs a real upload; it is covered by the e2e
+        // suite, see #673.)
+        $src = $this->tempRootDir . '/plain.gif';
+        file_put_contents($src, 'GIF89a not really');
+
+        $result = @store_upload_or_fallback($src, 'gif', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.gif');
+    }
+
+    public function testStoreUploadOrFallbackReturnsNullForConvertibleExtensionWhenWebpAndMoveBothFail(): void
+    {
+        // The more common real-world shape of #653: a convertible extension
+        // (jpg/png) whose bytes aren't a real image, so store_webp_copy() also
+        // fails and the code falls through to the same move_uploaded_file() that
+        // cannot succeed outside a real HTTP upload. Both branches failing must
+        // still surface as null, not a filename nothing was written to.
+        $src = $this->tempRootDir . '/plain.jpg';
+        file_put_contents($src, 'not really a jpeg');
+
+        $result = @store_upload_or_fallback($src, 'jpg', $this->tempRootDir, 'seedhash');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.webp');
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.jpg');
     }
 
     // asset_dimensions — pixel size of a locally stored asset, for intrinsic
