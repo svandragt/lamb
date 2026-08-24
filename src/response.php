@@ -21,7 +21,7 @@ if (PHP_SAPI === 'cli-server') {
     \Lamb\Bootstrap\load_dotenv(dirname(__DIR__));
 }
 
-define('LOGIN_PASSWORD', getenv("LAMB_LOGIN_PASSWORD") ?: '');
+define('LOGIN_PASSWORD', \Lamb\Bootstrap\login_password());
 
 // IMAGE_FILES is defined in constants.php
 
