@@ -461,4 +461,31 @@ class ThemeExtendedTest extends TestCase
         $result = get_posts_by_tags(['scheduleme']);
         $this->assertCount(0, $result);
     }
+
+    public function testGetPostsByTagsExcludesMenuItems(): void
+    {
+        // Related posts appear on public permalinks; a menu page (pinned in the
+        // nav) has no business in the "related" list. The two _related.php
+        // templates used to filter on a non-existent $bean->is_menu_item
+        // property, so the exclusion never fired (issue #101). It belongs in the
+        // query, like every other visibility rule.
+        global $config;
+        $config['menu_items'] = ['About' => 'about'];
+
+        $bean = R::dispense('post');
+        $bean->body = 'Menu page about #menume end';
+        $bean->slug = 'about';
+        $bean->version = 1;
+        $bean->draft = 0;
+        $bean->deleted = 0;
+        $bean->created = date('Y-m-d H:i:s');
+        R::store($bean);
+
+        try {
+            $result = get_posts_by_tags(['menume']);
+            $this->assertCount(0, $result);
+        } finally {
+            unset($config['menu_items']);
+        }
+    }
 }

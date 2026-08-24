@@ -21,11 +21,6 @@ $current_id = (int) $current->id;
 $body = (string) $current->body;
 $related = related_posts($body, $current_id)['posts'];
 
-// Hide menu items from the related list.
-$related = array_values(array_filter($related, static function ($bean) {
-    return empty($bean->is_menu_item);
-}));
-
 if (empty($related)) {
     return;
 }
