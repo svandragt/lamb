@@ -1806,6 +1806,32 @@ class MicropubAdapterTest extends TestCase
         );
     }
 
+    public function testUpdateCallbackReturnsInsufficientScopeForNonexistentUrlWhenTokenLacksScope(): void
+    {
+        // Regression: updateCallback() used to check existence before scope, so
+        // a token without 'update' scope got 'invalid_request' for a URL with no
+        // post but 403 insufficient_scope for one that does exist (draft,
+        // scheduled, or published) — letting any token, of any scope, probe
+        // whether a hidden post id is taken. Checking scope first (matching
+        // deleteCallback()/undeleteCallback()) makes the response identical
+        // whether or not the post exists, so it can no longer be used to enumerate ids.
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = [
+            'me'    => ROOT_URL . '/',
+            'scope' => ['create'],
+        ];
+
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/999999',
+            ['replace' => ['content' => ['New content']]]
+        );
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
+    }
+
     // --- bearer_challenge (RFC 6750 §3 WWW-Authenticate value) ---
 
     public function testBearerChallengeWithNoArgumentsOmitsErrorCode(): void

@@ -484,6 +484,16 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function updateCallback(string $url, array $actions)
     {
+        // Checked before existence, matching deleteCallback()/undeleteCallback():
+        // an insufficient-scope token gets the same insufficient_scope response
+        // whether $url names a post at all. Checking existence first would let
+        // any token — whatever its own scope — tell a draft/scheduled/trashed
+        // post's id apart from an unused one by the 403-vs-invalid_request split.
+        $rejection = $this->scopeRejection('update');
+        if ($rejection !== null) {
+            return $rejection;
+        }
+
         $bean = $this->findPostByUrl($url);
         // A soft-deleted post is meant to stay immutable until explicitly
         // restored via the delete-scoped undeleteCallback(); treating it the
@@ -491,11 +501,6 @@ class LambMicropubAdapter extends MicropubAdapter
         // a trashed post's id apart from a nonexistent one.
         if ($bean === null || (int) $bean->deleted === 1) {
             return 'invalid_request';
-        }
-
-        $rejection = $this->scopeRejection('update');
-        if ($rejection !== null) {
-            return $rejection;
         }
 
         // Captured before any operation runs: whether this update *mints* a
