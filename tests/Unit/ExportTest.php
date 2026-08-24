@@ -327,6 +327,42 @@ class ExportTest extends TestCase
         $zip->close();
     }
 
+    public function testAFailedPostWriteAbortsTheExportInsteadOfProducingABlankManifestEntry(): void
+    {
+        // Regression: ZipArchive::addFromString()'s return value was discarded,
+        // so a post whose entry libzip failed to buffer still got a manifest
+        // entry pointing at it — a restore would later see that entry's file
+        // missing and silently drop the post, while the export itself reported
+        // success. This double is a stand-in for that failure mode (real
+        // triggers: memory pressure during buffering, a libzip write error);
+        // it can't be provoked through the real filesystem in a test.
+        $failing_path = 'posts/2026/07/hello-world.md';
+        $zip = new class ($failing_path) extends ZipArchive {
+            public function __construct(private string $failPath)
+            {
+            }
+
+            public function addFromString($name, $content, $flags = 0): bool
+            {
+                if ($name === $this->failPath) {
+                    return false;
+                }
+                return parent::addFromString($name, $content, $flags);
+            }
+        };
+
+        $this->expectException(\RuntimeException::class);
+
+        build_export_archive(
+            [$this->post()],
+            $this->tmp_dir . '/assets',
+            $this->tmp_dir . '/export.zip',
+            '2026-07-26T14:00:00+00:00',
+            [],
+            $zip
+        );
+    }
+
     public function testAMissingAssetDoesNotAbortTheExport(): void
     {
         mkdir($this->tmp_dir . '/assets', 0777, true);
