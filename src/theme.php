@@ -397,6 +397,30 @@ function syndication_links(OODBBean $bean): string
 }
 
 /**
+ * Returns true when a post-list row should be hidden for being a menu page —
+ * a post pinned in [menu_items] and reachable from the nav instead of the
+ * chronological stream.
+ *
+ * Public listings already exclude menu pages in SQL (public_posts_clause());
+ * this is the backstop for owner-only views that deliberately query
+ * everything (drafts, trash, scheduled). Never hides on a permalink
+ * ($template === 'status'): there the menu page *is* the requested post, so
+ * hiding it would render an empty page.
+ *
+ * The single definition shared by render_post_list() (2024/2026 themes) and
+ * the base theme's parts/_items.php, which each hand-copied this check
+ * before (#731).
+ *
+ * @param string|null $template The current template name.
+ * @param OODBBean    $bean     The post bean being considered for the listing.
+ * @return bool
+ */
+function is_hidden_menu_item(?string $template, OODBBean $bean): bool
+{
+    return $template !== 'status' && is_menu_item((string) ($bean->slug ?? ''));
+}
+
+/**
  * Renders the post-list loop shared by the 2024 and 2026 themes' _items.php.
  *
  * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
@@ -429,9 +453,7 @@ function render_post_list(bool $hide_author): void
         endif;
         foreach ($data['posts'] as $bean) :
             /** @var \RedBeanPHP\OODBBean $bean */
-            if ($template !== 'status' && is_menu_item((string) ($bean->slug ?? ''))) :
-                # Backstop for the owner-only views that query everything (drafts,
-                # trash, scheduled); public listings exclude menu pages in SQL.
+            if (is_hidden_menu_item($template, $bean)) :
                 continue;
             endif;
             if ($is_list) :
