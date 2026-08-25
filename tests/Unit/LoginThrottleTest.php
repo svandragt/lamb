@@ -197,6 +197,40 @@ class LoginThrottleTest extends TestCase
         $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
     }
 
+    // Concurrent-write safety — the counter must not lose an increment (or
+    // crash the request) when another connection already holds the write lock
+
+    public function testRecordLoginFailureSkipsCountingRatherThanThrowingWhenTheWriteLockIsHeld(): void
+    {
+        // Simulates another request already mid-write: SQLite refuses a second
+        // BEGIN IMMEDIATE on the same connection, which is the same SQLSTATE
+        // shape record_login_failure() must survive when a different
+        // connection holds the lock instead.
+        R::exec('BEGIN IMMEDIATE');
+        try {
+            record_login_failure('203.0.113.7', 1_000);
+        } finally {
+            R::exec('ROLLBACK');
+        }
+
+        $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
+    }
+
+    public function testRecordLoginFailureStillCountsOnceTheLockIsFree(): void
+    {
+        R::exec('BEGIN IMMEDIATE');
+        record_login_failure('203.0.113.7', 1_000);
+        R::exec('ROLLBACK');
+
+        // The skipped attempt above left no row; this one, with no contention,
+        // must still start a fresh counter rather than staying silently broken.
+        record_login_failure('203.0.113.7', 1_000);
+
+        $bean = R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]);
+        $this->assertNotNull($bean);
+        $this->assertSame(['count' => 1, 'expires' => 1_000 + LOGIN_THROTTLE_WINDOW], decode_throttle_state($bean->value));
+    }
+
     // The refusal message tells the owner when to come back
 
     public function testThrottleMessageStatesTheWait(): void

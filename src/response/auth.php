@@ -10,6 +10,7 @@ use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 /**
  * Handles the /login route without starting a session for anonymous visitors.
@@ -349,6 +350,15 @@ function login_throttle_retry_after(string $ip, int $now): int
  * once each window lapses, so the `option` table doesn't keep a permanent row
  * per address that ever probed the login form.
  *
+ * The read-increment-write below runs inside `BEGIN IMMEDIATE`, which takes
+ * SQLite's write lock before the read: without it, concurrent wrong-password
+ * requests from the same IP each read the same stale counter and each write
+ * back +1, so parallel failures undercount and more than
+ * LOGIN_THROTTLE_MAX_FAILURES real password_verify() calls get through per
+ * window. R::begin()/R::commit() are no-ops in this app's fluid mode (see
+ * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement
+ * instead.
+ *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return void
@@ -357,11 +367,22 @@ function record_login_failure(string $ip, int $now): void
 {
     prune_login_throttle($now);
 
+    try {
+        R::exec('BEGIN IMMEDIATE');
+    } catch (SQL $e) {
+        // Another request already holds the write lock: let this one attempt
+        // go uncounted rather than fail the login response over a throttle
+        // counter — bcrypt already ran for it either way.
+        return;
+    }
+
     $bean  = \Lamb\get_option(login_throttle_key($ip), '');
     $state = decode_throttle_state($bean->value);
     $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
 
     \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
+
+    R::exec('COMMIT');
 }
 
 /**
