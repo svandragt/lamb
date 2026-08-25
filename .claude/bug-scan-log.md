@@ -20,6 +20,110 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-25
+
+**Covered:** 2 (recomputed state), 6 (executable HTTP harness for
+upload/auth/header findings), 7 (property fuzzing) — the three categories the
+2026-08-24 run flagged as not yet having a first pass, per its suggested
+refinement below.
+
+**PRs opened:**
+- [#740](https://github.com/svandragt/lamb/pull/740) — category 2.
+  `Lamb\Response\redirect_edited()` (`src/response/posts.php`) independently
+  rejected the whole edit — discarding the author's title/body changes — when
+  the parsed slug matched a registered route name, while
+  `Lamb\Post\finalize_slug()` (already run via `save()`'s `finalize_slug`
+  step, and already relied on by `redirect_created()` for the same case) just
+  suffixes such a slug with the post's id. Renaming a post's title to a
+  reserved route name (`Search`, `Login`, `Settings`, …) silently dropped the
+  edit instead of saving it, unlike creating a new post with the same title.
+  Fixed by deleting the redundant check and letting the edit path delegate to
+  `finalize_slug()` like create already does.
+- [#741](https://github.com/svandragt/lamb/pull/741) — category 7.
+  `Lamb\parse_tags()` (`src/lamb.php`) hashtag-links a `#word` at the start of
+  any text segment, including the visible text of a link Markdown itself just
+  built (`[#42](https://.../issues/42)` → `<a href="...">#42</a>`), nesting a
+  second `<a>` inside the author's own `<a>`. HTML5 parsers de-nest that,
+  silently breaking the intended link — a common shape on a developer's blog
+  (referencing a GitHub issue/PR by number as link text). Also an idempotence
+  violation (`parse_tags(parse_tags(x)) != parse_tags(x)` for an already-linked
+  hashtag). Fixed by tracking anchor depth while walking the tag-split
+  segments and skipping hashtag-linking inside an `<a>...</a>` pair.
+- [#742](https://github.com/svandragt/lamb/pull/742) — category 6.
+  `Lamb\Response\record_login_failure()` (`src/response/auth.php`) is a plain
+  read-increment-write on the per-IP brute-force counter with no locking —
+  a lost-update race. Verified live: driving the real `/login` route with
+  `curl_multi` against a `php -S` server, 30 concurrent wrong-password POSTs
+  from one IP let 29 through as genuine `password_verify()` attempts against
+  the documented 10-per-window cap. `R::begin()`/`R::commit()` are no-ops in
+  this app's fluid RedBeanPHP mode, so fixed by taking SQLite's write lock
+  directly with `BEGIN IMMEDIATE` before the read, skipping (not crashing on)
+  an attempt that finds the lock already held.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 2 — `count_drafts()`/`count_trash()`/`count_scheduled()` vs. their
+  listing counterparts (`response/feeds.php`) share the same SQL constants, no
+  independent logic to drift. Webmention's per-row visibility re-check vs.
+  WebSub's scheduled-publish sweep (`webmention.php`, `websub.php`) answer
+  different questions by design. SimplePie vs. JSON Feed ingestion funnel
+  through the same `ingest_item()`/`prepare_item()` spine. OpenGraph image
+  dimensions vs. post-body image dimensions serve different fields, not the
+  same derived value. The sitemap validator's duplicate-looking derivation is
+  explicitly pinned together by a unit test. Checkbox toggle client/server
+  split already trusts the server's index — correct pattern, not drift.
+- Category 6 — upload extension/content-type allowlist (re-encodes JPEG/PNG
+  through GD, blocks SVG, `sha1`-seeded filenames defeat path traversal via
+  client filename); every dynamic `Location:` header goes through
+  `Http\sanitize_location()` or a regex-scrubbed `permalink()` slug, so no CR/LF
+  injection path found; the open-redirect guard in
+  `response/auth.php`'s `local_redirect_target()` re-read and still intact
+  (already verified in the 2026-08-24 run, not re-flagged as new); every
+  security-sensitive comparison (CSRF, preview token, Micropub `me`) uses
+  `hash_equals()`; SSRF surfaces (`fetch_guarded()`, webmention, websub) still
+  re-validate IPs per redirect hop.
+- Category 7 — `slugify()` idempotent across ASCII/Unicode/emoji/punctuation
+  inputs; `og_escape()` idempotent by design (decode-then-encode); front-matter
+  `build_matter()`/`parse_matter()` round-trips correctly including multi-value
+  fields and Unicode; export→restore round-trip verified end-to-end through
+  two separate SQLite databases (slug/body/created/draft/title/transformed all
+  match); checkbox toggle's "permissive superset + re-render to verify" design
+  is robust by construction against decoys. `restore_code_blocks()`'s
+  placeholder-collision risk is theoretical only — no reachable path found to
+  get an unescaped literal placeholder string past Parsedown's/Phiki's escaping.
+
+**Issue-dense files:** none newly identified — the three fixes above landed in
+three different files (`response/posts.php`, `lamb.php`, `response/auth.php`)
+with no other findings nearby in any of them.
+
+**Environment note:** this sandbox cannot run `composer install` — dev
+dependencies (codeception, phpunit, phpcs, phpstan) fail to download
+("Could not authenticate against github.com") through the environment's
+proxy, even though a partial/stale `vendor/` with empty package directories is
+present. `composer install --no-dev --prefer-source` (used by the category 6
+and 7 investigations, per their reports) works around it for read-only
+investigation, but none of this run's fixes could be validated by actually
+running `vendor/bin/codecept run Unit`, `composer lint`, or `composer
+analyse` — only `php -l` and hand-rolled standalone scripts reimplementing
+the changed logic. **Future runs should try `composer install --no-dev
+--prefer-source` (or `--prefer-source` alone) up front**, before falling back
+to static reasoning, and should still flag in each PR description whether the
+real test suite ran.
+
+**Suggested refinement:** categories 2, 6, and 7 are no longer "first pass"
+categories — each found and fixed one real, non-trivial bug (a UX/data-loss
+bug, a broken-markup/idempotence bug, and a verified security race,
+respectively), a notably higher hit rate than the file-level categories (1, 3,
+4) had on their second pass. Category 6 in particular paid for its
+higher setup cost (installing deps, standing up a live server, driving it
+with `curl_multi`) by catching a bug neither static reading nor the unit-test
+suite would have surfaced — a plain code read of `record_login_failure()`
+looks correct; the race is only visible under real concurrency. Next run:
+prioritize re-checking 2, 6, and 7 again with fresh eyes (the codebase changes
+between runs, and category 6's harness approach generalizes to other
+concurrent-write paths — e.g. any other read-modify-write on an `option` row
+or similar shared counter) over re-treading 1/3/4/5/9, which are at low
+marginal yield until the code they cover changes materially.
+
 ### 2026-08-24
 
 **Covered:** 3 (guard-clause diffing), 4 (unchecked return values), 1
