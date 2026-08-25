@@ -228,6 +228,36 @@ class ResponsePostsTest extends TestCase
     }
 
     // -------------------------------------------------------------------------
+    // redirect_edited — a reserved-route slug is suffixed, not rejected
+    // -------------------------------------------------------------------------
+    // Matches redirect_created(): finalize_slug() already suffixes a reserved
+    // route name with the post's id (SlugFinalizeTest), so the edit path must
+    // delegate to it instead of independently rejecting the whole edit.
+
+    public function testRedirectEditedSuffixesReservedRouteSlugInsteadOfRejectingTheEdit(): void
+    {
+        \Lamb\Route\register_route('search', 'strlen');
+        $id = $this->seedEditablePost();
+
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'restok';
+        $_POST[HIDDEN_CSRF_NAME]    = 'restok';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = (string) $id;
+        $_POST['contents']          = "# Search\n\nRenamed content.\n";
+
+        redirect_edited();
+
+        $bean = R::load('post', $id);
+        $this->assertSame('search-' . $id, $bean->slug);
+        $this->assertStringContainsString('Renamed content.', $bean->body);
+        $this->assertEmpty(array_filter(
+            $_SESSION['flash'] ?? [],
+            fn ($m) => str_contains((string) $m, 'slug is in use')
+        ));
+    }
+
+    // -------------------------------------------------------------------------
     // redirect_edited — a failed save must have no side effects
     // -------------------------------------------------------------------------
 
