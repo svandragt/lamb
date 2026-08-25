@@ -1,14 +1,30 @@
 # Advisories the image scans must not block on, each with the date its
 # suppression lapses. Trivy reads this file only when a scan names it in
 # `trivyignores`; see AGENTS.md for what to do when an entry expires.
+#
+# Trivy matches only the exact id it prints in the Vulnerability column, and
+# which id that is depends on its vuln DB: the CI runner reports these under
+# their CVE ids, a newer local Trivy under the GHSA alias. It does not cross-map
+# one to the other, so list every id an advisory can surface under.
 
 vulnerabilities:
+  # kin-openapi ValidationHandler.Load() fail-open authentication bypass, in
+  # frankenphp's kin-openapi v0.140.0. Lamb's Caddyfile enables no OpenAPI
+  # validation, so the handler is never constructed. Same advisory under its
+  # GHSA and CVE ids; clears when the base image ships kin-openapi 0.141.0+.
   - id: GHSA-r277-6w6q-xmqw
+    statement: kin-openapi fail-open auth bypass; unreachable, no OpenAPI in the Caddyfile.
+    expired_at: 2026-10-15
+  - id: CVE-2026-76905
+    statement: kin-openapi fail-open auth bypass; unreachable, no OpenAPI in the Caddyfile.
+    expired_at: 2026-10-15
+
+  - id: CVE-2026-77354
     statement: >-
-      kin-openapi ValidationHandler.Load() fail-open authentication bypass, in
-      frankenphp's kin-openapi v0.140.0. Lamb's Caddyfile enables no OpenAPI
-      validation, so the handler is never constructed. Clears when the base
-      image ships kin-openapi 0.144.0 or newer.
+      Second kin-openapi advisory in the same frankenphp v0.140.0 dependency;
+      same rationale — Lamb constructs no OpenAPI validator, so the vulnerable
+      path is unreachable. Clears when the base image ships kin-openapi 0.142.0
+      or newer.
     expired_at: 2026-10-15
 
   - id: GHSA-hrxh-6v49-42gf
