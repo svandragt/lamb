@@ -20,6 +20,224 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-26
+
+**Process note — read this before picking categories.** This run started from
+`origin/main`'s copy of this log, which only had the 2026-08-24 entry: the
+2026-08-25 run's log update (PR #743) and all three of its fix PRs (#740,
+#741, #742) were still open, unmerged, two days later. So this run picked
+categories 2, 6, and 7 believing them un-covered since 2026-08-24 — the same
+categories the 2026-08-25 run had already picked for the identical reason.
+No duplicate *findings* resulted (this run's four fixes are in different
+functions/files than #740/#741/#742), but the redundant coverage was luck,
+not design. **This log file only reflects reality once its PR merges to
+main** — a future run's category selection is only as good as how promptly
+these PRs land. At the time of this entry there are 7 open, unmerged
+bug-scan PRs (#740, #741, #742, #748, #749, #750, #751) plus this log-update
+PR (#743, now extended to also cover this run) — worth flagging to whoever
+reviews this repo rather than something a future run can fix on its own.
+
+**Covered:** 2 (recomputed state), 6 (executable HTTP harness for
+upload/auth/header findings), 7 (property fuzzing) — see the process note
+above for why; these turned out to be the same categories, but not the same
+findings, as the unmerged 2026-08-25 run below.
+
+**PRs opened:**
+- [#748](https://github.com/svandragt/lamb/pull/748) — category 6. Micropub
+  authenticates via bearer token, never the session cookie, but
+  `index.php`'s pre-route `cache_headers()` call only looks at
+  `$_SESSION[SESSION_LOGIN]` — so `/micropub` and `/micropub-media` always
+  got the anonymous `Cache-Control: max-age=300` header, letting a shared
+  cache in front of the install store and replay draft content, write
+  results, or error bodies. This was only observable over a real HTTP
+  request/response cycle (`header()` is a no-op under PHPUnit's CLI SAPI),
+  so it needed the acceptance suite's real `php -S` dev server, not a unit
+  test — confirmed red (reverted the fix, saw `max-age=300` over curl) before
+  reapplying it. Fixed by overriding to the private/no-store headers at the
+  top of both route handlers.
+- [#749](https://github.com/svandragt/lamb/pull/749) — category 2.
+  `preview_token_valid()` (`lamb.php`) and
+  `LambMicropubAdapter::updateCallback()` (`micropub.php`) each re-derived
+  "is this post deleted" inline (`$post->deleted == 1` /
+  `(int) $bean->deleted === 1`) instead of calling the canonical
+  `is_deleted()` helper already used by `is_viewable()`/
+  `is_publicly_visible()`, and already imported into `micropub.php`
+  alongside its siblings. No behavior change today (both were equivalent to
+  `is_deleted()`); the fix removes the drift risk if "deleted" is ever
+  redefined.
+- [#750](https://github.com/svandragt/lamb/pull/750) — category 7. Property
+  fuzz on `add_body_tags()` against its own docblock claim of being the
+  "counterpart of `get_tags()`" (a round-trip: append then extract should
+  return what was asked for). It wasn't: a tag containing a
+  `TAG_TERMINATORS` character (most concretely, a space — a normal Micropub
+  `category` like `"day trip"`) got appended as `#day trip`, and
+  `get_tags()` could only ever recover `"day"` — the ` trip` became bare,
+  unlinked body text and was silently dropped from every later source query
+  or tag listing. Micropub's `buildTags()` (post creation) had the identical
+  flaw independently. Fixed with a shared `sanitize_tag_name()` used by both.
+  This is a genuine, client-triggerable data-loss bug, not just a stylistic
+  finding — worth treating category 7 as high-value, not just a fallback for
+  when file-level passes dry up (the unmerged #741 below is further evidence
+  of this).
+- [#751](https://github.com/svandragt/lamb/pull/751) — category 2 (second
+  finding, lower severity). `theme.php`'s `action_preview()`, `lamb.php`'s
+  `ensure_preview_token()`, and Micropub's `createCallback()` each spelled
+  out "draft or scheduled" inline (one as `draft != 1 && !is_scheduled()`,
+  one as its De Morgan inverse) instead of sharing a helper. No behavior
+  change; consolidated into a new `is_unpublished()`.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 2 — pagination (`pagination_window()`/`build_pagination_meta()`),
+  visibility (`is_draft`/`is_deleted`/`is_scheduled`/`is_viewable`/
+  `is_publicly_visible`), `deleted_at` writes, and front-matter parsing are
+  already consolidated behind single helpers everywhere checked, including
+  cross-file imports in `webmention.php`/`websub.php`/`micropub.php`.
+  `upgrade_posts()`'s apparent front-matter re-derivation is deliberate and
+  documented, not accidental duplication. Only the two findings above (now
+  fixed) reached for a raw property instead of the helper sitting next to
+  it.
+- Category 6 — traced `redirect_login()`'s `Cache-Control` override sequence
+  (correctly clobbers the pre-route header before every exit path), the
+  ETag/If-None-Match precedence in `bootstrap.php`'s
+  `client_has_current_version()`, session-fixation/regeneration ordering in
+  `redirect_login()`, the SSRF per-hop pinning in `http.php`, and the
+  `WWW-Authenticate`/`Location`/`Content-Type` header assembly in Micropub's
+  `nyholm/psr7`-backed response emission. None are bugs. Only the Micropub
+  cache-header finding above (now fixed) was new. (Did not know about the
+  unmerged #742's login-throttle race at scan time; worth a fresh look at
+  other read-modify-write counters once #742 merges and that pattern is
+  fully landed.)
+- Category 7 — `get_tags(parse_tags(x))` is a true round trip for the
+  single-pass usage the codebase actually has (`highlight_and_link()`);
+  `parse_tags()` is not idempotent under a second call on its own output
+  (double-wraps a leading tag), but nothing calls it twice, so unreachable —
+  do not "fix" this without a reason something now calls it twice. (The
+  unmerged #741 below found a real, different `parse_tags()` bug — anchor
+  nesting, not idempotence — from the same property-fuzz pass; re-verify
+  #741's fix doesn't change this idempotence conclusion once it merges.)
+  `strip_trailing_body_tags()` is idempotent as expected. `slugify()` and
+  `normalize_datetime()` were checked by the 2026-08-25 run below (idempotent,
+  no bug); `minify_css()` was not checked by either run — still a candidate.
+
+**Issue-dense files:** none yet. `micropub.php` has now produced findings in
+both runs to date (category 3 in #735, categories 2/7 in #749/#750/#751)
+simply because it is the largest, most-imported-into file and the primary
+target of untrusted external input (Micropub client requests) — this is
+proportionate to its size/exposure, not evidence of unusual density. Do not
+mark it issue-dense; keep including it in every category's sweep.
+
+**Suggested refinement:** the process note above is the main one — get the
+PR backlog reviewed so this log reflects true coverage. Beyond that:
+category 8 still has nothing to skip (no issue-dense files exist), so drop
+it from the category list until one is identified. Once the backlog clears,
+next run should finish category 7's last untried candidate
+(`minify_css()`) and give categories 3/4 a fresh pass (unchecked since
+2026-08-24, and the codebase has moved since).
+
+### 2026-08-25
+
+**Covered:** 2 (recomputed state), 6 (executable HTTP harness for
+upload/auth/header findings), 7 (property fuzzing) — the three categories the
+2026-08-24 run flagged as not yet having a first pass, per its suggested
+refinement below.
+
+**PRs opened:**
+- [#740](https://github.com/svandragt/lamb/pull/740) — category 2.
+  `Lamb\Response\redirect_edited()` (`src/response/posts.php`) independently
+  rejected the whole edit — discarding the author's title/body changes — when
+  the parsed slug matched a registered route name, while
+  `Lamb\Post\finalize_slug()` (already run via `save()`'s `finalize_slug`
+  step, and already relied on by `redirect_created()` for the same case) just
+  suffixes such a slug with the post's id. Renaming a post's title to a
+  reserved route name (`Search`, `Login`, `Settings`, …) silently dropped the
+  edit instead of saving it, unlike creating a new post with the same title.
+  Fixed by deleting the redundant check and letting the edit path delegate to
+  `finalize_slug()` like create already does.
+- [#741](https://github.com/svandragt/lamb/pull/741) — category 7.
+  `Lamb\parse_tags()` (`src/lamb.php`) hashtag-links a `#word` at the start of
+  any text segment, including the visible text of a link Markdown itself just
+  built (`[#42](https://.../issues/42)` → `<a href="...">#42</a>`), nesting a
+  second `<a>` inside the author's own `<a>`. HTML5 parsers de-nest that,
+  silently breaking the intended link — a common shape on a developer's blog
+  (referencing a GitHub issue/PR by number as link text). Also an idempotence
+  violation (`parse_tags(parse_tags(x)) != parse_tags(x)` for an already-linked
+  hashtag). Fixed by tracking anchor depth while walking the tag-split
+  segments and skipping hashtag-linking inside an `<a>...</a>` pair.
+- [#742](https://github.com/svandragt/lamb/pull/742) — category 6.
+  `Lamb\Response\record_login_failure()` (`src/response/auth.php`) is a plain
+  read-increment-write on the per-IP brute-force counter with no locking —
+  a lost-update race. Verified live: driving the real `/login` route with
+  `curl_multi` against a `php -S` server, 30 concurrent wrong-password POSTs
+  from one IP let 29 through as genuine `password_verify()` attempts against
+  the documented 10-per-window cap. `R::begin()`/`R::commit()` are no-ops in
+  this app's fluid RedBeanPHP mode, so fixed by taking SQLite's write lock
+  directly with `BEGIN IMMEDIATE` before the read, skipping (not crashing on)
+  an attempt that finds the lock already held.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 2 — `count_drafts()`/`count_trash()`/`count_scheduled()` vs. their
+  listing counterparts (`response/feeds.php`) share the same SQL constants, no
+  independent logic to drift. Webmention's per-row visibility re-check vs.
+  WebSub's scheduled-publish sweep (`webmention.php`, `websub.php`) answer
+  different questions by design. SimplePie vs. JSON Feed ingestion funnel
+  through the same `ingest_item()`/`prepare_item()` spine. OpenGraph image
+  dimensions vs. post-body image dimensions serve different fields, not the
+  same derived value. The sitemap validator's duplicate-looking derivation is
+  explicitly pinned together by a unit test. Checkbox toggle client/server
+  split already trusts the server's index — correct pattern, not drift.
+- Category 6 — upload extension/content-type allowlist (re-encodes JPEG/PNG
+  through GD, blocks SVG, `sha1`-seeded filenames defeat path traversal via
+  client filename); every dynamic `Location:` header goes through
+  `Http\sanitize_location()` or a regex-scrubbed `permalink()` slug, so no CR/LF
+  injection path found; the open-redirect guard in
+  `response/auth.php`'s `local_redirect_target()` re-read and still intact
+  (already verified in the 2026-08-24 run, not re-flagged as new); every
+  security-sensitive comparison (CSRF, preview token, Micropub `me`) uses
+  `hash_equals()`; SSRF surfaces (`fetch_guarded()`, webmention, websub) still
+  re-validate IPs per redirect hop.
+- Category 7 — `slugify()` idempotent across ASCII/Unicode/emoji/punctuation
+  inputs; `og_escape()` idempotent by design (decode-then-encode); front-matter
+  `build_matter()`/`parse_matter()` round-trips correctly including multi-value
+  fields and Unicode; export→restore round-trip verified end-to-end through
+  two separate SQLite databases (slug/body/created/draft/title/transformed all
+  match); checkbox toggle's "permissive superset + re-render to verify" design
+  is robust by construction against decoys. `restore_code_blocks()`'s
+  placeholder-collision risk is theoretical only — no reachable path found to
+  get an unescaped literal placeholder string past Parsedown's/Phiki's escaping.
+
+**Issue-dense files:** none newly identified — the three fixes above landed in
+three different files (`response/posts.php`, `lamb.php`, `response/auth.php`)
+with no other findings nearby in any of them.
+
+**Environment note:** this sandbox cannot run `composer install` — dev
+dependencies (codeception, phpunit, phpcs, phpstan) fail to download
+("Could not authenticate against github.com") through the environment's
+proxy, even though a partial/stale `vendor/` with empty package directories is
+present. `composer install --no-dev --prefer-source` (used by the category 6
+and 7 investigations, per their reports) works around it for read-only
+investigation, but none of this run's fixes could be validated by actually
+running `vendor/bin/codecept run Unit`, `composer lint`, or `composer
+analyse` — only `php -l` and hand-rolled standalone scripts reimplementing
+the changed logic. **Future runs should try `composer install --no-dev
+--prefer-source` (or `--prefer-source` alone) up front**, before falling back
+to static reasoning, and should still flag in each PR description whether the
+real test suite ran.
+
+**Suggested refinement:** categories 2, 6, and 7 are no longer "first pass"
+categories — each found and fixed one real, non-trivial bug (a UX/data-loss
+bug, a broken-markup/idempotence bug, and a verified security race,
+respectively), a notably higher hit rate than the file-level categories (1, 3,
+4) had on their second pass. Category 6 in particular paid for its
+higher setup cost (installing deps, standing up a live server, driving it
+with `curl_multi`) by catching a bug neither static reading nor the unit-test
+suite would have surfaced — a plain code read of `record_login_failure()`
+looks correct; the race is only visible under real concurrency. Next run:
+prioritize re-checking 2, 6, and 7 again with fresh eyes (the codebase changes
+between runs, and category 6's harness approach generalizes to other
+concurrent-write paths — e.g. any other read-modify-write on an `option` row
+or similar shared counter) over re-treading 1/3/4/5/9, which are at low
+marginal yield until the code they cover changes materially.
+
 ### 2026-08-24
 
 **Covered:** 3 (guard-clause diffing), 4 (unchecked return values), 1
