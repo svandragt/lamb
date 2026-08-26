@@ -20,6 +20,120 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-26
+
+**Process note — read this before picking categories.** This run started from
+`origin/main`'s copy of this log, which only had the 2026-08-24 entry: the
+2026-08-25 run's log update (PR #743) and all three of its fix PRs (#740,
+#741, #742) were still open, unmerged, two days later. So this run picked
+categories 2, 6, and 7 believing them un-covered since 2026-08-24 — the same
+categories the 2026-08-25 run had already picked for the identical reason.
+No duplicate *findings* resulted (this run's four fixes are in different
+functions/files than #740/#741/#742), but the redundant coverage was luck,
+not design. **This log file only reflects reality once its PR merges to
+main** — a future run's category selection is only as good as how promptly
+these PRs land. At the time of this entry there are 7 open, unmerged
+bug-scan PRs (#740, #741, #742, #748, #749, #750, #751) plus this log-update
+PR (#743, now extended to also cover this run) — worth flagging to whoever
+reviews this repo rather than something a future run can fix on its own.
+
+**Covered:** 2 (recomputed state), 6 (executable HTTP harness for
+upload/auth/header findings), 7 (property fuzzing) — see the process note
+above for why; these turned out to be the same categories, but not the same
+findings, as the unmerged 2026-08-25 run below.
+
+**PRs opened:**
+- [#748](https://github.com/svandragt/lamb/pull/748) — category 6. Micropub
+  authenticates via bearer token, never the session cookie, but
+  `index.php`'s pre-route `cache_headers()` call only looks at
+  `$_SESSION[SESSION_LOGIN]` — so `/micropub` and `/micropub-media` always
+  got the anonymous `Cache-Control: max-age=300` header, letting a shared
+  cache in front of the install store and replay draft content, write
+  results, or error bodies. This was only observable over a real HTTP
+  request/response cycle (`header()` is a no-op under PHPUnit's CLI SAPI),
+  so it needed the acceptance suite's real `php -S` dev server, not a unit
+  test — confirmed red (reverted the fix, saw `max-age=300` over curl) before
+  reapplying it. Fixed by overriding to the private/no-store headers at the
+  top of both route handlers.
+- [#749](https://github.com/svandragt/lamb/pull/749) — category 2.
+  `preview_token_valid()` (`lamb.php`) and
+  `LambMicropubAdapter::updateCallback()` (`micropub.php`) each re-derived
+  "is this post deleted" inline (`$post->deleted == 1` /
+  `(int) $bean->deleted === 1`) instead of calling the canonical
+  `is_deleted()` helper already used by `is_viewable()`/
+  `is_publicly_visible()`, and already imported into `micropub.php`
+  alongside its siblings. No behavior change today (both were equivalent to
+  `is_deleted()`); the fix removes the drift risk if "deleted" is ever
+  redefined.
+- [#750](https://github.com/svandragt/lamb/pull/750) — category 7. Property
+  fuzz on `add_body_tags()` against its own docblock claim of being the
+  "counterpart of `get_tags()`" (a round-trip: append then extract should
+  return what was asked for). It wasn't: a tag containing a
+  `TAG_TERMINATORS` character (most concretely, a space — a normal Micropub
+  `category` like `"day trip"`) got appended as `#day trip`, and
+  `get_tags()` could only ever recover `"day"` — the ` trip` became bare,
+  unlinked body text and was silently dropped from every later source query
+  or tag listing. Micropub's `buildTags()` (post creation) had the identical
+  flaw independently. Fixed with a shared `sanitize_tag_name()` used by both.
+  This is a genuine, client-triggerable data-loss bug, not just a stylistic
+  finding — worth treating category 7 as high-value, not just a fallback for
+  when file-level passes dry up (the unmerged #741 below is further evidence
+  of this).
+- [#751](https://github.com/svandragt/lamb/pull/751) — category 2 (second
+  finding, lower severity). `theme.php`'s `action_preview()`, `lamb.php`'s
+  `ensure_preview_token()`, and Micropub's `createCallback()` each spelled
+  out "draft or scheduled" inline (one as `draft != 1 && !is_scheduled()`,
+  one as its De Morgan inverse) instead of sharing a helper. No behavior
+  change; consolidated into a new `is_unpublished()`.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 2 — pagination (`pagination_window()`/`build_pagination_meta()`),
+  visibility (`is_draft`/`is_deleted`/`is_scheduled`/`is_viewable`/
+  `is_publicly_visible`), `deleted_at` writes, and front-matter parsing are
+  already consolidated behind single helpers everywhere checked, including
+  cross-file imports in `webmention.php`/`websub.php`/`micropub.php`.
+  `upgrade_posts()`'s apparent front-matter re-derivation is deliberate and
+  documented, not accidental duplication. Only the two findings above (now
+  fixed) reached for a raw property instead of the helper sitting next to
+  it.
+- Category 6 — traced `redirect_login()`'s `Cache-Control` override sequence
+  (correctly clobbers the pre-route header before every exit path), the
+  ETag/If-None-Match precedence in `bootstrap.php`'s
+  `client_has_current_version()`, session-fixation/regeneration ordering in
+  `redirect_login()`, the SSRF per-hop pinning in `http.php`, and the
+  `WWW-Authenticate`/`Location`/`Content-Type` header assembly in Micropub's
+  `nyholm/psr7`-backed response emission. None are bugs. Only the Micropub
+  cache-header finding above (now fixed) was new. (Did not know about the
+  unmerged #742's login-throttle race at scan time; worth a fresh look at
+  other read-modify-write counters once #742 merges and that pattern is
+  fully landed.)
+- Category 7 — `get_tags(parse_tags(x))` is a true round trip for the
+  single-pass usage the codebase actually has (`highlight_and_link()`);
+  `parse_tags()` is not idempotent under a second call on its own output
+  (double-wraps a leading tag), but nothing calls it twice, so unreachable —
+  do not "fix" this without a reason something now calls it twice. (The
+  unmerged #741 below found a real, different `parse_tags()` bug — anchor
+  nesting, not idempotence — from the same property-fuzz pass; re-verify
+  #741's fix doesn't change this idempotence conclusion once it merges.)
+  `strip_trailing_body_tags()` is idempotent as expected. `slugify()` and
+  `normalize_datetime()` were checked by the 2026-08-25 run below (idempotent,
+  no bug); `minify_css()` was not checked by either run — still a candidate.
+
+**Issue-dense files:** none yet. `micropub.php` has now produced findings in
+both runs to date (category 3 in #735, categories 2/7 in #749/#750/#751)
+simply because it is the largest, most-imported-into file and the primary
+target of untrusted external input (Micropub client requests) — this is
+proportionate to its size/exposure, not evidence of unusual density. Do not
+mark it issue-dense; keep including it in every category's sweep.
+
+**Suggested refinement:** the process note above is the main one — get the
+PR backlog reviewed so this log reflects true coverage. Beyond that:
+category 8 still has nothing to skip (no issue-dense files exist), so drop
+it from the category list until one is identified. Once the backlog clears,
+next run should finish category 7's last untried candidate
+(`minify_css()`) and give categories 3/4 a fresh pass (unchecked since
+2026-08-24, and the codebase has moved since).
+
 ### 2026-08-25
 
 **Covered:** 2 (recomputed state), 6 (executable HTTP harness for
