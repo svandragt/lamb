@@ -63,15 +63,16 @@ Your database (`data/`), uploads (`src/assets/`), and `.env` are preserved — t
 
 ## Docker install
 
-Pull the new image and recreate the container:
+Rebuild the image from an updated checkout and recreate the container:
 
 ```
-docker pull ghcr.io/svandragt/lamb:latest
+git pull
+docker build -f .docker/Dockerfile.release -t lamb .
 docker stop lamb && docker rm lamb
 docker run -d --name lamb -p 80:80 \
   -e LAMB_LOGIN_PASSWORD='<your-hash>' \
   -v lamb-data:/app/data -v lamb-assets:/app/src/assets \
-  ghcr.io/svandragt/lamb:latest
+  lamb
 ```
 
 The database and uploads live in the named volumes and survive the recreate.

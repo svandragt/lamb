@@ -2,7 +2,7 @@ name: Cut release
 
 # Creates the GitHub Release (and its tag) at the tip of `release`. Publishing the
 # release fires `release-artifacts.yml` (on `release: published`), which builds the
-# no-Composer tarball and the Docker image. Run this *after* promoting main → release
+# no-Composer tarball. Run this *after* promoting main → release
 # (see RELEASING.md): the release is tagged at the current `release` tip.
 
 on:

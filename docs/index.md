@@ -18,16 +18,18 @@ Barrier free super simple blogging, self-hosted. [Read about the features](https
 
 There are three ways to install Lamb. All of them track the stable release channel.
 
-### 1. Docker image (easiest)
+### 1. Docker
 
-No PHP, git, or Composer needed on the host — just Docker:
+Build and run the release image from a checkout — no PHP or Composer on the host, just Docker and git:
 
 ```
+git clone https://github.com/svandragt/lamb && cd lamb
+docker build -f .docker/Dockerfile.release -t lamb .
 # Generate a password hash first (any machine with PHP), or copy one from make-password.php output
 docker run -d --name lamb -p 80:80 \
   -e LAMB_LOGIN_PASSWORD='<your-hash>' \
   -v lamb-data:/app/data -v lamb-assets:/app/src/assets \
-  ghcr.io/svandragt/lamb:latest
+  lamb
 ```
 
 See [Docker]({{ site.baseurl }}{% link docker.md %}) for details.
