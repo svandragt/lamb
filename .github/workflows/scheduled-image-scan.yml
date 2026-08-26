@@ -1,0 +1,111 @@
+name: Scheduled image scan
+
+# Catches base-image CVEs while they are cheap to act on. CI's image-scan is
+# advisory and only runs on PRs that touch .docker/, and the release gate only
+# fires when a release is already being cut — so a HIGH/CRITICAL advisory
+# published against the base image we already run can sit unseen until it blocks
+# a release (see #746). This rebuilds the release image on a schedule, scans it
+# with the same rules as the release gate, and opens (or closes) a single
+# tracking issue so a fresh advisory becomes visible before release time.
+#
+# Deliberately does NOT gate any PR: the findings live in the base image's OS
+# and Go layers, which a PR author neither introduced nor can fix.
+
+on:
+  schedule:
+    # Weekly, matching the Dependabot cadence that keeps the base image current.
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: scheduled-image-scan
+  cancel-in-progress: false
+
+env:
+  ISSUE_TITLE: 'Scheduled image scan: base-image CVEs need attention'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4
+
+      - name: Build release image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: .docker/Dockerfile.release
+          load: true
+          tags: lamb:scan
+
+      # Same rules as the release gate (release-artifacts.yml): HIGH,CRITICAL,
+      # fixable only, honouring .trivyignore.yaml. exit-code stays 0 so a
+      # finding doesn't fail the run — the issue below is how it surfaces.
+      - name: Scan image for vulnerabilities
+        id: scan
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: lamb:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          # Trivy auto-discovers only a plain .trivyignore, so drop this line
+          # and every suppression in the YAML file silently stops applying.
+          trivyignores: .trivyignore.yaml
+          format: table
+          output: trivy-report.txt
+          exit-code: '0'
+
+      # A finding is a non-comment, non-blank line in the report. Empty report
+      # (or header-only) means clean.
+      - name: Summarise findings
+        id: findings
+        run: |
+          if grep -qE '(HIGH|CRITICAL)' trivy-report.txt; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open or update tracking issue
+        if: steps.findings.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "The scheduled Trivy scan found fixable HIGH/CRITICAL advisories in the release image. These will block the next release push unless suppressed in \`.trivyignore.yaml\` or resolved upstream."
+            echo
+            echo "Scan run: $RUN_URL"
+            echo
+            echo '```'
+            cat trivy-report.txt
+            echo '```'
+            echo
+            echo "See #746 for why this runs on a schedule rather than gating PRs, and #744 for the Trivy id-matching gotcha when suppressing."
+          } > issue-body.md
+
+          existing=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$ISSUE_TITLE\") | .number" | head -n1)
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file issue-body.md
+          else
+            gh issue create --title "$ISSUE_TITLE" --label security --body-file issue-body.md
+          fi
+
+      - name: Close tracking issue when clean
+        if: steps.findings.outputs.found == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          existing=$(gh issue list --state open --search "$ISSUE_TITLE in:title" --json number,title \
+            --jq ".[] | select(.title == \"$ISSUE_TITLE\") | .number" | head -n1)
+          if [ -n "$existing" ]; then
+            gh issue close "$existing" --comment "Scheduled scan is clean again — no fixable HIGH/CRITICAL advisories in the release image. Closing."
+          fi
