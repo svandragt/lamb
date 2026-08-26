@@ -12,6 +12,7 @@ use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
+use function Lamb\Bootstrap\cache_headers;
 use function Lamb\get_tags;
 use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
@@ -1392,6 +1393,15 @@ function token_fingerprint(string $token): string
  */
 function respond_micropub(): void
 {
+    // index.php's pre-route cache_headers() call only sees the session cookie, so
+    // it always emits the anonymous max-age=300 header here — Micropub auth is a
+    // bearer token, never that cookie. Override before touching the request: every
+    // code path below (draft source queries, write results, error bodies) carries
+    // bearer-token-gated content that a shared cache must never store or replay.
+    foreach (cache_headers(true) as $cache_header) {
+        header($cache_header);
+    }
+
     $headers = getallheaders() ?: [];
     $rawBody = file_get_contents('php://input') ?: null;
 
@@ -1544,6 +1554,13 @@ function micropub_error(int $status, string $error, string $description, ?string
  */
 function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapter = null): void
 {
+    // Same override as respond_micropub() above, and for the same reason: this
+    // endpoint is bearer-token-gated, not session-cookie-gated, so index.php's
+    // pre-route cache_headers() call always guesses "anonymous" here.
+    foreach (cache_headers(true) as $cache_header) {
+        header($cache_header);
+    }
+
     $headers = getallheaders() ?: [];
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
     $lcHeaders = array_change_key_case($headers, CASE_LOWER);

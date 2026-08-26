@@ -79,4 +79,29 @@ class CacheHeadersCest
         $I->seeResponseHeaderContains('Cache-Control', 'max-age=300');
         $I->dontSeeResponseHeaderContains('Set-Cookie', 'LAMBSESSID');
     }
+
+    /**
+     * Micropub auth is a bearer token, never the session cookie index.php's
+     * pre-route cache_headers() call inspects — so without an override every
+     * Micropub response (draft source queries, write results, error bodies)
+     * got the same public max-age=300 header as an anonymous homepage view,
+     * letting a shared cache in front of the install store and replay it.
+     * No valid token is needed to observe this: even the 401 "missing bearer
+     * token" response was marked publicly cacheable before the fix.
+     */
+    public function micropubResponsesAreNotPubliclyCacheable(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/micropub?q=config');
+        $I->seeResponseCodeIs(401);
+        $I->seeResponseHeaderContains('Cache-Control', 'no-store');
+        $I->dontSeeResponseHeaderContains('Cache-Control', 'max-age=300');
+    }
+
+    public function micropubMediaResponsesAreNotPubliclyCacheable(AcceptanceTester $I): void
+    {
+        $I->sendAjaxPostRequest('/micropub-media', []);
+        $I->seeResponseCodeIs(401);
+        $I->seeResponseHeaderContains('Cache-Control', 'no-store');
+        $I->dontSeeResponseHeaderContains('Cache-Control', 'max-age=300');
+    }
 }
