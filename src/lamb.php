@@ -117,11 +117,31 @@ function parse_tags(string $html): string
 }
 
 /**
+ * Normalizes an arbitrary string into a single hashtag-safe token: a run of
+ * characters get_tags() cannot parse past (TAG_TERMINATORS) collapses to one
+ * hyphen. Without this, a multi-word Micropub category like "day trip"
+ * appended verbatim as `#day trip` splits into the hashtag `#day` plus the
+ * bare, unlinked, silently-dropped-from-round-trip text ` trip`.
+ *
+ * @param string $tag
+ * @return string The sanitized tag, or '' if nothing tag-safe remained.
+ */
+function sanitize_tag_name(string $tag): string
+{
+    $safe = preg_replace('/[' . TAG_TERMINATORS . ']+/u', '-', trim($tag));
+
+    return trim($safe ?? '', '-');
+}
+
+/**
  * Appends the given tags to a body as trailing hashtags, skipping ones the
  * body already carries. Returns the body unchanged when nothing is missing.
  *
  * Counterpart of get_tags(): used by Micropub category `add` updates, where
- * categories live in the body as hashtags rather than in a column.
+ * categories live in the body as hashtags rather than in a column. Each tag
+ * is passed through sanitize_tag_name() first, so what get_tags() recovers
+ * from the result always matches what was asked for — see that function's
+ * docblock for why this is necessary.
  *
  * "Already carries" is case-insensitive, and a tag repeated in $tags is added
  * once: `#PHP` and `#php` are one tag everywhere else (the link parse_tags()
@@ -137,6 +157,7 @@ function add_body_tags(string $body, array $tags): string
     $present = array_map('mb_strtolower', get_tags($body));
     $to_add = [];
     foreach ($tags as $tag) {
+        $tag = sanitize_tag_name($tag);
         $key = mb_strtolower($tag);
         if ($tag === '' || in_array($key, $present, true)) {
             continue;

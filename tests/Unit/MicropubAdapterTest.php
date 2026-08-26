@@ -417,6 +417,27 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#test2', $post->body);
     }
 
+    public function testCreateCallbackSanitizesMultiWordCategory(): void
+    {
+        // A category with a space ("day trip") appended verbatim as `#day trip`
+        // split into the hashtag `#day` plus stray, unlinked body text — and
+        // get_tags() could only ever recover "day", silently dropping "trip"
+        // from every source query. sanitize_tag_name() must run here too, not
+        // just in add_body_tags()'s update path.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'  => ['A post about a day trip'],
+                'category' => ['day trip'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%#day-trip%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('#day trip', $post->body);
+    }
+
     public function testCreateCallbackHtmlContentIsRenderedNotEscaped(): void
     {
         $adapter = new LambMicropubAdapter();

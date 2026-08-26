@@ -48,6 +48,21 @@ class LambTest extends TestCase
         $this->assertSame('Hello #foo', add_body_tags('Hello', ['foo', 'foo', 'FOO']));
     }
 
+    public function testAddBodyTagsSanitizesASpaceInATag()
+    {
+        // A Micropub category with a space is real (e.g. "day trip"): appended
+        // verbatim it splits into a bare hashtag plus stray unlinked text, and
+        // get_tags() can only ever recover the part before the space — this
+        // must round-trip instead of silently losing the rest of the tag.
+        $this->assertSame('Hello #day-trip', add_body_tags('Hello', ['day trip']));
+    }
+
+    public function testAddBodyTagsSanitizedTagIsRecoverableByGetTags()
+    {
+        $body = add_body_tags('Hello', ['day trip']);
+        $this->assertSame(['day-trip'], get_tags($body));
+    }
+
     // strip_trailing_body_tags
 
     public function testStripTrailingBodyTagsRemovesTrailingRun()
