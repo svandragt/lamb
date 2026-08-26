@@ -13,6 +13,7 @@ use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
+use function Lamb\is_deleted;
 use function Lamb\is_publicly_visible;
 use function Lamb\is_scheduled;
 use function Lamb\normalize_datetime;
@@ -489,7 +490,7 @@ class LambMicropubAdapter extends MicropubAdapter
         // restored via the delete-scoped undeleteCallback(); treating it the
         // same as "no such post" here also means this can't be used to tell
         // a trashed post's id apart from a nonexistent one.
-        if ($bean === null || (int) $bean->deleted === 1) {
+        if ($bean === null || is_deleted($bean)) {
             return 'invalid_request';
         }
 
