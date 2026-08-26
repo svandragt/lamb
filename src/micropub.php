@@ -19,6 +19,7 @@ use function Lamb\normalize_datetime;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\remove_body_tags;
+use function Lamb\sanitize_tag_name;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\matter_string;
@@ -1218,7 +1219,10 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildTags(array $categories): string
     {
-        $tags = self::textValues($categories);
+        $tags = array_values(array_filter(array_map(
+            sanitize_tag_name(...),
+            self::textValues($categories)
+        ), fn(string $c) => $c !== ''));
 
         return $tags === [] ? '' : implode(' ', array_map(fn(string $c) => '#' . $c, $tags));
     }
