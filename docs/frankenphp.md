@@ -1,5 +1,6 @@
 ---
 title: FrankenPHP
+parent: Installation & hosting
 ---
 
 # FrankenPHP

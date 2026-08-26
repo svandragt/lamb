@@ -1,5 +1,6 @@
 ---
 title: WordPress import
+parent: Import & export
 ---
 
 # Importing from WordPress

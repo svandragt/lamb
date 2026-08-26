@@ -1,5 +1,6 @@
 ---
 title: Devbox
+parent: Installation & hosting
 ---
 
 # Devbox

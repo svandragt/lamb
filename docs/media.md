@@ -1,5 +1,6 @@
 ---
 title: Media
+parent: Content
 ---
 
 # Media

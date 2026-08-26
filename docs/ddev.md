@@ -1,5 +1,6 @@
 ---
 title: DDev
+parent: Installation & hosting
 ---
 
 # DDev

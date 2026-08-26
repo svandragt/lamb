@@ -1,6 +1,6 @@
 ---
 title: Lamb import
-nav_order: 31
+parent: Import & export
 ---
 
 # Restore a Lamb export

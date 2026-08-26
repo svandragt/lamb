@@ -1,6 +1,9 @@
 ---
 title: Theme Functions
+parent: Site customisation
 ---
+
+# Theme Functions
 
 Lamb ships a small library of helper functions that theme parts call to render
 posts, titles, navigation, and the page `<head>`. This page is the reference for

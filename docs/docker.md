@@ -1,5 +1,6 @@
 ---
 title: Docker
+parent: Installation & hosting
 ---
 
 # Docker

@@ -1,5 +1,6 @@
 ---
 title: Drafts
+parent: Content
 ---
 
 # Drafts

@@ -1,5 +1,6 @@
 ---
 title: Themes
+parent: Site customisation
 ---
 
 # Themes
@@ -27,18 +28,18 @@ separately using git.
 ## Screenshots
 
 Default:
-![theme-default](https://github.com/user-attachments/assets/3d80d860-b54c-4d64-ad7b-7c548157e610)
+![Screenshot of the default Lamb theme](https://github.com/user-attachments/assets/3d80d860-b54c-4d64-ad7b-7c548157e610)
 
 
 ---
 
 2024:
-![theme-2024](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
+![Screenshot of the 2024 Lamb theme](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
 
 ---
 
 2026:
-![theme-2026]({{ site.baseurl }}/2026-theme.png)
+![Screenshot of the 2026 Lamb theme]({{ site.baseurl }}/2026-theme.png)
 
 ## Theme documentation
 
