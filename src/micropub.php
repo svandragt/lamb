@@ -14,7 +14,7 @@ use Taproot\Micropub\MicropubAdapter;
 use function Lamb\add_body_tags;
 use function Lamb\get_tags;
 use function Lamb\is_publicly_visible;
-use function Lamb\is_scheduled;
+use function Lamb\is_unpublished;
 use function Lamb\normalize_datetime;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
@@ -387,7 +387,7 @@ class LambMicropubAdapter extends MicropubAdapter
         // Unpublished posts 404 anonymously (#284), but clients GET the Location
         // URL we return to show the just-created post. Attach a short-lived
         // preview token so that URL works without a Lamb session (#285).
-        $needs_preview = $bean->draft == 1 || is_scheduled($bean);
+        $needs_preview = is_unpublished($bean);
         \Lamb\ensure_preview_token($bean);
 
         // Stores, pins the final slug, and emits post.published — the slug must
