@@ -1,5 +1,6 @@
 ---
 title: Webmentions
+parent: Sharing & discovery
 ---
 
 # Webmentions

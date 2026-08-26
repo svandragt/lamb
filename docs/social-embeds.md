@@ -1,5 +1,6 @@
 ---
 title: Social Embeds
+parent: Content
 ---
 
 # Social Embeds

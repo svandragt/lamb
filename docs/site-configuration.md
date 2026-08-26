@@ -1,5 +1,6 @@
 ---
 title: Site Configuration
+parent: Site customisation
 ---
 
 # Site Configuration

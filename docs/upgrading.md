@@ -1,5 +1,6 @@
 ---
 title: Upgrading
+parent: Installation & hosting
 ---
 
 # Upgrading

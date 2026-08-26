@@ -1,5 +1,6 @@
 ---
 title: Search Engines
+parent: Sharing & discovery
 ---
 
 # Search Engines

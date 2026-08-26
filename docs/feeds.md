@@ -1,5 +1,6 @@
 ---
 title: Feeds
+parent: Sharing & discovery
 ---
 
 # Feeds

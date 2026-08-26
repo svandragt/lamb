@@ -1,5 +1,6 @@
 ---
 title: Redirections
+parent: Site customisation
 ---
 
 # Redirections
