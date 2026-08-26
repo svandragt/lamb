@@ -815,6 +815,19 @@ function is_draft(OODBBean $post): bool
 }
 
 /**
+ * Returns true when a post is not yet publicly visible: a draft, or
+ * scheduled for the future. Deleted is deliberately not part of this — a
+ * trashed post is a separate state from "not published yet".
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_unpublished(OODBBean $post): bool
+{
+    return is_draft($post) || is_scheduled($post);
+}
+
+/**
  * Returns true when a post is soft-deleted. The in-memory counterpart to
  * SQL_NOT_DELETED: an unset column is not deleted, matching the SQL listings.
  *
@@ -914,7 +927,7 @@ function preview_token_valid(OODBBean $post, ?string $token): bool
  */
 function ensure_preview_token(OODBBean $post): void
 {
-    if ($post->draft != 1 && !is_scheduled($post)) {
+    if (!is_unpublished($post)) {
         return;
     }
     $expires = $post->preview_token_expires ?? '';

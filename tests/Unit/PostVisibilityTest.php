@@ -8,6 +8,7 @@ use RedBeanPHP\R;
 use function Lamb\is_deleted;
 use function Lamb\is_draft;
 use function Lamb\is_publicly_visible;
+use function Lamb\is_unpublished;
 use function Lamb\is_viewable;
 use function Lamb\Response\respond_post;
 use function Lamb\Response\respond_status;
@@ -149,6 +150,22 @@ class PostVisibilityTest extends TestCase
         $this->assertTrue(is_draft($this->makePost(['draft' => '1'])), 'a string "1" counts, as SQL "draft != 1" would');
         $this->assertFalse(is_draft($this->makePost(['draft' => 0])));
         $this->assertFalse(is_draft(R::dispense('post')), 'an unset draft column is not a draft');
+    }
+
+    public function testIsUnpublishedIsTrueForADraft(): void
+    {
+        $this->assertTrue(is_unpublished($this->makePost(['draft' => 1])));
+    }
+
+    public function testIsUnpublishedIsTrueForAScheduledPost(): void
+    {
+        $future = $this->makePost(['created' => date('Y-m-d H:i:s', time() + 3600)]);
+        $this->assertTrue(is_unpublished($future));
+    }
+
+    public function testIsUnpublishedIsFalseForAPublishedPost(): void
+    {
+        $this->assertFalse(is_unpublished($this->makePost([])));
     }
 
     public function testIsDeletedMatchesSqlNullSafeSemantics(): void

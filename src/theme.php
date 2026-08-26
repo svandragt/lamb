@@ -103,7 +103,7 @@ function action_preview(OODBBean $bean): string
     if (!\Lamb\preview_token_valid($bean, (string) $bean->preview_token)) {
         return '';
     }
-    if ($bean->draft != 1 && !\Lamb\is_scheduled($bean)) {
+    if (!\Lamb\is_unpublished($bean)) {
         return '';
     }
 
