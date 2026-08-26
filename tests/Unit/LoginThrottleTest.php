@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use PDO;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
@@ -27,6 +28,9 @@ use function Lamb\Response\throttle_retry_after;
  */
 class LoginThrottleTest extends TestCase
 {
+    /** @var string|null Path of the file-backed DB from a contention test, if any. */
+    private ?string $contendedDbFile = null;
+
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -41,6 +45,12 @@ class LoginThrottleTest extends TestCase
     protected function tearDown(): void
     {
         unset($_SERVER['REMOTE_ADDR']);
+
+        if ($this->contendedDbFile !== null) {
+            R::selectDatabase('default');
+            @unlink($this->contendedDbFile);
+            $this->contendedDbFile = null;
+        }
     }
 
     // client_ip — the single source of the client address for logging + throttling
@@ -202,15 +212,15 @@ class LoginThrottleTest extends TestCase
 
     public function testRecordLoginFailureSkipsCountingRatherThanThrowingWhenTheWriteLockIsHeld(): void
     {
-        // Simulates another request already mid-write: SQLite refuses a second
-        // BEGIN IMMEDIATE on the same connection, which is the same SQLSTATE
-        // shape record_login_failure() must survive when a different
-        // connection holds the lock instead.
-        R::exec('BEGIN IMMEDIATE');
+        // A single shared connection can't simulate this: SQLite silently
+        // accepts a nested BEGIN IMMEDIATE on the same connection, so the
+        // contention has to come from a genuinely separate connection.
+        $lock = $this->holdWriteLockOnAContendedConnection();
+
         try {
             record_login_failure('203.0.113.7', 1_000);
         } finally {
-            R::exec('ROLLBACK');
+            $lock->exec('COMMIT');
         }
 
         $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
@@ -218,9 +228,9 @@ class LoginThrottleTest extends TestCase
 
     public function testRecordLoginFailureStillCountsOnceTheLockIsFree(): void
     {
-        R::exec('BEGIN IMMEDIATE');
-        record_login_failure('203.0.113.7', 1_000);
-        R::exec('ROLLBACK');
+        $lock = $this->holdWriteLockOnAContendedConnection();
+        record_login_failure('203.0.113.7', 1_000); // Contended: skipped, no row.
+        $lock->exec('COMMIT'); // Release the lock.
 
         // The skipped attempt above left no row; this one, with no contention,
         // must still start a fresh counter rather than staying silently broken.
@@ -229,6 +239,38 @@ class LoginThrottleTest extends TestCase
         $bean = R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]);
         $this->assertNotNull($bean);
         $this->assertSame(['count' => 1, 'expires' => 1_000 + LOGIN_THROTTLE_WINDOW], decode_throttle_state($bean->value));
+    }
+
+    /**
+     * Points the RedBean facade at a throwaway file-backed SQLite database and
+     * takes its write lock from a second, independent PDO connection to the
+     * same file — real cross-connection contention, which a single shared
+     * connection cannot produce. `busy_timeout=0` on the RedBean side turns
+     * the resulting "database is locked" error into an immediate SQL exception
+     * instead of a multi-second stall.
+     *
+     * tearDown() restores the `default` connection and removes the file.
+     *
+     * @return PDO The lock-holding connection; the caller releases it with
+     *              `$lock->exec('COMMIT')` once the contended call is made.
+     */
+    private function holdWriteLockOnAContendedConnection(): PDO
+    {
+        $this->contendedDbFile = tempnam(sys_get_temp_dir(), 'lamb_throttle_test_');
+
+        // A fresh key per call: RedBean refuses to re-register an existing one,
+        // and each test needs its own throwaway file anyway.
+        $key = 'contended_' . uniqid();
+        R::addDatabase($key, 'sqlite:' . $this->contendedDbFile);
+        R::selectDatabase($key);
+        R::freeze(false);
+        R::exec('PRAGMA busy_timeout = 0');
+
+        $lock = new PDO('sqlite:' . $this->contendedDbFile);
+        $lock->exec('PRAGMA busy_timeout = 0');
+        $lock->exec('BEGIN IMMEDIATE');
+
+        return $lock;
     }
 
     // The refusal message tells the owner when to come back
