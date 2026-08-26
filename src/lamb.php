@@ -99,9 +99,23 @@ function parse_tags(string $html): string
         return $html;
     }
 
+    // A hashtag can also be the visible text of a link Markdown already built,
+    // e.g. `[#42](https://…/issues/42)`. TAG_PATTERN matches at the start of a
+    // text segment regardless of what preceded it, so without this the anchor's
+    // own text got hashtag-linked too, nesting an `<a>` inside an `<a>` — HTML5
+    // parsers de-nest that, silently breaking the author's link.
+    $anchor_depth = 0;
     foreach ($parts as $i => $part) {
         // Odd indices are the captured tags themselves — never rewritten.
-        if ($i % 2 === 1 || !str_contains($part, '#')) {
+        if ($i % 2 === 1) {
+            if (preg_match('/^<a[\s>]/i', $part) === 1) {
+                $anchor_depth++;
+            } elseif (preg_match('/^<\/a\s*>$/i', $part) === 1) {
+                $anchor_depth = max(0, $anchor_depth - 1);
+            }
+            continue;
+        }
+        if ($anchor_depth > 0 || !str_contains($part, '#')) {
             continue;
         }
         $parts[$i] = preg_replace_callback(TAG_PATTERN, function ($matches) {

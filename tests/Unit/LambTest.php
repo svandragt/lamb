@@ -257,6 +257,29 @@ class LambTest extends TestCase
         $this->assertStringNotContainsString('href="/tag/foo&amp"', $result);
         $this->assertStringContainsString('href="/tag/foo"', $result);
     }
+
+    public function testParseTagsDoesNotLinkHashtagShapedAnchorText(): void
+    {
+        // A Markdown link whose visible text starts with "#" (e.g. referencing a
+        // GitHub issue: `[#42](https://.../issues/42)`) renders as
+        // <a href="...">#42</a>. Without an anchor-text guard, the "#42" text
+        // segment matched TAG_PATTERN on its own and got hashtag-linked too,
+        // nesting an <a> inside the author's own <a> — invalid HTML5 that
+        // browsers de-nest, breaking the intended link.
+        $result = parse_tags('<p>See <a href="https://example.com/issues/42">#42</a> for details.</p>');
+        $this->assertSame(
+            '<p>See <a href="https://example.com/issues/42">#42</a> for details.</p>',
+            $result
+        );
+    }
+
+    public function testParseTagsStillLinksHashtagsOutsideAnAnchor(): void
+    {
+        // The anchor-text guard must not swallow ordinary hashtags that merely
+        // follow a link in the same paragraph.
+        $result = parse_tags('<p>See <a href="/x">a link</a> about #php.</p>');
+        $this->assertStringContainsString('<a href="/tag/php">#php</a>', $result);
+    }
     private function connect(): void
     {
         if (!R::testConnection()) {
