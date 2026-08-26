@@ -901,7 +901,7 @@ function is_publicly_visible(OODBBean $post): bool
  */
 function preview_token_valid(OODBBean $post, ?string $token): bool
 {
-    if (empty($post->id) || $post->deleted == 1) {
+    if (empty($post->id) || is_deleted($post)) {
         return false;
     }
     if (empty($post->preview_token) || $token === null || $token === '') {
