@@ -89,8 +89,6 @@ function rewrite_css_urls(string $css, string $base_url): string
  */
 function minify_css(string $css): string
 {
-    $css = preg_replace('#/\*.*?\*/#s', '', $css) ?? $css;
-
     // Capturing split, so the delimiters (the literals) are kept and land on the
     // odd indices. url() is included so an unquoted data URI is protected too.
     $parts = preg_split(
@@ -110,6 +108,12 @@ function minify_css(string $css): string
             $out .= $part;
             continue;
         }
+        // Comment-stripping must run per-segment, after the split above, not
+        // as a pre-pass over the raw input — otherwise a `/* ... */`-shaped
+        // substring inside a string literal or url() token (e.g.
+        // `content: "/* not a comment */"`) is deleted as if it were a real
+        // comment, since the pre-pass can't see the literal boundaries.
+        $part = preg_replace('#/\*.*?\*/#s', '', $part) ?? $part;
         $part = preg_replace('/\s+/', ' ', $part) ?? $part;
         $part = preg_replace('/\s*([{}:;,>])\s*/', '$1', $part) ?? $part;
         // A `;` that CSS syntax owns is always in the same segment as the `}`

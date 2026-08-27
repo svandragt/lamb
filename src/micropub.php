@@ -487,6 +487,15 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function updateCallback(string $url, array $actions)
     {
+        // Checked before existence, matching deleteCallback()/undeleteCallback():
+        // an insufficiently-scoped token must get the same response whether the
+        // target post exists, is hidden, or doesn't exist, so URL ids (which are
+        // sequential) can't be used as an existence oracle.
+        $rejection = $this->scopeRejection('update');
+        if ($rejection !== null) {
+            return $rejection;
+        }
+
         $bean = $this->findPostByUrl($url);
         // A soft-deleted post is meant to stay immutable until explicitly
         // restored via the delete-scoped undeleteCallback(); treating it the
@@ -494,11 +503,6 @@ class LambMicropubAdapter extends MicropubAdapter
         // a trashed post's id apart from a nonexistent one.
         if ($bean === null || is_deleted($bean)) {
             return 'invalid_request';
-        }
-
-        $rejection = $this->scopeRejection('update');
-        if ($rejection !== null) {
-            return $rejection;
         }
 
         // Captured before any operation runs: whether this update *mints* a
