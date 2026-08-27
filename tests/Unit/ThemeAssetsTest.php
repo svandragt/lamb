@@ -144,6 +144,25 @@ class ThemeAssetsTest extends TestCase
         $this->assertStringContainsString("<svg a='1' > </svg>", minify_css($css));
     }
 
+    public function testMinifyCssPreservesCommentLikeTextInsideAStringLiteral(): void
+    {
+        // Comment-stripping ran over the raw input before literals were split
+        // out, so a `/* ... */`-shaped substring inside a quoted string was
+        // deleted as if it were a real comment, silently corrupting content.
+        $out = minify_css('.a::before { content: "/* not a comment */"; }');
+
+        $this->assertStringContainsString('/* not a comment */', $out);
+    }
+
+    public function testMinifyCssPreservesCommentLikeTextInsideAUrlToken(): void
+    {
+        // Same bug, via an unquoted url() token: a path segment that looks
+        // like a comment must not be deleted from the URL.
+        $out = minify_css('.a { background: url(http://example.com/foo/*note*/bar.png); }');
+
+        $this->assertStringContainsString('http://example.com/foo/*note*/bar.png', $out);
+    }
+
     public function testMinifyCssKeepsAnEscapedQuoteInsideALiteral(): void
     {
         // A `\"` does not end the string, so the split must not treat it as a
