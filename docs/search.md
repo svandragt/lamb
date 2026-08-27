@@ -1,5 +1,6 @@
 ---
 title: Search
+parent: Sharing & discovery
 ---
 
 # Search

@@ -1,34 +1,38 @@
 ---
 title: Docker
+parent: Installation & hosting
 ---
 
 # Docker
 
 > **Well-travelled path.** The release image is verified by the automated acceptance suite before every release (the `release-verify` workflow), so this is a supported, regularly-tested way to run Lamb.
 
-The only requirement in this case is a working Docker setup!
+You need a working Docker setup and a checkout of the repository.
 
-## Prebuilt image (recommended)
+## Run the release image
 
-Every release publishes a ready-to-run image to GitHub Container Registry. It bundles PHP, the webserver (FrankenPHP/Caddy), and all dependencies in a single container:
+`.docker/Dockerfile.release` bundles PHP, the webserver (FrankenPHP/Caddy), and all dependencies into a single production container. Build it from a checkout, then run it:
 
 ```shell
 # Generate a password hash on any machine with PHP, or inside a throwaway container:
 $ docker run --rm php:8.4-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
+
+# Build the image (run from the repository root)
+$ docker build -f .docker/Dockerfile.release -t lamb .
 
 # Run Lamb
 $ docker run -d --name lamb -p 80:80 \
     -e LAMB_LOGIN_PASSWORD='<the-hash>' \
     -v lamb-data:/app/data \
     -v lamb-assets:/app/src/assets \
-    ghcr.io/svandragt/lamb:latest
+    lamb
 ```
 
 Your site is now ready at http://localhost
 
 The SQLite database lives in the `lamb-data` volume and uploads in `lamb-assets`, so they survive container upgrades. To upgrade, see [Upgrading]({{ site.baseurl }}{% link upgrading.md %}).
 
-Specific versions are available as tags, e.g. `ghcr.io/svandragt/lamb:0.9.0`.
+> **Prebuilt images are discontinued.** Lamb stopped publishing `ghcr.io/svandragt/lamb` after 0.14.0. Older tags still pull but get no further updates — build from the current source instead.
 
 ## Build from source
 

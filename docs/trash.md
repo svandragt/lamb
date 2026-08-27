@@ -1,5 +1,6 @@
 ---
 title: Trash
+parent: Content
 ---
 
 # Trash

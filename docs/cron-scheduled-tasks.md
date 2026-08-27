@@ -1,5 +1,6 @@
 ---
 title: Cron Scheduled Tasks
+parent: Installation & hosting
 ---
 
 # Cron Scheduled Tasks

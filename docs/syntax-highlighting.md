@@ -1,5 +1,6 @@
 ---
 title: Syntax Highlighting
+parent: Content
 ---
 
 # Syntax Highlighting

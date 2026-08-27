@@ -68,17 +68,14 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
 composer, npm, github-actions, docker, devcontainers — and
 `dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
-Vulnerabilities are caught by `composer audit` (quality job), `pnpm audit`
-(js-test job), and a Trivy scan of the release image before it is pushed.
+Vulnerabilities are caught by `composer audit` (quality job) and `pnpm audit`
+(js-test job).
 
-An advisory in the base image that Lamb cannot patch goes in
-`.trivyignore.yaml` with an `expired_at` date, so the suppression lapses on its
-own and the scan asks again. When one expires, rebuild the release image and
-scan it with the entry removed. If the scan passes, the base image has caught
-up — delete the entry. If it still fails, push the date out and say in the
-`statement` what is still blocking it. Both scans have to name the file in the
-action's `trivyignores` input: Trivy auto-discovers only a plain-text
-`.trivyignore`, so an entry it is not pointed at does nothing.
+Lamb does not publish a prebuilt Docker image. Docker is a documented
+self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
+manage on their own build; Dependabot's `docker` ecosystem keeps the base image
+in `.docker/` current. `release-verify.yml` still builds and acceptance-tests
+the release image before each release.
 
 Two things that automation deliberately does **not** handle, so they need a
 human:

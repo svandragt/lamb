@@ -1,5 +1,6 @@
 ---
 title: Reply posts
+parent: Content
 ---
 
 # Reply posts

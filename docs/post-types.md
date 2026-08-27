@@ -1,5 +1,6 @@
 ---
 title: Post Types
+parent: Content
 ---
 
 There are two kinds of posts:
