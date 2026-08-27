@@ -20,6 +20,127 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-27
+
+**Process note — verify "merged" claims against the actual PR state, not
+just this log.** This run picked categories 3 and 4 (least recently covered
+per the previous entry's own recommendation) plus a bonus check of 7's one
+outstanding candidate (`minify_css()`). The category-3 agent re-found the
+*exact* bug the 2026-08-24 entry below describes as "Fixed by checking scope
+first, matching the siblings" (PR #735) — because #735 was never merged.
+Checking `pull_request_read` directly showed `"state":"closed","merged":false`,
+closed by the repo owner five hours after opening, and `src/micropub.php` on
+`origin/main` still has the vulnerable existence-before-scope ordering today.
+**This log's "Fixed by ..." / "since merged" language documents PR *intent*,
+not confirmed merge state — a future run should not treat a "Ruled out" or
+"Fixed" entry as reliable without spot-checking the PR itself**, especially
+before skipping a category on the strength of it. (Whether the owner closed
+#735 for a substantive reason or simply didn't get to it is unknown — worth
+asking rather than assuming either way.)
+
+**Covered:** 3 (guard-clause diffing — re-confirmed the still-open
+`updateCallback()` scope-ordering gap misreported as fixed above), 4
+(unchecked return values — full fresh sweep, no findings), and the single
+outstanding category-7 candidate flagged last run (`minify_css()`).
+
+**Blocker — this run could not open any PRs.** Both `git push` (HTTP 403
+from github.com) and the GitHub MCP write tools (`create_branch`,
+`push_files` — `403 Resource not accessible by integration`) are read-only
+for this session; `mcp__GitHub-MCP__get_me` confirms the identity is the
+repo owner, so this is a session/connector permission scope, not an account
+limitation. Per this environment's proxy guidance, a 403 policy denial is
+reported rather than retried or routed around. All fixes below were
+completed, committed to local branches, and validated, but exist only as
+uncommitted local branches / patch files in this session's scratchpad
+(`/tmp/.../scratchpad/patches/`) — **not on GitHub**. Whoever reviews this
+log should either grant this session's GitHub connector write access, or
+apply the patches manually; see the session transcript / notification for
+details. Re-flag this blocker prominently if a future run hits it again
+before assuming it's transient.
+
+**Findings (fixed locally, not yet on GitHub — see blocker above):**
+- **Category 3 — `LambMicropubAdapter::updateCallback()`** (`src/micropub.php`,
+  ~line 488) still checks post existence/deleted-state before the `update`
+  OAuth scope, unlike `deleteCallback()`/`undeleteCallback()`. An
+  insufficiently-scoped token gets a different, distinguishable response
+  (`invalid_request` vs 403 `insufficient_scope`) depending on whether a
+  sequential post id names a real (possibly hidden) post — an existence
+  oracle. This is PR #735's exact fix, re-applied (branch
+  `bugscan/micropub-update-scope-order`): swapped the two checks and added
+  `testUpdateCallbackReturnsInsufficientScopeForNonexistentUrlWhenTokenLacksScope`.
+- **Category 7 — `minify_css()`** (`src/theme/assets.php:90`) stripped CSS
+  comments with a raw regex over the *whole* stylesheet before splitting out
+  string literals/`url()` tokens, so a `/* ... */`-shaped substring inside a
+  literal (e.g. `content: "/* not a comment */"`, or a `url()` path
+  containing `/*...*/`) was silently deleted as real content, not just a
+  cosmetic idempotence issue — genuine semantic corruption with no error
+  surfaced. `theme/README.md` explicitly documents third-party/custom themes
+  as a supported input class this function must survive, so this is
+  reachable, just not through any of Lamb's own bundled themes today. Fixed
+  (branch `bugscan/minify-css-comment-strip-order`) by moving comment-strip
+  into the per-segment loop, after the literal split, with two new regression
+  tests. This closes out category 7's last untried candidate from the
+  2026-08-26 entry.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 4 — full fresh sweep, including files not explicitly named in the
+  2026-08-24 ruled-out list (`webmention.php`, `websub.php`, `http.php`,
+  `network.php`, `response/discovery.php`, `theme.php`/`theme/*.php`,
+  `config.php`). No reachable unchecked-return bugs found. Two harmless
+  style-only near-misses noted for optional future cleanup, not bugs: the
+  `preg_replace()` calls in `src/index.php:149` and
+  `src/config.php:192` (`ensure_explicit_theme()`) lack the `?? $fallback`
+  idiom used everywhere else in this codebase, but neither is reachably
+  triggerable to `null` (checked via forced low `pcre.backtrack_limit`
+  against large/adversarial inputs).
+- Category 3 — re-confirmed all the 2026-08-24/2026-08-25 rulings still
+  hold (CSRF-ordering split in `response/posts.php`, `require_login()`
+  coverage in `upload.php`/`export.php`/`respond_checkbox()`,
+  webmention/websub/network ingestion guard families, the `is_*` predicate
+  family, Micropub's `applyReplace()`/`applyAdd()`/`applyDelete*()` sibling
+  methods, `sourceQueryCallback()`'s intentional public-post exception). Only
+  the `updateCallback()` finding above is new (well, "new" — it's #735
+  again).
+- Category 7 (bonus) — `minify_css()` re-confirmed idempotent for every
+  input shape checked (nested media queries, `calc()`, combinators, escaped
+  quotes, unterminated strings, the full shipped 2026 theme CSS); its one
+  call site (`styles_markup()`) never invokes it twice on its own output, so
+  idempotence was never the live risk — the single-pass literal-corruption
+  bug above was.
+
+**Issue-dense files:** none newly identified. `micropub.php` continues to be
+the most frequent source of findings (category 3 in #735/this run) purely
+from size/exposure, as already noted in the 2026-08-26 entry — still not
+marking it issue-dense.
+
+**Environment note:** full `composer install` (with dev deps) now completes
+much further than the 2026-08-25 run's environment note describes — `phpunit`,
+`codeception`, and `php_codesniffer` source-clone successfully via the
+git-based fallback — but `phpstan/phpstan` (phar-only, no git source) and a
+handful of other dist-only packages still hard-fail with "Could not
+authenticate against github.com", and critically **`vendor/bin/` binaries
+never got generated** (the install aborts before the binary-linking step),
+so `vendor/bin/phpunit`/`vendor/bin/codecept`/`vendor/bin/phpcs` are absent
+even though their package directories exist. Validation this run used
+`php -l` plus hand-rolled standalone scripts (`php` directly requiring the
+changed source file and re-running the test file's assertions inline) —
+same workaround as 2026-08-25. Worth someone checking why the binary-linking
+step aborts partway rather than skipping just the packages it can't fetch.
+
+**Suggested refinement:** (1) **Verify, don't trust, this log's own "Fixed"/
+"merged" claims** — spot-check the referenced PR's actual state before using
+it to rule out a category, as this run had to do for #735. (2) Category 7 has
+no more flagged outstanding candidates — next run picking it should do a
+fresh property-fuzz pass over functions not yet fuzzed at all, rather than
+re-checking `minify_css()`/`parse_tags()`/`slugify()`/etc. again. (3)
+Categories 3 and 4 are now both freshly covered as of today — categories 1,
+5, 8, 9 remain the longest-untouched (all last checked 2026-08-24) if a
+future run wants genuinely fresh ground, though 5/8/9 are expected to stay
+low-yield per their existing "check only on relevant diff" status. (4) Most
+importantly: **resolve this run's GitHub write-access blocker** before the
+next scheduled run, or every run after this one will hit the same wall and
+produce fixes nobody can review without digging through session transcripts.
+
 ### 2026-08-26
 
 **Process note — read this before picking categories.** This run started from
