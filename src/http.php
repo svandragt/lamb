@@ -201,6 +201,18 @@ const DEFAULT_USER_AGENT = 'Lamb-Webmention';
 const DEFAULT_FETCH_TIMEOUT = 30;
 
 /**
+ * Per-query ceiling for the DNS lookup in {@see resolve_host_ips}, in seconds.
+ *
+ * That lookup runs before curl connects, and neither dns_get_record() nor
+ * gethostbyname() takes a timeout — while on Unix set_time_limit() does not
+ * count time blocked in a syscall. Left unbounded, a black-holed resolver would
+ * stall a /_cron run and hold its flock the whole time, so every later run
+ * reports "Already running" (#707). Applied as RES_OPTIONS with attempts:2, so
+ * ~10s worst case per nameserver — comfortably under FEED_FETCH_TIMEOUT.
+ */
+const DNS_RESOLVE_TIMEOUT = 5;
+
+/**
  * The timeout a single request runs under: the caller's when it named one,
  * DEFAULT_FETCH_TIMEOUT otherwise.
  *
@@ -325,6 +337,12 @@ function is_private_ip(string $ip): bool
  */
 function resolve_host_ips(string $host): array
 {
+    // Bound the resolver: neither call below takes a timeout, so a black-holed
+    // nameserver would otherwise block unbounded and hold the /_cron flock the
+    // whole time (#707). glibc honours RES_OPTIONS; where it does not (musl) the
+    // libc default is already finite, so this only ever tightens the wait.
+    putenv('RES_OPTIONS=timeout:' . DNS_RESOLVE_TIMEOUT . ' attempts:2');
+
     $records = @dns_get_record($host, DNS_A + DNS_AAAA);
     if (is_array($records) && $records !== []) {
         return array_values(array_filter(array_map(
