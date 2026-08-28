@@ -257,7 +257,7 @@ function emit_sitemap(string $path): void
 
     echo str_replace(
         SITEMAP_ROOT,
-        htmlspecialchars(ROOT_URL, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE),
+        \Lamb\Theme\escape_xml(ROOT_URL),
         $template
     );
 

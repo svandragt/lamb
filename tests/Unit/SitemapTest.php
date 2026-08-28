@@ -310,6 +310,22 @@ class SitemapTest extends TestCase
         $this->assertStringNotContainsString(SITEMAP_ROOT, $body);
     }
 
+    // The host substituted on the way out is escaped through the one XML
+    // escaper (Theme\escape_xml()), not an inline copy of its flags — so both
+    // <loc> call sites in this file stay converged (#752).
+    public function testSubstitutedHostIsEscapedViaEscapeXml(): void
+    {
+        $this->makePost(['slug' => 'hello']);
+        $path = $this->cacheDir() . '/sitemap-escape.xml';
+
+        $body = $this->emit($path);
+
+        $this->assertStringContainsString(
+            '<loc>' . \Lamb\Theme\escape_xml(ROOT_URL) . '/hello</loc>',
+            $body
+        );
+    }
+
     public function testStoringACopyRemovesTheOlderOnes(): void
     {
         $dir = $this->cacheDir();
