@@ -319,7 +319,15 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
         }
     }
 
-    return array_slice(array_values($related_posts), 0, $limit);
+    // Each tag's own rows arrive created-DESC from SQL, but merging tag by tag
+    // leaves the *combined* list ordered by which tag matched first, not by
+    // date — a post found only via the second tag lands after every post the
+    // first tag matched, however new it is. Re-sort the merged set so the
+    // promised created-DESC order holds across tags too.
+    $posts = array_values($related_posts);
+    usort($posts, static fn(OODBBean $a, OODBBean $b): int => strcmp((string) $b->created, (string) $a->created));
+
+    return array_slice($posts, 0, $limit);
 }
 
 /**

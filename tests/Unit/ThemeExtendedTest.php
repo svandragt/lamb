@@ -212,6 +212,38 @@ class ThemeExtendedTest extends TestCase
     }
 
     /**
+     * Each tag's own SQL query already returns its rows created-DESC, but that
+     * only sorts within one tag: a post matched solely by the *second* tag used
+     * to be appended after every post the first tag matched, however much
+     * newer it was, because the per-tag results were merged in tag order and
+     * never re-sorted. A post with two hashtags — the ordinary case — could
+     * therefore surface its related posts out of date order.
+     */
+    public function testGetPostsByTagsOrdersAcrossTagsByCreatedDate(): void
+    {
+        $older = R::dispense('post');
+        $older->body = 'Older post about #alpha end';
+        $older->version = 1;
+        $older->created = '2020-01-01 00:00:00';
+        R::store($older);
+
+        $newer = R::dispense('post');
+        $newer->body = 'Newer post about #beta end';
+        $newer->version = 1;
+        $newer->created = '2026-01-01 00:00:00';
+        R::store($newer);
+
+        // 'alpha' (matching only the older post) is searched first, 'beta'
+        // (matching only the newer post) second — the order get_tags() would
+        // hand back for a post reading "... #alpha ... #beta ...".
+        $result = get_posts_by_tags(['alpha', 'beta']);
+
+        $this->assertCount(2, $result);
+        $this->assertSame((int) $newer->id, (int) $result[0]->id, 'the newer post must sort first');
+        $this->assertSame((int) $older->id, (int) $result[1]->id, 'the older post must sort last');
+    }
+
+    /**
      * The block shows ten links; it used to read every row the LIKE matched to
      * find them. On a common tag that is the whole archive, on the most-visited
      * anonymous page there is: 58 MB for one post page at 8,000 posts sharing a
