@@ -25,7 +25,14 @@ extensions:
         # every later request then fails with cURL "Operation timed out after 30s"
         # (a 0-byte read). Sending the log to a file keeps the pipe empty (and the
         # log inspectable) so a long suite no longer wedges the server.
-        0: sh -c "env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD='%LAMB_LOGIN_PASSWORD%' php -S 0.0.0.0:%LAMB_TEST_PORT% -t src 2> tests/_output/dev-server.log"
+        #
+        # `fuser -k` first frees the port. An interrupted run (Ctrl-C/crash)
+        # orphans this child, and the next run's bind then fails silently into
+        # dev-server.log while PhpBrowser talks to the stale zombie — every
+        # route 404s from a wrong data dir (#116). `;` not `&&`, so php still
+        # starts when the port was already free (fuser exits non-zero then).
+        # ponytail: fuser is Linux-only; on macOS use `lsof -ti tcp:<port> | xargs -r kill`.
+        0: sh -c "fuser -k %LAMB_TEST_PORT%/tcp 2>/dev/null; env LAMB_DATA_DIR=../tests/Support/Data LAMB_LOGIN_PASSWORD='%LAMB_LOGIN_PASSWORD%' php -S 0.0.0.0:%LAMB_TEST_PORT% -t src 2> tests/_output/dev-server.log"
         sleep: 1
 step_decorators:
   - Codeception\Step\ConditionalAssertion
