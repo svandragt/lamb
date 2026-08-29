@@ -235,8 +235,8 @@ function source_mentions_target(string $html, string $target): bool
  */
 function webmentions_for_post(int $post_id): array
 {
-    // Read the newest mentions (DESC + LIMIT), then restore oldest-first order
-    // for display. A plain ASC LIMIT would drop the newest mentions instead.
+    // Newest-first in SQL to keep the newest under the LIMIT, then reversed for
+    // the oldest-first display. A plain ASC LIMIT would drop the newest instead.
     $rows = array_values(
         R::find(
             'webmention',
