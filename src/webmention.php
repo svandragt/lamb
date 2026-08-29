@@ -50,6 +50,26 @@ const WEBMENTION_FETCH_MAX_BYTES = 2_000_000;
 const OUTBOX_SCAN_LIMIT = 500;
 
 /**
+ * Most webmentions rendered on a single post page.
+ *
+ * webmentions_for_post() feeds the author-only mentions list. A popular post can
+ * accumulate an unbounded number of verified mentions, and rendering them all
+ * loads every row and its content into one request. This caps that read at the
+ * newest mentions, which is far more than any real conversation shows at once.
+ */
+const WEBMENTION_DISPLAY_LIMIT = 100;
+
+/**
+ * Longest content snippet kept for a webmention.
+ *
+ * extract_meta() derives the snippet from the source page's <title>, bounded
+ * only by WEBMENTION_FETCH_MAX_BYTES until it hits this cap. A title is meant to
+ * be a short label; anything past this is truncated rather than stored and
+ * re-rendered in full on the post page.
+ */
+const WEBMENTION_CONTENT_MAX = 280;
+
+/**
  * Route handler for POST /webmention.
  *
  * Accepts `source` and `target` form parameters per the Webmention spec,
@@ -207,14 +227,25 @@ function source_mentions_target(string $html, string $target): bool
 /**
  * Return verified webmentions for a post, oldest first.
  *
+ * Bounded to the newest WEBMENTION_DISPLAY_LIMIT mentions so a heavily mentioned
+ * post cannot make the page load an unbounded number of rows.
+ *
  * @param int $post_id
  * @return OODBBean[]
  */
 function webmentions_for_post(int $post_id): array
 {
-    return array_values(
-        R::find('webmention', ' post_id = ? AND verified_at IS NOT NULL ORDER BY created ASC ', [$post_id])
+    // Newest-first in SQL to keep the newest under the LIMIT, then reversed for
+    // the oldest-first display. A plain ASC LIMIT would drop the newest instead.
+    $rows = array_values(
+        R::find(
+            'webmention',
+            ' post_id = ? AND verified_at IS NOT NULL ORDER BY created DESC LIMIT ? ',
+            [$post_id, WEBMENTION_DISPLAY_LIMIT]
+        )
     );
+
+    return array_reverse($rows);
 }
 
 /**
@@ -237,6 +268,9 @@ function extract_meta(string $html): array
     $content = null;
     if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $m)) {
         $content = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5)) ?: null;
+        if ($content !== null && mb_strlen($content) > WEBMENTION_CONTENT_MAX) {
+            $content = mb_substr($content, 0, WEBMENTION_CONTENT_MAX);
+        }
     }
 
     return ['author' => $author, 'content' => $content];

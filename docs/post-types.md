@@ -87,13 +87,14 @@ Front-matter keys are forgiving: they are matched case-insensitively, and unders
 
 The following sections of the site are special:
 
-- `/tags/<name>` are tags linked in content
+- `/tag/<name>` are tags linked in content
 - `/search/<keywords>` search the content for keywords
 - `/login` and `/logout` to login and out.
 - `/feed` for the Atom newsfeed.
 
 ## Related
 
+* [Write your first post]({{ site.baseurl }}{% link first-post.md %}): A ten-minute walkthrough of publishing a status, tagging it, adding an image, and making a page.
 * [Media]({{ site.baseurl }}{% link media.md %}): Add images and video by drag-and-drop or paste; JPEG/PNG are converted to WebP, video is stored as-is.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Add `draft: true` to front-matter to save a post as a draft.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Add a future `created:` date to publish a post later.

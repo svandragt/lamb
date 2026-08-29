@@ -20,6 +20,142 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-29
+
+**Blocker from 2026-08-27 is resolved.** That run's fixes were stuck as
+local-only branches because both `git push` and the GitHub MCP write tools
+returned 403 for that session. This run confirmed `git push` and PR creation
+both work normally (`bugscan/micropub-update-scope-order`, the branch that
+run pushed once access came back or a later session picked it up, is already
+merged to `main` as #756). No write-access issue this run — if a future run
+hits 403 again, treat it as a fresh occurrence worth re-flagging, not an
+ongoing condition.
+
+**Covered:** 1 (docblock absolute claims — fresh sweep, focused on code
+changed since the 2026-08-24 full pass rather than re-verifying its ~20
+already-checked claims) and 7 (property fuzzing — fresh functions only,
+per the 2026-08-27 entry's own suggestion to stop re-checking
+`slugify()`/`minify_css()`/`parse_tags()`/`normalize_datetime()`). Also
+re-confirmed categories 5 and 9 are still clean on a quick pass (no new
+`R::find`/`getAll` without `LIMIT` introduced since 2026-08-24; `phpstan.neon`
+unchanged, ignore block still correctly scoped).
+
+**PRs opened:**
+- [#765](https://github.com/svandragt/lamb/pull/765) — category 7.
+  `remove_body_tags()` (`src/lamb.php`) never ran its input through
+  `sanitize_tag_name()`, unlike its counterpart `add_body_tags()` and
+  Micropub's `buildTags()`. Micropub's `applyDeleteValues()` passes a
+  client's raw category string straight through: a multi-word category like
+  `"day trip"` is stored by `add_body_tags()` as `#day-trip`, but
+  `delete: {category: ["day trip"]}` — the same string the client used to
+  add it — no longer matches verbatim, so the hashtag silently survives a
+  "successful" delete. Same bug class as the `parse_tags()`/`get_tags()`
+  round-trip fix (#750) and the Micropub `buildTags()` fix, recurring in a
+  sibling function neither of those covered. Fixed by sanitizing in
+  `remove_body_tags()` too; verified with a standalone script requiring the
+  real `src/lamb.php` (red before, green after), plus a new PHPUnit
+  regression test.
+- [#766](https://github.com/svandragt/lamb/pull/766) — category 1.
+  `record_login_failure()`'s docblock (`src/response/auth.php`, added by
+  #742) claims its locked read-increment-write keeps more than
+  `LOGIN_THROTTLE_MAX_FAILURES` real `password_verify()` calls from running
+  per window — true for the write alone, but the actual gate
+  (`login_throttle_retry_after()`, called in `redirect_login()`) is an
+  *unlocked peek* taken before bcrypt runs and before that write happens.
+  Concurrent `/login` POSTs from the same IP all read the same
+  under-the-limit count, all run bcrypt, and only serialize on the write
+  afterwards — a burst can push well past the documented cap before the
+  counter catches up. This is a check-then-act race one layer up from the
+  write race #742 already fixed; #742's own fix was necessary but not
+  sufficient. Fixed by folding the check and increment into one atomic
+  `reserve_login_attempt()` step that runs immediately before bcrypt, with
+  lock contention now failing *closed* (this app's SQLite connections use
+  `busy_timeout = 0`, so contention is the common case under a real burst,
+  not an edge case — the old fail-open behavior on contention would have
+  reopened the same race). Verified with a genuine multi-process
+  reproduction (separate `php` CLI processes against one file-backed
+  SQLite database, not in-process PHPUnit): 30 concurrent simulated
+  attempts against a limit of 10 — old design let 21/30 through to the
+  simulated bcrypt call, new design capped it at exactly 10/30. Updated the
+  existing `LoginThrottleTest`/`ResponseAuthTest` suites for the rename and
+  the fail-closed behavior change, added a new test pinning the
+  sequential-admission cap.
+- [#767](https://github.com/svandragt/lamb/pull/767) — category 1,
+  lower severity, docs-only. `DNS_RESOLVE_TIMEOUT`'s docblock
+  (`src/http.php`, added by #763/#707) claimed its ~10s worst-case DNS
+  preflight budget was "comfortably under `FEED_FETCH_TIMEOUT`" (15s) — only
+  true for a single configured nameserver. glibc's resolver applies the
+  `timeout`/`attempts` budget *per nameserver*, cycling through every one in
+  `resolv.conf`, so a host with 2-3 configured nameservers (common) can
+  spend ~20-30s on DNS preflight against a black-holed resolver, exceeding
+  `FEED_FETCH_TIMEOUT` before curl's own timeout starts counting. Not a
+  behavior bug (still bounded by `process_feeds()`'s overall 1800s
+  `/_cron` limit) — corrected the docblock rather than retuning the
+  constants, since tightening the DNS budget to fit under
+  `FEED_FETCH_TIMEOUT` in the worst case would trade away resilience to a
+  single slow-but-not-dead nameserver, a tuning tradeoff outside a
+  bug-scan's judgment call.
+
+**Ruled out (do not re-flag without new evidence):**
+- Category 1 — swept all docblock claims in every `src/` file touched since
+  2026-08-24 (`get_posts_by_tags()` date sorting, `escape_xml()` control-char
+  stripping, sitemap host escaping, Micropub scope-check reorder,
+  `minify_css()`, `is_deleted()`/`is_unpublished()` consolidation, menu-page
+  filtering in `related_posts()`, `LAMB_LOGIN_PASSWORD` resolver convergence,
+  Micropub cache headers, `ZipArchive` return-value check). Each either
+  already has a red-green test from the PR that introduced it or is a
+  straightforward, low-risk consolidation with no claim/code mismatch.
+- Category 5 — re-confirmed clean: `related_posts()`'s query (menu-filter
+  change in #738) is bounded by `RELATED_SCAN_LIMIT`; no other new
+  `R::find`/`getAll`/`findAll` call without a `LIMIT` or bounding `WHERE`
+  was introduced since the 2026-08-24 full sweep.
+- Category 9 — `phpstan.neon`'s `ignoreErrors` block is unchanged since
+  2026-08-24 and still correctly scoped to exactly the files it justifies;
+  `dynamicConstantNames` gained `LOGIN_PASSWORD` (#734) for a legitimate,
+  documented reason (matches its own inline comment). Nothing to remove.
+- Category 7 — property-fuzzed and ruled out this run (no bug found):
+  `sanitize_location()` (idempotent), `encode_path_segment()`/
+  `rawurldecode()` round-trip, `absolute_url()`/`absolute_urls()`
+  (idempotent by construction, single call site), `sanitize_explicit_slug()`
+  (idempotent), `escape()`/`escape_xml()` (one-directional, already
+  hardened), `anchor_headings()` (not idempotent by design but never
+  double-applied — no live risk), `target_post_id()`/
+  `source_mentions_target()` (one-way, not a round-trip pair).
+
+**Issue-dense files:** none newly identified. `src/lamb.php` and
+`src/response/auth.php` have each now produced two independent findings
+across different runs (`lamb.php`: the #750 tag round-trip and this run's
+`remove_body_tags()` sibling bug; `auth.php`: #742's write race and this
+run's check-then-act race one layer up) — both purely because they're the
+most exposed, most-attempted-against surfaces (Micropub category writes;
+the one unauthenticated write-adjacent endpoint), not because they're
+unusually defect-prone. Not marking either issue-dense; both should stay in
+every relevant category's sweep. `micropub.php` remains the single most
+frequently-touched file overall for the same reason, per every prior
+entry's note — still not issue-dense.
+
+**Suggested routine refinements:**
+1. The category-7 "peek vs. atomic reservation" bug class (a check computed
+   separately from, and before, the operation it's meant to gate) has now
+   shown up twice in different subsystems (Micropub tag delete this run;
+   the login throttle in category 1, which is really the same shape of bug
+   — a stale read used to gate a slow operation). Consider folding "does a
+   guard's read happen atomically with the write/operation it gates, or
+   could a slow operation in between let the read go stale" into category
+   3 (guard-clause diffing) or calling it out as its own recurring pattern
+   in the categories list — it's caught two real bugs now via two different
+   categories (1 and 7) somewhat by accident.
+2. Category 1 is not exhausted the way 5/8/9 are — this run's fresh
+   docblock sweep, scoped only to files changed since the last full pass,
+   still found a real security-relevant claim/code mismatch on the first
+   look. Prioritize it again alongside 2/6/7 rather than treating it as
+   low-yield like 5/8/9.
+3. Categories 5, 8, 9 remain fully triaged with nothing outstanding; keep
+   them as "check only on a diff touching the relevant files" rather than a
+   full sweep.
+4. Category 2 (recomputed state) hasn't had a fresh pass since 2026-08-26 —
+   longest-untouched substantive category now, worth prioritizing next run.
+
 ### 2026-08-28
 
 **Process note — this run's own advice worked: verified "merged" claims by

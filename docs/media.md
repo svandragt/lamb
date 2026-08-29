@@ -112,6 +112,7 @@ If WebP support is missing and you want it, install or enable the WebP-capable G
 
 ## Related
 
+* [Write your first post]({{ site.baseurl }}{% link first-post.md %}): A ten-minute walkthrough that includes dragging in your first image.
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): Add images and video to status and page posts.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts and upload photos from external apps.
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A post's first image becomes its social preview card; video-only posts fall back to the default card.
