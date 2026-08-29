@@ -20,6 +20,192 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-28
+
+**Process note — this run's own advice worked: verified "merged" claims by
+checking `list_pull_requests`/`git log` directly rather than trusting this
+log, and it paid off immediately.** The backlog the 2026-08-26/27 entries
+worried about is now clear — `list_pull_requests(state=open)` returned zero
+open PRs at the start of this run, and `git push`/GitHub MCP write tools both
+worked without the 403 the 2026-08-27 entry hit. That blocker looks resolved
+(or was specific to that session); this run hit no permission issue at all.
+**A second, more consequential thing this run's "verify, don't trust"
+discipline surfaced: the environment blocker every prior entry (08-24 through
+08-27) documents — "`vendor/bin` binaries never got generated," forcing
+hand-rolled standalone validation scripts instead of the real test suite —
+had already been fixed in the codebase (`.claude/hooks/session-start.sh`,
+added by PR #681, well before this log's history starts) but the fix was
+dead: it was never registered in `.claude/settings.json`'s `hooks` key, so it
+silently never ran. Every run since #681 revalidated with `php -l` and manual
+scripts instead of `vendor/bin/codecept`/`phpstan`/`phpcs` because of a
+one-line missing config entry, not because the sandbox is actually
+incapable.** Fixed this run (PR #773) by adding the `SessionStart` hook
+registration; confirmed working by running the script's steps by hand and
+getting a full `vendor/bin/codecept run Unit` pass (2142 tests, 3941
+assertions, 0 failures) plus working `phpstan`/`phpcs`. **The next run should
+no longer need this workaround at all** — if `vendor/bin/` is still empty at
+the start of a future run, that means the hook registration itself regressed
+or the session type doesn't fire `SessionStart` hooks, which is worth
+flagging loudly rather than silently re-applying the manual workaround again.
+
+**Covered:** 1 (docblock absolute claims — fresh full pass beyond the
+2026-08-24 baseline, plus a targeted follow-up on files that pass didn't
+reach) and 7 (property fuzzing — fresh pass on functions not named in any
+prior Category 7 entry, plus a targeted follow-up on three specific
+untried leads). Both were the longest-untouched/most-recommended categories
+per the 2026-08-27 entry's suggested refinement (1 hadn't had a fresh pass
+since 08-24; 7's prior run explicitly said file-level fuzzing wasn't dry yet
+and named these exact next candidates).
+
+**PRs opened:**
+- [#760](https://github.com/svandragt/lamb/pull/760) (merged) — category 7.
+  `Theme\escape_xml()` (`src/theme/formatting.php`) only ran input through
+  `htmlspecialchars()`, which rewrites `& < > " '` but has no concept of XML
+  1.0's separate rule that raw control characters (below U+0020, excluding
+  tab/LF/CR) and the U+FFFE/U+FFFF noncharacters are never valid, escaped or
+  not. Such a byte passed straight through untouched. Reachable: Micropub's
+  JSON create endpoint accepts a unicode-escaped control character inside a
+  string property (valid JSON), and `json_decode()` turns it into a literal
+  control byte with nothing in the pipeline stripping it before it reaches
+  `escape_xml()`. Consequence: `DOMDocument::loadXML()` (the sitemap's shape)
+  fails the *whole document* to parse; `SimpleXMLElement::addChild()` (the
+  Atom feed's shape) instead silently drops the field's content. Fixed by
+  stripping XML-1.0-invalid control characters/noncharacters before the
+  existing `htmlspecialchars()` call, with two new regression tests in
+  `tests/Unit/ThemeTest.php` (one confirms well-formed XML via
+  `DOMDocument::loadXML()`, one confirms tab/LF/CR survive while other C0
+  controls and the noncharacters don't).
+- [#761](https://github.com/svandragt/lamb/pull/761) (merged) — category 1.
+  `get_posts_by_tags()`'s docblock (`src/theme.php`) claims results are
+  "ordered by created date descending." Each tag's own SQL query is correctly
+  `ORDER BY created DESC`, but results from different tags were merged
+  tag-by-tag with no re-sort afterward, so a post matched only by the second
+  (or later) tag in the list landed after every post the first tag matched,
+  however much newer it was. Reachable in the ordinary case (not an edge
+  case): `related_posts()` — the "Related" block rendered on every post's
+  theme partial — calls this with a post's own hashtags in body order, so any
+  post with two or more tags matching different other posts could render its
+  related-posts list out of date order. This bug was introduced incidentally
+  by the very recent `#101`/`#738` visibility-clause fix, which corrected
+  *which* posts are eligible but didn't touch the pre-existing merge-order
+  gap (likely latent even longer than that). Fixed with a stable `usort` on
+  the merged set before slicing to the limit, plus a regression test in
+  `tests/Unit/ThemeExtendedTest.php`. Full suite validated:
+  `vendor/bin/codecept run Unit` — 2142 tests, 3941 assertions, 0 failures.
+- [#773](https://github.com/svandragt/lamb/pull/773) — not one of the 9 scan
+  categories, but a configuration bug found while investigating why this
+  run's own `composer install` was failing the same way every prior run
+  describes. See the process note above: registers the long-dead
+  `session-start.sh` hook in `.claude/settings.json`.
+
+**Ruled out (do not re-flag without new evidence) — category 1:**
+`post.php`'s `finalize_slug()` uniqueness loop, `set_matter()`/
+`set_frontmatter_key()` no-churn/no-create/stale-list-removal behavior,
+`persist_slug()`'s no-front-matter docblock case (unreachable dead code, a
+doc inaccuracy rather than a live bug — `slug` on the bean requires
+`parse_matter()` to have found real front matter first), `toggle_rendered_checkbox()`/
+`candidate_marker_offsets()` (re-confirmed), `post_ids_by_tag()`/
+`all_post_ids_by_tag()` paging/tie-break; `network/ingest.php`'s
+`ingest_item()` "never recreated" claim (safe — `/_cron` serialized by
+`acquire_cron_lock()`'s exclusive flock); `network/status.php`'s
+`record_crawl_success()` forward-only watermark; `network/json_feed.php`'s
+dateless-item non-ingestion claim; `export.php`'s `post_export_path()`
+slug-collision claim; `response/discovery.php`'s sitemap atomic-write and
+`should_noindex()`/`robots_txt_body()` single-source-of-truth claims;
+`response/upload.php`'s `upload_subpath()`/`asset_url()`/upload-uniqueness/
+WebP-fallback claims (flagged, not filed, a theoretical decompression-bomb
+edge case in `convert_to_webp()` when `getimagesize()` fails to parse an
+image `imagecreatefromstring()` can still decode — not demonstrable on this
+PHP 8.4.19/GD 2.3.3 build, worth a look only if GD/PHP support ever
+diverges); `micropub.php`'s `sanitizeHtml()`/`sanitizeAttributes()`/
+`filterContentUrl()`/`canonical_site_url()`; `config.php`'s
+`normalize_config()`/`is_config_section()`/`canonical_site_url()`;
+`lamb.php`'s `is_viewable()`/`is_publicly_visible()`/`preview_token_valid()`/
+`absolute_url()`/`flatten_redirects()`; `LambDown.php`, `highlight.php`,
+`theme/formatting.php` (pre-fix), `theme/meta.php` — all read in full, no
+contradicted claims. Follow-up pass on files the first sweep didn't reach
+(`response/posts.php`, `response/auth.php`, `response/feeds.php`, `http.php`,
+`bootstrap.php`, `restore.php`, `webmention.php`, `websub.php`, `index.php`):
+open-redirect guards (`store_slug_change_redirect()`, `safe_referer_path()`,
+`local_redirect_target()`), checkbox-toggle no-renotify behavior, `client_ip()`'s
+deliberate X-Forwarded-For exclusion, `decode_throttle_state()`'s fail-open
+behavior, webmention's `target_post_id()` visibility check,
+`process_outbound()`/`process_outbound_row()`'s draft-leak guard and
+`OUTBOX_SCAN_LIMIT` bound, resend/cancel semantics, `bootstrap.php`'s login-marker
+HMAC/`hash_equals()` and `client_has_current_version()`'s RFC 9110
+If-None-Match precedence, `restore.php`'s zip-slip gates
+(`safe_entry_path()`, `open_source()`/`open_directory()`), `index.php`'s
+host-header/reserved-route/conditional-GET handling, `websub.php`'s hub-URL
+SSRF filtering and scheduled-publish watermark boundary — all checked,
+all hold.
+
+**Ruled out — category 7:** `sanitize_tag_name()` (5000-input fuzz, both
+self-idempotence and the `add_body_tags()`→`get_tags()` round trip — none
+failed); `encode_throttle_state()`/`decode_throttle_state()` round trip;
+`pagination_window()`/`build_pagination_meta()` (lower-bound clamp is the
+caller's job by design, done correctly by the only caller family);
+`encode_path_segment()`/`rawurldecode()` round trip; `resolve_url()`
+idempotence; `anchor_headings()`'s heading-level clamp (documented/
+intentional, and the two live call sites never trigger the collapse case);
+`repair_known_content()`/`strip_structural_hashtags()` (trivially idempotent,
+import-only, never called twice). Follow-up pass on three specific leads
+flagged by the first pass as worth checking next: `build_matter()`/
+`normalize_matter_keys()`/`normalize_matter_values()` interactions (5000+
+fuzz cases: multi-value fields, YAML-special chars, key collisions after
+normalization, empty/very-long values, Unicode — all round-tripped/idempotent
+correctly); the `parse_ini_safe()`/`ensure_explicit_theme()`/
+`reset_stale_experimental_flag()` chain in `config.php` (already has explicit
+idempotence tests per-function and per-chain in `ConfigTest.php`/
+`ConfigLoadTest.php`; traced the interaction order and confirmed
+`reset_stale_experimental_flag()` is safe without its own INI-validity guard
+because invalid INI always parses to `[]`, so its rewrite branch can't fire
+on broken input); WXR/RSS/known-content import re-run idempotence
+(`src/wordpress.php`, `src/known.php` — structurally identical dedup logic
+keyed off `import_uuid`, `run_import()`'s external dedup and each importer's
+internal dedup agree, `--replace`'s bypass is the documented escape hatch,
+`restore.php`'s `import_post()` correctly has no internal check of its own
+since `run_import()` covers it).
+
+**Not yet dry — leads for a future category-7 run:** the follow-up agent
+flagged unexamined `build_*/parse_*`/`encode_*/decode_*`/`escape_*` pairs
+still worth fuzzing: interactions beyond front matter's already-checked
+basics, and the WXR/RSS import parsers' own internal parsing (as opposed to
+the re-run-idempotence property already checked above).
+
+**Issue-dense files:** none newly identified. The `get_posts_by_tags()` fix
+landed in `theme.php` with nothing else nearby showing similar problems; the
+`escape_xml()` fix is an isolated single-function bug in
+`theme/formatting.php`. Neither file is issue-dense on this evidence.
+
+**Environment note — see the process note above; this should be resolved
+going forward.** This run is the first to get a real `vendor/bin/codecept
+run Unit` pass (2142 tests, 0 failures) instead of the `php -l` +
+hand-rolled-script workaround every prior run's environment note describes.
+If a future run still finds `vendor/bin/` empty, don't just re-apply the
+manual workaround silently — that means the fix in PR #773 regressed or
+doesn't apply to that session type, and is worth flagging as prominently as
+the 08-27 entry flagged the GitHub-write-access blocker.
+
+**Suggested refinement:** (1) Categories 1 and 7 are now both freshly
+covered as of today, including follow-up passes past the first hit in each —
+categories 2, 3, 4, 6 (last covered 08-26/08-27) are the next-longest-
+untouched; 5, 8, 9 remain "check only on a diff touching the relevant files"
+per their established low-yield status (this run spot-checked 5 and 9
+against files/dependencies that changed since 08-24 — `related_posts()`'s
+`RELATED_SCAN_LIMIT` bound predates this log and is already fine,
+`phpstan.neon` is byte-for-byte unchanged since before 08-24 — nothing new
+to report for either). (2) If PR #773 lands and a future run confirms
+`vendor/bin/` is populated automatically at session start with no manual
+intervention, that run should say so explicitly and this log's repeated
+"Environment note" boilerplate can finally stop being necessary. (3) This
+run split each category's investigation into a first broad pass plus a
+second, narrower follow-up pass on specific leads the first pass flagged
+(rather than one long pass); that structure found a real bug in the
+follow-up half of category 1 but not category 7's follow-up half — small
+sample, but consistent with the "diminishing but not yet zero" yield pattern
+these categories have shown since 08-25, so keep doing a bounded follow-up
+pass rather than stopping at the first hit per category.
+
 ### 2026-08-27
 
 **Process note — verify "merged" claims against the actual PR state, not
