@@ -208,7 +208,17 @@ const DEFAULT_FETCH_TIMEOUT = 30;
  * count time blocked in a syscall. Left unbounded, a black-holed resolver would
  * stall a /_cron run and hold its flock the whole time, so every later run
  * reports "Already running" (#707). Applied as RES_OPTIONS with attempts:2, so
- * ~10s worst case per nameserver — comfortably under FEED_FETCH_TIMEOUT.
+ * ~10s worst case per nameserver queried.
+ *
+ * Not "comfortably under FEED_FETCH_TIMEOUT" in general: glibc's resolver
+ * cycles through every nameserver listed in resolv.conf in turn, retrying
+ * this same ~10s budget against each one before giving up, so the total DNS
+ * preflight for one host can run to roughly 10s times however many
+ * nameservers are configured (commonly 2-3) — on top of, not counted
+ * against, the curl-side FEED_FETCH_TIMEOUT that starts only once DNS
+ * resolves. Still finite either way: bounded by process_feeds()'s overall
+ * 1800s /_cron time limit (see network.php), just a larger per-feed delay
+ * than FEED_FETCH_TIMEOUT alone suggests when a resolver is unreachable.
  */
 const DNS_RESOLVE_TIMEOUT = 5;
 
