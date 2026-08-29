@@ -54,7 +54,9 @@ function redirect_login(): array
 
     // Refuse a client that has already burned through its attempts, before
     // bcrypt runs (issue #443). A refused attempt is not itself recorded, so
-    // retrying can't extend the block indefinitely.
+    // retrying can't extend the block indefinitely. This is a cheap, unlocked
+    // early exit only — the real, race-free gate is reserve_login_attempt()
+    // below, which runs immediately before bcrypt.
     $ip  = client_ip();
     $now = time();
     $retry_after = login_throttle_retry_after($ip, $now);
@@ -74,10 +76,17 @@ function redirect_login(): array
         return login_page_data('Login is not configured on this site.');
     }
 
+    // Reserve a slot for this attempt atomically, immediately before bcrypt
+    // runs: see reserve_login_attempt()'s docblock for why the peek above is
+    // not enough on its own.
+    $retry_after = reserve_login_attempt($ip, $now);
+    if ($retry_after > 0) {
+        return throttled_login_response($retry_after);
+    }
+
     $user_pass = \Lamb\Http\request_string($_POST['password'] ?? null) ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();
-        record_login_failure($ip, $now);
         // Re-render the login page in place with the error: /login is sessionless
         // now, so there is no flash to carry the message across a redirect (#462).
         return login_page_data('Password is incorrect, please try again.');
@@ -330,6 +339,11 @@ function throttle_retry_after(array $state, int $now): int
 /**
  * Reads a client's counter and returns how long it must wait (0 = go ahead).
  *
+ * An unlocked peek, not the enforcement point: it exists only as a cheap
+ * early exit before the CSRF/config checks in redirect_login(). The actual,
+ * race-free gate is reserve_login_attempt(), called immediately before
+ * bcrypt runs.
+ *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return int Seconds to wait.
@@ -342,47 +356,65 @@ function login_throttle_retry_after(string $ip, int $now): int
 }
 
 /**
- * Records a failed attempt for a client, starting a fresh window when the
- * previous one has lapsed, and prunes rows left behind by other clients.
+ * Reserves an attempt slot for a client, atomically with the threshold check,
+ * starting a fresh window when the previous one has lapsed, and prunes rows
+ * left behind by other clients.
  *
  * Pruning rides on the write path because that is the only thing that creates
  * these rows: a burst of attempts from many addresses cleans up after itself
  * once each window lapses, so the `option` table doesn't keep a permanent row
  * per address that ever probed the login form.
  *
- * The read-increment-write below runs inside `BEGIN IMMEDIATE`, which takes
- * SQLite's write lock before the read: without it, concurrent wrong-password
- * requests from the same IP each read the same stale counter and each write
- * back +1, so parallel failures undercount and more than
- * LOGIN_THROTTLE_MAX_FAILURES real password_verify() calls get through per
- * window. R::begin()/R::commit() are no-ops in this app's fluid mode (see
+ * This must run — and its BEGIN IMMEDIATE/COMMIT must both complete — before
+ * password_verify(), not after it. The counter used to be incremented only on
+ * an actual wrong-password result, checked against a separate, unlocked peek
+ * taken before bcrypt ran (login_throttle_retry_after()). That let concurrent
+ * requests from the same IP all read the same under-the-limit count, all run
+ * bcrypt, and only serialize on the write afterwards — by which point every
+ * one of them had already spent a real password_verify() call, so a
+ * sufficiently concurrent burst blew well past LOGIN_THROTTLE_MAX_FAILURES
+ * attempts per window regardless of how correctly the write itself was
+ * locked. Checking and incrementing together, before bcrypt, closes that:
+ * each concurrent request either wins the lock and reserves a slot against
+ * the up-to-date count, or is refused before bcrypt runs at all.
+ *
+ * R::begin()/R::commit() are no-ops in this app's fluid mode (see
  * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement
  * instead.
  *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
- * @return void
+ * @return int Seconds to wait before the client may attempt again (0 = reserved, go ahead).
  */
-function record_login_failure(string $ip, int $now): void
+function reserve_login_attempt(string $ip, int $now): int
 {
     prune_login_throttle($now);
 
     try {
         R::exec('BEGIN IMMEDIATE');
     } catch (SQL $e) {
-        // Another request already holds the write lock: let this one attempt
-        // go uncounted rather than fail the login response over a throttle
-        // counter — bcrypt already ran for it either way.
-        return;
+        // Another request already holds the write lock: refuse this attempt
+        // rather than let it through unreserved — doing so would reopen
+        // exactly the race this function exists to close. A short wait costs
+        // a legitimate concurrent request one retry and costs an attacker
+        // nothing more than the reserved slot they were refused anyway.
+        return 1;
     }
 
     $bean  = \Lamb\get_option(login_throttle_key($ip), '');
     $state = decode_throttle_state($bean->value);
-    $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
+    $retry_after = throttle_retry_after($state, $now);
+    if ($retry_after > 0) {
+        R::exec('COMMIT');
+        return $retry_after;
+    }
 
+    $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
     \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
 
     R::exec('COMMIT');
+
+    return 0;
 }
 
 /**
