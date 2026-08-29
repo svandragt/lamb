@@ -15,6 +15,8 @@ use function Lamb\Webmention\verify_and_store;
 use function Lamb\Webmention\webmentions_for_post;
 
 use const Lamb\Webmention\WEBMENTION_FETCH_TIMEOUT;
+use const Lamb\Webmention\WEBMENTION_DISPLAY_LIMIT;
+use const Lamb\Webmention\WEBMENTION_CONTENT_MAX;
 
 class WebmentionTest extends TestCase
 {
@@ -226,6 +228,38 @@ class WebmentionTest extends TestCase
         $mentions = webmentions_for_post($id);
         $this->assertCount(1, $mentions);
         $this->assertSame('https://other.example/reply', $mentions[0]->source);
+    }
+
+    public function testWebmentionsForPostBoundsResultCount(): void
+    {
+        $id = $this->makePost();
+        $overflow = WEBMENTION_DISPLAY_LIMIT + 5;
+        for ($i = 0; $i < $overflow; $i++) {
+            $m = R::dispense('webmention');
+            $m->source = 'https://other.example/reply/' . $i;
+            $m->target = ROOT_URL . '/status/' . $id;
+            $m->post_id = $id;
+            $m->type = 'mention';
+            // Ascending created so the highest index is the newest mention.
+            $m->created = date('Y-m-d H:i:s', strtotime('2026-01-01 00:00:00') + $i);
+            $m->verified_at = '2026-01-01 12:00:00';
+            R::store($m);
+        }
+
+        $mentions = webmentions_for_post($id);
+
+        $this->assertCount(WEBMENTION_DISPLAY_LIMIT, $mentions);
+        // The bound keeps the newest mentions, still oldest-first for display.
+        $newest = end($mentions);
+        $this->assertSame('https://other.example/reply/' . ($overflow - 1), $newest->source);
+    }
+
+    public function testExtractMetaCapsContentLength(): void
+    {
+        $title = str_repeat('a', WEBMENTION_CONTENT_MAX + 500);
+        $meta = extract_meta('<title>' . $title . '</title>');
+        $this->assertNotNull($meta['content']);
+        $this->assertLessThanOrEqual(WEBMENTION_CONTENT_MAX, mb_strlen($meta['content']));
     }
 
     // is_external_http_url --------------------------------------------------
