@@ -87,7 +87,7 @@ Front-matter keys are forgiving: they are matched case-insensitively, and unders
 
 The following sections of the site are special:
 
-- `/tags/<name>` are tags linked in content
+- `/tag/<name>` are tags linked in content
 - `/search/<keywords>` search the content for keywords
 - `/login` and `/logout` to login and out.
 - `/feed` for the Atom newsfeed.
