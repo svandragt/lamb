@@ -54,9 +54,8 @@ function redirect_login(): array
 
     // Refuse a client that has already burned through its attempts, before
     // bcrypt runs (issue #443). A refused attempt is not itself recorded, so
-    // retrying can't extend the block indefinitely. This is a cheap, unlocked
-    // early exit only — the real, race-free gate is reserve_login_attempt()
-    // below, which runs immediately before bcrypt.
+    // retrying can't extend the block indefinitely. Cheap early exit only;
+    // reserve_login_attempt() below is the race-free gate.
     $ip  = client_ip();
     $now = time();
     $retry_after = login_throttle_retry_after($ip, $now);
@@ -365,18 +364,13 @@ function login_throttle_retry_after(string $ip, int $now): int
  * once each window lapses, so the `option` table doesn't keep a permanent row
  * per address that ever probed the login form.
  *
- * This must run — and its BEGIN IMMEDIATE/COMMIT must both complete — before
- * password_verify(), not after it. The counter used to be incremented only on
- * an actual wrong-password result, checked against a separate, unlocked peek
- * taken before bcrypt ran (login_throttle_retry_after()). That let concurrent
- * requests from the same IP all read the same under-the-limit count, all run
- * bcrypt, and only serialize on the write afterwards — by which point every
- * one of them had already spent a real password_verify() call, so a
- * sufficiently concurrent burst blew well past LOGIN_THROTTLE_MAX_FAILURES
- * attempts per window regardless of how correctly the write itself was
- * locked. Checking and incrementing together, before bcrypt, closes that:
- * each concurrent request either wins the lock and reserves a slot against
- * the up-to-date count, or is refused before bcrypt runs at all.
+ * The check and increment are atomic and must both complete before
+ * password_verify(). The old design peeked at an unlocked counter before
+ * bcrypt and incremented only after a wrong password, so a concurrent burst
+ * from one IP could all read the same under-limit count, all run bcrypt, and
+ * only serialise on the write — spending far more than
+ * LOGIN_THROTTLE_MAX_FAILURES real password_verify() calls per window.
+ * Reserving the slot before bcrypt refuses the surplus up front.
  *
  * R::begin()/R::commit() are no-ops in this app's fluid mode (see
  * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement
@@ -394,10 +388,8 @@ function reserve_login_attempt(string $ip, int $now): int
         R::exec('BEGIN IMMEDIATE');
     } catch (SQL $e) {
         // Another request already holds the write lock: refuse this attempt
-        // rather than let it through unreserved — doing so would reopen
-        // exactly the race this function exists to close. A short wait costs
-        // a legitimate concurrent request one retry and costs an attacker
-        // nothing more than the reserved slot they were refused anyway.
+        // rather than let it through unreserved, which would reopen the exact
+        // race this function exists to close. The refused client just retries.
         return 1;
     }
 

@@ -248,16 +248,10 @@ class LoginThrottleTest extends TestCase
 
     public function testReserveLoginAttemptCapsConcurrentAdmissionsAtTheLimit(): void
     {
-        // The bug this fix closes: a peek-then-later-increment split lets
-        // concurrent requests all read the same under-the-limit count and all
-        // proceed to bcrypt, undercounting in exactly the way the old
-        // record_login_failure()'s docblock warned about for its own write
-        // step alone. Simulating true OS-level concurrency isn't possible
-        // in-process, but the property that must hold either way is: calling
-        // reserve_login_attempt() one at a time, in a loop, never admits more
-        // than LOGIN_THROTTLE_MAX_FAILURES attempts before refusing — the
-        // check and the increment happen together, so no interleaving of
-        // calls (concurrent or not) can ever see a stale count.
+        // Real OS-level concurrency can't be simulated in-process, but the
+        // property that guards the race holds either way: because the check and
+        // increment happen together, calling reserve_login_attempt() in a loop
+        // never admits more than LOGIN_THROTTLE_MAX_FAILURES before refusing.
         $now = 1_000;
         $admitted = 0;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES + 5; $i++) {
