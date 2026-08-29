@@ -13,7 +13,7 @@ use function Lamb\Response\encode_throttle_state;
 use function Lamb\Response\login_throttle_key;
 use function Lamb\Response\login_throttle_retry_after;
 use function Lamb\Response\prune_login_throttle;
-use function Lamb\Response\record_login_failure;
+use function Lamb\Response\reserve_login_attempt;
 use function Lamb\Response\throttle_message;
 use function Lamb\Response\throttle_retry_after;
 
@@ -125,7 +125,7 @@ class LoginThrottleTest extends TestCase
     {
         $now = 1_000;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES - 1; $i++) {
-            record_login_failure('203.0.113.7', $now);
+            reserve_login_attempt('203.0.113.7', $now);
         }
 
         $this->assertSame(0, login_throttle_retry_after('203.0.113.7', $now));
@@ -135,7 +135,7 @@ class LoginThrottleTest extends TestCase
     {
         $now = 1_000;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            record_login_failure('203.0.113.7', $now);
+            reserve_login_attempt('203.0.113.7', $now);
         }
 
         $this->assertSame(LOGIN_THROTTLE_WINDOW, login_throttle_retry_after('203.0.113.7', $now));
@@ -145,7 +145,7 @@ class LoginThrottleTest extends TestCase
     {
         $now = 1_000;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            record_login_failure('203.0.113.7', $now);
+            reserve_login_attempt('203.0.113.7', $now);
         }
 
         // The owner, on a different address, must still be able to log in — a
@@ -157,7 +157,7 @@ class LoginThrottleTest extends TestCase
     {
         $now = 1_000;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            record_login_failure('203.0.113.7', $now);
+            reserve_login_attempt('203.0.113.7', $now);
         }
 
         $this->assertSame(0, login_throttle_retry_after('203.0.113.7', $now + LOGIN_THROTTLE_WINDOW));
@@ -167,7 +167,7 @@ class LoginThrottleTest extends TestCase
     {
         $now = 1_000;
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            record_login_failure('203.0.113.7', $now);
+            reserve_login_attempt('203.0.113.7', $now);
         }
         clear_login_failures('203.0.113.7');
 
@@ -179,8 +179,8 @@ class LoginThrottleTest extends TestCase
 
     public function testPruneDropsExpiredRowsAndKeepsLiveOnes(): void
     {
-        record_login_failure('203.0.113.7', 1_000);
-        record_login_failure('198.51.100.9', 1_500);
+        reserve_login_attempt('203.0.113.7', 1_000);
+        reserve_login_attempt('198.51.100.9', 1_500);
 
         $pruned = prune_login_throttle(1_000 + LOGIN_THROTTLE_WINDOW);
 
@@ -192,7 +192,7 @@ class LoginThrottleTest extends TestCase
     public function testPruneLeavesUnrelatedOptionsAlone(): void
     {
         \Lamb\set_option(\Lamb\get_option('site_config_ini', 'site_title = Lamb'), 'site_title = Lamb');
-        record_login_failure('203.0.113.7', 1_000);
+        reserve_login_attempt('203.0.113.7', 1_000);
 
         prune_login_throttle(1_000 + LOGIN_THROTTLE_WINDOW);
 
@@ -201,16 +201,17 @@ class LoginThrottleTest extends TestCase
 
     public function testRecordingAFailurePrunesExpiredRows(): void
     {
-        record_login_failure('203.0.113.7', 1_000);
-        record_login_failure('198.51.100.9', 1_000 + LOGIN_THROTTLE_WINDOW);
+        reserve_login_attempt('203.0.113.7', 1_000);
+        reserve_login_attempt('198.51.100.9', 1_000 + LOGIN_THROTTLE_WINDOW);
 
         $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
     }
 
-    // Concurrent-write safety — the counter must not lose an increment (or
-    // crash the request) when another connection already holds the write lock
+    // Concurrent-write safety — a contended lock must refuse the attempt (not
+    // throw, and not let it through unreserved) when another connection
+    // already holds the write lock
 
-    public function testRecordLoginFailureSkipsCountingRatherThanThrowingWhenTheWriteLockIsHeld(): void
+    public function testReserveLoginAttemptRefusesRatherThanThrowingWhenTheWriteLockIsHeld(): void
     {
         // A single shared connection can't simulate this: SQLite silently
         // accepts a nested BEGIN IMMEDIATE on the same connection, so the
@@ -218,27 +219,48 @@ class LoginThrottleTest extends TestCase
         $lock = $this->holdWriteLockOnAContendedConnection();
 
         try {
-            record_login_failure('203.0.113.7', 1_000);
+            $retry_after = reserve_login_attempt('203.0.113.7', 1_000);
         } finally {
             $lock->exec('COMMIT');
         }
 
+        // Refused (not silently let through): a contended reservation must
+        // fail *closed*, otherwise the very race this function exists to
+        // close reopens under lock contention.
+        $this->assertGreaterThan(0, $retry_after);
         $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
     }
 
-    public function testRecordLoginFailureStillCountsOnceTheLockIsFree(): void
+    public function testReserveLoginAttemptStillCountsOnceTheLockIsFree(): void
     {
         $lock = $this->holdWriteLockOnAContendedConnection();
-        record_login_failure('203.0.113.7', 1_000); // Contended: skipped, no row.
+        reserve_login_attempt('203.0.113.7', 1_000); // Contended: refused, no row.
         $lock->exec('COMMIT'); // Release the lock.
 
-        // The skipped attempt above left no row; this one, with no contention,
+        // The refused attempt above left no row; this one, with no contention,
         // must still start a fresh counter rather than staying silently broken.
-        record_login_failure('203.0.113.7', 1_000);
+        reserve_login_attempt('203.0.113.7', 1_000);
 
         $bean = R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]);
         $this->assertNotNull($bean);
         $this->assertSame(['count' => 1, 'expires' => 1_000 + LOGIN_THROTTLE_WINDOW], decode_throttle_state($bean->value));
+    }
+
+    public function testReserveLoginAttemptCapsConcurrentAdmissionsAtTheLimit(): void
+    {
+        // Real OS-level concurrency can't be simulated in-process, but the
+        // property that guards the race holds either way: because the check and
+        // increment happen together, calling reserve_login_attempt() in a loop
+        // never admits more than LOGIN_THROTTLE_MAX_FAILURES before refusing.
+        $now = 1_000;
+        $admitted = 0;
+        for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES + 5; $i++) {
+            if (reserve_login_attempt('203.0.113.7', $now) === 0) {
+                $admitted++;
+            }
+        }
+
+        $this->assertSame(LOGIN_THROTTLE_MAX_FAILURES, $admitted);
     }
 
     /**
