@@ -126,6 +126,14 @@ class LambTest extends TestCase
         $this->assertSame('Hello #phpstan', remove_body_tags('Hello #phpstan', ['php']));
     }
 
+    public function testRemoveBodyTagsSanitizesMultiWordTagsLikeAddBodyTags(): void
+    {
+        // Deleting with the same string used to add ("day trip") must still
+        // remove the `#day-trip` that add_body_tags() wrote.
+        $body = add_body_tags('A post about a day trip', ['day trip']);
+        $this->assertSame('A post about a day trip', remove_body_tags($body, ['day trip']));
+    }
+
     public function testRemoveBodyTagsIgnoresAnEmptyTagName(): void
     {
         // An empty name would leave a pattern matching a bare `#`.
