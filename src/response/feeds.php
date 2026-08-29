@@ -373,7 +373,8 @@ function render_json_feed(array $data, array $config): void
             'id'             => $url,
             'url'            => $url,
             // Reply context inside content_html as well as _microblog below: the
-            // extension is a micro.blog convention, the u-in-reply-to markup is
+            // extension is a best-effort hint (micro.blog is not documented to
+            // read it from an external feed), whereas the u-in-reply-to markup is
             // what a plain reader shows and what mf2 consumers parse.
             'content_html'   => feed_item_content_html($bean),
             'date_published' => date(DATE_RFC3339, strtotime($bean->created)),
@@ -384,9 +385,10 @@ function render_json_feed(array $data, array $config): void
         }
         // Guarded like content_html above: the consumer links this, and
         // in_reply_to is not author-only. `_microblog.in_reply_to_url` is a
-        // micro.blog convention for a single target, so a post with several
-        // (#583) reports only the first valid one here — every target still
-        // reaches the reader via content_html's u-in-reply-to links above.
+        // JSON Feed extension field that carries a single target (micro.blog is
+        // not documented to read it from an external feed; #586), so a post with
+        // several (#583) reports only the first valid one here — every target
+        // still reaches the reader via content_html's u-in-reply-to links above.
         foreach (split_reply_targets((string) ($bean->in_reply_to ?? '')) as $target) {
             if (\Lamb\Http\is_valid_http_url($target)) {
                 $item['_microblog'] = ['in_reply_to_url' => $target];
