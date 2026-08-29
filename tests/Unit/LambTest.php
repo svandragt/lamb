@@ -128,11 +128,8 @@ class LambTest extends TestCase
 
     public function testRemoveBodyTagsSanitizesMultiWordTagsLikeAddBodyTags(): void
     {
-        // add_body_tags('day trip') writes `#day-trip` (sanitize_tag_name()
-        // collapses the space). A Micropub client that deletes the same
-        // category string it used to add it — "day trip", not "day-trip" —
-        // must still remove that hashtag, or a `delete: {category: [...]}`
-        // request reports success while leaving the tag in the body.
+        // Deleting with the same string used to add ("day trip") must still
+        // remove the `#day-trip` that add_body_tags() wrote.
         $body = add_body_tags('A post about a day trip', ['day trip']);
         $this->assertSame('A post about a day trip', remove_body_tags($body, ['day trip']));
     }
