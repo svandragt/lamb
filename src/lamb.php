@@ -211,6 +211,13 @@ function strip_trailing_body_tags(string $body): string
  * Removes the named hashtags (and their preceding whitespace) from a body,
  * wherever they appear. Used by Micropub category delete-values updates.
  *
+ * Each tag is passed through sanitize_tag_name() first, the same as
+ * add_body_tags(), so a multi-word or punctuated category names the same
+ * hashtag on delete that add_body_tags() wrote on add (e.g. "day trip" here
+ * matches the `#day-trip` add_body_tags() appended) — otherwise a client
+ * deleting a category it added earlier gets a success response with the
+ * hashtag silently left in the body.
+ *
  * @param string       $body The raw post body.
  * @param list<string> $tags Tag names (without `#`) to remove.
  * @return string The body without the named tags.
@@ -218,6 +225,7 @@ function strip_trailing_body_tags(string $body): string
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
+        $tag = sanitize_tag_name($tag);
         // An empty name would leave a pattern that matches a bare `#`, deleting
         // a literal one out of the body. add_body_tags() skips it the same way.
         if ($tag === '') {

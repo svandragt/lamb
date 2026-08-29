@@ -126,6 +126,17 @@ class LambTest extends TestCase
         $this->assertSame('Hello #phpstan', remove_body_tags('Hello #phpstan', ['php']));
     }
 
+    public function testRemoveBodyTagsSanitizesMultiWordTagsLikeAddBodyTags(): void
+    {
+        // add_body_tags('day trip') writes `#day-trip` (sanitize_tag_name()
+        // collapses the space). A Micropub client that deletes the same
+        // category string it used to add it — "day trip", not "day-trip" —
+        // must still remove that hashtag, or a `delete: {category: [...]}`
+        // request reports success while leaving the tag in the body.
+        $body = add_body_tags('A post about a day trip', ['day trip']);
+        $this->assertSame('A post about a day trip', remove_body_tags($body, ['day trip']));
+    }
+
     public function testRemoveBodyTagsIgnoresAnEmptyTagName(): void
     {
         // An empty name would leave a pattern matching a bare `#`.
