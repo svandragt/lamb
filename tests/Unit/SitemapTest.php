@@ -12,6 +12,7 @@ use function Lamb\Response\render_sitemap;
 use function Lamb\Response\render_sitemap_index;
 use function Lamb\Response\sitemap_cache_key;
 use function Lamb\Response\sitemap_cache_path;
+use function Lamb\Response\sitemap_date;
 use function Lamb\Response\sitemap_page_count;
 use function Lamb\Response\sitemap_urls;
 use function Lamb\Response\store_sitemap_cache;
@@ -544,5 +545,92 @@ class SitemapTest extends TestCase
 
         $this->assertFileDoesNotExist($dir . '/' . basename($oldPage));
         $this->assertFileExists($dir . '/' . basename($newPage));
+    }
+
+    /**
+     * Renders and caches the /sitemap.xml entry point (page 0) the way
+     * respond_sitemap() does — a <sitemapindex> when $total exceeds $cap, a
+     * plain <urlset> otherwise — into a private test cache dir rather than
+     * data_dir()'s real cache path.
+     */
+    private function emitEntryPoint(string $updated, int $config_ts, int $total, int $cap, string $dir): string
+    {
+        $page_count = sitemap_page_count($total, $cap);
+        $path = $dir . '/' . basename(sitemap_cache_path(
+            sitemap_cache_key($updated, $config_ts, $page_count),
+            0
+        ));
+
+        ob_start();
+        if ($page_count > 1) {
+            emit_sitemap($path, static fn (): string => render_sitemap_index(
+                SITEMAP_ROOT,
+                $page_count,
+                sitemap_date($updated)
+            ));
+        } else {
+            emit_sitemap($path);
+        }
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * sitemap_cache_key() must turn over when count_visible_posts() crosses the
+     * split boundary, even though $updated does not: trashing/restoring a
+     * non-newest post (or a scheduled post crossing into visibility) changes
+     * whether /sitemap.xml is a <urlset> or a <sitemapindex> without touching
+     * the newest visible `updated`. Before this, such a change left the cache
+     * key — and so the served document's shape — stale.
+     */
+    public function testCacheKeyAndServedShapeTrackVisibleCountNotJustNewestUpdate(): void
+    {
+        $this->makePost(['slug' => 'newest', 'updated' => '2026-06-05 09:00:00']);
+        $oldIds = [
+            $this->makePost(['slug' => 'old1', 'updated' => '2026-06-01 09:00:00']),
+            $this->makePost(['slug' => 'old2', 'updated' => '2026-06-02 09:00:00']),
+            $this->makePost(['slug' => 'old3', 'updated' => '2026-06-03 09:00:00']),
+        ];
+        $updated = newest_visible_update();
+        $dir = $this->cacheDir();
+        $cap = 2;
+
+        // Home + 4 posts = 5 entries over a cap of 2 → split.
+        $total = count_visible_posts() + 1;
+        $key1 = sitemap_cache_key($updated, 1000, sitemap_page_count($total, $cap));
+        $split = $this->emitEntryPoint($updated, 1000, $total, $cap, $dir);
+        $this->assertStringContainsString('<sitemapindex', $split);
+
+        // Soft-delete every non-newest post: the visible count drops back
+        // under the cap, but the newest visible `updated` — still 'newest' —
+        // does not change.
+        foreach ($oldIds as $id) {
+            $bean = R::load('post', $id);
+            $bean->deleted = 1;
+            R::store($bean);
+        }
+        $this->assertSame($updated, newest_visible_update());
+
+        $totalAfterDelete = count_visible_posts() + 1;
+        $key2 = sitemap_cache_key($updated, 1000, sitemap_page_count($totalAfterDelete, $cap));
+        $this->assertNotSame($key1, $key2, 'the cache key must change when the visible count re-crosses the cap');
+
+        $unsplit = $this->emitEntryPoint($updated, 1000, $totalAfterDelete, $cap, $dir);
+        $this->assertStringContainsString('<urlset', $unsplit);
+        $this->assertStringNotContainsString('<sitemapindex', $unsplit);
+
+        // And the reverse: restoring posts re-crosses back over the cap.
+        foreach (array_slice($oldIds, 0, 2) as $id) {
+            $bean = R::load('post', $id);
+            $bean->deleted = 0;
+            R::store($bean);
+        }
+        $this->assertSame($updated, newest_visible_update());
+
+        $totalAfterRestore = count_visible_posts() + 1;
+        $key3 = sitemap_cache_key($updated, 1000, sitemap_page_count($totalAfterRestore, $cap));
+        $this->assertNotSame($key2, $key3);
+
+        $resplit = $this->emitEntryPoint($updated, 1000, $totalAfterRestore, $cap, $dir);
+        $this->assertStringContainsString('<sitemapindex', $resplit);
     }
 }

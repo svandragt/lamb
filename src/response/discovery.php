@@ -243,6 +243,15 @@ function newest_visible_update(): ?string
  * exactly when the validator does and a served copy always matches the ETag
  * sent with it — no staleness window to reason about.
  *
+ * $page_count is folded in too, because it can change independently of both:
+ * trashing/restoring a post that is not the newest, or a scheduled post
+ * crossing into visibility purely by clock, changes count_visible_posts()
+ * (and so whether /sitemap.xml is a <urlset> or a <sitemapindex>, and how many
+ * pages it has) without touching $updated. Without this, such a change left
+ * the key — and so the served document's shape — stale: a <sitemapindex>
+ * served after the count dropped back under the cap, or a <urlset> missing
+ * everything past the old count after it rose past the cap.
+ *
  * The site root is deliberately *not* part of the key. The cached document is
  * host-independent — it holds SITEMAP_ROOT where the root belongs, and
  * emit_sitemap() substitutes this request's ROOT_URL on the way out — so one
@@ -252,13 +261,16 @@ function newest_visible_update(): ?string
  * a poisoning, and evicting the honest entry with junk Hosts would disable
  * the cache outright. Substituting at render time removes both.
  *
- * @param string $updated   The newest visible post's stored datetime.
- * @param int    $config_ts The config's last-modified timestamp.
+ * @param string $updated    The newest visible post's stored datetime.
+ * @param int    $config_ts  The config's last-modified timestamp.
+ * @param int    $page_count The sitemap's current page count, as
+ *                            sitemap_page_count() computes it. Defaults to 1
+ *                            (unsplit) for callers that don't split.
  * @return string A filename-safe cache key.
  */
-function sitemap_cache_key(string $updated, int $config_ts): string
+function sitemap_cache_key(string $updated, int $config_ts, int $page_count = 1): string
 {
-    return md5($updated . '|' . $config_ts);
+    return md5($updated . '|' . $config_ts . '|' . $page_count);
 }
 
 /**
@@ -448,7 +460,10 @@ function respond_sitemap(): array
 
     header('Content-Type: application/xml; charset=UTF-8');
     feed_cache($updated);
-    $path = sitemap_cache_path(sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp()), $page);
+    $path = sitemap_cache_path(
+        sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp(), $page_count),
+        $page
+    );
 
     if (!$split) {
         emit_sitemap($path);
