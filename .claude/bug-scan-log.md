@@ -85,10 +85,11 @@ and named these exact next candidates).
   case): `related_posts()` — the "Related" block rendered on every post's
   theme partial — calls this with a post's own hashtags in body order, so any
   post with two or more tags matching different other posts could render its
-  related-posts list out of date order. This bug was introduced incidentally
-  by the very recent `#101`/`#738` visibility-clause fix, which corrected
-  *which* posts are eligible but didn't touch the pre-existing merge-order
-  gap (likely latent even longer than that). Fixed with a stable `usort` on
+  related-posts list out of date order. The merge-order gap is pre-existing —
+  likely latent since the function was written. The very recent `#101`/`#738`
+  visibility-clause fix corrected *which* posts are eligible but didn't touch
+  the tag-by-tag merge, so it changed how often the gap is observable rather
+  than introducing it. Fixed with a stable `usort` on
   the merged set before slicing to the limit, plus a regression test in
   `tests/Unit/ThemeExtendedTest.php`. Full suite validated:
   `vendor/bin/codecept run Unit` — 2142 tests, 3941 assertions, 0 failures.
