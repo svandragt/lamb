@@ -27,7 +27,7 @@ Remove the value from the front matter and re-save to turn the post back into a 
 
 - **On the post page and in listings** a small "In reply to …" line is shown above the content, linked to the parent and marked up with `u-in-reply-to` so Webmention receivers treat it as a reply.
 - **Atom feed**: emits `<thr:in-reply-to ref="…" href="…" />` (the `http://purl.org/syndication/thread/1.0` thread extension).
-- **JSON feed**: emits `_microblog.in_reply_to_url` (the micro.blog reply convention).
+- **JSON feed**: emits `_microblog.in_reply_to_url`, a JSON Feed extension field. micro.blog outputs the `_microblog` namespace in its own API, but it is not documented to read this field from an external feed: it detects replies from external blogs through the `u-in-reply-to` microformat and Webmention. Lamb emits the field as a harmless hint, and the reply threads through the `u-in-reply-to` markup either way.
 - **Both feeds** also carry the same "In reply to …" line inside the item's HTML content, because the two metadata fields above are extensions most readers ignore, and services that thread replies look for the `u-in-reply-to` markup itself.
 
 ## Editing a reply over Micropub
