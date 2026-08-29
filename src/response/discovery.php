@@ -9,6 +9,7 @@ use RedBeanPHP\R;
 
 use const ROOT_DIR;
 use const ROOT_URL;
+use const SITEMAP_MAX_URLS;
 
 /**
  * Formats a stored `Y-m-d H:i:s` datetime as a W3C/ISO-8601 string for a sitemap
@@ -49,18 +50,45 @@ function sitemap_date(?string $datetime): ?string
  * resolves to, so the rule stays in one place without a bean per row — making
  * one cost about 130 ms of this response at 30,000 posts.
  *
+ * $page splits the same ordered list into sitemaps.org-sized slices instead of
+ * returning it whole, for a site past SITEMAP_MAX_URLS (see respond_sitemap()).
+ * Entry 0 is the home page and entries 1.. are posts newest-first, so page 1
+ * carries the home page plus a $cap-1 slice of posts and page 2 onwards carries
+ * a $cap slice with no home entry. The slicing is done in SQL via LIMIT/OFFSET
+ * rather than fetching everything and array_slice()ing it, for the same memory
+ * reason the whole function avoids loading post beans (see below).
+ *
  * @param string $root The site root each `<loc>` is built from. Defaults to
  *                     this request's ROOT_URL; respond_sitemap() passes
  *                     SITEMAP_ROOT so the cached copy is host-independent.
+ * @param int    $page Which sitemap page to return; 0 (the default) returns
+ *                     every entry, unpaginated.
+ * @param int    $cap  Entries per page when $page is set. Defaults to
+ *                     SITEMAP_MAX_URLS; overridable so tests can exercise
+ *                     pagination without seeding 50,000 posts.
  * @return list<array{loc: string, lastmod: string|null}>
  */
-function sitemap_urls(string $root = ROOT_URL): array
+function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP_MAX_URLS): array
 {
     $visible = \Lamb\visible_clause();
-    $rows = R::getAll(
-        'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'ORDER BY updated DESC',
-        $visible['params']
-    );
+    $sql = 'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'ORDER BY updated DESC';
+    $params = $visible['params'];
+
+    if ($page >= 1) {
+        // Entry 0 is the home page, so post index i is global entry i + 1: page 1's
+        // post slice is one shorter (it also carries the home entry) and starts at
+        // offset 0, while page k > 1 starts one post short of ($page - 1) * $cap.
+        $sql .= ' LIMIT ? OFFSET ?';
+        if ($page === 1) {
+            $params[] = max(0, $cap - 1);
+            $params[] = 0;
+        } else {
+            $params[] = $cap;
+            $params[] = ($page - 1) * $cap - 1;
+        }
+    }
+
+    $rows = R::getAll($sql, $params);
 
     $entries = [];
     $seen = [];
@@ -77,12 +105,46 @@ function sitemap_urls(string $root = ROOT_URL): array
     }
 
     // Home page first; its lastmod tracks the freshest post (null when empty).
-    array_unshift($entries, [
-        'loc'     => $root . '/',
-        'lastmod' => $entries[0]['lastmod'] ?? null,
-    ]);
+    // Only pages 0 (everything) and 1 (the first slice) carry it — its rows
+    // start at offset 0, so entries[0] is still the newest post overall.
+    if ($page <= 1) {
+        array_unshift($entries, [
+            'loc'     => $root . '/',
+            'lastmod' => $entries[0]['lastmod'] ?? null,
+        ]);
+    }
 
     return $entries;
+}
+
+/**
+ * Counts the publicly visible posts a sitemap would list (excluding the home
+ * page entry sitemap_urls() prepends) — the same visible_clause() allow-list,
+ * read as one row instead of the whole list.
+ *
+ * @return int
+ */
+function count_visible_posts(): int
+{
+    $visible = \Lamb\visible_clause();
+    return (int) R::getCell(
+        'SELECT COUNT(*) FROM post WHERE ' . $visible['sql'],
+        $visible['params']
+    );
+}
+
+/**
+ * The number of sitemap pages (P) a $total-entry sitemap needs at $cap URLs
+ * per page — sitemaps.org's cap on a single document.
+ *
+ * @param int $total The total number of sitemap entries (posts + the home page).
+ * @param int $cap   Entries per page. Defaults to SITEMAP_MAX_URLS; overridable
+ *                   so tests can exercise the split with a tiny cap.
+ * @return int
+ */
+function sitemap_page_count(int $total, int $cap = SITEMAP_MAX_URLS): int
+{
+    return $cap > 0 ? (int) ceil($total / $cap) : 1;
 }
 
 /**
@@ -110,6 +172,46 @@ function render_sitemap(array $urls): string
         $lines[] = '  </url>';
     }
     $lines[] = '</urlset>';
+    return implode("\n", $lines) . "\n";
+}
+
+/**
+ * Renders a sitemaps.org 0.9 sitemap index: one `<sitemap>` entry per child
+ * page, for a site whose visible URL count has passed SITEMAP_MAX_URLS.
+ *
+ * Child locs follow the site's existing pagination convention
+ * (`/sitemap.xml/page/N`) rather than page_path(), which would collapse page 1
+ * to the bare `/sitemap.xml` — the wrong URL here, since page 1 is a child
+ * page, not the index itself.
+ *
+ * Every child shares the one $lastmod given (the sitemap's newest lastmod, as
+ * newest_visible_update()/sitemap_date() produce it) rather than each computing
+ * its own: page 1 always holds the newest entry, so a per-page value would only
+ * ever be current for that one child.
+ *
+ * @param string      $root       The site root each child `<loc>` is built
+ *                                from. SITEMAP_ROOT for the cached copy, like
+ *                                render_sitemap().
+ * @param int         $page_count The number of child pages (P).
+ * @param string|null $lastmod    ISO-8601 lastmod applied to every child entry,
+ *                                or null to omit it.
+ * @return string The complete XML document.
+ */
+function render_sitemap_index(string $root, int $page_count, ?string $lastmod): string
+{
+    $lines = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ];
+    for ($page = 1; $page <= $page_count; $page++) {
+        $lines[] = '  <sitemap>';
+        $lines[] = '    <loc>' . \Lamb\Theme\escape_xml($root . '/sitemap.xml/page/' . $page) . '</loc>';
+        if (!empty($lastmod)) {
+            $lines[] = '    <lastmod>' . $lastmod . '</lastmod>';
+        }
+        $lines[] = '  </sitemap>';
+    }
+    $lines[] = '</sitemapindex>';
     return implode("\n", $lines) . "\n";
 }
 
@@ -170,15 +272,44 @@ function sitemap_cache_key(string $updated, int $config_ts): string
 const SITEMAP_ROOT = '{ROOT}';
 
 /**
- * Where the cached sitemap for $key lives — under the same `data/cache/`
- * directory the feed cache already uses (see Network\ensure_feed_cache()).
+ * Where the cached sitemap for $key/$page lives — under the same
+ * `data/cache/` directory the feed cache already uses (see
+ * Network\ensure_feed_cache()).
  *
- * @param string $key As built by sitemap_cache_key().
+ * $page is appended rather than folded into $key so store_sitemap_cache()'s
+ * pruning can tell sibling pages of the same generation (same $key, different
+ * $page) apart from an older generation's files (see
+ * sitemap_cache_generation()) — sibling pages must survive each other's writes,
+ * since a split sitemap caches one file per page.
+ *
+ * @param string $key  As built by sitemap_cache_key().
+ * @param int    $page The sitemap page this cache entry is for; 0 for the
+ *                      entry point (the single urlset, or the index).
  * @return string Absolute or data-dir-relative path to the cache file.
  */
-function sitemap_cache_path(string $key): string
+function sitemap_cache_path(string $key, int $page = 0): string
 {
-    return \Lamb\Bootstrap\data_dir() . '/cache/sitemap-' . $key . '.xml';
+    return \Lamb\Bootstrap\data_dir() . '/cache/sitemap-' . $key . '-' . $page . '.xml';
+}
+
+/**
+ * The generation portion of a sitemap cache filename — everything before an
+ * optional trailing `-<page>` page suffix — so store_sitemap_cache() can tell
+ * a sibling page of the current generation from a stale one.
+ *
+ * Falls back to the whole filename for anything not shaped like
+ * sitemap_cache_path()'s output, so an old-format cache file (from before
+ * pages existed) is still treated as its own distinct generation and pruned.
+ *
+ * @param string $filename Basename of a `sitemap-*.xml` cache file.
+ * @return string The generation key.
+ */
+function sitemap_cache_generation(string $filename): string
+{
+    if (preg_match('/^sitemap-([0-9a-f]{32})-\d+\.xml$/', $filename, $matches) === 1) {
+        return $matches[1];
+    }
+    return $filename;
 }
 
 /**
@@ -191,8 +322,11 @@ function sitemap_cache_path(string $key): string
  * time this runs, so an unwritable data directory costs the cache, not the
  * sitemap.
  *
- * Older keys are removed once the new one is in place, so the directory holds
- * one sitemap rather than one per edit.
+ * Older generations are removed once the new copy is in place, so the
+ * directory holds one sitemap's worth of pages rather than one per edit — but
+ * a sibling page of the *same* generation (see sitemap_cache_generation()) is
+ * kept, since a split sitemap's pages are written one request at a time and
+ * must not evict each other.
  *
  * Every call is `@`-suppressed on purpose. These are best-effort filesystem
  * operations on a path the operator controls, each already handled by its
@@ -218,8 +352,9 @@ function store_sitemap_cache(string $path, string $xml): void
         @unlink($tmp);
         return;
     }
+    $generation = sitemap_cache_generation(basename($path));
     foreach (glob($dir . '/sitemap-*.xml') ?: [] as $stale) {
-        if ($stale !== $path) {
+        if ($stale !== $path && sitemap_cache_generation(basename($stale)) !== $generation) {
             @unlink($stale);
         }
     }
@@ -244,15 +379,22 @@ function store_sitemap_cache(string $path, string $xml): void
  * because a concurrent request replacing the cache can unlink this key between
  * the is_readable() check and the open; losing that race just renders.
  *
- * @param string $path The cache path for the current key.
+ * @param string        $path   The cache path for the current key/page.
+ * @param callable|null $render Builds the document on a miss; defaults to the
+ *                              single, unpaginated urlset render_sitemap()
+ *                              produces for sitemap_urls(SITEMAP_ROOT).
+ *                              respond_sitemap() passes one that renders the
+ *                              index or the page slice this path is for.
  * @return void
  */
-function emit_sitemap(string $path): void
+function emit_sitemap(string $path, ?callable $render = null): void
 {
+    $render ??= static fn (): string => render_sitemap(sitemap_urls(SITEMAP_ROOT));
+
     $template = is_readable($path) ? @file_get_contents($path) : false;
     $miss = $template === false;
     if ($miss) {
-        $template = render_sitemap(sitemap_urls(SITEMAP_ROOT));
+        $template = $render();
     }
 
     echo str_replace(
@@ -280,17 +422,47 @@ function emit_sitemap(string $path): void
  * 200 — a first fetch, or one after an edit — is served from a file rather
  * than rebuilt.
  *
- * @return never
+ * Past SITEMAP_MAX_URLS visible entries, a single `<urlset>` would break
+ * sitemaps.org's 50,000-URL cap, so /sitemap.xml itself becomes a
+ * `<sitemapindex>` and each `/sitemap.xml/page/N` (fed in via the site's usual
+ * `/page/N` convention — see Http\extract_page_segment()) serves one slice.
+ * Under the cap there is exactly one page, and behaviour is unchanged: this
+ * request, with no page segment, serves the sitemap directly. A page number
+ * that does not exist — any page at all under the cap, or one past the last
+ * page once split — 404s the same way any other route does, via respond_404().
+ *
+ * @return array{title: string, intro: string, action: string, requested: string}|never
+ *         respond_404()'s view data for an out-of-range page; otherwise never
+ *         returns.
  */
-#[NoReturn]
-function respond_sitemap(): never
+function respond_sitemap(): array
 {
-    header('Content-Type: application/xml; charset=UTF-8');
     $updated = newest_visible_update() ?? \Lamb\now();
+    $page = (int) ($_GET['page'] ?? 0);
+    $page_count = sitemap_page_count(count_visible_posts() + 1);
+    $split = $page_count > 1;
+
+    if ($split ? $page > $page_count : $page >= 1) {
+        return respond_404([]);
+    }
+
+    header('Content-Type: application/xml; charset=UTF-8');
     feed_cache($updated);
-    emit_sitemap(sitemap_cache_path(
-        sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp())
-    ));
+    $path = sitemap_cache_path(sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp()), $page);
+
+    if (!$split) {
+        emit_sitemap($path);
+    } elseif ($page === 0) {
+        emit_sitemap($path, static fn (): string => render_sitemap_index(
+            SITEMAP_ROOT,
+            $page_count,
+            sitemap_date($updated)
+        ));
+    } else {
+        emit_sitemap($path, static fn (): string => render_sitemap(
+            sitemap_urls(SITEMAP_ROOT, $page)
+        ));
+    }
     die();
 }
 
