@@ -109,3 +109,4 @@ Devtools / local environments / sandbox:
 * [Trash]({{ site.baseurl }}{% link trash.md %})
 * [Upgrading]({{ site.baseurl }}{% link upgrading.md %})
 * [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %})
+* [Write your first post]({{ site.baseurl }}{% link first-post.md %})

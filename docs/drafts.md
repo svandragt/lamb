@@ -19,6 +19,7 @@ Feed ingested posts are saved as drafts by default to prioritize authorship over
 
 ## Related
 
+- [Write your first post]({{ site.baseurl }}{% link first-post.md %}): A ten-minute walkthrough that ends by saving a draft.
 - [Post Types]({{ site.baseurl }}{% link post-types.md %}): Front-matter is used to set `draft: true`.
 - [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Hide a post until a future `created` date.
 - [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed ingestion that produces drafts.
