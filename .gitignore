@@ -40,6 +40,7 @@ node_modules/
 # Local agent/tooling state
 /.serena/
 /.claude/settings.local.json
+/.claude/worktrees/
 
 # Local runtime data (db is covered by *.db above)
 /data/sessions/
