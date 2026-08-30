@@ -459,7 +459,10 @@ function respond_sitemap(): array
     }
 
     header('Content-Type: application/xml; charset=UTF-8');
-    feed_cache($updated);
+    // Pass page_count as the shape discriminator: a change between index/urlset
+    // or in child-page count must invalidate the 304/ETag the same way it
+    // invalidates the disk cache key below, even when $updated is unchanged.
+    feed_cache($updated, $page_count);
     $path = sitemap_cache_path(
         sitemap_cache_key($updated, \Lamb\Config\config_modified_timestamp(), $page_count),
         $page

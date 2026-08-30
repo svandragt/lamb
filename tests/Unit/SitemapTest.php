@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\Response\count_visible_posts;
 use function Lamb\Response\emit_sitemap;
+use function Lamb\Response\feed_cache;
 use function Lamb\Response\newest_visible_update;
 use function Lamb\Response\render_sitemap;
 use function Lamb\Response\render_sitemap_index;
@@ -256,6 +257,42 @@ class SitemapTest extends TestCase
 
         $this->assertNotSame($base, sitemap_cache_key('2026-06-02 09:00:00', 1000));
         $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000));
+    }
+
+    public function testFeedCacheShapeDiscriminatorTurnsOverTheEtag(): void
+    {
+        // The disk cache key folds in page count; the emitted ETag must too, or a
+        // shape change (index<->urlset, page count) that leaves the newest post
+        // untouched is masked by a 304 and a crawler keeps serving itself a stale
+        // sitemap. Same $updated, different page count => different ETag.
+        if (!function_exists('xdebug_get_headers')) {
+            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
+        }
+
+        $updated       = '2026-06-01 09:00:00';
+        $_SESSION      = [];
+        unset($_SERVER['HTTP_IF_NONE_MATCH'], $_SERVER['HTTP_IF_MODIFIED_SINCE']);
+
+        header_remove();
+        feed_cache($updated, 1);
+        $onePage = $this->emittedEtag();
+
+        header_remove();
+        feed_cache($updated, 2);
+        $twoPages = $this->emittedEtag();
+
+        $this->assertNotNull($onePage);
+        $this->assertNotSame($onePage, $twoPages);
+    }
+
+    private function emittedEtag(): ?string
+    {
+        foreach (xdebug_get_headers() as $header) {
+            if (stripos($header, 'ETag:') === 0) {
+                return trim(substr($header, strlen('ETag:')));
+            }
+        }
+        return null;
     }
 
     public function testCacheKeyIsFilenameSafe(): void
