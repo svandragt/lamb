@@ -223,6 +223,28 @@ class WebmentionSendTest extends TestCase
         $this->assertSame(1, R::count('webmentionoutbox', ' status = ? ', ['pending']));
     }
 
+    /**
+     * enqueue_for_post() must ask is_draft() rather than re-deriving "is this
+     * a draft" with its own truthiness check. A `draft` column value that is
+     * truthy but not canonically `1` (never written by any real save path
+     * today, but not guarded against either) is not a draft per is_draft()'s
+     * own definition, so the mention must still be queued.
+     */
+    public function testEnqueueForPostQueuesWhenDraftColumnIsNonCanonicalTruthyValue(): void
+    {
+        $post = $this->dispenseReply('<p>A reply with no links</p>', 'https://other.example/their-post');
+        $post->draft = 2;
+        R::store($post);
+
+        enqueue_for_post($post);
+
+        $this->assertSame(
+            1,
+            R::count('webmentionoutbox', ' status = ? ', ['pending']),
+            'A non-canonical truthy draft value must not be treated as a draft'
+        );
+    }
+
     public function testEnqueueForPostSkipsFeedItems(): void
     {
         $post = R::dispense('post');

@@ -121,6 +121,26 @@ class WebsubTest extends TestCase
         $this->assertFalse($called, 'Drafts, feed items, scheduled and unsaved posts must not ping the hub');
     }
 
+    /**
+     * ping_for_post() must ask is_draft() rather than re-deriving "is this a
+     * draft" with its own truthiness check. A `draft` column value that is
+     * truthy but not canonically `1` (never written by any real save path
+     * today, but not guarded against either) is not a draft per is_draft()'s
+     * own definition, so the hub must still be pinged.
+     */
+    public function testPingForPostPingsWhenDraftColumnIsNonCanonicalTruthyValue(): void
+    {
+        $bean = $this->storedPost();
+        $bean->draft = 2;
+
+        $pings = 0;
+        ping_for_post($bean, ['websub_hubs' => 'https://hub.example.com/'], function () use (&$pings): void {
+            $pings++;
+        });
+
+        $this->assertSame(2, $pings, 'A non-canonical truthy draft value must not be treated as a draft');
+    }
+
     private function storedPost(): \RedBeanPHP\OODBBean
     {
         $bean = R::dispense('post');
