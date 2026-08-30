@@ -357,40 +357,18 @@ function login_throttle_retry_after(string $ip, int $now): int
 /**
  * Reserves an attempt slot for a client, atomically with the threshold check,
  * starting a fresh window when the previous one has lapsed, and prunes rows
- * left behind by other clients.
+ * left behind by other clients (pruning rides on the write path since that is
+ * the only thing that creates the rows).
  *
- * Pruning rides on the write path because that is the only thing that creates
- * these rows: a burst of attempts from many addresses cleans up after itself
- * once each window lapses, so the `option` table doesn't keep a permanent row
- * per address that ever probed the login form.
- *
- * The check and increment are atomic and must both complete before
- * password_verify(). The old design peeked at an unlocked counter before
- * bcrypt and incremented only after a wrong password, so a concurrent burst
- * from one IP could all read the same under-limit count, all run bcrypt, and
- * only serialise on the write — spending far more than
- * LOGIN_THROTTLE_MAX_FAILURES real password_verify() calls per window.
- * Reserving the slot before bcrypt refuses the surplus up front.
+ * A BEGIN IMMEDIATE write lock makes the check-and-increment atomic before
+ * bcrypt, with busy_timeout forced to 0 (restored in `finally`) so a contended
+ * lock refuses promptly instead of stalling bcrypt behind it; the prune shares
+ * that zero-timeout window deliberately. Why each of those matters — the
+ * pre-bcrypt reservation, busy_timeout=0, the deliberately-refused prune — is
+ * in response/README.md ("Login: a sessionless page with its own CSRF model").
  *
  * R::begin()/R::commit() are no-ops in this app's fluid mode (see
- * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement
- * instead.
- *
- * Neither PHP nor RedBeanPHP ever configures SQLite's busy handler, so the
- * connection keeps whatever a bare `new PDO('sqlite:...')` defaults to on the
- * host's SQLite build — commonly tens of seconds, not 0. Left alone, a
- * contended BEGIN IMMEDIATE below would silently *block* for that long
- * instead of throwing: every concurrent attempt in a burst would still queue
- * up and eventually reach password_verify() once its turn came, exactly the
- * bcrypt pile-up this function exists to prevent, just spread out in time
- * instead of parallel. Forcing busy_timeout to 0 for this critical section
- * (restored below, so the rest of the request — and prune's own writes above
- * this point once contended — keep the host's normal, forgiving timeout)
- * turns that stall back into the immediate refusal the catch below expects.
- * Verified by driving concurrent real HTTP `/login` requests against a
- * `php -S` server while a second connection held the write lock: before this
- * change the request blocked for the lock's full hold time before still
- * running bcrypt; after, it refuses immediately.
+ * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement.
  *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
