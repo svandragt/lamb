@@ -20,6 +20,141 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-30
+
+**Environment fully healthy — the scheduled task prompt's TOOLING section is now stale.**
+At the start of this run `vendor/bin/` already had `codecept`, `phpunit`, `phpstan`,
+`phpcs` and friends populated (the `SessionStart` hook registered by #773 on
+2026-08-28 ran automatically, with no manual step needed), `vendor/autoload.php`
+existed, and `vendor/bin/codecept run Unit` passed 2149 tests/3953 assertions
+cleanly before this run touched anything. This directly confirms the 2026-08-28
+entry's ask: a future run should say so explicitly once it sees this, so this
+entry is that confirmation — **two runs in a row (08-28, and now 08-30) have found
+the toolchain fully working with zero manual intervention.** The scheduled
+task's own prompt still asserts "`vendor/` has no autoload.php and no
+`vendor/bin`, the suite cannot be run, verify with standalone scripts instead" —
+that description has been wrong since 2026-08-28 and should be corrected or
+removed by whoever maintains the routine (see Suggested refinements below); this
+run used the real suites throughout (`codecept run Unit`, `codecept run
+Acceptance`, `phpstan analyse`, `composer lint`) exactly as instructed by this
+log rather than the stale prompt text.
+
+**Covered:** 2 (recomputed state) and 6 (executable HTTP harness for
+upload/auth/header findings) — the two categories the 2026-08-29 entry's own
+suggested refinement flagged as longest-untouched (2 last had a fresh pass on
+2026-08-26; 6 tied at 2026-08-26). Confirmed zero open bug-scan PRs at the
+start of this run (`list_pull_requests(state=open)` showed only two unrelated
+feature PRs, #777 and #778) — no backlog to worry about, unlike several past
+entries.
+
+**PRs opened:**
+- [#779](https://github.com/svandragt/lamb/pull/779) — category 2.
+  `Webmention\enqueue_for_post()` (`src/webmention.php`) and
+  `Websub\ping_for_post()` (`src/websub.php`) are sibling eligibility gates on
+  the same `post.published` event, and both spelled out an identical inline
+  `!empty($bean->draft)` check instead of calling the canonical `is_draft()`
+  predicate — which `webmention.php` already imports and uses elsewhere in the
+  same file. This is the missing twin to #720, which delegated this same
+  line's *scheduled* half to `is_scheduled()` but left the *draft* half alone,
+  and the same shape as #749's `is_deleted()` consolidation and #751's
+  `is_unpublished()` consolidation — the third instance of this exact pattern
+  now. Reachable, not dead code: `save()`'s `notify` flag (which triggers both
+  functions) is set unconditionally by every create/update call site
+  regardless of draft status, so these two inline checks are the sole gate.
+  No live behavior bug today (every write path only ever stores `0`, `1`, or
+  `null` into `draft`, where `!empty()` and `is_draft()`'s `== 1` rule agree),
+  but the two derivations are one new write path away from silently
+  disagreeing — exactly the drift risk this category targets. Fixed by
+  delegating both to `is_draft()`; verified with a regression test per
+  function using `draft = 2` (truthy but non-canonical, fails old check,
+  passes new), red-before/green-after confirmed, full suite green (2151
+  tests), `composer lint`/`analyse` clean.
+- [#780](https://github.com/svandragt/lamb/pull/780) — category 6.
+  `reserve_login_attempt()` (`src/response/auth.php`, from #766) documents and
+  tests a fail-closed lock-contention path — a busy `BEGIN IMMEDIATE` should
+  throw immediately so a concurrent `/login` attempt is refused. But
+  production code never configures SQLite's busy handler, so the connection
+  keeps the host's SQLite build default — confirmed directly at 60000ms
+  (60s) on this container. Under that real default, a contended write
+  silently *blocks* for up to 60s instead of throwing: the request queues and
+  still runs `password_verify()` once its turn comes (the exact bcrypt
+  pile-up #742/#766 exist to prevent, just serialized across the stall rather
+  than parallel), tying up a web-server worker for the wait. The existing
+  regression test from #766 only passed because it manually forced
+  `busy_timeout=0` on both connections in the test itself — a workaround that
+  quietly encoded the gap between documented and actual production behavior
+  without anyone noticing. Verified over a real HTTP request/response cycle:
+  started `php -S 127.0.0.1:8747 -t src`, held the SQLite write lock from a
+  separate OS process, fired a concurrent wrong-password `POST /login` at the
+  live server — before the fix, blocked ~5.8s then proceeded to bcrypt
+  (`200`); after the fix, refused in ~5ms (`429`). Fixed by forcing
+  `busy_timeout=0` around the critical section only, restoring the prior
+  value in a `finally` block. New regression test uses a genuine separate OS
+  process (`Symfony\Component\Process\Process`) to hold the lock without
+  test-forced `busy_timeout`, reproducing real conditions rather than the
+  test-only shortcut the old test used. Full `Unit` suite green (2150 tests),
+  `Acceptance` suite green (96 tests), `phpstan`/`composer lint` clean.
+
+**Ruled out (do not re-flag without new evidence) — category 6:** re-checked
+the login-throttle atomicity itself (#766's fix still correctly caps
+admission — it was blocking rather than fail-fast that #780 fixed, not the
+cap itself), Micropub's cache headers (#748, still correct), the `/_cron`
+watermark race (already `flock`-serialized via `acquire_cron_lock()`),
+`bump_content_timestamp()`'s read-increment-write (forward-progress invariant
+holds even under races), and three other `option`-table read-modify-write
+counters (`experimental_gate_version`, `SCHEDULED_PUBLISH_WATERMARK`,
+`site_config_ini`) — all either admin-only or already serialized elsewhere.
+
+**Issue-dense files:** none newly marked. `src/response/auth.php` has now
+produced a finding in three consecutive runs (08-25's lost-update race #742,
+08-29's check-then-act race #766, this run's busy-timeout gap #780) — but all
+three are progressively deeper layers of the *same* login-throttle mechanism
+(`reserve_login_attempt()` and its ancestors), not three unrelated bugs in the
+file, and it remains the one unauthenticated write-adjacent endpoint, exactly
+the kind of surface this routine is meant to scrutinize repeatedly. Not
+marking it issue-dense — keep including it in every relevant sweep, but a
+future run should check whether the login-throttle mechanism specifically has
+finally run out of layers, rather than assuming the file itself is defect-prone.
+
+**Suggested routine refinements:**
+1. **Update the scheduled prompt's TOOLING section.** It still describes
+   `vendor/autoload.php` as missing and the test suite as unrunnable — both
+   have been false since PR #773 (2026-08-28), confirmed again this run with
+   zero manual steps needed. Leaving it as-is risks a future run wasting time
+   re-applying the standalone-script workaround, or worse, distrusting real
+   green test output because the prompt told it not to expect any. Either
+   remove that section or replace it with "check `.claude/bug-scan-log.md`'s
+   most recent environment note for current toolchain status."
+2. Category 2's finding today is the third occurrence of the exact same
+   pattern (two sibling event handlers/predicates, one delegates to a named
+   `is_*()` helper, one still spells out the raw property check) — after
+   `is_deleted()` (#749) and `is_unpublished()` (#751), now `is_draft()`
+   (#779). Worth a single bounded sweep grepping every `is_*()` predicate's
+   call sites for one more sibling that still inlines the raw check, rather
+   than open-ended re-scanning of category 2 generally — this specific
+   pattern seems to be the category's actual yield, not general "recomputed
+   state" broadly.
+3. Category 6's "other read-modify-write `option` counters" angle (flagged
+   2026-08-25) is now checked and dry — three more counters ruled out this
+   run with nothing found. The *new* angle this run's bug came from instead —
+   whether a lock-contention path's fail-closed behavior actually holds given
+   the connection's real, unconfigured `busy_timeout`, not just its logic —
+   is worth remembering as its own recurring check: any other "should fail
+   fast under contention" claim in the codebase is worth the same real-HTTP
+   verification this run used, not just a code read.
+4. Categories 3 (guard-clause diffing) and 4 (unchecked return values) are
+   now the longest-untouched substantive categories (both last covered
+   2026-08-27) — prioritize them next over re-treading 1/7, which have had
+   two consecutive fresh passes each (08-28, 08-29).
+5. This run's two category scans ran as parallel background agents in
+   isolated worktrees; wall-clock time between the first PR (#779) and the
+   second (#780) was about 6 hours even though each agent's own reported
+   active duration was far shorter — background subagent wall-clock time is
+   unpredictable and doesn't map cleanly onto the routine's "1 hour" budget.
+   Worth treating that budget as a soft target for scan *scope* (how many
+   categories/PRs to attempt) rather than something a future run should try
+   to hit precisely via wall-clock polling.
+
 ### 2026-08-29
 
 **Blocker from 2026-08-27 is resolved.** That run's fixes were stuck as
