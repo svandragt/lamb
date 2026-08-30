@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use Symfony\Component\Process\Process;
 
 use function Lamb\Response\clear_login_failures;
 use function Lamb\Response\client_ip;
@@ -293,6 +294,60 @@ class LoginThrottleTest extends TestCase
         $lock->exec('BEGIN IMMEDIATE');
 
         return $lock;
+    }
+
+    /**
+     * Reproduces the conditions reserve_login_attempt() actually runs under in
+     * production, unlike holdWriteLockOnAContendedConnection() above: this
+     * test never forces busy_timeout on the RedBean side, so the connection
+     * keeps whatever a bare `new PDO('sqlite:...')` defaults to on this host —
+     * the same thing a real deployment never overrides either. The write lock
+     * is held by a genuinely separate OS process (not a second connection in
+     * this same process) so a regression that blocks instead of refusing
+     * fails this test in bounded time (the hold's length) instead of hanging
+     * the suite for the host's full default busy_timeout.
+     */
+    public function testReserveLoginAttemptRefusesPromptlyUnderContentionWithoutTestForcedBusyTimeout(): void
+    {
+        $this->contendedDbFile = tempnam(sys_get_temp_dir(), 'lamb_throttle_test_');
+
+        $key = 'contended_' . uniqid();
+        R::addDatabase($key, 'sqlite:' . $this->contendedDbFile);
+        R::selectDatabase($key);
+        R::freeze(false);
+        // Deliberately not forcing busy_timeout here — see docblock above.
+
+        $holdSeconds = 2;
+        $holder = new Process([
+            'php',
+            '-r',
+            '$pdo = new PDO("sqlite:' . $this->contendedDbFile . '"); '
+                . '$pdo->exec("BEGIN IMMEDIATE"); '
+                . 'usleep(' . ($holdSeconds * 1_000_000) . '); '
+                . '$pdo->exec("COMMIT");',
+        ]);
+        $holder->start();
+        // Let the subprocess actually acquire BEGIN IMMEDIATE before racing it.
+        usleep(300_000);
+
+        $started = microtime(true);
+        $retry_after = reserve_login_attempt('203.0.113.7', 1_000);
+        $elapsed = microtime(true) - $started;
+
+        $holder->wait();
+
+        // Refused (not silently let through)...
+        $this->assertGreaterThan(0, $retry_after);
+        // ...and refused promptly. A regression that stops forcing
+        // busy_timeout to 0 for this critical section would instead block
+        // for the lock holder's full hold time before still admitting the
+        // attempt — the exact bcrypt-pileup race this function exists to
+        // close, just serialised across the stall instead of parallel.
+        $this->assertLessThan(
+            $holdSeconds,
+            $elapsed,
+            'reserve_login_attempt() blocked on lock contention instead of refusing promptly'
+        );
     }
 
     // The refusal message tells the owner when to come back

@@ -376,37 +376,71 @@ function login_throttle_retry_after(string $ip, int $now): int
  * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement
  * instead.
  *
+ * Neither PHP nor RedBeanPHP ever configures SQLite's busy handler, so the
+ * connection keeps whatever a bare `new PDO('sqlite:...')` defaults to on the
+ * host's SQLite build — commonly tens of seconds, not 0. Left alone, a
+ * contended BEGIN IMMEDIATE below would silently *block* for that long
+ * instead of throwing: every concurrent attempt in a burst would still queue
+ * up and eventually reach password_verify() once its turn came, exactly the
+ * bcrypt pile-up this function exists to prevent, just spread out in time
+ * instead of parallel. Forcing busy_timeout to 0 for this critical section
+ * (restored below, so the rest of the request — and prune's own writes above
+ * this point once contended — keep the host's normal, forgiving timeout)
+ * turns that stall back into the immediate refusal the catch below expects.
+ * Verified by driving concurrent real HTTP `/login` requests against a
+ * `php -S` server while a second connection held the write lock: before this
+ * change the request blocked for the lock's full hold time before still
+ * running bcrypt; after, it refuses immediately.
+ *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return int Seconds to wait before the client may attempt again (0 = reserved, go ahead).
  */
 function reserve_login_attempt(string $ip, int $now): int
 {
-    prune_login_throttle($now);
+    $previous_busy_timeout = (int) R::getCell('PRAGMA busy_timeout');
+    R::exec('PRAGMA busy_timeout = 0');
+    $in_transaction = false;
 
     try {
+        prune_login_throttle($now);
+
         R::exec('BEGIN IMMEDIATE');
-    } catch (SQL $e) {
-        // Another request already holds the write lock: refuse this attempt
-        // rather than let it through unreserved, which would reopen the exact
-        // race this function exists to close. The refused client just retries.
-        return 1;
-    }
+        $in_transaction = true;
 
-    $bean  = \Lamb\get_option(login_throttle_key($ip), '');
-    $state = decode_throttle_state($bean->value);
-    $retry_after = throttle_retry_after($state, $now);
-    if ($retry_after > 0) {
+        $bean  = \Lamb\get_option(login_throttle_key($ip), '');
+        $state = decode_throttle_state($bean->value);
+        $retry_after = throttle_retry_after($state, $now);
+        if ($retry_after > 0) {
+            R::exec('COMMIT');
+            return $retry_after;
+        }
+
+        $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
+        \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
+
         R::exec('COMMIT');
-        return $retry_after;
+
+        return 0;
+    } catch (SQL) {
+        // Another request already holds the write lock (either for the
+        // reservation itself or for one of prune's own deletes above): refuse
+        // this attempt rather than let it through unreserved, which would
+        // reopen the exact race this function exists to close. The refused
+        // client just retries.
+        if ($in_transaction) {
+            try {
+                R::exec('ROLLBACK');
+            } catch (SQL) {
+                // Best-effort only; the busy_timeout restore below still runs
+                // regardless, and a stuck transaction on this connection would
+                // fail every later query in the request loudly enough to notice.
+            }
+        }
+        return 1;
+    } finally {
+        R::exec('PRAGMA busy_timeout = ' . $previous_busy_timeout);
     }
-
-    $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
-    \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
-
-    R::exec('COMMIT');
-
-    return 0;
 }
 
 /**
