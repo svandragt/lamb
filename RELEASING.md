@@ -129,6 +129,19 @@ It tags the current `release` tip, so promote main → release (step 4) first.
 - [ ] Publishing the release triggers the `Release artifacts` workflow. Verify it
       attached `lamb-<version>.tar.gz` to the release (`gh release view <version>`).
       Re-run via `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
+- [ ] Open an announcement discussion for the release in the **Announcements**
+      category, linking the release tag with a short note. Match the existing
+      per-release discussions (e.g. `Lamb 0.14.0`):
+
+      ```sh
+      REPO_ID=$(gh api graphql -f query='{repository(owner:"svandragt",name:"lamb"){id}}' --jq '.data.repository.id')
+      gh api graphql -f query='mutation($repo:ID!,$cat:ID!,$title:String!,$body:String!){createDiscussion(input:{repositoryId:$repo,categoryId:$cat,title:$title,body:$body}){discussion{url}}}' \
+        -f repo="$REPO_ID" -f cat="DIC_kwDOJIhg0c4CWhS7" \
+        -f title="Lamb <version>" \
+        -f body="https://github.com/svandragt/lamb/releases/tag/<version>
+
+      <short note>" --jq '.data.createDiscussion.discussion.url'
+      ```
 - [ ] Announce / update any demo site if applicable.
 - [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a
       clean checkout of `release` installs and runs.
