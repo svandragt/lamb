@@ -878,6 +878,41 @@ XML;
         $this->assertSame('/status/' . $bean->id, (string) $redirect->to_url);
     }
 
+    /**
+     * A site using WordPress's default ("Plain") permalink structure exports
+     * <link> as a bare query string (`?p=59`), which carries no path to
+     * redirect from — but <wp:post_name> still records the numeric post-id
+     * leak internally regardless of permalink structure. The slug must be
+     * dropped exactly as it is when a pretty-permalink <link> is present,
+     * even though there is no old path to capture as a redirect.
+     */
+    public function testImportItemDropsNumericSlugEvenWhenLinkHasNoUsablePath(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => '',
+            'guid' => 'https://oldsite.example/?p=59',
+            'link' => 'https://oldsite.example/?p=59',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Status body.</p>',
+            'tags' => [],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => '59',
+        ];
+
+        $bean = import_item($item, fn() => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame('', (string) $bean->slug);
+        $this->assertStringNotContainsString('slug:', (string) $bean->body);
+        // No usable old path to redirect from — nothing should be stored.
+        $this->assertNull(R::findOne('redirect', ' from_slug = ? ', ['?p=59']));
+    }
+
     public function testImportItemDropsNumericSlugAndRedirectsFromNonStatusPath(): void
     {
         if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {

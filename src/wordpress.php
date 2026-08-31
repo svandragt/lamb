@@ -230,7 +230,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
         : prepare_imported_html($body_html, (string) $item['created'], $downloader);
     $markdown = html_to_markdown($prepared);
     $tags = array_values(array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? [])));
-    $slug = wordpress_status_path($item) !== null ? '' : (string) ($item['slug'] ?? '');
+    $slug = is_numeric_wordpress_slug($item) ? '' : (string) ($item['slug'] ?? '');
     $body = build_post_body((string) $item['title'], $markdown, $tags, $slug);
 
     $bean = populate_bean($body, null, null, $bean);
@@ -252,21 +252,44 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
 }
 
 /**
- * Returns the original WP path (slashes trimmed) when `<wp:post_name>` is
- * purely numeric — e.g. `26`, `633`. WordPress hands these out when a post
- * has no title (the post id leaks into the URL). Pinning such a slug locally
- * produces a Lamb URL like `/26`, which visually collides with the canonical
- * `/status/<id>` shape and can shadow it on lookup.
+ * True when `<wp:post_name>` is purely numeric — e.g. `26`, `633`. WordPress
+ * hands these out when a post has no title (the post id leaks into the
+ * slug column), regardless of the site's permalink structure: even a site
+ * using the default "Plain" structure (`<link>` shaped as a bare `?p=59`
+ * query string, no path at all) still records this numeric post_name
+ * internally. Pinning such a slug locally produces a Lamb URL like `/26`,
+ * which visually collides with the canonical `/status/<id>` shape and can
+ * shadow it on lookup.
  *
- * Instead we drop the slug, let the post fall through to its `/status/<id>`
- * permalink, and capture the original WP path as a redirect.
+ * Deliberately independent of whether {@see wordpress_status_path} can also
+ * derive an old redirect path from `<link>` — those are two different
+ * questions. A "Plain"-permalink site has no old path worth redirecting
+ * from, but the slug still needs dropping.
+ *
+ * @param array<string, mixed> $item
+ */
+function is_numeric_wordpress_slug(array $item): bool
+{
+    $slug = trim((string) ($item['slug'] ?? ''));
+    return $slug !== '' && ctype_digit($slug);
+}
+
+/**
+ * Returns the original WP path (slashes trimmed) when `<wp:post_name>` is
+ * purely numeric (see {@see is_numeric_wordpress_slug}) and `<link>` carries
+ * a usable path to redirect from.
+ *
+ * The slug is always dropped for a numeric post_name — see
+ * is_numeric_wordpress_slug() — but a redirect can only be captured when the
+ * source site's permalink structure put the old path somewhere ("Plain"
+ * permalinks don't; the post falls through to /status/<id> with no old path
+ * to redirect away from).
  *
  * @param array<string, mixed> $item
  */
 function wordpress_status_path(array $item): ?string
 {
-    $slug = trim((string) ($item['slug'] ?? ''));
-    if ($slug === '' || !ctype_digit($slug)) {
+    if (!is_numeric_wordpress_slug($item)) {
         return null;
     }
     $path = parse_url((string) ($item['link'] ?? ''), PHP_URL_PATH);
