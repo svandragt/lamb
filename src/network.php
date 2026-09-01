@@ -99,6 +99,79 @@ function webmention_line(array $sent): string
     );
 }
 
+/**
+ * Crawls every due feed, then drains the notification queues and advances the
+ * run watermark.
+ *
+ * Extracted from process_feeds() so the run's orchestration is unit-testable —
+ * process_feeds() itself is not, because it sends a header, takes a file lock
+ * and ends in exit()/die(). Every collaborator is injectable so a test drives
+ * the loop and drains without touching the network; real /_cron requests get
+ * the production collaborators from the defaults, and the output is byte-for-byte
+ * what process_feeds() emitted inline before.
+ *
+ * The watermark advance and both drains run in a `finally`, so a feed that fails
+ * — or the loop throwing outright — can never starve webmention/WebSub delivery.
+ * The watermark is advanced before draining so a partial run still rate-limits
+ * the next one even if a drain throws; the drains then retry on the next run.
+ *
+ * @param array<string, string>|null $feeds Feed name => URL map (default get_feeds()).
+ * @param callable(string, string): array{ok: bool, items: int, error: ?string}|null $crawler
+ *        Per-feed crawler (default crawl_feed_guarded(), which never throws).
+ * @param callable(): int|null $websub_drain WebSub drain returning the ping count
+ *        (default ping_scheduled_publishes()).
+ * @param callable(): array{sent: int, failed: int, skipped: int, cancelled: int}|null $webmention_drain
+ *        Outbound-webmention drain (default process_outbound()).
+ * @param callable(int): void|null $advance_watermark Persists the run timestamp
+ *        (default writes the last_processed_date option).
+ * @param callable(string): void|null $output Output sink (default echo).
+ * @param callable(): int|null $clock Current Unix timestamp (default time()).
+ * @return void
+ */
+function run_feed_cycle(
+    ?array $feeds = null,
+    ?callable $crawler = null,
+    ?callable $websub_drain = null,
+    ?callable $webmention_drain = null,
+    ?callable $advance_watermark = null,
+    ?callable $output = null,
+    ?callable $clock = null
+): void {
+    $feeds ??= get_feeds();
+    $crawler ??= static fn(string $name, string $url): array => crawl_feed_guarded($name, $url);
+    $websub_drain ??= static fn(): int => \Lamb\Websub\ping_scheduled_publishes();
+    $webmention_drain ??= static fn(): array => \Lamb\Webmention\process_outbound();
+    $output ??= static function (string $line): void {
+        echo $line;
+    };
+    $clock ??= static fn(): int => time();
+    $advance_watermark ??= static function (int $timestamp): void {
+        set_option(get_option('last_processed_date', 0), $timestamp);
+    };
+
+    try {
+        $output("Updating feeds..." . PHP_EOL);
+        foreach ($feeds as $name => $url) {
+            flush();
+            $status = feed_status_bean($name, $url);
+            if (!feed_fetch_due((int)$status->last_attempt, $clock())) {
+                $output('Skipped ' . $url . PHP_EOL);
+                continue;
+            }
+
+            $output(crawl_line($name, $crawler($name, $url)));
+        }
+    } finally {
+        $advance_watermark($clock());
+
+        $output(count_line(
+            $websub_drain(),
+            'WebSub: pinged hub for %d scheduled post(s) now published.'
+        ));
+        $output(webmention_line($webmention_drain()));
+    }
+}
+
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
@@ -133,8 +206,6 @@ function webmention_line(array $sent): string
         die('Already running, try again later.');
     }
 
-    $feeds = get_feeds();
-
     $cron_last_updated = get_option('last_processed_date', 0);
     if (!cron_run_due((int)$cron_last_updated->value, time())) {
         die('Too often, try again later.');
@@ -144,33 +215,13 @@ function webmention_line(array $sent): string
     echo count_line(prune_feed_status(), 'Pruned %d stale feed status row(s).');
     echo count_line(\Lamb\flatten_redirects(), 'Flattened %d redirect(s).');
 
-    try {
-        echo("Updating feeds..." . PHP_EOL);
-        foreach ($feeds as $name => $url) {
-            flush();
-            $status = feed_status_bean($name, $url);
-            if (!feed_fetch_due((int)$status->last_attempt, time())) {
-                echo('Skipped ' . $url . PHP_EOL);
-                continue;
-            }
-
-            echo crawl_line($name, crawl_feed_guarded($name, $url));
-        }
-    } finally {
-        // Advance the watermark first, before draining: a partial run must
-        // rate-limit the next one even if a drain itself throws, otherwise the
-        // starvation loop just moves from the crawl to the drain. The drains then
-        // retry on the next scheduled run rather than re-running immediately.
-        set_option($cron_last_updated, (int)date('U'));
-
-        // Drain notifications even if the crawl loop threw or was cut short, so
-        // feed fetching cannot starve webmention/WebSub delivery.
-        echo count_line(
-            \Lamb\Websub\ping_scheduled_publishes(),
-            'WebSub: pinged hub for %d scheduled post(s) now published.'
-        );
-        echo webmention_line(\Lamb\Webmention\process_outbound());
-    }
+    // Reuse the option bean already fetched for the rate-limit check rather than
+    // re-reading it, and keep date('U') as the run timestamp (== time()).
+    run_feed_cycle(
+        advance_watermark: static function (int $timestamp) use ($cron_last_updated): void {
+            set_option($cron_last_updated, $timestamp);
+        },
+    );
 
     exit('Done');
 }
