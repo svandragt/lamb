@@ -20,6 +20,79 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-30 (run 2 — manual `/bugsweep`)
+
+**Manual run**, after the automated run earlier today (#781) already took
+categories 2 and 6. Picked **3 (guard-clause diffing)** and **4 (unchecked
+return values)** per #781's own suggestion #4 — both last freshly swept
+2026-08-27, the longest-untouched substantive categories. Toolchain healthy for a
+third consecutive run (`vendor/bin` populated, `codecept`/`phpstan`/`phpcs` all
+present, no manual step); the scheduled prompt's TOOLING section is still stale
+(#781 suggestion #1, still outstanding). Zero open bug-scan PRs at the start.
+
+**No findings — both categories swept clean; no fix PRs opened.** Detail below so
+a future run doesn't re-tread. Each category ran as its own background scanner
+agent re-diffing/​auditing current code, not just trusting prior rulings.
+
+**Ruled out — category 3 (guard-clause diffing):** re-diffed all six families:
+- Micropub callbacks (`micropub.php`) — create/delete/undelete/update all route
+  through the shared `scopeRejection()` gate as their first statement, so the
+  #756/#735 scope-before-existence ordering is now uniform. `sourceQueryCallback`
+  returns identical `false` for a nonexistent post and a hidden-insufficient-scope
+  post (no existence oracle). Media endpoint's
+  `has_micropub_scope(...,'create')` is a token-only, correctly-stricter path.
+- `redirect_*` (`response/posts.php`) — create/edit/delete/restore all
+  `require_login()` first; delete/restore's `empty($_POST)` bail before
+  `require_csrf()` is the documented direct-route split (create/edit are gated by
+  their callers `respond_home`/`respond_edit`).
+- `require_login`/`require_csrf` coverage across export/upload/checkbox/settings —
+  present and consistent.
+- `is_viewable` vs `is_publicly_visible` — every third-party-driven path
+  (webmention `target_post_id`, Micropub `sourceQueryCallback`, `process_outbound`
+  re-check) uses the no-session predicate; only session-owning permalink handlers
+  use `is_viewable`.
+- Webmention `enqueue_for_post` vs WebSub `ping_for_post` — share the
+  id/feed_name/draft guard; ping adds `is_scheduled()`, enqueue intentionally
+  queues scheduled posts in the outbox (documented at webmention.php:476-478).
+- SSRF (`http.php`) — `fetch_guarded` re-resolves and re-pins on every redirect
+  hop; the only direct `fetch()` callers are trusted (token introspection with
+  redirects disabled).
+
+**Ruled out — category 4 (unchecked return values):** every side-effecting write
+site already checks its failure return, most carrying a "Checked:" comment naming
+the silent failure it prevents. Audited: `export.php` (ZipArchive
+addFromString/close, `JSON_THROW_ON_ERROR`; `addFile` deliberately best-effort),
+`restore.php` (`file_put_contents` + `rename` both tally-skip on failure, mkdir
+guarded), `response/upload.php` (`persist_image_bytes` checks
+`file_put_contents`/`rename` and unlinks the temp; `imagewebp` propagated),
+`response/discovery.php` (sitemap mkdir/write/rename all checked),
+`import.php`, `network/sources.php` (mkdir + is_writable), and all 10
+`preg_replace_callback` sites (each uses `?? $fallback` or an explicit null
+check). No `fwrite`/`fputcsv`/`copy`/`touch`/GD-write exists outside these.
+Genuinely dry.
+
+**Non-findings noted (not filed):**
+- `export.php:311` `$zip->addFile()` is checked, but libzip is lazy — it queues
+  the path and only reads at `close()`, so the check gives slight false
+  confidence: an asset that becomes unreadable between add and close either aborts
+  the whole export or, on some libzip builds, is dropped silently while the
+  manifest still lists it. Requires an in-loop TOCTOU on a local asset, not
+  attacker-controlled — below the "real reachable consequence" bar. Recorded only.
+- `websub.php:87` `ping_for_post` still inlines `!empty($bean->draft)` rather than
+  `is_draft()` — exactly PR #779's category-2 item (unmerged); no live behaviour
+  difference today (every write path stores only 0/1/null). Left for #779.
+
+**Issue-dense files:** none newly identified.
+
+**Suggested refinements:**
+1. With 3 and 4 freshly swept today and dry, and 1/2/6/7 all covered 08-28→08-30,
+   the whole substantive category set has had a fresh pass within three days and
+   the next run has no genuinely-stale category. Treat the routine as
+   maintenance-mode: re-scan only categories whose covered files changed since this
+   run (a diff-triggered sweep) rather than a full re-tread.
+2. #781's suggestion #1 (correct the scheduled prompt's stale TOOLING section) is
+   still outstanding, now confirmed stale for a third consecutive run.
+
 ### 2026-08-30
 
 **Environment fully healthy — the scheduled task prompt's TOOLING section is now stale.**
