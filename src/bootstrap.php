@@ -112,12 +112,12 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
-    // WAL lets a writer commit without waiting for concurrent readers. The login
-    // throttle's reserve_login_attempt() forces busy_timeout=0 so a contended
-    // reservation fails closed instead of stalling; without WAL its COMMIT takes
-    // an EXCLUSIVE lock that any page-render read holds off, so an ordinary
-    // concurrent visitor would make a correct-password login refuse. WAL narrows
-    // that refusal to a genuine concurrent writer, which is the intent.
+    // WAL lets a writer commit without waiting for concurrent readers. Without
+    // it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
+    // lock that any page-render read holds off, so an ordinary concurrent visitor
+    // could make a correct-password login stall or fail. Under WAL that
+    // reservation only ever contends with another writer, keeping its lock hold
+    // to the microseconds of a counter update.
     // ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
     // fall back to the slower rollback journal and lose this guarantee.
     R::exec('PRAGMA journal_mode=WAL');

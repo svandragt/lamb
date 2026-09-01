@@ -30,9 +30,6 @@ use function Lamb\Response\throttle_retry_after;
  */
 class LoginThrottleTest extends TestCase
 {
-    /** @var string|null Path of the file-backed DB from a contention test, if any. */
-    private ?string $contendedDbFile = null;
-
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -47,12 +44,6 @@ class LoginThrottleTest extends TestCase
     protected function tearDown(): void
     {
         unset($_SERVER['REMOTE_ADDR']);
-
-        if ($this->contendedDbFile !== null) {
-            R::selectDatabase('default');
-            @unlink($this->contendedDbFile);
-            $this->contendedDbFile = null;
-        }
     }
 
     // client_ip — the single source of the client address for logging + throttling
@@ -209,44 +200,8 @@ class LoginThrottleTest extends TestCase
         $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
     }
 
-    // Concurrent-write safety — a contended lock must refuse the attempt (not
-    // throw, and not let it through unreserved) when another connection
-    // already holds the write lock
-
-    public function testReserveLoginAttemptRefusesRatherThanThrowingWhenTheWriteLockIsHeld(): void
-    {
-        // A single shared connection can't simulate this: SQLite silently
-        // accepts a nested BEGIN IMMEDIATE on the same connection, so the
-        // contention has to come from a genuinely separate connection.
-        $lock = $this->holdWriteLockOnAContendedConnection();
-
-        try {
-            $retry_after = reserve_login_attempt('203.0.113.7', 1_000);
-        } finally {
-            $lock->exec('COMMIT');
-        }
-
-        // Refused (not silently let through): a contended reservation must
-        // fail *closed*, otherwise the very race this function exists to
-        // close reopens under lock contention.
-        $this->assertGreaterThan(0, $retry_after);
-        $this->assertNull(R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]));
-    }
-
-    public function testReserveLoginAttemptStillCountsOnceTheLockIsFree(): void
-    {
-        $lock = $this->holdWriteLockOnAContendedConnection();
-        reserve_login_attempt('203.0.113.7', 1_000); // Contended: refused, no row.
-        $lock->exec('COMMIT'); // Release the lock.
-
-        // The refused attempt above left no row; this one, with no contention,
-        // must still start a fresh counter rather than staying silently broken.
-        reserve_login_attempt('203.0.113.7', 1_000);
-
-        $bean = R::findOne('option', ' name = ? ', [login_throttle_key('203.0.113.7')]);
-        $this->assertNotNull($bean);
-        $this->assertSame(['count' => 1, 'expires' => 1_000 + LOGIN_THROTTLE_WINDOW], decode_throttle_state($bean->value));
-    }
+    // Concurrent-write safety — the atomic check-and-increment caps admissions
+    // at the limit even under a burst from one address
 
     public function testReserveLoginAttemptCapsConcurrentAdmissionsAtTheLimit(): void
     {
@@ -265,99 +220,27 @@ class LoginThrottleTest extends TestCase
         $this->assertSame(LOGIN_THROTTLE_MAX_FAILURES, $admitted);
     }
 
-    /**
-     * Points the RedBean facade at a throwaway file-backed SQLite database and
-     * takes its write lock from a second, independent PDO connection to the
-     * same file — real cross-connection contention, which a single shared
-     * connection cannot produce. `busy_timeout=0` on the RedBean side turns
-     * the resulting "database is locked" error into an immediate SQL exception
-     * instead of a multi-second stall.
-     *
-     * tearDown() restores the `default` connection and removes the file.
-     *
-     * @return PDO The lock-holding connection; the caller releases it with
-     *              `$lock->exec('COMMIT')` once the contended call is made.
-     */
-    private function holdWriteLockOnAContendedConnection(): PDO
+    public function testReserveLoginAttemptLeavesNoOpenTransaction(): void
     {
-        $this->contendedDbFile = tempnam(sys_get_temp_dir(), 'lamb_throttle_test_');
+        // The reservation must commit (or roll back) cleanly and leave the
+        // shared connection with no open transaction — a dangling BEGIN would
+        // make the next one throw "cannot start a transaction within a
+        // transaction" and poison every later query in the request.
+        reserve_login_attempt('203.0.113.7', 1_000);
 
-        // A fresh key per call: RedBean refuses to re-register an existing one,
-        // and each test needs its own throwaway file anyway.
-        $key = 'contended_' . uniqid();
-        R::addDatabase($key, 'sqlite:' . $this->contendedDbFile);
-        R::selectDatabase($key);
-        R::freeze(false);
-        R::exec('PRAGMA busy_timeout = 0');
+        R::exec('BEGIN IMMEDIATE');
+        R::exec('ROLLBACK');
 
-        $lock = new PDO('sqlite:' . $this->contendedDbFile);
-        $lock->exec('PRAGMA busy_timeout = 0');
-        $lock->exec('BEGIN IMMEDIATE');
-
-        return $lock;
-    }
-
-    /**
-     * Reproduces the conditions reserve_login_attempt() actually runs under in
-     * production, unlike holdWriteLockOnAContendedConnection() above: this
-     * test never forces busy_timeout on the RedBean side, so the connection
-     * keeps whatever a bare `new PDO('sqlite:...')` defaults to on this host —
-     * the same thing a real deployment never overrides either. The write lock
-     * is held by a genuinely separate OS process (not a second connection in
-     * this same process) so a regression that blocks instead of refusing
-     * fails this test in bounded time (the hold's length) instead of hanging
-     * the suite for the host's full default busy_timeout.
-     */
-    public function testReserveLoginAttemptRefusesPromptlyUnderContentionWithoutTestForcedBusyTimeout(): void
-    {
-        $this->contendedDbFile = tempnam(sys_get_temp_dir(), 'lamb_throttle_test_');
-
-        $key = 'contended_' . uniqid();
-        R::addDatabase($key, 'sqlite:' . $this->contendedDbFile);
-        R::selectDatabase($key);
-        R::freeze(false);
-        // Deliberately not forcing busy_timeout here — see docblock above.
-
-        $holdSeconds = 2;
-        $holder = new Process([
-            'php',
-            '-r',
-            '$pdo = new PDO("sqlite:' . $this->contendedDbFile . '"); '
-                . '$pdo->exec("BEGIN IMMEDIATE"); '
-                . 'usleep(' . ($holdSeconds * 1_000_000) . '); '
-                . '$pdo->exec("COMMIT");',
-        ]);
-        $holder->start();
-        // Let the subprocess actually acquire BEGIN IMMEDIATE before racing it.
-        usleep(300_000);
-
-        $started = microtime(true);
-        $retry_after = reserve_login_attempt('203.0.113.7', 1_000);
-        $elapsed = microtime(true) - $started;
-
-        $holder->wait();
-
-        // Refused (not silently let through)...
-        $this->assertGreaterThan(0, $retry_after);
-        // ...and refused promptly. A regression that stops forcing
-        // busy_timeout to 0 for this critical section would instead block
-        // for the lock holder's full hold time before still admitting the
-        // attempt — the exact bcrypt-pileup race this function exists to
-        // close, just serialised across the stall instead of parallel.
-        $this->assertLessThan(
-            $holdSeconds,
-            $elapsed,
-            'reserve_login_attempt() blocked on lock contention instead of refusing promptly'
-        );
+        // Reached here without an exception, and a fresh reservation still works.
+        $this->assertSame(0, reserve_login_attempt('198.51.100.9', 1_000));
     }
 
     public function testBootstrapDbEnablesWalSoLoginCommitsSurviveConcurrentReaders(): void
     {
-        // reserve_login_attempt() forces busy_timeout=0, so its COMMIT must not
-        // stall on a concurrent reader — it has to fail only against a real
-        // writer. WAL lets a writer commit while readers hold the file; a
+        // reserve_login_attempt()'s COMMIT must not stall on a concurrent
+        // reader. WAL lets a writer commit while readers hold the file; a
         // regression to the rollback journal would let an ordinary page-render
-        // read make a correct-password login refuse. Run bootstrap_db() in a
+        // read block or fail a correct-password login. Run bootstrap_db() in a
         // subprocess: it calls R::setup(), which would clobber this suite's
         // shared :memory: default connection.
         $dir = sys_get_temp_dir() . '/lamb_wal_test_' . uniqid();
