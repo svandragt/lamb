@@ -63,6 +63,17 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 - Chromium executable: `~/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome` (note `chrome-linux64`; version dir may differ per machine — check `ls ~/.cache/ms-playwright/`)
 - Script: `scripts/screenshot.mjs [path] [outdir]`
 
+### Worktrees
+
+Run `composer install` inside each git worktree. Don't share or symlink one
+checkout's `vendor/` into another: Composer's generated autoloader resolves to
+the checkout that created it, so a worktree pointed at another checkout's
+`vendor/` silently runs and tests that checkout's `src/`, not the worktree's —
+green tests against the wrong code. A per-worktree `composer install` also
+registers the PHPCompatibility standard for that checkout (handled on install
+by the `phpcodesniffer-composer-installer` plugin), so `composer lint` works
+without any global phpcs config.
+
 ## Dependencies
 
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
