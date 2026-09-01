@@ -215,4 +215,44 @@ class SessionBootstrapTest extends TestCase
             @rmdir($data_dir);
         }
     }
+
+    /**
+     * bootstrap_db() must apply the DNS resolver timeout (Http\apply_dns_resolve_timeout())
+     * as its first action, before doing anything else — including before opening the
+     * SQLite connection. glibc's resolver only honours a RES_OPTIONS change made
+     * before the process's *first* hostname lookup, so this only actually bounds
+     * DNS the way DNS_RESOLVE_TIMEOUT's docblock promises when it wins that race
+     * against every other Lamb code path (a real, timed reproduction against a
+     * black-holed nameserver confirmed a second, later putenv() call is silently
+     * ignored — see apply_dns_resolve_timeout()'s docblock in src/http.php).
+     *
+     * Run in a subprocess (like BinLambTest's data-dir helper) rather than calling
+     * bootstrap_db() in-process: it opens a real RedBeanPHP/SQLite connection via
+     * the global R:: facade, which would clobber the shared connection every other
+     * test in this process depends on.
+     */
+    public function testBootstrapDbAppliesDnsResolveTimeoutBeforeAnythingElse(): void
+    {
+        $root = rtrim(\codecept_root_dir(), '/');
+        $data_dir = sys_get_temp_dir() . '/lamb-bootstrap-db-test-' . getmypid();
+
+        $process = new \Symfony\Component\Process\Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db('$data_dir'); "
+                . "echo getenv('RES_OPTIONS');",
+            ],
+            $root
+        );
+
+        try {
+            $process->mustRun();
+            $this->assertSame('timeout:5 attempts:2', $process->getOutput());
+        } finally {
+            @unlink($data_dir . '/lamb.db');
+            @rmdir($data_dir);
+        }
+    }
 }
