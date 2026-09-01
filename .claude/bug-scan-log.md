@@ -20,6 +20,167 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-09-01
+
+**Process note — the open bug-scan PR backlog is now 7 and growing; this is
+the sixth consecutive entry to flag it.** At the start of this run,
+`list_pull_requests(state=open)` showed seven unmerged bug-scan-originated
+PRs sitting since 2026-08-30/08-31: #779, #780, #785 (log), #786, #787 (log)
+— none merged in the two days since #781 (2026-08-30's log PR) last raised
+this. This run adds #788 and #789 on top, bringing it to nine open PRs total
+including this log update. Every fix PR has been independently validated
+(full `codecept run Unit`/`Acceptance`, `phpstan`, `phpcs`, plus a red/green
+reproduction) before being opened, so none of this is blocked on the
+bug-scan side — it is blocked on review/merge. Worth surfacing to whoever
+owns this repo rather than assuming a future run will un-stick it.
+
+**Environment: fully healthy again**, consistent with 08-28/08-30 — no
+manual steps needed for `vendor/bin/`, `vendor/autoload.php`, or `.env` in
+the main session checkout. **New wrinkle this run:** both background
+scan agents ran in isolated git worktrees (via the `Agent` tool's
+`isolation: "worktree"`), and each independently discovered that a
+worktree has no `vendor/` of its own — the shared checkout's
+`vendor/autoload.php`, if merely symlinked/copied in, bakes in *absolute
+paths back to the shared checkout's own `src/`/`tests/`* in
+`autoload_files.php`, so running `vendor/bin/codecept`/`phpunit` inside a
+worktree without care silently tests the *unmodified* shared files, not
+the worktree's edits. Both agents worked around it (one via
+`composer dump-autoload --working-dir=<worktree>` after copying `vendor/`
+and `.env` in, the other via a custom autoload bootstrap pointed at the
+worktree's own files for scripts/reflection-run tests, plus pointing
+`phpcs`/`phpstan` at the worktree directly since those take path
+arguments and aren't affected). Worth remembering for any future run that
+uses worktree-isolated agents: budget time for this, or copy+regenerate
+the autoloader as the first step in the agent's own instructions rather
+than letting it get rediscovered mid-run.
+
+**Covered:** 1 (docblock absolute claims — fresh sweep, prioritizing files
+changed since the 2026-08-29 full pass: `http.php`, `lamb.php`,
+`response/feeds.php`, `webmention.php`'s three new constants/docblocks,
+`response/auth.php`'s busy_timeout docblock) and 2 (recomputed state —
+specifically the bounded `is_*()` predicate-sibling sweep the 2026-08-30
+entry's suggested refinement #2 asked for, not yet done as its own pass
+until now). Also spot-checked 5 and 9 directly against the diff since
+2026-08-29: clean — the one relevant change, `webmentions_for_post()`,
+already got its `LIMIT` fix in #768 before this run started, and
+`phpstan.neon` is unchanged.
+
+**PRs opened:**
+- [#788](https://github.com/svandragt/lamb/pull/788) — category 2. Three
+  more sibling call sites answering "is this post deleted" with the raw
+  truthy check `$bean->deleted`/`$post->deleted` instead of the canonical
+  `is_deleted()` predicate already used for the identical question
+  elsewhere (`is_viewable()`, `is_publicly_visible()`,
+  `preview_token_valid()`): `src/theme.php`'s `render_post_list()`
+  (~line 500, shared by the 2024/2026 themes), `src/themes/base/parts/_items.php`'s
+  own un-extracted copy, and `src/themes/base/parts/edit.php`'s
+  `if (!$post->deleted)` gate on the Delete link. All three decide
+  Restore-vs-Delete / Delete-visibility on every logged-in post-list, status,
+  and edit-page view — reachable, not dead code. Same drift risk as
+  #749/#751/#779: no live bug today (every write path only stores `0`, `1`,
+  or `null`), but a non-canonical truthy value (`deleted = 2`) would make
+  the raw check and `is_deleted()` disagree. Fixed by delegating all three
+  to `is_deleted()`; verified with a standalone reproduction demonstrating
+  the `deleted = 2` divergence (red before, green after) plus new regression
+  tests in `ThemeModernItemsPartTest.php`, `ThemeItemsEscapeTest.php`, and a
+  new `ThemeEditPartTest.php`. `phpcs`/`phpstan` (level 8) clean.
+- [#789](https://github.com/svandragt/lamb/pull/789) — category 1.
+  `DNS_RESOLVE_TIMEOUT`'s docblock and `resolve_host_ips()`'s comment
+  (`src/http.php`) claim every DNS lookup is bounded to ~10s/nameserver via
+  a `putenv('RES_OPTIONS=...')` call made right before each lookup. False in
+  a persistent worker (php-fpm/FrankenPHP, both documented deployment
+  targets): glibc's resolver reads `RES_OPTIONS` only once per process, at
+  its *first* hostname resolution, then caches that state — a later
+  `putenv()` is silently ignored. Reachable via Micropub's
+  `introspectToken()`, which resolves its token endpoint through plain
+  `Http\fetch()` with no override of its own (documented in `fetch()`'s own
+  docblock as the one caller `pin` doesn't cover); if that runs before
+  `/_cron`'s `process_feeds()` in the same worker, the #707 protection
+  (bounding DNS so a black-holed resolver can't hold the cron flock
+  indefinitely) silently reverts to the system default. Verified with a
+  real timed reproduction (a black-holed local UDP nameserver, temporary
+  `resolv.conf`, no mocking): red showed `resolve_host_ips()` inheriting an
+  earlier unrelated call's timeout (12.01s instead of the intended 20.02s);
+  green, after moving the `putenv()` into a new
+  `Http\apply_dns_resolve_timeout()` called as the first line of
+  `Bootstrap\bootstrap_db()` (the one function every entry point runs
+  before anything network-shaped), showed both calls consistently hitting
+  the intended bound regardless of order. Docblocks corrected to state the
+  real guarantee, matching the #767 precedent for this same constant. Two
+  new regression tests (`HttpTest`, `SessionBootstrapTest` — the latter in
+  a subprocess since `bootstrap_db()` opens a real RedBeanPHP connection).
+  Full `Unit` (2151 tests) and `Acceptance` (96 tests) suites green,
+  `phpstan`/`composer lint` clean.
+
+**Ruled out (do not re-flag without new evidence) — category 1:**
+`http.php`'s `resolve_host_ips()`/`resolve_validated_ip()`/
+`is_public_http_url()`/`fetch_guarded()` (including the "first resolved IP
+is returned" claim, pinned by a two-distinct-IP test) aside from the
+DNS-timeout finding above; `lamb.php`'s `remove_body_tags()`/
+`add_body_tags()`/`sanitize_tag_name()` (11 tests already pin the exact
+boundary/case/multi-word/blockquote claims); `response/feeds.php`'s
+reworded `in_reply_to`/`_microblog.in_reply_to_url` docblocks from #770
+(accurate, "first valid target" pinned by a multi-target test);
+`webmention.php`'s three new docblocks/constants
+(`WEBMENTION_DISPLAY_LIMIT`, `WEBMENTION_CONTENT_MAX`,
+`webmentions_for_post()`'s bound claim — all accurate, precisely pinned in
+`WebmentionTest.php`); `response/auth.php`'s busy_timeout docblock (an
+initial claim/code mismatch was found, but the maintainer had already
+caught and corrected it in a follow-up commit on the still-open #780
+branch, moving the deeper rationale to `response/README.md` — nothing left
+to do); `known.php`, `import.php`, `routes.php`, `security.php`,
+`network/sources.php` read in full, nothing found. `wordpress.php`'s
+`wordpress_status_path()` numeric-slug docblock — the agent independently
+found the exact bug #786 (open, from the 2026-08-31 run) already fixes;
+skipped to avoid duplicating that PR.
+
+**Ruled out — category 2:** `webmention.php`'s `enqueue_for_post()` and
+`websub.php`'s `ping_for_post()` still inline `!empty($bean->draft)` on
+`main`, but #779 (open) already fixes exactly this — not duplicated. Beyond
+the three `is_deleted()` sites fixed in #788, every other raw
+post-state-property check found across `src/` (including
+`src/themes/**`) either already has no sibling that delegates to a
+predicate, or is a write/serialization site rather than a predicate
+call site — **the `is_*()`-predicate-sibling sweep specifically (the
+narrow sub-pattern behind #749/#751/#779/#788) now looks thin/near-exhausted.**
+A future run should still check category 2 broadly (it is not the same
+claim as categories 5/8/9 being fully triaged), but treat this one narrow
+sub-pattern as low-yield rather than re-running the same grep again from
+scratch.
+
+**Issue-dense files:** none newly marked. `src/theme.php` and
+`src/themes/base/parts/*.php` produced this run's category-2 finding
+alongside `micropub.php`/`lamb.php`/`auth.php`'s prior findings, purely
+because view-template code is where every post-state predicate eventually
+gets consumed — not evidence the theme files are unusually defect-prone.
+
+**Suggested routine refinements:**
+1. **Resolve the nine-PR backlog** (#777, #778, #779, #780, #785, #786,
+   #787, #788, #789) before the next run — repeated (now sixth) advice, but
+   it's the single highest-leverage action available: no further bug-scan
+   work adds value while validated fixes sit unreviewed, and it risks merge
+   conflicts piling up between them (several touch overlapping files).
+2. **Update the scheduled prompt's stale TOOLING section** (also a repeat
+   ask, now the sixth time) — it still asserts `vendor/autoload.php` is
+   missing and the suite can't be run, which has been false since
+   2026-08-28.
+3. Category 2's `is_*()`-predicate-sibling narrow sweep is now
+   thin/near-exhausted per the note above — a future run picking category 2
+   should look for a *different* shape of recomputed state (the category's
+   original broader definition), not repeat this exact grep.
+4. Categories 3, 4, and 6 were all freshly, cleanly covered on 2026-08-30/
+   08-31 (3 and 4 with zero findings twice in a row now); 7 just found a
+   real bug (#786) on 2026-08-31. None of these are due for a fresh pass
+   next run — 1 and 2 (this run) plus 5/9 (spot-checked clean this run) are
+   the freshest; whichever of 3/4/6/7 has gone longest by the next run's
+   date is the next reasonable pick.
+5. If a future run dispatches background agents in isolated worktrees
+   (`isolation: "worktree"`), tell the agent up front to copy `vendor/`
+   and `.env` in and run `composer dump-autoload --working-dir=<worktree>`
+   (or build a custom autoload bootstrap) as its first step — see the
+   Environment note above. Both agents this run rediscovered this
+   independently, costing real time in each.
+
 ### 2026-08-31
 
 **Process note — a second unmerged log-update PR found at the start of this run, same
@@ -139,6 +300,7 @@ issue-dense.
    future run splitting categories this way should still explicitly partition file lists
    up front (as this run did) rather than trust two agents not to duplicate a broad sweep
    independently.
+
 ### 2026-08-30 (run 2 — manual `/bugsweep`)
 
 **Manual run**, after the automated run earlier today (#781) already took
