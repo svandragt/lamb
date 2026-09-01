@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\bootstrap_db;
 use function Lamb\Response\clear_login_failures;
 use function Lamb\Response\client_ip;
 use function Lamb\Response\decode_throttle_state;
@@ -348,6 +349,38 @@ class LoginThrottleTest extends TestCase
             $elapsed,
             'reserve_login_attempt() blocked on lock contention instead of refusing promptly'
         );
+    }
+
+    public function testBootstrapDbEnablesWalSoLoginCommitsSurviveConcurrentReaders(): void
+    {
+        // reserve_login_attempt() forces busy_timeout=0, so its COMMIT must not
+        // stall on a concurrent reader — it has to fail only against a real
+        // writer. WAL lets a writer commit while readers hold the file; a
+        // regression to the rollback journal would let an ordinary page-render
+        // read make a correct-password login refuse. Run bootstrap_db() in a
+        // subprocess: it calls R::setup(), which would clobber this suite's
+        // shared :memory: default connection.
+        $dir = sys_get_temp_dir() . '/lamb_wal_test_' . uniqid();
+
+        $boot = new Process([
+            'php',
+            '-r',
+            'require "vendor/autoload.php"; \Lamb\Bootstrap\bootstrap_db($argv[1]);',
+            $dir,
+        ]);
+        $boot->mustRun();
+
+        // WAL is a persisted property of the file, so a fresh connection sees it.
+        $pdo  = new PDO('sqlite:' . $dir . '/lamb.db');
+        $mode = (string) $pdo->query('PRAGMA journal_mode')->fetchColumn();
+        $pdo  = null;
+
+        @unlink($dir . '/lamb.db');
+        @unlink($dir . '/lamb.db-wal');
+        @unlink($dir . '/lamb.db-shm');
+        @rmdir($dir);
+
+        $this->assertSame('wal', strtolower($mode));
     }
 
     // The refusal message tells the owner when to come back
