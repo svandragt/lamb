@@ -186,9 +186,16 @@ function get_feed_data(): array
  * See response/README.md ("Conditional GET, ETag, and 304 caching").
  *
  * @param string $updated The feed's latest-updated datetime string.
+ * @param int    $shape   A discriminator for a response's structure when that can
+ *                        change without $updated moving — folded into the ETag so
+ *                        the change invalidates conditional GETs. The sitemap
+ *                        passes its page count (index vs urlset, and how many child
+ *                        pages), which count_visible_posts() can change while the
+ *                        newest post is untouched (e.g. a non-newest post trashed).
+ *                        0 (the default) leaves the ETag keyed on content alone.
  * @return void
  */
-function feed_cache(string $updated): void
+function feed_cache(string $updated, int $shape = 0): void
 {
     if (isset($_SESSION[SESSION_LOGIN])) {
         return;
@@ -197,7 +204,7 @@ function feed_cache(string $updated): void
     // Fold in config edits so changes to feed-affecting settings (title, menu
     // exclusions, …) invalidate cached feeds immediately.
     $config_ts = Config\config_modified_timestamp();
-    $ts = max(strtotime($updated) ?: 0, $config_ts);
+    $ts = max(strtotime($updated) ?: 0, $config_ts) + $shape;
     send_304_if_current($ts, $config_ts);
 }
 

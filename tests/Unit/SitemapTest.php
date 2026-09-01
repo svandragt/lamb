@@ -5,11 +5,16 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Response\count_visible_posts;
 use function Lamb\Response\emit_sitemap;
+use function Lamb\Response\feed_cache;
 use function Lamb\Response\newest_visible_update;
 use function Lamb\Response\render_sitemap;
+use function Lamb\Response\render_sitemap_index;
 use function Lamb\Response\sitemap_cache_key;
 use function Lamb\Response\sitemap_cache_path;
+use function Lamb\Response\sitemap_date;
+use function Lamb\Response\sitemap_page_count;
 use function Lamb\Response\sitemap_urls;
 use function Lamb\Response\store_sitemap_cache;
 
@@ -254,6 +259,42 @@ class SitemapTest extends TestCase
         $this->assertNotSame($base, sitemap_cache_key('2026-06-01 09:00:00', 2000));
     }
 
+    public function testFeedCacheShapeDiscriminatorTurnsOverTheEtag(): void
+    {
+        // The disk cache key folds in page count; the emitted ETag must too, or a
+        // shape change (index<->urlset, page count) that leaves the newest post
+        // untouched is masked by a 304 and a crawler keeps serving itself a stale
+        // sitemap. Same $updated, different page count => different ETag.
+        if (!function_exists('xdebug_get_headers')) {
+            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
+        }
+
+        $updated       = '2026-06-01 09:00:00';
+        $_SESSION      = [];
+        unset($_SERVER['HTTP_IF_NONE_MATCH'], $_SERVER['HTTP_IF_MODIFIED_SINCE']);
+
+        header_remove();
+        feed_cache($updated, 1);
+        $onePage = $this->emittedEtag();
+
+        header_remove();
+        feed_cache($updated, 2);
+        $twoPages = $this->emittedEtag();
+
+        $this->assertNotNull($onePage);
+        $this->assertNotSame($onePage, $twoPages);
+    }
+
+    private function emittedEtag(): ?string
+    {
+        foreach (xdebug_get_headers() as $header) {
+            if (stripos($header, 'ETag:') === 0) {
+                return trim(substr($header, strlen('ETag:')));
+            }
+        }
+        return null;
+    }
+
     public function testCacheKeyIsFilenameSafe(): void
     {
         $key = sitemap_cache_key('2026-06-01 09:00:00', 1000);
@@ -385,5 +426,248 @@ class SitemapTest extends TestCase
     {
         $xml = render_sitemap([['loc' => 'https://example.com/', 'lastmod' => null]]);
         $this->assertStringNotContainsString('<lastmod>', $xml);
+    }
+
+    // Sitemap index: sitemaps.org caps a single document at 50,000 URLs, so a
+    // site past that splits into an index of /sitemap.xml/page/N children.
+    // Seeding 50,000 posts is impractical here, so the cap is injectable
+    // throughout — sitemap_page_count() and sitemap_urls() take it as an
+    // optional param instead of always reading SITEMAP_MAX_URLS.
+
+    public function testCountVisiblePostsMatchesTheVisibleClause(): void
+    {
+        $this->makePost([]);
+        $this->makePost(['slug' => 'about']);
+        $this->makePost(['draft' => 1]);
+        $this->makePost(['deleted' => 1]);
+        $this->makePost(['created' => '2099-01-01 00:00:00']);
+
+        $this->assertSame(2, count_visible_posts());
+    }
+
+    public function testSitemapPageCountIsOneUnderTheCap(): void
+    {
+        $this->assertSame(1, sitemap_page_count(1, 2));
+        $this->assertSame(1, sitemap_page_count(2, 2));
+    }
+
+    public function testSitemapPageCountRoundsUpPastTheCap(): void
+    {
+        $this->assertSame(2, sitemap_page_count(3, 2));
+        $this->assertSame(2, sitemap_page_count(4, 2));
+        $this->assertSame(3, sitemap_page_count(5, 2));
+    }
+
+    public function testSitemapUrlsPageOneIncludesHomeAndTheFirstSlice(): void
+    {
+        // Cap of 2: page 1 holds the home entry plus one post (entry 0 is the
+        // home page, so page 1's post budget is cap - 1).
+        $this->makePost(['slug' => 'a', 'updated' => '2026-06-03 09:00:00']);
+        $this->makePost(['slug' => 'b', 'updated' => '2026-06-02 09:00:00']);
+        $this->makePost(['slug' => 'c', 'updated' => '2026-06-01 09:00:00']);
+
+        $locs = array_column(sitemap_urls(ROOT_URL, 1, 2), 'loc');
+
+        $this->assertSame([ROOT_URL . '/', ROOT_URL . '/a'], $locs);
+    }
+
+    public function testSitemapUrlsPageTwoOffsetsPastTheFirstSlice(): void
+    {
+        $this->makePost(['slug' => 'a', 'updated' => '2026-06-03 09:00:00']);
+        $this->makePost(['slug' => 'b', 'updated' => '2026-06-02 09:00:00']);
+        $this->makePost(['slug' => 'c', 'updated' => '2026-06-01 09:00:00']);
+
+        $locs = array_column(sitemap_urls(ROOT_URL, 2, 2), 'loc');
+
+        $this->assertSame([ROOT_URL . '/b', ROOT_URL . '/c'], $locs);
+    }
+
+    public function testSitemapUrlsLastPageReturnsTheRemainder(): void
+    {
+        $this->makePost(['slug' => 'a', 'updated' => '2026-06-04 09:00:00']);
+        $this->makePost(['slug' => 'b', 'updated' => '2026-06-03 09:00:00']);
+        $this->makePost(['slug' => 'c', 'updated' => '2026-06-02 09:00:00']);
+        $this->makePost(['slug' => 'd', 'updated' => '2026-06-01 09:00:00']);
+
+        // Total entries = home + 4 posts = 5; cap 2 → 3 pages (2, 2, 1), so page
+        // 3 gets only the one leftover post instead of a full slice of two.
+        $locs = array_column(sitemap_urls(ROOT_URL, 3, 2), 'loc');
+
+        $this->assertSame([ROOT_URL . '/d'], $locs);
+    }
+
+    public function testSitemapUrlsPageBeyondRangeIsEmpty(): void
+    {
+        $this->makePost(['slug' => 'a']);
+
+        $this->assertSame([], sitemap_urls(ROOT_URL, 5, 2));
+    }
+
+    public function testRenderSitemapIndexWrapsChildrenInSitemapindex(): void
+    {
+        $xml = render_sitemap_index(ROOT_URL, 2, '2026-06-01T09:00:00+00:00');
+
+        $this->assertStringContainsString('<?xml version="1.0" encoding="UTF-8"?>', $xml);
+        $this->assertStringContainsString(
+            '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+            $xml
+        );
+        $this->assertStringContainsString('</sitemapindex>', $xml);
+    }
+
+    public function testRenderSitemapIndexListsEachChildPageLoc(): void
+    {
+        $xml = render_sitemap_index(ROOT_URL, 2, null);
+
+        $this->assertStringContainsString('<loc>' . ROOT_URL . '/sitemap.xml/page/1</loc>', $xml);
+        $this->assertStringContainsString('<loc>' . ROOT_URL . '/sitemap.xml/page/2</loc>', $xml);
+    }
+
+    public function testRenderSitemapIndexAppliesTheSameLastmodToEveryChild(): void
+    {
+        $xml = render_sitemap_index(ROOT_URL, 2, '2026-06-01T09:00:00+00:00');
+
+        $this->assertSame(2, substr_count($xml, '<lastmod>2026-06-01T09:00:00+00:00</lastmod>'));
+    }
+
+    public function testRenderSitemapIndexOmitsLastmodWhenNull(): void
+    {
+        $xml = render_sitemap_index(ROOT_URL, 1, null);
+
+        $this->assertStringNotContainsString('<lastmod>', $xml);
+    }
+
+    public function testRenderSitemapIndexEscapesChildLocs(): void
+    {
+        $xml = render_sitemap_index('https://example.com/a?b=1&c=2', 1, null);
+
+        $this->assertStringContainsString('https://example.com/a?b=1&amp;c=2/sitemap.xml/page/1', $xml);
+        $this->assertStringNotContainsString('&c=2', $xml);
+    }
+
+    public function testCacheKeyIsSharedButPathsDifferPerPage(): void
+    {
+        $key = sitemap_cache_key('2026-06-01 09:00:00', 1000);
+
+        $this->assertNotSame(sitemap_cache_path($key, 1), sitemap_cache_path($key, 2));
+    }
+
+    public function testStoringASiblingPageDoesNotEvictAnotherPageOfTheSameGeneration(): void
+    {
+        $dir = $this->cacheDir();
+        $key = sitemap_cache_key('2026-06-01 09:00:00', 1000);
+        $page1 = sitemap_cache_path($key, 1);
+        $page2 = sitemap_cache_path($key, 2);
+
+        // Both cache files live in the temp cacheDir(), not data_dir()'s real
+        // cache path, so exercise the same prune logic store_sitemap_cache()
+        // uses directly rather than through it (which is pinned to data_dir()).
+        file_put_contents($dir . '/' . basename($page1), 'one');
+        store_sitemap_cache($dir . '/' . basename($page2), 'two');
+
+        $this->assertFileExists($dir . '/' . basename($page1));
+        $this->assertFileExists($dir . '/' . basename($page2));
+    }
+
+    public function testStoringANewGenerationEvictsAnOlderGenerationsPages(): void
+    {
+        $dir = $this->cacheDir();
+        $oldKey = sitemap_cache_key('2026-06-01 09:00:00', 1000);
+        $newKey = sitemap_cache_key('2026-06-02 09:00:00', 1000);
+        $oldPage = sitemap_cache_path($oldKey, 2);
+        $newPage = sitemap_cache_path($newKey, 1);
+
+        file_put_contents($dir . '/' . basename($oldPage), 'old');
+        store_sitemap_cache($dir . '/' . basename($newPage), 'new');
+
+        $this->assertFileDoesNotExist($dir . '/' . basename($oldPage));
+        $this->assertFileExists($dir . '/' . basename($newPage));
+    }
+
+    /**
+     * Renders and caches the /sitemap.xml entry point (page 0) the way
+     * respond_sitemap() does — a <sitemapindex> when $total exceeds $cap, a
+     * plain <urlset> otherwise — into a private test cache dir rather than
+     * data_dir()'s real cache path.
+     */
+    private function emitEntryPoint(string $updated, int $config_ts, int $total, int $cap, string $dir): string
+    {
+        $page_count = sitemap_page_count($total, $cap);
+        $path = $dir . '/' . basename(sitemap_cache_path(
+            sitemap_cache_key($updated, $config_ts, $page_count),
+            0
+        ));
+
+        ob_start();
+        if ($page_count > 1) {
+            emit_sitemap($path, static fn (): string => render_sitemap_index(
+                SITEMAP_ROOT,
+                $page_count,
+                sitemap_date($updated)
+            ));
+        } else {
+            emit_sitemap($path);
+        }
+        return (string) ob_get_clean();
+    }
+
+    /**
+     * sitemap_cache_key() must turn over when count_visible_posts() crosses the
+     * split boundary, even though $updated does not: trashing/restoring a
+     * non-newest post (or a scheduled post crossing into visibility) changes
+     * whether /sitemap.xml is a <urlset> or a <sitemapindex> without touching
+     * the newest visible `updated`. Before this, such a change left the cache
+     * key — and so the served document's shape — stale.
+     */
+    public function testCacheKeyAndServedShapeTrackVisibleCountNotJustNewestUpdate(): void
+    {
+        $this->makePost(['slug' => 'newest', 'updated' => '2026-06-05 09:00:00']);
+        $oldIds = [
+            $this->makePost(['slug' => 'old1', 'updated' => '2026-06-01 09:00:00']),
+            $this->makePost(['slug' => 'old2', 'updated' => '2026-06-02 09:00:00']),
+            $this->makePost(['slug' => 'old3', 'updated' => '2026-06-03 09:00:00']),
+        ];
+        $updated = newest_visible_update();
+        $dir = $this->cacheDir();
+        $cap = 2;
+
+        // Home + 4 posts = 5 entries over a cap of 2 → split.
+        $total = count_visible_posts() + 1;
+        $key1 = sitemap_cache_key($updated, 1000, sitemap_page_count($total, $cap));
+        $split = $this->emitEntryPoint($updated, 1000, $total, $cap, $dir);
+        $this->assertStringContainsString('<sitemapindex', $split);
+
+        // Soft-delete every non-newest post: the visible count drops back
+        // under the cap, but the newest visible `updated` — still 'newest' —
+        // does not change.
+        foreach ($oldIds as $id) {
+            $bean = R::load('post', $id);
+            $bean->deleted = 1;
+            R::store($bean);
+        }
+        $this->assertSame($updated, newest_visible_update());
+
+        $totalAfterDelete = count_visible_posts() + 1;
+        $key2 = sitemap_cache_key($updated, 1000, sitemap_page_count($totalAfterDelete, $cap));
+        $this->assertNotSame($key1, $key2, 'the cache key must change when the visible count re-crosses the cap');
+
+        $unsplit = $this->emitEntryPoint($updated, 1000, $totalAfterDelete, $cap, $dir);
+        $this->assertStringContainsString('<urlset', $unsplit);
+        $this->assertStringNotContainsString('<sitemapindex', $unsplit);
+
+        // And the reverse: restoring posts re-crosses back over the cap.
+        foreach (array_slice($oldIds, 0, 2) as $id) {
+            $bean = R::load('post', $id);
+            $bean->deleted = 0;
+            R::store($bean);
+        }
+        $this->assertSame($updated, newest_visible_update());
+
+        $totalAfterRestore = count_visible_posts() + 1;
+        $key3 = sitemap_cache_key($updated, 1000, sitemap_page_count($totalAfterRestore, $cap));
+        $this->assertNotSame($key2, $key3);
+
+        $resplit = $this->emitEntryPoint($updated, 1000, $totalAfterRestore, $cap, $dir);
+        $this->assertStringContainsString('<sitemapindex', $resplit);
     }
 }

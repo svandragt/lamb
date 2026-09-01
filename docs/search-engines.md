@@ -36,6 +36,15 @@ Unlike the timeline, the sitemap **does** include
 The sitemap is cached and supports conditional requests, so crawlers that
 revisit it only re-download it when your content has actually changed.
 
+### Large sites
+
+[sitemaps.org](https://www.sitemaps.org/) caps a single sitemap document at
+50,000 URLs. Once your site passes that, `/sitemap.xml` automatically becomes
+a sitemap index instead of a plain sitemap: it lists child sitemaps at
+`/sitemap.xml/page/1`, `/sitemap.xml/page/2`, and so on, each holding up to
+50,000 URLs. Crawlers that follow sitemap indexes (all major ones do) pick
+this up with no configuration change on your part.
+
 ## robots.txt
 
 `/robots.txt` allows crawling, advertises the sitemap, and asks crawlers not to
