@@ -482,7 +482,7 @@ function resolve_url(string $base, string $rel): string
  */
 function enqueue_for_post(OODBBean $bean): void
 {
-    if (!$bean->id || !empty($bean->feed_name) || !empty($bean->draft)) {
+    if (!$bean->id || !empty($bean->feed_name) || is_draft($bean)) {
         return;
     }
 
