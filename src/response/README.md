@@ -104,12 +104,12 @@ The peek only rejects an already-blocked client; the race-free gate is
 checks-and-increments the counter atomically before bcrypt. Without it a
 concurrent burst from one IP could all read the same under-limit count and each
 run `password_verify()`, serialising only on the write — the bcrypt pile-up the
-throttle exists to stop. SQLite's busy handler is left at the host default
-(tens of seconds), so the reservation forces `busy_timeout = 0` for that
-critical section: a contended lock then refuses immediately (the client retries)
-instead of stalling every attempt behind the lock and reopening the pile-up. The
-lazy prune runs inside that same zero-timeout window on purpose — a prune that
-blocked on contention would reopen it just as surely.
+throttle exists to stop. The database runs in WAL mode (see `bootstrap_db()`),
+so this lock only ever contends with another writer, never with the page-render
+reads that share the connection: a contended login waits the microseconds of the
+other writer's counter update, and bcrypt runs only after the reservation
+returns, never behind the lock. Any throw in the critical section rolls the
+transaction back, so the shared connection is never left mid-transaction.
 
 Post-login, `local_redirect_target()` constrains `?redirect_to=` to a local
 path so the parameter can't be turned into an open redirect — the same
