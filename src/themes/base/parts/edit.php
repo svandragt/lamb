@@ -2,6 +2,7 @@
 
 global $data;
 
+use function Lamb\is_deleted;
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
@@ -26,7 +27,7 @@ if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
         <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
     </form>
 
-    <?php if (!$post->deleted) : ?>
+    <?php if (!is_deleted($post)) : ?>
     <small><?= action_delete($post) ?></small>
     <?php endif; ?>
     <?php
