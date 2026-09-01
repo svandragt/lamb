@@ -123,7 +123,134 @@ function bootstrap_db(string $data_dir): void
     R::exec('PRAGMA journal_mode=WAL');
     R::useWriterCache(true);
 
+    ensure_schema();
     ensure_post_columns();
+
+    // Frozen mode rejects a write to any column not declared in SCHEMA instead
+    // of silently adding it (RedBeanPHP's default fluid behaviour) — a typo'd
+    // or forgotten column becomes a thrown exception at write time rather than
+    // a schema drift nobody notices. Must come after ensure_schema() and
+    // ensure_post_columns(), which are themselves schema changes and would be
+    // refused too.
+    R::freeze(true);
+}
+
+/**
+ * Every table Lamb writes to, and the columns each one declares beyond the
+ * implicit `id INTEGER PRIMARY KEY AUTOINCREMENT`.
+ *
+ * This is what ensure_schema() creates tables from and R::freeze(true) (see
+ * bootstrap_db()) enforces against: a write naming a column not listed here
+ * throws instead of RedBeanPHP's default of silently adding it.
+ *
+ * Column types are advisory — SQLite is dynamically typed regardless of what
+ * a column is declared as — and are named for readability, matching what
+ * fluid mode would otherwise have inferred from the first value written.
+ */
+const SCHEMA = [
+    'post' => [
+        'body' => 'TEXT',
+        'slug' => 'TEXT',
+        'title' => 'TEXT',
+        'description' => 'TEXT',
+        'transformed' => 'TEXT',
+        'created' => 'TEXT',
+        'updated' => 'TEXT',
+        'version' => 'INTEGER',
+        'feed_name' => 'TEXT',
+        'feeditem_uuid' => 'TEXT',
+        'import_uuid' => 'TEXT',
+        'source_url' => 'TEXT',
+        'in_reply_to' => 'TEXT',
+        'syndicated_to' => 'TEXT',
+        'draft' => 'INTEGER',
+        'deleted' => 'INTEGER',
+        'deleted_at' => 'TEXT',
+        'feed_locked' => 'INTEGER',
+        'preview_token' => 'TEXT',
+        'preview_token_expires' => 'TEXT',
+    ],
+    'option' => [
+        'name' => 'TEXT',
+        'value' => 'TEXT',
+        'updated' => 'TEXT',
+    ],
+    'redirect' => [
+        'from_slug' => 'TEXT',
+        'to_url' => 'TEXT',
+    ],
+    'webmention' => [
+        'source' => 'TEXT',
+        'target' => 'TEXT',
+        'post_id' => 'INTEGER',
+        'type' => 'TEXT',
+        'author' => 'TEXT',
+        'content' => 'TEXT',
+        'status' => 'TEXT',
+        'created' => 'TEXT',
+        'verified_at' => 'TEXT',
+    ],
+    'webmentionoutbox' => [
+        'post_id' => 'INTEGER',
+        'source' => 'TEXT',
+        'target' => 'TEXT',
+        'endpoint' => 'TEXT',
+        'status' => 'TEXT',
+        'attempts' => 'INTEGER',
+        'created' => 'TEXT',
+        'processed_at' => 'TEXT',
+        'resend' => 'INTEGER',
+    ],
+    'feedstatus' => [
+        'feedkey' => 'TEXT',
+        'name' => 'TEXT',
+        'url' => 'TEXT',
+        'last_success' => 'INTEGER',
+        'last_item_date' => 'INTEGER',
+        'last_attempt' => 'INTEGER',
+        'last_error' => 'INTEGER',
+        'item_count' => 'INTEGER',
+        'error_message' => 'TEXT',
+    ],
+];
+
+/**
+ * Creates every table in SCHEMA that does not exist yet, and ALTER-adds any
+ * declared column an existing table is missing.
+ *
+ * The ALTER-add is what lets an installation that has been running in fluid
+ * mode upgrade to a frozen one: CREATE TABLE IF NOT EXISTS only helps a
+ * brand-new database. An existing lamb.db already has these tables, built one
+ * column at a time by fluid mode, and may be missing a column a later Lamb
+ * release added that no bean on this install has written yet. Skipping the
+ * ALTER and freezing anyway would turn that column's next write into a thrown
+ * exception where fluid mode would have quietly added it.
+ *
+ * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
+ * are themselves schema changes, which a frozen connection also refuses.
+ *
+ * @return void
+ */
+function ensure_schema(): void
+{
+    foreach (SCHEMA as $table => $columns) {
+        $definitions = [];
+        foreach ($columns as $name => $type) {
+            $definitions[] = "$name $type";
+        }
+        R::exec(sprintf(
+            'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
+            $table,
+            implode(', ', $definitions)
+        ));
+
+        $existing = array_column(R::getAll("PRAGMA table_info($table)"), 'name');
+        foreach ($columns as $name => $type) {
+            if (!in_array($name, $existing, true)) {
+                R::exec("ALTER TABLE $table ADD COLUMN $name $type");
+            }
+        }
+    }
 }
 
 /**
