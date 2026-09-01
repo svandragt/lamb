@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use PDO;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\bootstrap_db;
 use function Lamb\Response\clear_login_failures;
 use function Lamb\Response\client_ip;
 use function Lamb\Response\decode_throttle_state;
@@ -293,6 +295,92 @@ class LoginThrottleTest extends TestCase
         $lock->exec('BEGIN IMMEDIATE');
 
         return $lock;
+    }
+
+    /**
+     * Reproduces the conditions reserve_login_attempt() actually runs under in
+     * production, unlike holdWriteLockOnAContendedConnection() above: this
+     * test never forces busy_timeout on the RedBean side, so the connection
+     * keeps whatever a bare `new PDO('sqlite:...')` defaults to on this host —
+     * the same thing a real deployment never overrides either. The write lock
+     * is held by a genuinely separate OS process (not a second connection in
+     * this same process) so a regression that blocks instead of refusing
+     * fails this test in bounded time (the hold's length) instead of hanging
+     * the suite for the host's full default busy_timeout.
+     */
+    public function testReserveLoginAttemptRefusesPromptlyUnderContentionWithoutTestForcedBusyTimeout(): void
+    {
+        $this->contendedDbFile = tempnam(sys_get_temp_dir(), 'lamb_throttle_test_');
+
+        $key = 'contended_' . uniqid();
+        R::addDatabase($key, 'sqlite:' . $this->contendedDbFile);
+        R::selectDatabase($key);
+        R::freeze(false);
+        // Deliberately not forcing busy_timeout here — see docblock above.
+
+        $holdSeconds = 2;
+        $holder = new Process([
+            'php',
+            '-r',
+            '$pdo = new PDO("sqlite:' . $this->contendedDbFile . '"); '
+                . '$pdo->exec("BEGIN IMMEDIATE"); '
+                . 'usleep(' . ($holdSeconds * 1_000_000) . '); '
+                . '$pdo->exec("COMMIT");',
+        ]);
+        $holder->start();
+        // Let the subprocess actually acquire BEGIN IMMEDIATE before racing it.
+        usleep(300_000);
+
+        $started = microtime(true);
+        $retry_after = reserve_login_attempt('203.0.113.7', 1_000);
+        $elapsed = microtime(true) - $started;
+
+        $holder->wait();
+
+        // Refused (not silently let through)...
+        $this->assertGreaterThan(0, $retry_after);
+        // ...and refused promptly. A regression that stops forcing
+        // busy_timeout to 0 for this critical section would instead block
+        // for the lock holder's full hold time before still admitting the
+        // attempt — the exact bcrypt-pileup race this function exists to
+        // close, just serialised across the stall instead of parallel.
+        $this->assertLessThan(
+            $holdSeconds,
+            $elapsed,
+            'reserve_login_attempt() blocked on lock contention instead of refusing promptly'
+        );
+    }
+
+    public function testBootstrapDbEnablesWalSoLoginCommitsSurviveConcurrentReaders(): void
+    {
+        // reserve_login_attempt() forces busy_timeout=0, so its COMMIT must not
+        // stall on a concurrent reader — it has to fail only against a real
+        // writer. WAL lets a writer commit while readers hold the file; a
+        // regression to the rollback journal would let an ordinary page-render
+        // read make a correct-password login refuse. Run bootstrap_db() in a
+        // subprocess: it calls R::setup(), which would clobber this suite's
+        // shared :memory: default connection.
+        $dir = sys_get_temp_dir() . '/lamb_wal_test_' . uniqid();
+
+        $boot = new Process([
+            'php',
+            '-r',
+            'require "vendor/autoload.php"; \Lamb\Bootstrap\bootstrap_db($argv[1]);',
+            $dir,
+        ]);
+        $boot->mustRun();
+
+        // WAL is a persisted property of the file, so a fresh connection sees it.
+        $pdo  = new PDO('sqlite:' . $dir . '/lamb.db');
+        $mode = (string) $pdo->query('PRAGMA journal_mode')->fetchColumn();
+        $pdo  = null;
+
+        @unlink($dir . '/lamb.db');
+        @unlink($dir . '/lamb.db-wal');
+        @unlink($dir . '/lamb.db-shm');
+        @rmdir($dir);
+
+        $this->assertSame('wal', strtolower($mode));
     }
 
     // The refusal message tells the owner when to come back

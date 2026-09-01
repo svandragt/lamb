@@ -99,6 +99,18 @@ retrying cannot extend a block. `client_ip()` reads `REMOTE_ADDR` only; see
 [AGENTS.md](../../AGENTS.md)'s Security section for why `X-Forwarded-For` is
 not trusted here.
 
+The peek only rejects an already-blocked client; the race-free gate is
+`reserve_login_attempt()`, which takes a `BEGIN IMMEDIATE` write lock and
+checks-and-increments the counter atomically before bcrypt. Without it a
+concurrent burst from one IP could all read the same under-limit count and each
+run `password_verify()`, serialising only on the write — the bcrypt pile-up the
+throttle exists to stop. SQLite's busy handler is left at the host default
+(tens of seconds), so the reservation forces `busy_timeout = 0` for that
+critical section: a contended lock then refuses immediately (the client retries)
+instead of stalling every attempt behind the lock and reopening the pile-up. The
+lazy prune runs inside that same zero-timeout window on purpose — a prune that
+blocked on contention would reopen it just as surely.
+
 Post-login, `local_redirect_target()` constrains `?redirect_to=` to a local
 path so the parameter can't be turned into an open redirect — the same
 protocol-relative-path check reappears in `posts.php` (see below), because a
