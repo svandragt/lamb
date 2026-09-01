@@ -497,7 +497,7 @@ function render_post_list(bool $hide_author): void
             <?= syndication_links($bean) ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
-                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
             <?php endif; ?>
         </article>
         <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template

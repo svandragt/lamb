@@ -3,6 +3,7 @@
 global $data;
 global $template;
 
+use function Lamb\is_deleted;
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
 use function Lamb\Theme\action_preview;
@@ -40,7 +41,7 @@ else :
             <div class="e-content"><?= anchor_headings($bean->transformed, !empty($bean->title) ? 3 : 2) ?></div>
             <?= syndication_links($bean) ?>
             <footer>
-                <small><?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+                <small><?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
             </footer>
         </article>
         <?php
