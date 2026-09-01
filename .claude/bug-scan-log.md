@@ -20,6 +20,125 @@ well-tested — most categories return little after their first pass.
 
 ## Run log
 
+### 2026-08-31
+
+**Process note — a second unmerged log-update PR found at the start of this run, same
+pattern as before.** `origin/main`'s copy of this log at the start of this run only had
+the 2026-08-30 (run 1) entry below — the 2026-08-30 "run 2" manual `/bugsweep` (categories
+3 and 4, no findings) was already recorded in an open, unmerged PR
+([#785](https://github.com/svandragt/lamb/pull/785)) that this run had to fetch and read
+directly rather than trust this file. Its content is folded into this entry's category
+selection below. Also still open at the start of this run: the two 2026-08-30 (run 1) fix
+PRs, [#779](https://github.com/svandragt/lamb/pull/779) and
+[#780](https://github.com/svandragt/lamb/pull/780) — neither merged yet, three runs after
+being opened for #779. Whoever reviews this log should look at why bug-scan PRs are
+accumulating unmerged rather than something a future run can fix on its own.
+
+**Toolchain healthy for a fourth consecutive run** — `vendor/bin` had
+`codecept`/`phpunit`/`phpstan`/`phpcs` all present with zero manual steps; `composer
+install` was correctly never attempted. The scheduled task prompt's TOOLING section is
+still stale (now flagged for a fifth time across #781/#785/this entry — see Suggested
+refinements).
+
+**Category selection:** per #785's own suggested refinement, categories 1/2/3/4/6/7 had
+all had a fresh pass within the prior three days (08-28 through 08-30) with the whole
+substantive set dry — "no genuinely-stale category" left for a full re-tread. Rather than
+force a re-scan of already-dry ground, this run split into two parallel slices: **category
+7**, picking up the one lead the 2026-08-28 entry explicitly flagged as "not yet dry" (the
+WXR/RSS/known-content import parsers' own internal parsing correctness, as opposed to the
+re-run-idempotence property already checked and closed out); and **category 4**, auditing
+the specific files no prior category-4 sweep had named (`wordpress.php`, `known.php`,
+`post.php`, `lamb.php`, `response/posts.php`, `response/auth.php`, `bootstrap.php`,
+`index.php`). Also spot-checked category 9 directly: `phpstan.neon` is byte-for-byte
+unchanged since 2026-08-24, ignore block still correctly scoped — nothing to remove.
+
+**PRs opened:**
+- [#786](https://github.com/svandragt/lamb/pull/786) — category 7.
+  `wordpress_status_path()` (`src/wordpress.php`) conflated two independent questions:
+  whether `<wp:post_name>` is purely numeric (WordPress's post-id-leaks-into-slug quirk for
+  title-less posts, which must always be dropped locally to avoid shadowing
+  `/status/<id>`), and whether `<link>` also carries a usable old path to redirect from. It
+  returned `null` — read by `import_item()` as "not the numeric-slug case" — whenever
+  *either* was false. A WordPress site on the default **Plain** permalink structure exports
+  `<link>` as a bare `?p=59` query string with no path at all, so a title-less post from
+  such a site (an unremarkable, common configuration — the out-of-the-box default) kept its
+  numeric slug instead of being dropped, reproducing the exact `/59`-shadows-`/status/`
+  collision the function exists to prevent. Fixed by splitting slug-detection into its own
+  `is_numeric_wordpress_slug()`, used directly by `import_item()`, while
+  `wordpress_status_path()` keeps its original, narrower job of deriving a redirect path.
+  Verified with a standalone script requiring the real `src/wordpress.php` (red `'59'` →
+  green `''`) plus a new regression test; full suite green (2150 tests, up from 2149),
+  `phpstan`/`phpcs` clean.
+
+**Ruled out (do not re-flag without new evidence) — category 7:** WXR CDATA containing a
+literal `]]>` (WordPress's own split-CDATA escaping — SimpleXML reassembles it correctly);
+HTML-entity handling inside CDATA; missing optional WXR fields; multi-namespace (`wp:`,
+`content:`, `dc:`) field extraction in `extract_items()`; every real WordPress export
+status value (`publish`, `draft`, `private`, `trash`, `pending`, `future`, `inherit`,
+`auto-draft`) against `should_import()`/`skip_reason()`; `wxr_local_datetime()`'s
+zero-sentinel/empty/malformed-date branches. Noted but not filed: PHP's `strtotime()` on an
+RFC822 date silently shifts by a day when the stated weekday doesn't match the actual
+date — affects both `wxr_local_datetime()`'s pubDate fallback and Known's
+`local_datetime_from_rfc822()`, but unreachable from a genuine export since a conforming
+exporter (WordPress, Known) always computes the weekday correctly; a PHP stdlib quirk on
+already-corrupt input, not a Lamb bug. Also noted, not filed: percent-encoded
+`nicename`/`post_name` for non-Latin WordPress categories/slugs is a real UX wart (garbled
+hashtags/slugs on import), but the "correct" fix is ambiguous — `slugify()`'s own
+non-ASCII-text fallback has the same limitation — so left for a dedicated pass rather than
+a bug-scan fix. Did not reach `src/network/json_feed.php`/RSS ingestion internals (already
+ruled out 2026-08-28; out of this slice's time budget) — still a candidate for a future
+category-7 run if the import-parsing thread is picked up again.
+
+**Ruled out (do not re-flag without new evidence) — category 4:** `wordpress.php` and
+`known.php` perform no filesystem writes directly — both delegate through
+`Import\default_image_downloader()` (`mkdir()` correctly checked) and
+`Response\persist_image_bytes()` (already audited 2026-08-24). `micropub.php`'s one
+side-effecting call (`mp_log()`'s `@`-suppressed debug-log write) is intentionally
+best-effort; actual upload persistence delegates to the already-audited
+`store_upload_or_fallback()`. `post.php`'s `preg_replace`/`preg_replace_callback` sites use
+`?? $fallback`; its `arsort()` operates on a plain in-memory array it just built, cannot
+fail on that input shape. `lamb.php`'s four `preg_replace`/`preg_replace_callback` sites
+(`get_tags`/`parse_tags`, `sanitize_tag_name`, `strip_trailing_body_tags`,
+`remove_body_tags`, `absolute_urls`) all use `?? $fallback`. `response/posts.php` and
+`response/auth.php` have zero hits for any side-effecting filesystem/array function.
+`bootstrap.php`'s two `mkdir()` calls are both correctly checked, throwing
+`RuntimeException` on real failure. `index.php`'s one unchecked `preg_replace()` (line 149)
+is the exact near-miss already ruled out 2026-08-27 (not reachably triggerable to null).
+**Correction to the 2026-08-30 (run 2, PR #785) log entry:** that entry's file list omitted
+that `micropub.php` was already swept for category 4 back on 2026-08-24 — re-verified
+clean again this run regardless, so no action needed, just noting for accuracy.
+
+**Issue-dense files:** none newly identified. `wordpress.php` has now produced findings
+across two different categories in two different runs (this run's category-7 fix; no
+category-4 issue), same "large, exposed, externally-triggered-input surface" pattern as
+`micropub.php`/`auth.php` rather than evidence of unusual defect density — not marking it
+issue-dense.
+
+**Suggested routine refinements:**
+1. **Update the scheduled prompt's TOOLING section** — flagged in #781, #785, and now here
+   a third/fourth/fifth time. It still describes `vendor/autoload.php` as missing and
+   `vendor/bin` as unpopulated; both have been false since PR #773 (2026-08-28), confirmed
+   again on every run since with zero manual steps. This is now the single most-repeated
+   suggestion in this log with no action taken — worth prioritizing over any other
+   refinement below.
+2. **Investigate the unmerged-PR backlog.** As of this run: #779, #780 (both from
+   2026-08-30 run 1, now three runs old) and #785 (2026-08-30 run 2's log entry) are all
+   still open. This is the same pattern the 2026-08-26/27 entries hit and flagged — a
+   future run's category selection is only as good as how promptly these land, and a
+   log-update PR being unmerged (like #785 was for this run) means the next run has to
+   reconstruct recent coverage from `list_pull_requests` instead of trusting this file
+   directly, which is extra overhead each time it happens.
+3. With categories 1/2/3/4/6/7 all fresh within the last four days and category 7's one
+   remaining thread (RSS/JSON-Feed ingestion internals, as opposed to WXR) the only
+   genuinely-unexplored corner left, a future run picking a fresh category should probably
+   go there next, or otherwise treat the routine as maintenance-mode per #785's own
+   suggestion (diff-triggered re-scans only) until code actually changes.
+4. This run's two category slices ran as parallel background agents against the same
+   unmodified `main` HEAD (`ef1fad8`) with no coordination between them beyond a shared
+   file-list split decided up front — worked cleanly with no overlap this time, but a
+   future run splitting categories this way should still explicitly partition file lists
+   up front (as this run did) rather than trust two agents not to duplicate a broad sweep
+   independently.
 ### 2026-08-30 (run 2 — manual `/bugsweep`)
 
 **Manual run**, after the automated run earlier today (#781) already took
