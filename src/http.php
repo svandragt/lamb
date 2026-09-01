@@ -219,8 +219,36 @@ const DEFAULT_FETCH_TIMEOUT = 30;
  * resolves. Still finite either way: bounded by process_feeds()'s overall
  * 1800s /_cron time limit (see network.php), just a larger per-feed delay
  * than FEED_FETCH_TIMEOUT alone suggests when a resolver is unreachable.
+ *
+ * "Applied" only actually holds when {@see apply_dns_resolve_timeout} wins the
+ * race to be the process's first hostname resolution — see its docblock.
  */
 const DNS_RESOLVE_TIMEOUT = 5;
+
+/**
+ * Applies DNS_RESOLVE_TIMEOUT to the process via RES_OPTIONS.
+ *
+ * glibc's resolver reads RES_OPTIONS only once — the first time anything in
+ * the process resolves a hostname — then caches that state; a later putenv()
+ * call is silently ignored once that has already happened (confirmed by
+ * timing a black-holed lookup before and after a second putenv() in the same
+ * process: the second call kept the first call's timeout). So the call that
+ * actually matters is whichever one runs before the process's *first* hostname
+ * resolution, by any code path — see Bootstrap\bootstrap_db(), which calls
+ * this before any other Lamb code has a chance to resolve anything, so it
+ * wins that race regardless of which function ends up making the process's
+ * first DNS lookup (a Micropub bearer token's introspectToken(), an inbound
+ * webmention fetch, a /_cron feed fetch, …). resolve_host_ips() below still
+ * calls this on every invocation too, which is what actually takes effect
+ * when nothing has resolved a host yet (e.g. a standalone script that calls
+ * it directly without bootstrapping first) and is otherwise a harmless no-op.
+ *
+ * @return void
+ */
+function apply_dns_resolve_timeout(): void
+{
+    putenv('RES_OPTIONS=timeout:' . DNS_RESOLVE_TIMEOUT . ' attempts:2');
+}
 
 /**
  * The timeout a single request runs under: the caller's when it named one,
@@ -350,8 +378,11 @@ function resolve_host_ips(string $host): array
     // Bound the resolver: neither call below takes a timeout, so a black-holed
     // nameserver would otherwise block unbounded and hold the /_cron flock the
     // whole time (#707). glibc honours RES_OPTIONS; where it does not (musl) the
-    // libc default is already finite, so this only ever tightens the wait.
-    putenv('RES_OPTIONS=timeout:' . DNS_RESOLVE_TIMEOUT . ' attempts:2');
+    // libc default is already finite, so this only ever tightens the wait. See
+    // apply_dns_resolve_timeout() for why this call is a no-op once the process
+    // has already resolved a host elsewhere — bootstrap_db() is what makes the
+    // bound actually apply in that case.
+    apply_dns_resolve_timeout();
 
     $records = @dns_get_record($host, DNS_A + DNS_AAAA);
     if (is_array($records) && $records !== []) {

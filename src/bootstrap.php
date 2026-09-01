@@ -8,6 +8,8 @@ use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
 
+use function Lamb\Http\apply_dns_resolve_timeout;
+
 /**
  * Loads the project's .env file into the process environment for the dev server.
  *
@@ -87,12 +89,20 @@ function login_password(): string
 /**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.
  *
+ * Also applies the DNS resolver timeout (see Http\apply_dns_resolve_timeout()) as
+ * the first thing any entry point does: glibc's resolver only honours a RES_OPTIONS
+ * change made *before* the process's first hostname lookup, and this runs before
+ * index.php/bin/lamb do anything else network-shaped, so it wins that race no
+ * matter which code ends up resolving a host first later in the process's life.
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
  * @throws RuntimeException If the specified directory cannot be created.
  */
 function bootstrap_db(string $data_dir): void
 {
+    apply_dns_resolve_timeout();
+
     if (!is_dir($data_dir)) {
         // 0750, not 0777: this directory holds lamb.db and the session files, so
         // only the web-server user has any business reading it. Under a permissive
