@@ -293,6 +293,35 @@ section {
     }
 }
 
+/* Visually hidden but still keyboard-focusable, same clip technique as
+   .screen-reader-text above. label.attach-image is the visible, styled
+   control. */
+.attach-image-input {
+    border: 0;
+    clip: rect(1px, 1px, 1px, 1px);
+    clip-path: inset(50%);
+    height: 1px;
+    margin: -1px;
+    overflow: hidden;
+    padding: 0;
+    position: absolute;
+    width: 1px;
+    word-wrap: normal !important;
+}
+
+label.attach-image {
+    display: inline-block;
+    min-height: 44px;
+    min-width: 44px;
+    box-sizing: border-box;
+    padding: 0.6em 1em;
+    margin: 0.5em 0;
+    line-height: 1.6;
+    cursor: pointer;
+    border: 1px solid var(--shadow);
+    border-radius: 4px;
+}
+
 textarea {
     font: 12px/1.4em "DejaVu Sans Mono", monospace;
     width: 100%;

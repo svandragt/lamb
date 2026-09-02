@@ -9,10 +9,11 @@ Lamb lets you add images and video to posts without leaving the editor. Uploaded
 
 ## Adding images
 
-When logged in, there are two ways to add an image to the post editor:
+When logged in, there are three ways to add an image to the post editor:
 
 - **Drag and drop** one or more image files onto the editor textarea.
 - **Paste** an image straight from the clipboard, for example a screenshot.
+- **Attach** a file using the attach button next to the editor, which opens the device's file picker — on a phone this offers Take Photo, Photo Library, or Choose File.
 
 Either way the file is uploaded and a markdown image link (`![name](url)`) is inserted at the cursor. Pasted screenshots arrive without a real filename, so each is given a unique name before upload.
 
