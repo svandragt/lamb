@@ -604,6 +604,32 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Returns the markup for a file-picker control that hands picked files to
+ * upload-image.js, which uploads them the same way as a drag-and-drop or
+ * paste.
+ *
+ * The input has no name attribute on purpose: it must never attach its value
+ * to the surrounding form's own submission, since JS uploads it separately.
+ *
+ * accept is a generic wildcard, not a specific extension list: iOS Safari
+ * only transcodes an HEIC photo to JPEG when accept is generic, handing over
+ * raw HEIC otherwise — which safe_upload_extension() would reject.
+ *
+ * @param string $id Element id, shared between the label's for and the input
+ *                    (distinct per form so two forms on one page don't clash).
+ * @return string
+ */
+function attach_image_control(string $id): string
+{
+    $id = escape($id);
+
+    return <<<HTML
+        <label for="{$id}" class="attach-image">Attach photo</label>
+        <input type="file" id="{$id}" class="attach-image-input" multiple accept="image/*,video/*">
+        HTML;
+}
+
+/**
  * Renders the quick-post entry form. Does nothing when the user is not logged in.
  *
  * @return void
@@ -616,6 +642,7 @@ function the_entry_form(): void
                 <label>
                     <textarea placeholder="What's happening?" name="contents" required><?= preload_text() ?></textarea>
                 </label>
+                <?= attach_image_control('attach-entry') ?>
                 <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
                 <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
             </form>

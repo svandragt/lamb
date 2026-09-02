@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Theme\asset_version;
+use function Lamb\Theme\attach_image_control;
 use function Lamb\Theme\minify_css;
 use function Lamb\Theme\redirect_to;
 use function Lamb\Theme\rewrite_css_urls;
@@ -255,6 +256,45 @@ class ThemeAssetsTest extends TestCase
     {
         $out = styles_markup('/no/such/file.css', 'http://localhost/themes/x/styles/styles.css', 'http://localhost/themes/x/styles/');
         $this->assertStringContainsString('<link rel="stylesheet"', $out);
+    }
+
+    // -------------------------------------------------------------------------
+    // attach_image_control
+    // -------------------------------------------------------------------------
+
+    public function testAttachImageControlRendersFileInputWithAcceptAndMultiple(): void
+    {
+        $out = attach_image_control('attach-entry');
+
+        $this->assertStringContainsString('type="file"', $out);
+        $this->assertStringContainsString('multiple', $out);
+        $this->assertStringContainsString('accept=', $out);
+    }
+
+    public function testAttachImageControlLabelForMatchesInputId(): void
+    {
+        $out = attach_image_control('attach-entry');
+
+        $this->assertMatchesRegularExpression('/<label for="attach-entry"[^>]*>/', $out);
+        $this->assertMatchesRegularExpression('/<input[^>]*id="attach-entry"/', $out);
+    }
+
+    public function testAttachImageControlInputHasNoNameAttribute(): void
+    {
+        // Nothing must attach this input's value to the surrounding form's own
+        // submission — uploads go through /upload via JS, not a form post.
+        $out = attach_image_control('attach-entry');
+
+        preg_match('/<input[^>]*type="file"[^>]*>/', $out, $m);
+        $this->assertNotEmpty($m, 'file input not found in output');
+        $this->assertStringNotContainsString('name=', $m[0]);
+    }
+
+    public function testAttachImageControlEscapesId(): void
+    {
+        $out = attach_image_control('attach"entry');
+
+        $this->assertStringNotContainsString('attach"entry', $out);
     }
 
     // -------------------------------------------------------------------------

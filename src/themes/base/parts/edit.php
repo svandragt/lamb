@@ -4,6 +4,7 @@ global $data;
 
 use function Lamb\is_deleted;
 use function Lamb\Theme\action_delete;
+use function Lamb\Theme\attach_image_control;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
 
@@ -22,6 +23,7 @@ if (isset($_SESSION[SESSION_LOGIN]) && $post->id > 0) :
         <label for="contents">Contents</label><textarea placeholder="What's happening?" name="contents" required
                                                         id="contents"
         ><?= $body ?></textarea>
+        <?= attach_image_control('attach-edit') ?>
         <input type="hidden" name="id" value="<?= (int) $post->id ?>"/>
         <input type="submit" form="editform" name="submit" value="<?= $submitLabel ?>">
         <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
