@@ -274,6 +274,60 @@ function should_convert_to_webp(?string $ext, ?bool $gd_available = null): bool
 }
 
 /**
+ * The longest-edge widths generated as WebP variants alongside the main
+ * asset, for responsive `srcset` (#442).
+ *
+ * The single source of truth for both generation (store_webp_variants(), the
+ * two convert_to_webp*() callers below) and render-time reconstruction
+ * (asset_srcset()): the resolver only has the main asset's URL to work from,
+ * so it must guess the variant filenames rather than look them up, and both
+ * ends of that guess have to agree.
+ *
+ * @return list<int> Longest-edge widths, narrowest first.
+ */
+function webp_variant_widths(): array
+{
+    return [800, 1200];
+}
+
+/**
+ * Generates "$seed-$width.webp" variants beside an already-written main WebP
+ * asset, for every width in webp_variant_widths() narrower than the source's
+ * longest edge (no upscaling, and no duplicate of the full-size main asset).
+ *
+ * $encode abstracts over the two source shapes callers have (a file path vs.
+ * bytes already in memory) so this one loop drives both: store_webp_copy()
+ * binds it to convert_to_webp($src_path, ...), persist_image_bytes() to
+ * convert_to_webp_from_bytes($bytes, ...) — reusing each encoder's own
+ * decompression-bomb guard rather than re-implementing the resize here.
+ *
+ * Best-effort: the main asset already succeeded by the time this runs, so a
+ * variant that fails to encode is skipped silently instead of failing the
+ * whole upload.
+ *
+ * ponytail: each variant re-decodes the source from scratch (one decode per
+ * width) rather than resampling once from a shared decoded buffer. Fine at
+ * upload-time volume; decode-once-resample-thrice is the upgrade if upload
+ * latency ever becomes a complaint.
+ *
+ * @param callable(string, int): bool $encode       fn(string $dest_path, int $max_dimension): bool,
+ *                                                   bound to the caller's source.
+ * @param int                         $longest_edge The source's longest edge, in pixels.
+ * @param string                      $dest_dir     Destination directory (no trailing slash).
+ * @param string                      $seed         The hashed base filename (without extension).
+ * @return void
+ */
+function store_webp_variants(callable $encode, int $longest_edge, string $dest_dir, string $seed): void
+{
+    foreach (webp_variant_widths() as $width) {
+        if ($width >= $longest_edge) {
+            continue;
+        }
+        $encode(sprintf('%s/%s-%d.webp', $dest_dir, $seed, $width), $width);
+    }
+}
+
+/**
  * Persists raw image bytes under $dest_dir, preferring a WebP re-encode and
  * falling back to the original bytes when conversion isn't possible.
  *
@@ -304,6 +358,17 @@ function persist_image_bytes(string $bytes, string $ext, string $dest_dir, strin
     if (should_convert_to_webp($ext)) {
         $webp_fn = $seed . '.webp';
         if (convert_to_webp_from_bytes($bytes, "$dest_dir/$webp_fn")) {
+            $size = @getimagesizefromstring($bytes);
+            if (is_array($size) && $size[0] > 0 && $size[1] > 0) {
+                store_webp_variants(
+                    static fn(string $dest_path, int $max): bool =>
+                        convert_to_webp_from_bytes($bytes, $dest_path, max_dimension: $max),
+                    max($size[0], $size[1]),
+                    $dest_dir,
+                    $seed
+                );
+            }
+
             return $webp_fn;
         }
     }
@@ -355,11 +420,22 @@ function store_webp_copy(string $src_path, string $ext, string $dest_dir, string
     }
 
     $webp_fn = $seed . '.webp';
-    if (convert_to_webp($src_path, sprintf('%s/%s', $dest_dir, $webp_fn))) {
-        return $webp_fn;
+    if (!convert_to_webp($src_path, sprintf('%s/%s', $dest_dir, $webp_fn))) {
+        return null;
     }
 
-    return null;
+    $size = @getimagesize($src_path);
+    if (is_array($size) && $size[0] > 0 && $size[1] > 0) {
+        store_webp_variants(
+            static fn(string $dest_path, int $max): bool =>
+                convert_to_webp($src_path, $dest_path, max_dimension: $max),
+            max($size[0], $size[1]),
+            $dest_dir,
+            $seed
+        );
+    }
+
+    return $webp_fn;
 }
 
 /**
@@ -690,4 +766,79 @@ function asset_dimensions(string $url): ?array
     }
 
     return [(int) $size[0], (int) $size[1]];
+}
+
+/**
+ * The responsive `srcset` candidates for a locally stored WebP asset, given
+ * the URL a post body points at: the original plus any generated variants
+ * (see webp_variant_widths(), store_webp_variants()), each measured for its
+ * true width — or null when there are fewer than two to choose between.
+ *
+ * The counterpart to asset_dimensions(): reuses the exact same scheme/host
+ * rejection and realpath() containment check on every candidate before it is
+ * touched, since a variant's filename is built by string-editing an
+ * attacker-writable post-body URL rather than looked up from a manifest.
+ *
+ * Widths are never read off the filename: with longest-edge scaling, a
+ * portrait source's "-800" variant measures narrower than 800px once
+ * decoded, so only getimagesize() on the actual file is trustworthy.
+ *
+ * @param string $url The `src` from a post body's Markdown image.
+ * @return list<array{url: string, width: int}>|null Ordered narrowest-first, or null.
+ */
+function asset_srcset(string $url): ?array
+{
+    if (!defined('ROOT_DIR')) {
+        return null;
+    }
+    $parts = parse_url($url);
+    if ($parts === false || isset($parts['scheme']) || isset($parts['host'])) {
+        return null;
+    }
+    $path = $parts['path'] ?? '';
+    if (!str_starts_with($path, '/assets/') || !str_ends_with($path, '.webp')) {
+        return null;
+    }
+
+    $assets_root = realpath(ROOT_DIR . '/assets');
+    $file = realpath(ROOT_DIR . rawurldecode($path));
+    if ($assets_root === false || $file === false) {
+        return null;
+    }
+    if (!str_starts_with($file, $assets_root . DIRECTORY_SEPARATOR)) {
+        return null;
+    }
+
+    $seed = basename($file, '.webp');
+    $dir = dirname($file);
+    $candidates = [$path => $file];
+    foreach (webp_variant_widths() as $width) {
+        $variant_path = dirname($path) . sprintf('/%s-%d.webp', $seed, $width);
+        $candidates[$variant_path] = sprintf('%s/%s-%d.webp', $dir, $seed, $width);
+    }
+
+    $srcset = [];
+    foreach ($candidates as $candidate_path => $candidate_file) {
+        // Re-contain every candidate individually: the main asset's path was
+        // already proven safe above, but a symlink swapped in between calls
+        // (or one variant name colliding with something outside assets/)
+        // must not get a free pass from the sibling check.
+        $real = realpath($candidate_file);
+        if ($real === false || !str_starts_with($real, $assets_root . DIRECTORY_SEPARATOR)) {
+            continue;
+        }
+        $size = @getimagesize($real);
+        if (!is_array($size) || (int) $size[0] <= 0) {
+            continue;
+        }
+        $srcset[] = ['url' => $candidate_path, 'width' => (int) $size[0]];
+    }
+
+    if (count($srcset) < 2) {
+        return null;
+    }
+
+    usort($srcset, static fn(array $a, array $b): int => $a['width'] <=> $b['width']);
+
+    return $srcset;
 }

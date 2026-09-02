@@ -510,6 +510,9 @@ function render_body(string $body): string
     // lazily-loaded image. Resolved once here, at parse time, and cached in
     // `transformed` — not per request.
     $parser->setImageSizeResolver(Response\asset_dimensions(...));
+    // Stamp a responsive srcset/sizes on the same images, so the browser can
+    // pick a smaller variant instead of always downloading the full-size WebP.
+    $parser->setSrcsetResolver(Response\asset_srcset(...));
 
     return $parser->text(trim($content));
 }
