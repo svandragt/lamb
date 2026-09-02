@@ -104,6 +104,70 @@ test('edit form keyed by id', async () => {
   assert.equal(window.localStorage.getItem('lamb:autosave:new'), null)
 })
 
+test('edit form shows a restore link when the draft differs from the body', () => {
+  const { window, document } = load(`<!DOCTYPE html><body>${editForm(7, 'server body')}</body>`)
+  window.localStorage.setItem('lamb:autosave:edit:7', 'unsaved local draft')
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+
+  const link = document.querySelector('.restore-draft')
+  assert.ok(link, 'expected a restore-draft link')
+  assert.equal(link.textContent, 'Restore unsaved changes')
+  assert.equal(document.querySelector('textarea').value, 'server body')
+})
+
+test('clicking the restore link swaps in the draft, fires input, clears storage, and removes itself', () => {
+  const { window, document } = load(`<!DOCTYPE html><body>${editForm(7, 'server body')}</body>`)
+  window.localStorage.setItem('lamb:autosave:edit:7', 'unsaved local draft')
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  const ta = document.querySelector('textarea')
+
+  let inputFired = false
+  ta.addEventListener('input', () => { inputFired = true })
+  document.querySelector('.restore-draft').dispatchEvent(new window.Event('click', { cancelable: true, bubbles: true }))
+
+  assert.equal(ta.value, 'unsaved local draft')
+  assert.equal(inputFired, true)
+  assert.equal(window.localStorage.getItem('lamb:autosave:edit:7'), null)
+  assert.equal(document.querySelector('.restore-draft'), null)
+})
+
+test('edit form shows no restore link when the draft matches the body or is absent', () => {
+  const { window, document } = load(`<!DOCTYPE html><body>${editForm(7, 'server body')}</body>`)
+  window.localStorage.setItem('lamb:autosave:edit:7', 'server body')
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  assert.equal(document.querySelector('.restore-draft'), null)
+
+  const { window: window2, document: document2 } = load(`<!DOCTYPE html><body>${editForm(9, 'server body')}</body>`)
+  document2.dispatchEvent(new window2.Event('DOMContentLoaded'))
+  assert.equal(document2.querySelector('.restore-draft'), null)
+})
+
+test('body with HTML-special characters round-trips, so an equal draft shows no link', () => {
+  // edit.php escapes the body with htmlspecialchars before it reaches the
+  // textarea; the DOM decodes it back, so a stored draft equal to the raw text
+  // must compare equal. Pins the round-trip against an escape() change.
+  const raw = 'tom & jerry <b> "quoted"'
+  const { window, document } = load(`<!DOCTYPE html><body>${editForm(7, 'tom &amp; jerry &lt;b&gt; &quot;quoted&quot;')}</body>`)
+  assert.equal(document.querySelector('textarea').value, raw)
+  window.localStorage.setItem('lamb:autosave:edit:7', raw)
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+
+  assert.equal(document.querySelector('.restore-draft'), null)
+})
+
+test('entry form never shows a restore link', () => {
+  const { window, document } = load(`<!DOCTYPE html><body>${ENTRY_FORM}</body>`)
+  window.localStorage.setItem('lamb:autosave:new', 'restored draft')
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+
+  assert.equal(document.querySelector('.restore-draft'), null)
+  assert.equal(document.querySelector('textarea').value, 'restored draft')
+})
+
 test('guarded storage', async () => {
   const { window, document } = setup(`<!DOCTYPE html><body>${ENTRY_FORM}</body>`)
   window.localStorage.setItem = () => { throw new Error('storage unavailable') }
