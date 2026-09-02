@@ -277,4 +277,52 @@ class LambDownTest extends TestCase
         $this->assertFalse($called);
         $this->assertStringNotContainsString('width=', $html);
     }
+
+    public function testImageGetsSrcsetFromResolver(): void
+    {
+        $this->parser->setSrcsetResolver(static fn(string $src): array => [
+            ['url' => '/assets/2026/07/photo-800.webp', 'width' => 800],
+            ['url' => '/assets/2026/07/photo.webp', 'width' => 1600],
+        ]);
+
+        $html = $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertStringContainsString(
+            'srcset="/assets/2026/07/photo-800.webp 800w, /assets/2026/07/photo.webp 1600w"',
+            $html
+        );
+        $this->assertStringContainsString('sizes="(max-width: 700px) 100vw, 700px"', $html);
+    }
+
+    public function testImageWithoutSrcsetResolverHasNoSrcset(): void
+    {
+        $html = $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertStringNotContainsString('srcset=', $html);
+        $this->assertStringNotContainsString('sizes=', $html);
+    }
+
+    public function testSrcsetResolverReturningNullOmitsSrcset(): void
+    {
+        // Fewer than two candidates (or an unresolvable src) must render exactly
+        // as before, not with a single-source srcset.
+        $this->parser->setSrcsetResolver(static fn(string $src): ?array => null);
+
+        $html = $this->parser->text('![photo](/assets/2026/07/photo.webp)');
+        $this->assertStringNotContainsString('srcset=', $html);
+    }
+
+    public function testVideoIsNotPassedToSrcsetResolver(): void
+    {
+        $called = false;
+        $this->parser->setSrcsetResolver(static function (string $src) use (&$called): ?array {
+            $called = true;
+            return [
+                ['url' => '/a-800.webp', 'width' => 800],
+                ['url' => '/a.webp', 'width' => 1600],
+            ];
+        });
+
+        $html = $this->parser->text('![clip](/assets/2026/07/clip.mp4)');
+        $this->assertFalse($called);
+        $this->assertStringNotContainsString('srcset=', $html);
+    }
 }

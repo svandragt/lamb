@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Lamb\Response\accept_upload_batch;
 use function Lamb\Response\asset_dimensions;
+use function Lamb\Response\asset_srcset;
 use function Lamb\Response\asset_url;
 use function Lamb\Response\convert_to_webp;
 use function Lamb\Response\convert_to_webp_from_bytes;
@@ -13,6 +14,7 @@ use function Lamb\Response\get_upload_dir;
 use function Lamb\Response\image_decoder_for_type;
 use function Lamb\Response\max_upload_pixels;
 use function Lamb\Response\normalize_uploaded_files;
+use function Lamb\Response\persist_image_bytes;
 use function Lamb\Response\safe_upload_extension;
 use function Lamb\Response\upload_subpath;
 use function Lamb\Response\scaled_dimensions;
@@ -611,6 +613,75 @@ class UploadTest extends TestCase
         $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash.jpg');
     }
 
+    // store_webp_variants (via store_webp_copy/persist_image_bytes) — responsive
+    // srcset variants generated alongside the main WebP asset (#442).
+    // webp_variant_widths() ([800, 1200]) is the single source of truth for both
+    // generation here and reconstruction in asset_srcset().
+
+    public function testStoreWebpCopyGeneratesVariantsForOversizedSource(): void
+    {
+        $src = $this->makePng(2000, 1000);
+
+        $result = store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash');
+
+        $this->assertSame('seedhash.webp', $result);
+        $this->assertFileExists($this->tempRootDir . '/seedhash-800.webp');
+        $this->assertFileExists($this->tempRootDir . '/seedhash-1200.webp');
+
+        [$w800] = getimagesize($this->tempRootDir . '/seedhash-800.webp');
+        [$w1200] = getimagesize($this->tempRootDir . '/seedhash-1200.webp');
+        [$wMain] = getimagesize($this->tempRootDir . '/seedhash.webp');
+
+        $this->assertSame(800, $w800);
+        $this->assertSame(1200, $w1200);
+        $this->assertLessThan($wMain, $w1200);
+    }
+
+    public function testPersistImageBytesGeneratesVariantsForOversizedSource(): void
+    {
+        $src = $this->makePng(2000, 1000);
+        $bytes = (string) file_get_contents($src);
+
+        $result = persist_image_bytes($bytes, 'png', $this->tempRootDir, 'seedhash2');
+
+        $this->assertSame('seedhash2.webp', $result);
+        $this->assertFileExists($this->tempRootDir . '/seedhash2-800.webp');
+        $this->assertFileExists($this->tempRootDir . '/seedhash2-1200.webp');
+    }
+
+    public function testStoreWebpCopySkipsVariantsForSmallSource(): void
+    {
+        // Longest edge (40px) is below both variant widths: no upscale.
+        $src = $this->makePng(40, 30);
+
+        store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash3');
+
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash3-800.webp');
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash3-1200.webp');
+    }
+
+    public function testStoreWebpCopyGeneratesOnlySmallerVariantForMidSizedSource(): void
+    {
+        // Longest edge (1000px) clears 800 but not 1200.
+        $src = $this->makePng(1000, 600);
+
+        store_webp_copy($src, 'png', $this->tempRootDir, 'seedhash4');
+
+        $this->assertFileExists($this->tempRootDir . '/seedhash4-800.webp');
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash4-1200.webp');
+    }
+
+    public function testStoreWebpCopyWritesNoVariantsForNonConvertedType(): void
+    {
+        $src = $this->makePng(2000, 1000);
+
+        $result = store_webp_copy($src, 'gif', $this->tempRootDir, 'seedhash5');
+
+        $this->assertNull($result);
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash5-800.webp');
+        $this->assertFileDoesNotExist($this->tempRootDir . '/seedhash5-1200.webp');
+    }
+
     // asset_dimensions — pixel size of a locally stored asset, for intrinsic
     // width/height attributes on rendered <img> tags.
 
@@ -683,6 +754,74 @@ class UploadTest extends TestCase
         imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
         imagepng($im, $path);
         imagedestroy($im);
+    }
+
+    // asset_srcset — the responsive srcset candidates for a locally stored WebP
+    // asset: the original plus any generated variants, each measured for its
+    // true width (never trusted from the filename — see webp_variant_widths()).
+
+    public function testAssetSrcsetReturnsOriginalAndVariantsOrderedByWidth(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $src = $this->makePng(2000, 1000);
+        $seed = 'srcset_' . uniqid();
+
+        store_webp_copy($src, 'png', $dir, $seed);
+
+        $srcset = asset_srcset(asset_url($sub_path, "$seed.webp"));
+
+        $this->assertNotNull($srcset);
+        $this->assertSame([800, 1200, 1600], array_column($srcset, 'width'));
+        $this->assertSame(asset_url($sub_path, "$seed-800.webp"), $srcset[0]['url']);
+        $this->assertSame(asset_url($sub_path, "$seed-1200.webp"), $srcset[1]['url']);
+        $this->assertSame(asset_url($sub_path, "$seed.webp"), $srcset[2]['url']);
+
+        @unlink("$dir/$seed.webp");
+        @unlink("$dir/$seed-800.webp");
+        @unlink("$dir/$seed-1200.webp");
+    }
+
+    public function testAssetSrcsetReturnsNullWhenNoVariantsExist(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $src = $this->makePng(40, 30);
+        $seed = 'nosrcset_' . uniqid();
+
+        store_webp_copy($src, 'png', $dir, $seed);
+
+        $this->assertNull(asset_srcset(asset_url($sub_path, "$seed.webp")));
+
+        @unlink("$dir/$seed.webp");
+    }
+
+    public function testAssetSrcsetReturnsNullForNonWebpAsset(): void
+    {
+        $sub_path = upload_subpath();
+        $dir = get_upload_dir($sub_path);
+        $filename = 'notwebp_' . uniqid() . '.png';
+        $this->writePng("$dir/$filename", 640, 480);
+
+        $this->assertNull(asset_srcset(asset_url($sub_path, $filename)));
+
+        @unlink("$dir/$filename");
+    }
+
+    public function testAssetSrcsetReturnsNullForARemoteUrl(): void
+    {
+        $this->assertNull(asset_srcset('https://example.com/assets/2026/07/photo.webp'));
+        $this->assertNull(asset_srcset('//example.com/assets/2026/07/photo.webp'));
+    }
+
+    public function testAssetSrcsetReturnsNullForPathTraversal(): void
+    {
+        $this->assertNull(asset_srcset('/assets/../../../etc/passwd'));
+        $this->assertNull(asset_srcset('/assets/%2e%2e/%2e%2e/etc/passwd'));
+        // A .webp suffix passes the extension gate, so this exercises the
+        // realpath() containment check rather than the early ext reject.
+        $this->assertNull(asset_srcset('/assets/../../../etc/passwd.webp'));
+        $this->assertNull(asset_srcset('/assets/../../secret.webp'));
     }
 
     // accept_upload_batch — the whole batch is judged before anything is stored
