@@ -6,7 +6,11 @@ onLoaded(() => {
         if (!ta || !key) continue
         form.dataset.autosaveBound = '1'
 
-        restore(ta, key)
+        if (form.id === 'editform') {
+            offerRestore(ta, key)
+        } else {
+            restore(ta, key)
+        }
 
         let timer = null
         // ponytail: last-write-wins if the same draft is open in two tabs —
@@ -59,6 +63,35 @@ function restore(ta, key)
         ta.value = stored
         ta.dispatchEvent(new Event('input'))
     }
+}
+
+/**
+ * On the edit form the textarea is pre-filled with the server's post body, so
+ * a stored draft can never be restored silently — the server body may be
+ * newer (the post was edited elsewhere) than a stale local draft. Instead,
+ * surface a link that lets the author pull the draft in explicitly.
+ *
+ * @param {HTMLTextAreaElement} ta
+ * @param {string} key
+ * @returns {void}
+ */
+function offerRestore(ta, key)
+{
+    const stored = getItem(key)
+    if (!stored || stored === ta.value) return
+
+    const link = document.createElement('a')
+    link.href = '#'
+    link.className = 'restore-draft'
+    link.textContent = 'Restore unsaved changes'
+    link.on('click', ev => {
+        cancel(ev)
+        ta.value = stored
+        ta.dispatchEvent(new Event('input'))
+        removeItem(key)
+        link.remove()
+    })
+    ta.after(link)
 }
 
 /**
