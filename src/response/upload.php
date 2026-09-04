@@ -252,6 +252,32 @@ function sniff_bytes_content_type(string $bytes): string|false
 }
 
 /**
+ * Maps raw image bytes to the canonical upload extension for their actual
+ * format, or null when the bytes aren't a recognised raster image.
+ *
+ * The import downloader trusts this over the URL's extension: WordPress media
+ * libraries routinely serve a renamed file (real PNG bytes under a `.jpg`
+ * name), which persist_image_bytes()'s content-vs-extension gate would
+ * otherwise reject, leaving the image remote. Sniffing the bytes and passing
+ * the matching extension keeps that gate at full strength — a scripted payload
+ * sniffs as text/html and maps to null, so it still fails downstream.
+ *
+ * @param string $bytes Raw image bytes, fully buffered in memory.
+ * @return string|null A lower-case extension from IMAGE_UPLOAD_EXTENSIONS, or null.
+ */
+function image_ext_for_bytes(string $bytes): ?string
+{
+    return match (sniff_bytes_content_type($bytes)) {
+        'image/jpeg' => 'jpg',
+        'image/png'  => 'png',
+        'image/gif'  => 'gif',
+        'image/webp' => 'webp',
+        'image/avif', 'image/heif', 'image/heic' => 'avif',
+        default => null,
+    };
+}
+
+/**
  * Whether an uploaded image of the given extension should be re-encoded to WebP.
  *
  * Only JPEG and PNG are converted: they are common, lossy/lossless raster formats

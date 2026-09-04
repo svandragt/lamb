@@ -16,6 +16,7 @@ use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
 use function Lamb\Post\on;
 use function Lamb\Post\reset_subscribers;
+use function Lamb\Response\image_ext_for_bytes;
 use function Lamb\Response\persist_image_bytes;
 use function Lamb\Theme\link_source;
 use function Lamb\WordPress\extract_items;
@@ -1164,6 +1165,32 @@ XML;
         } finally {
             rmdir($dir);
         }
+    }
+
+    public function testImageExtForBytesReflectsActualFormatNotName(): void
+    {
+        // Regression: a WordPress media file renamed at the source — real PNG
+        // bytes served under a `.jpg` name (mime-type image/png in the WXR) —
+        // must be recognised by its bytes. Deriving the extension from the URL
+        // alone hands persist_image_bytes() a 'jpg' that its content gate
+        // rejects against the PNG bytes, leaving the image remote.
+        $png = imagecreatetruecolor(4, 4);
+        ob_start();
+        imagepng($png);
+        $pngBytes = (string) ob_get_clean();
+        imagedestroy($png);
+
+        $jpeg = imagecreatetruecolor(4, 4);
+        ob_start();
+        imagejpeg($jpeg);
+        $jpegBytes = (string) ob_get_clean();
+        imagedestroy($jpeg);
+
+        $this->assertSame('png', image_ext_for_bytes($pngBytes));
+        $this->assertSame('jpg', image_ext_for_bytes($jpegBytes));
+        // A scripted payload must not be mapped to any image extension, so the
+        // content gate still rejects it downstream.
+        $this->assertNull(image_ext_for_bytes('<html><script>alert(1)</script></html>'));
     }
 
     public function testDefaultImageDownloaderBlocksLoopbackDestination(): void
