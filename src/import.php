@@ -672,7 +672,15 @@ function default_image_downloader(string $url, string $sub_path): ?string
         }
     }
     // 0755, not 0777: only the user running the import needs to write here.
-    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
+    // @-silenced because the failure is handled explicitly just below with a
+    // clearer message; the native mkdir() warning would only duplicate it.
+    if (!is_dir($dest_dir) && !@mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
+        // Distinct from the fetch/validate failures below: a dest-dir that
+        // can't be created is almost always ownership/permissions (e.g. a
+        // web-server user importing into an assets/YYYY dir owned by someone
+        // else), which otherwise looks identical to a 404 or a bad image and
+        // leaves the source URL silently remote.
+        error_log(sprintf('import: cannot create asset directory %s (check ownership/permissions); leaving %s remote', $dest_dir, $url));
         return null;
     }
     // $url is embedded in the WXR file being imported — an untrusted export
