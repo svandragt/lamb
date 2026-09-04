@@ -1206,4 +1206,43 @@ XML;
         $this->assertNull(default_image_downloader('http://127.0.0.1/evil.jpg', '2024/03'));
         $this->assertNull(default_image_downloader('http://169.254.169.254/evil.png', '2024/03'));
     }
+
+    public function testDefaultImageDownloaderLogsWhenAssetDirCannotBeCreated(): void
+    {
+        // A dest-dir mkdir failure (e.g. assets/YYYY owned by another user and
+        // not group-writable) must not masquerade as a 404 or a bad image: it
+        // returns null like any other failure, but a permissions problem is
+        // invisible without a distinct signal. Force the failure deterministically
+        // — parent path component is a file, so mkdir fails for any user, root
+        // included — and assert the diagnostic reaches the log.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_wp_import_' . uniqid('', true));
+        }
+        $assets = ROOT_DIR . '/assets';
+        if (!is_dir($assets)) {
+            mkdir($assets, 0755, true);
+        }
+        // sub_path '9999/01' → parent ROOT_DIR/assets/9999; make that a FILE so
+        // creating the month dir under it can never succeed.
+        $blocker = "$assets/9999";
+        file_put_contents($blocker, 'not a directory');
+
+        $log = sys_get_temp_dir() . '/lamb_imglog_' . uniqid('', true);
+        $prev = ini_set('error_log', $log);
+        try {
+            $result = default_image_downloader('https://example.com/photo.jpg', '9999/01');
+            $this->assertNull($result);
+            $this->assertStringContainsString(
+                'asset directory',
+                (string) @file_get_contents($log),
+                'expected a dest-dir failure to be logged, not a silent null'
+            );
+        } finally {
+            if ($prev !== false) {
+                ini_set('error_log', $prev);
+            }
+            @unlink($blocker);
+            @unlink($log);
+        }
+    }
 }
