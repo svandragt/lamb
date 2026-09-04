@@ -697,6 +697,12 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if (!response_is_image($response['headers'])) {
         return null;
     }
+    // Trust the bytes over the URL's extension: a WordPress media file renamed
+    // at the source (real PNG bytes under a `.jpg` name) would otherwise be
+    // rejected by persist_image_bytes()'s content-vs-extension gate and left
+    // remote. Fall back to the URL extension when the bytes don't sniff as a
+    // known image — persist_image_bytes() then rejects the mismatch as before.
+    $ext = \Lamb\Response\image_ext_for_bytes($response['body']) ?? $ext;
     return \Lamb\Response\persist_image_bytes($response['body'], $ext, $dest_dir, $seed);
 }
 
