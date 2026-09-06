@@ -243,10 +243,9 @@ function feed_item_content_html(\RedBeanPHP\OODBBean $bean): string
 /**
  * Renders the Atom feed for the given view data.
  *
- * Feeds live in code, not the theme layer: a theme that omitted feed.php used to
- * lose the site's feed silently — the same omission-by-default failure #684 (D7)
- * records for other parts. emit_feed() still honours a theme shipping its own
- * feed.php, with a deprecation notice, for one release.
+ * Feeds live in code, not the theme layer, so a theme cannot lose the site's
+ * feed by omitting a part — the omission-by-default failure #684 (D7) records
+ * for other parts.
  *
  * @param array<string, mixed> $data   Feed view data (posts, title, feed_url, updated).
  * @param array<string, mixed> $config Site configuration.
@@ -415,32 +414,11 @@ function render_json_feed(array $data, array $config): void
 }
 
 /**
- * The active theme's own feed part path, or null when it does not ship one.
- *
- * The built-in renderers above are the default; a theme that still carries its
- * own feed.php / feed_json.php keeps working for one release, via emit_feed(),
- * with a deprecation notice. base no longer ships either part, so this returns
- * a path only for a genuine third-party override.
- *
- * @param string $template 'feed' or 'feed_json'.
- * @return string|null The override file path, or null.
- */
-function feed_part_override(string $template): ?string
-{
-    if (!defined('THEME_DIR')) {
-        return null;
-    }
-    $path = THEME_DIR . \Lamb\Theme\sanitize_filename($template) . '.php';
-
-    return is_readable($path) ? $path : null;
-}
-
-/**
  * Renders a feed with the given feed data and terminates the request.
  *
  * Shared tail of all four feed responders: merge the feed data into the global
  * view data, emit cache headers (with a conditional-GET 304 short-circuit),
- * upgrade stale posts, render (built-in, or a deprecated theme override), die.
+ * upgrade stale posts, render, die.
  *
  * @param array<string, mixed> $feed_data As built by get_feed_data()/get_tag_feed_data().
  * @param string      $template  Feed template name ('feed' or 'feed_json').
@@ -460,29 +438,7 @@ function emit_feed(array $feed_data, string $template, ?string $feed_url = null)
     feed_cache($data['updated']);
     upgrade_posts($data['posts']);
 
-    $override = feed_part_override($template);
-    if ($override !== null) {
-        // The one developer-visible change in #684 (D7): a theme feed part still
-        // works, but only an override is now deprecated — omitting it inherits a
-        // correct feed instead of losing it.
-        //
-        // Warn at most once per template per process: feeds are polled hard by
-        // aggregators, and a logging error handler that ignores error_reporting()
-        // would otherwise record the same notice on every hit.
-        static $warned = [];
-        if (!isset($warned[$template])) {
-            $warned[$template] = true;
-            @trigger_error(
-                sprintf(
-                    "Theme feed part '%s.php' is deprecated and will be removed; feeds are rendered by "
-                    . 'Lamb\\Response now. Remove the theme part to inherit the built-in feed.',
-                    $template
-                ),
-                E_USER_DEPRECATED
-            );
-        }
-        require $override;
-    } elseif ($template === 'feed_json') {
+    if ($template === 'feed_json') {
         render_json_feed($data, $config);
     } else {
         render_atom_feed($data, $config);

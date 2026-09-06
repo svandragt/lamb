@@ -826,8 +826,8 @@ function parse_import_args(array $argv, array $extra_prefixes = []): array
  * Shared CLI import loop: walks $items, skips out-of-scope ones (tallying a
  * skip-reason breakdown), dedups already-imported items by uuid, imports the
  * rest through $import, and prints a per-item progress line plus a final
- * summary. Used by both import-wordpress.php and import-known.php so the two
- * scripts' output stays byte-identical in shape.
+ * summary. Shared by every `bin/lamb import` source so their output stays
+ * identical in shape.
  *
  * $find_existing looks an already-imported row up by uuid; $replace re-imports
  * into the bean it returns rather than counting the item as already present.

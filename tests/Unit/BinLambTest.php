@@ -117,39 +117,6 @@ XML;
         $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
     }
 
-    /**
-     * run_import() is shared, but the wiring around it (bootstrap, arg
-     * parsing, the registry lookup) is new: this pins the new driver's
-     * stdout against the old script's, byte for byte, for the same input.
-     */
-    public function testWordpressDryRunOutputMatchesTheOldScriptByteForByte(): void
-    {
-        $wxr = "$this->tmp_dir/export.xml";
-        file_put_contents($wxr, self::SAMPLE_WXR);
-
-        $old_data_dir = "$this->tmp_dir/data-old";
-        $this->enableExperimentalFeaturesInDataDir($old_data_dir);
-        $old = new Process(
-            ['php', codecept_root_dir('import-wordpress.php'), $wxr, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $old_data_dir] + getenv(),
-        );
-        $old->run();
-
-        $new_data_dir = "$this->tmp_dir/data-new";
-        $this->enableExperimentalFeaturesInDataDir($new_data_dir);
-        $new = new Process(
-            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $new_data_dir] + getenv(),
-        );
-        $new->run();
-
-        $this->assertSame(0, $old->getExitCode(), $old->getErrorOutput());
-        $this->assertSame(0, $new->getExitCode(), $new->getErrorOutput());
-        $this->assertSame($old->getOutput(), $new->getOutput());
-    }
-
     public function testUnknownSourceExitsNonZeroListingTheValidSources(): void
     {
         $process = new Process(
@@ -179,24 +146,5 @@ XML;
 
         $this->assertSame(1, $process->getExitCode());
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
-    }
-
-    public function testTheOldWordpressScriptDelegatesAndWarns(): void
-    {
-        $wxr = "$this->tmp_dir/export.xml";
-        file_put_contents($wxr, self::SAMPLE_WXR);
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
-
-        $process = new Process(
-            ['php', codecept_root_dir('import-wordpress.php'), $wxr, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
-        );
-        $process->run();
-
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('deprecated', strtolower($process->getErrorOutput()));
-        $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
     }
 }

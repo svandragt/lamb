@@ -157,7 +157,6 @@ lamb/
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
 ├── bin/lamb              # CLI: unified importer driver — `bin/lamb import <source> <path>`
-├── import-lamb.php       # CLI: deprecated shim → `bin/lamb import lamb` (removed a release later)
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
@@ -244,7 +243,7 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 **Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
-- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme that still ships `feed.php` / `feed_json.php` overrides them for one release with a deprecation notice, then loses the override; base no longer ships either.
+- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme cannot override them: a `feed.php` / `feed_json.php` in a theme directory is simply never read.
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `scheduled.php`, `trash.php`
 - `parts/_items.php` — post list partial
 - `parts/_pagination.php` — pagination partial
@@ -454,7 +453,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` override is deprecated.)
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` in a theme is never read.)
 
 ### Typical file set (for a full redesign)
 
@@ -656,6 +655,29 @@ When a task's work is complete and pushed, open a pull request for it by default
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
 
 Before any bulk PR operation — merging, rebasing, or force-pushing across several PRs — check whether the branches are stacked. Branches can be built on each other even when every PR targets `main`, so a diff or a squash can carry a lower branch's content, and a PR's real base may be another feature branch (check `baseRefName`). Merge stacked PRs bottom-up, re-check each remaining PR's mergeable state after every merge (earlier merges turn later ones `DIRTY`), and never force-push a shared branch without confirming the remote tip is what you expect — another session or GitHub's base-retargeting may have moved it. Prefer merging `main` into the branch over rebasing, so the push stays a fast-forward. When resolving the merge, keep the content the stacked branch legitimately owns rather than blindly taking `main`'s side, and run the tests locally before pushing.
+
+## Deprecations
+
+Lamb removes deprecated work in the **next published major version**. Pre-1.0
+that means the next `0.y`: something deprecated in 0.14.0 comes out in 0.15.0.
+SemVer itself promises nothing under `0.y.z` ("anything MAY change at any
+time"), but `0.y` is the boundary package managers encode and the one this
+project holds to.
+
+One published version of grace, then it goes. Deliberately short: Lamb is
+pre-1.0 with few users, all of whom can be assumed to be on the most recent
+published version.
+
+When adding a deprecation:
+
+- Say the version it is removed in, not "a future release" — a notice nobody
+  can date is a notice nobody acts on. Name the replacement in the same breath.
+- Emit something at runtime where there is somewhere to emit it: `E_USER_DEPRECATED`
+  for library-level callers, STDERR for a CLI.
+- Update `docs/` to document the replacement as the way to do the thing. A
+  deprecated path should never be the primary documented one.
+- Removing it is a **breaking change**, so it leads the release notes (see
+  `RELEASING.md` step 3) and shapes the version (step 2).
 
 ## Philosophy (from README)
 

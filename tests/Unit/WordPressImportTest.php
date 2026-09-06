@@ -987,7 +987,7 @@ XML;
     }
 
     /**
-     * Runs the item through the CLI loop exactly as import-wordpress.php does.
+     * Runs the item through the CLI loop exactly as `bin/lamb import wordpress` does.
      *
      * @param array<string, mixed> $item
      */
@@ -1062,7 +1062,7 @@ XML;
     {
         $this->assertSame(
             ['wxr.xml', true, true],
-            parse_import_args(['import-wordpress.php', 'wxr.xml', '--dry-run', '--replace'])
+            parse_import_args(['wordpress', 'wxr.xml', '--dry-run', '--replace'])
         );
         $this->assertSame(['wxr.xml', false, false], parse_import_args(['x', 'wxr.xml']));
         $this->assertSame([null, false, false], parse_import_args(['x', '--help']));

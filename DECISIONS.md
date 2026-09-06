@@ -140,6 +140,27 @@ The conversion is deliberately incremental: this decision lands the funnel with 
 
 ---
 
+## 2026-09-06 — Deprecated work is removed in the next published major version
+
+**Status:** Accepted
+**Context:** Lamb had accumulated deprecations with no stated expiry. The three `import-*.php` shims said "Kept for one release as a documented entry point; will be removed after that", the runtime notice said "will be removed in a future release", and the docs said "it is removed a release later" — three phrasings of the same vague promise, none of which names a version. The theme `feed.php` / `feed_json.php` override said "for one release" in the code and "in a later release" in the docs. Both shipped in 0.14.0, and nothing recorded that 0.15.0 was therefore the deadline; an audit (#809, #810) is what surfaced them.
+
+The counter-pressure a longer grace period usually answers — users stranded on old versions — does not apply here. Lamb is pre-1.0 with few users, self-hosted from a git checkout, and `bin/upgrade` resets to the upstream of the checked-out branch, so every user can be assumed to be on the most recent published version.
+
+There was also no written mapping from SemVer's "major" to a pre-1.0 project. `RELEASING.md` step 2 said "major = breaking changes" and stopped there, which read as "wait for 1.0" — while the actual practice, across every release from 0.7.0 to 0.14.0, has been a `0.y` bump each time and no patch release ever cut.
+
+**Decision:** A deprecation buys exactly one published major version of grace; the removal is due in the next one.
+
+Pre-1.0, the minor slot *is* the major slot: something deprecated in 0.14.0 comes out in 0.15.0. SemVer 2.0.0 does not dictate this — §4 says only that under `0.y.z` "anything MAY change at any time", which grants more latitude than we want, not less. What makes `0.y` the boundary is the convention package managers encode (`^0.14.0` resolves to `>=0.14.0 <0.15.0`), and it is the one Lamb holds to.
+
+A deprecation must therefore name the version it is removed in rather than "a future release", name its replacement, emit a runtime notice where there is somewhere to emit one (`E_USER_DEPRECATED`, or STDERR for a CLI), and be accompanied by docs that present the replacement as *the* way to do the thing — a deprecated path is never the primary documented one. That last point was not hypothetical: all three import docs led with `php import-known.php` and mentioned `bin/lamb` second, as the "preferred" alternative.
+
+`RELEASING.md` step 2 now carries a check for outstanding deprecations before the version is settled, because the removals are breaking and therefore shape it.
+
+**Consequences:** The grace period is short and predictable, and the deprecation backlog cannot grow silently — a deprecation with no removal version is now a defect. Every removal is a breaking change, so it leads the release notes (see the same release's convention change) and forces a `0.y` bump. The cost is borne by anyone who skips a version: they get a removal with no deprecation window they ever saw. That is an accepted trade at this size, and is what the "upgrade one published version at a time" expectation in `bin/upgrade` already assumes.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted
