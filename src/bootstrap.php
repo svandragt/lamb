@@ -124,13 +124,13 @@ function bootstrap_db(string $data_dir): void
     R::useWriterCache(true);
 
     ensure_schema();
-    ensure_post_columns();
+    migrate_post_table();
 
     // Frozen mode rejects a write to any column not declared in SCHEMA instead
     // of silently adding it (RedBeanPHP's default fluid behaviour) — a typo'd
     // or forgotten column becomes a thrown exception at write time rather than
     // a schema drift nobody notices. Must come after ensure_schema() and
-    // ensure_post_columns(), which are themselves schema changes and would be
+    // migrate_post_table(), which are themselves schema changes and would be
     // refused too.
     R::freeze(true);
 }
@@ -254,35 +254,23 @@ function ensure_schema(): void
 }
 
 /**
- * Ensures the post table has the columns introduced by the soft-delete, draft
- * and export-import features.
- * Safe to call on any DB: no-ops if the table or columns don't exist yet.
+ * Runs the post table's one-time row migrations, then indexes it.
+ *
+ * Must be called after ensure_schema(), which is what guarantees the table and
+ * every SCHEMA column exist. This used to add `deleted`, `draft` and
+ * `import_uuid` itself, back when it was bootstrap_db()'s only schema step;
+ * ensure_schema() now ALTER-adds every declared column ahead of it, so those
+ * three branches could no longer fire and the columns it reads are already the
+ * post-ALTER set.
  *
  * @return void
  */
-function ensure_post_columns(): void
+function migrate_post_table(): void
 {
-    $postTableExists = (bool) R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name='post'");
-    if (!$postTableExists) {
-        return;
-    }
     $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
-    if (!in_array('deleted', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN deleted INTEGER');
-    }
-    if (!in_array('draft', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN draft INTEGER');
-    }
-    if (!in_array('import_uuid', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
-    }
     backfill_post_version($columns);
     backfill_imported_post_identity($columns);
-    // The backfills above want the columns as they were; the indexes want them
-    // as they now are, so the three the ALTERs just guaranteed are folded back
-    // in — otherwise indexing `draft`/`deleted` would lag a boot behind the
-    // upgrade that added them.
-    ensure_post_indexes(array_merge($columns, ['deleted', 'draft', 'import_uuid']));
+    ensure_post_indexes($columns);
 }
 
 /**
@@ -361,12 +349,12 @@ function ensure_post_indexes(array $columns): void
  * behind it (up to PDO's 60-second busy timeout) instead of being served under
  * a shared read lock. The probe is a read, so it does not.
  *
- * Also skipped when the column does not exist yet: a `post` table predating it
- * has nothing to stamp, and naming it in an UPDATE is an error rather than a
- * no-op. Runs from ensure_post_columns(), which has already established that
- * the table exists and collected its columns.
+ * Skipped when the column is absent, so the function is safe to call against a
+ * `post` table predating it: naming a missing column in an UPDATE is an error
+ * rather than a no-op. ensure_schema() declares `version`, so the guard never
+ * fires under bootstrap_db() — it is what keeps this callable in isolation.
  *
- * @param list<string> $columns Column names as they were before the ALTERs above.
+ * @param list<string> $columns Column names of the post table.
  */
 function backfill_post_version(array $columns): void
 {
@@ -396,7 +384,7 @@ function backfill_post_version(array $columns): void
  * correct — but it probes with a SELECT first, because an UPDATE that matches
  * nothing still takes a write lock (see backfill_post_version()).
  *
- * @param list<string> $columns Column names as they were before this call.
+ * @param list<string> $columns Column names of the post table.
  */
 function backfill_imported_post_identity(array $columns): void
 {
