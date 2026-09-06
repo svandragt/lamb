@@ -5,7 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\Bootstrap\ensure_post_columns;
+use function Lamb\Bootstrap\ensure_schema;
+use function Lamb\Bootstrap\migrate_post_table;
 use function Lamb\Response\count_drafts;
 use function Lamb\Response\count_trash;
 use function Lamb\Response\listing_data;
@@ -591,8 +592,10 @@ class ResponseHandlersTest extends TestCase
         // Simulate a production DB that predates soft-delete: drop the column.
         R::exec('ALTER TABLE post DROP COLUMN deleted');
 
-        // ensure_post_columns() mirrors what bootstrap_db() does before any request.
-        ensure_post_columns();
+        // Mirror what bootstrap_db() does before any request: ensure_schema()
+        // puts the column back, then the row migrations run.
+        ensure_schema();
+        migrate_post_table();
 
         $post = R::dispense('post');
         $post->body    = 'Old post before soft-delete feature';

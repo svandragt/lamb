@@ -21,7 +21,8 @@ class PostDraftVisibilityTest extends TestCase
         // — which filters on `deleted` — resolves against a real column instead
         // of silently matching nothing in an isolated in-memory schema.
         R::store(R::dispense('post'));
-        \Lamb\Bootstrap\ensure_post_columns();
+        \Lamb\Bootstrap\ensure_schema();
+        \Lamb\Bootstrap\migrate_post_table();
         R::exec('DELETE FROM post');
     }
 
