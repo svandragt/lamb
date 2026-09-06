@@ -9,7 +9,6 @@ use Symfony\Component\Process\Process;
 use ZipArchive;
 
 use function Lamb\Bootstrap\ensure_schema;
-use function Lamb\Bootstrap\migrate_post_table;
 use function Lamb\Export\build_export_archive;
 use function Lamb\Import\run_import;
 use function Lamb\Restore\apply_manifest_state;
