@@ -8,7 +8,8 @@ use RuntimeException;
 use Symfony\Component\Process\Process;
 use ZipArchive;
 
-use function Lamb\Bootstrap\ensure_post_columns;
+use function Lamb\Bootstrap\ensure_schema;
+use function Lamb\Bootstrap\migrate_post_table;
 use function Lamb\Export\build_export_archive;
 use function Lamb\Import\run_import;
 use function Lamb\Restore\apply_manifest_state;
@@ -132,12 +133,14 @@ class LambRestoreTest extends TestCase
         return array_column(R::getAll('PRAGMA table_info(post)'), 'name');
     }
 
-    public function testEnsurePostColumnsAddsTheImportUuidColumn(): void
+    public function testEnsureSchemaAddsTheImportUuidColumn(): void
     {
         R::exec('CREATE TABLE post (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT)');
         $this->assertNotContains('import_uuid', $this->postColumns());
 
-        ensure_post_columns();
+        // migrate_post_table() used to ALTER this column in itself; adding every
+        // declared column to an existing table is ensure_schema()'s job now.
+        ensure_schema();
 
         $this->assertContains('import_uuid', $this->postColumns());
     }
