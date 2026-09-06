@@ -656,6 +656,29 @@ After opening a pull request, watch its activity and automatically fix failing C
 
 Before any bulk PR operation — merging, rebasing, or force-pushing across several PRs — check whether the branches are stacked. Branches can be built on each other even when every PR targets `main`, so a diff or a squash can carry a lower branch's content, and a PR's real base may be another feature branch (check `baseRefName`). Merge stacked PRs bottom-up, re-check each remaining PR's mergeable state after every merge (earlier merges turn later ones `DIRTY`), and never force-push a shared branch without confirming the remote tip is what you expect — another session or GitHub's base-retargeting may have moved it. Prefer merging `main` into the branch over rebasing, so the push stays a fast-forward. When resolving the merge, keep the content the stacked branch legitimately owns rather than blindly taking `main`'s side, and run the tests locally before pushing.
 
+## Deprecations
+
+Lamb removes deprecated work in the **next published major version**. Pre-1.0
+that means the next `0.y`: something deprecated in 0.14.0 comes out in 0.15.0.
+SemVer itself promises nothing under `0.y.z` ("anything MAY change at any
+time"), but `0.y` is the boundary package managers encode and the one this
+project holds to.
+
+One published version of grace, then it goes. Deliberately short: Lamb is
+pre-1.0 with few users, all of whom can be assumed to be on the most recent
+published version.
+
+When adding a deprecation:
+
+- Say the version it is removed in, not "a future release" — a notice nobody
+  can date is a notice nobody acts on. Name the replacement in the same breath.
+- Emit something at runtime where there is somewhere to emit it: `E_USER_DEPRECATED`
+  for library-level callers, STDERR for a CLI.
+- Update `docs/` to document the replacement as the way to do the thing. A
+  deprecated path should never be the primary documented one.
+- Removing it is a **breaking change**, so it leads the release notes (see
+  `RELEASING.md` step 3) and shapes the version (step 2).
+
 ## Philosophy (from README)
 
 - Simple over complex
