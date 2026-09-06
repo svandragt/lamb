@@ -157,7 +157,6 @@ lamb/
 ├── phpcs.xml             # Coding standard config
 ├── codeception.yml       # Test runner config
 ├── bin/lamb              # CLI: unified importer driver — `bin/lamb import <source> <path>`
-├── import-lamb.php       # CLI: deprecated shim → `bin/lamb import lamb` (removed a release later)
 └── make-password.php     # CLI utility: hash password → .env
 ```
 
@@ -244,7 +243,7 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 **Theme parts (base):**
 - `html.php` — outer HTML shell (includes `parts/home.php`, etc.)
-- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme that still ships `feed.php` / `feed_json.php` overrides them for one release with a deprecation notice, then loses the override; base no longer ships either.
+- The Atom and JSON feeds are **not** theme parts — they are rendered in code by `Lamb\Response\render_atom_feed()` / `render_json_feed()` (`response/feeds.php`). A theme cannot override them: a `feed.php` / `feed_json.php` in a theme directory is simply never read.
 - `parts/home.php`, `status.php`, `edit.php`, `search.php`, `tag.php`, `login.php`, `settings.php`, `404.php`, `drafts.php`, `scheduled.php`, `trash.php`
 - `parts/_items.php` — post list partial
 - `parts/_pagination.php` — pagination partial
@@ -454,7 +453,7 @@ src/themes/<name>/
     └── styles.css     ← required (the_styles() always loads this path)
 ```
 
-Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` override is deprecated.)
+Add `html.php` only if the HTML shell (nav, header, footer) changes. Add individual `parts/*.php` files only for the page templates that differ visually. All other parts fall back to `base` automatically. (The feeds are rendered in code, not a theme part — see above; a `feed.php` in a theme is never read.)
 
 ### Typical file set (for a full redesign)
 

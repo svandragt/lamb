@@ -537,7 +537,7 @@ class LambRestoreTest extends TestCase
     }
 
     /**
-     * Runs the importer over an archive the way import-lamb.php does.
+     * Runs the importer over an archive the way `bin/lamb import lamb` does.
      */
     private function importArchive(string $path, bool $replace = false, ?string $site_url = null): string
     {
@@ -862,29 +862,12 @@ class LambRestoreTest extends TestCase
         $this->assertFalse(is_dir($root));
     }
 
-    public function testTheCliScriptRunsAnArchiveEndToEnd(): void
-    {
-        $archive = $this->buildArchive();
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
-
-        $process = new Process(
-            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
-        );
-        $process->run();
-
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('[dry-run] Done. created=6', $process->getOutput());
-    }
-
-    public function testTheCliScriptRefusesWhenExperimentalFeaturesDisabled(): void
+    public function testTheDriverRefusesWhenExperimentalFeaturesDisabled(): void
     {
         $archive = $this->buildArchive();
 
         $process = new Process(
-            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'lamb', $archive, '--dry-run'],
             codecept_root_dir(),
             ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
         );
@@ -894,18 +877,23 @@ class LambRestoreTest extends TestCase
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
     }
 
-    public function testTheCliScriptRefusesAnArchiveItCannotRead(): void
+    public function testTheDriverRefusesAnArchiveItCannotRead(): void
     {
-        // Fails on the unreadable-path check, before Config\load() runs — so
-        // this exits(1) for that reason regardless of experimental_features.
+        // bin/lamb opens the source only after the experimental gate, so the
+        // gate has to be open for the exit(1) here to be the unreadable-path
+        // check rather than the refusal covered by the test above.
+        $data_dir = "$this->tmp_dir/data";
+        $this->enableExperimentalFeaturesInDataDir($data_dir);
+
         $process = new Process(
-            ['php', codecept_root_dir('import-lamb.php'), "$this->tmp_dir/absent.zip"],
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'lamb', "$this->tmp_dir/absent.zip"],
             codecept_root_dir(),
-            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
         );
         $process->run();
 
         $this->assertSame(1, $process->getExitCode());
+        $this->assertStringNotContainsString('experimental', $process->getErrorOutput());
     }
 
     public function testTheDriverRunsAnArchiveEndToEndViaTheRegisteredLambSource(): void
@@ -926,63 +914,12 @@ class LambRestoreTest extends TestCase
         $this->assertStringContainsString('Assets: restored=1', $process->getOutput());
     }
 
-    /**
-     * run_import() is shared, but the wiring around it (bootstrap, arg
-     * parsing, the registry lookup, the --site-url flag, the asset-restore
-     * step) is new for the lamb source: this pins the new driver's stdout
-     * against the old script's, byte for byte, for the same archive.
-     */
-    public function testLambDryRunOutputMatchesTheOldScriptByteForByte(): void
-    {
-        $archive = $this->buildArchive();
-
-        $old_data_dir = "$this->tmp_dir/data-old";
-        $this->enableExperimentalFeaturesInDataDir($old_data_dir);
-        $old = new Process(
-            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $old_data_dir] + getenv(),
-        );
-        $old->run();
-
-        $new_data_dir = "$this->tmp_dir/data-new";
-        $this->enableExperimentalFeaturesInDataDir($new_data_dir);
-        $new = new Process(
-            ['php', codecept_root_dir('bin/lamb'), 'import', 'lamb', $archive, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $new_data_dir] + getenv(),
-        );
-        $new->run();
-
-        $this->assertSame(0, $old->getExitCode(), $old->getErrorOutput());
-        $this->assertSame(0, $new->getExitCode(), $new->getErrorOutput());
-        $this->assertSame($old->getOutput(), $new->getOutput());
-    }
-
-    public function testTheOldLambScriptDelegatesAndWarns(): void
-    {
-        $archive = $this->buildArchive();
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
-
-        $process = new Process(
-            ['php', codecept_root_dir('import-lamb.php'), $archive, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
-        );
-        $process->run();
-
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('deprecated', strtolower($process->getErrorOutput()));
-        $this->assertStringContainsString('[dry-run] Done. created=6', $process->getOutput());
-    }
-
     public function testParseRestoreArgsReadsTheFlags(): void
     {
         $this->assertSame(
             ['backup.zip', true, true, 'https://example.test'],
             parse_restore_args([
-                'import-lamb.php',
+                'lamb',
                 'backup.zip',
                 '--dry-run',
                 '--replace',

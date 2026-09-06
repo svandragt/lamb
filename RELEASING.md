@@ -55,8 +55,16 @@ git log --format='- %s' <last-tag>..main
       dependency bumps with no user-visible effect.
 - [ ] Rewrite each kept line in plain language (what changed for the user, not
       the PR title). Group under **Added / Changed / Fixed**.
-- [ ] Call out anything requiring action on upgrade in an **Upgrade notes**
-      section (e.g. "install the `pdo_mysql` PHP extension", config changes).
+- [ ] **Breaking changes go first, always.** If the release removes or changes
+      anything an existing install depends on — a removed CLI entry point or
+      config key, a renamed theme part, a changed default, a dropped platform
+      requirement — open the notes with a **⚠️ Breaking changes** section,
+      above Added/Changed/Fixed. One line per change, each saying what broke
+      and what to use instead. A reader deciding whether to upgrade must see
+      this without scrolling; never leave it to be discovered further down.
+- [ ] Call out anything else requiring action on upgrade in an **Upgrade
+      notes** section after the grouped changes (e.g. "install the
+      `pdo_mysql` PHP extension", config changes).
 - [ ] Save the notes to a temp file (e.g. `/tmp/notes.md`) for step 5.
 
 ## 4. Promote `main` to `release` via PR
