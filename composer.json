@@ -107,7 +107,7 @@
         "e2e": "pnpm exec playwright test",
         "docs": [
             "Composer\\Config::disableProcessTimeout",
-            "docker run --rm -v \"$PWD/docs:/site\" -v \"$PWD/.jekyll-bundle:/usr/local/bundle\" -p 4000:4000 bretfisher/jekyll-serve"
+            "docker run --rm -v \"$PWD/docs:/site\" -v \"$PWD/.jekyll-bundle:/usr/local/bundle\" -p 4000:4000 bretfisher/jekyll-serve:stable-20260315-2119a31"
         ]
     }
 }
