@@ -68,7 +68,8 @@ function respond_export(array $_args): void
  * The descriptive site block recorded in the manifest.
  *
  * It tells a human (or a converter) which site an archive came from, and
- * import-lamb.php uses `url` as the origin it namespaces restored post ids by,
+ * `bin/lamb import lamb` uses `url` as the origin it namespaces restored post
+ * ids by,
  * so two archives from different sites do not collide on id. An archive
  * without it still imports; the importer warns and offers --site-url.
  *

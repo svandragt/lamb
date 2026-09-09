@@ -453,8 +453,13 @@ function render_post_list(bool $hide_author): void
     // PHP tag is part of the rendered HTML, so it cannot be re-indented for
     // being nested inside a function without changing the output.
     if (empty($data['posts'])) :
-        ?><p>Sorry no items found.</p>
+        // Search and tag pages set $data['intro'] ("No results found.") which
+        // already states the empty case; skip our own message then so the two
+        // don't double up.
+        if (empty($data['intro'])) :
+            ?><p>Sorry no items found.</p>
     <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+        endif;
     else :
         // Wrap the list in <ul>/<li> only when there is more than one post, so a
         // single post renders as a bare <article>. Computed once; the menu-item

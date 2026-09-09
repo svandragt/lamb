@@ -19,8 +19,13 @@ use function Lamb\Theme\the_reply_context;
 use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
-    ?><p>Sorry no items found.</p>
-    <?php
+    // Search and tag pages set $data['intro'] ("No results found.") which
+    // already states the empty case; only fall back to our own message when
+    // nothing else does, so the two don't double up.
+    if (empty($data['intro'])) :
+        ?><p>Sorry no items found.</p>
+        <?php
+    endif;
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */

@@ -672,7 +672,15 @@ function default_image_downloader(string $url, string $sub_path): ?string
         }
     }
     // 0755, not 0777: only the user running the import needs to write here.
-    if (!is_dir($dest_dir) && !mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
+    // @-silenced because the failure is handled explicitly just below with a
+    // clearer message; the native mkdir() warning would only duplicate it.
+    if (!is_dir($dest_dir) && !@mkdir($dest_dir, 0755, true) && !is_dir($dest_dir)) {
+        // Distinct from the fetch/validate failures below: a dest-dir that
+        // can't be created is almost always ownership/permissions (e.g. a
+        // web-server user importing into an assets/YYYY dir owned by someone
+        // else), which otherwise looks identical to a 404 or a bad image and
+        // leaves the source URL silently remote.
+        error_log(sprintf('import: cannot create asset directory %s (check ownership/permissions); leaving %s remote', $dest_dir, $url));
         return null;
     }
     // $url is embedded in the WXR file being imported — an untrusted export
@@ -697,6 +705,12 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if (!response_is_image($response['headers'])) {
         return null;
     }
+    // Trust the bytes over the URL's extension: a WordPress media file renamed
+    // at the source (real PNG bytes under a `.jpg` name) would otherwise be
+    // rejected by persist_image_bytes()'s content-vs-extension gate and left
+    // remote. Fall back to the URL extension when the bytes don't sniff as a
+    // known image — persist_image_bytes() then rejects the mismatch as before.
+    $ext = \Lamb\Response\image_ext_for_bytes($response['body']) ?? $ext;
     return \Lamb\Response\persist_image_bytes($response['body'], $ext, $dest_dir, $seed);
 }
 
@@ -820,8 +834,8 @@ function parse_import_args(array $argv, array $extra_prefixes = []): array
  * Shared CLI import loop: walks $items, skips out-of-scope ones (tallying a
  * skip-reason breakdown), dedups already-imported items by uuid, imports the
  * rest through $import, and prints a per-item progress line plus a final
- * summary. Used by both import-wordpress.php and import-known.php so the two
- * scripts' output stays byte-identical in shape.
+ * summary. Shared by every `bin/lamb import` source so their output stays
+ * identical in shape.
  *
  * $find_existing looks an already-imported row up by uuid; $replace re-imports
  * into the bean it returns rather than counting the item as already present.
