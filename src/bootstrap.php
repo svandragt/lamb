@@ -8,6 +8,8 @@ use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
 
+use function Lamb\Http\apply_dns_resolve_timeout;
+
 /**
  * Loads the project's .env file into the process environment for the dev server.
  *
@@ -87,12 +89,20 @@ function login_password(): string
 /**
  * Initializes the database by configuring the SQLite connection and setting up the writer cache.
  *
+ * Also applies the DNS resolver timeout (see Http\apply_dns_resolve_timeout()) as
+ * the first thing any entry point does: glibc's resolver only honours a RES_OPTIONS
+ * change made *before* the process's first hostname lookup, and this runs before
+ * index.php/bin/lamb do anything else network-shaped, so it wins that race no
+ * matter which code ends up resolving a host first later in the process's life.
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
  * @throws RuntimeException If the specified directory cannot be created.
  */
 function bootstrap_db(string $data_dir): void
 {
+    apply_dns_resolve_timeout();
+
     if (!is_dir($data_dir)) {
         // 0750, not 0777: this directory holds lamb.db and the session files, so
         // only the web-server user has any business reading it. Under a permissive
@@ -102,41 +112,165 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
+    // WAL lets a writer commit without waiting for concurrent readers. Without
+    // it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
+    // lock that any page-render read holds off, so an ordinary concurrent visitor
+    // could make a correct-password login stall or fail. Under WAL that
+    // reservation only ever contends with another writer, keeping its lock hold
+    // to the microseconds of a counter update.
+    // ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
+    // fall back to the slower rollback journal and lose this guarantee.
+    R::exec('PRAGMA journal_mode=WAL');
     R::useWriterCache(true);
 
-    ensure_post_columns();
+    ensure_schema();
+    migrate_post_table();
+
+    // Frozen mode rejects a write to any column not declared in SCHEMA instead
+    // of silently adding it (RedBeanPHP's default fluid behaviour) — a typo'd
+    // or forgotten column becomes a thrown exception at write time rather than
+    // a schema drift nobody notices. Must come after ensure_schema() and
+    // migrate_post_table(), which are themselves schema changes and would be
+    // refused too.
+    R::freeze(true);
 }
 
 /**
- * Ensures the post table has the columns introduced by the soft-delete, draft
- * and export-import features.
- * Safe to call on any DB: no-ops if the table or columns don't exist yet.
+ * Every table Lamb writes to, and the columns each one declares beyond the
+ * implicit `id INTEGER PRIMARY KEY AUTOINCREMENT`.
+ *
+ * This is what ensure_schema() creates tables from and R::freeze(true) (see
+ * bootstrap_db()) enforces against: a write naming a column not listed here
+ * throws instead of RedBeanPHP's default of silently adding it.
+ *
+ * Column types are advisory — SQLite is dynamically typed regardless of what
+ * a column is declared as — and are named for readability, matching what
+ * fluid mode would otherwise have inferred from the first value written.
+ */
+const SCHEMA = [
+    'post' => [
+        'body' => 'TEXT',
+        'slug' => 'TEXT',
+        'title' => 'TEXT',
+        'description' => 'TEXT',
+        'transformed' => 'TEXT',
+        'created' => 'TEXT',
+        'updated' => 'TEXT',
+        'version' => 'INTEGER',
+        'feed_name' => 'TEXT',
+        'feeditem_uuid' => 'TEXT',
+        'import_uuid' => 'TEXT',
+        'source_url' => 'TEXT',
+        'in_reply_to' => 'TEXT',
+        'syndicated_to' => 'TEXT',
+        'draft' => 'INTEGER',
+        'deleted' => 'INTEGER',
+        'deleted_at' => 'TEXT',
+        'feed_locked' => 'INTEGER',
+        'preview_token' => 'TEXT',
+        'preview_token_expires' => 'TEXT',
+    ],
+    'option' => [
+        'name' => 'TEXT',
+        'value' => 'TEXT',
+        'updated' => 'TEXT',
+    ],
+    'redirect' => [
+        'from_slug' => 'TEXT',
+        'to_url' => 'TEXT',
+    ],
+    'webmention' => [
+        'source' => 'TEXT',
+        'target' => 'TEXT',
+        'post_id' => 'INTEGER',
+        'type' => 'TEXT',
+        'author' => 'TEXT',
+        'content' => 'TEXT',
+        'status' => 'TEXT',
+        'created' => 'TEXT',
+        'verified_at' => 'TEXT',
+    ],
+    'webmentionoutbox' => [
+        'post_id' => 'INTEGER',
+        'source' => 'TEXT',
+        'target' => 'TEXT',
+        'endpoint' => 'TEXT',
+        'status' => 'TEXT',
+        'attempts' => 'INTEGER',
+        'created' => 'TEXT',
+        'processed_at' => 'TEXT',
+        'resend' => 'INTEGER',
+    ],
+    'feedstatus' => [
+        'feedkey' => 'TEXT',
+        'name' => 'TEXT',
+        'url' => 'TEXT',
+        'last_success' => 'INTEGER',
+        'last_item_date' => 'INTEGER',
+        'last_attempt' => 'INTEGER',
+        'last_error' => 'INTEGER',
+        'item_count' => 'INTEGER',
+        'error_message' => 'TEXT',
+    ],
+];
+
+/**
+ * Creates every table in SCHEMA that does not exist yet, and ALTER-adds any
+ * declared column an existing table is missing.
+ *
+ * The ALTER-add is what lets an installation that has been running in fluid
+ * mode upgrade to a frozen one: CREATE TABLE IF NOT EXISTS only helps a
+ * brand-new database. An existing lamb.db already has these tables, built one
+ * column at a time by fluid mode, and may be missing a column a later Lamb
+ * release added that no bean on this install has written yet. Skipping the
+ * ALTER and freezing anyway would turn that column's next write into a thrown
+ * exception where fluid mode would have quietly added it.
+ *
+ * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
+ * are themselves schema changes, which a frozen connection also refuses.
  *
  * @return void
  */
-function ensure_post_columns(): void
+function ensure_schema(): void
 {
-    $postTableExists = (bool) R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name='post'");
-    if (!$postTableExists) {
-        return;
+    foreach (SCHEMA as $table => $columns) {
+        $definitions = [];
+        foreach ($columns as $name => $type) {
+            $definitions[] = "$name $type";
+        }
+        R::exec(sprintf(
+            'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
+            $table,
+            implode(', ', $definitions)
+        ));
+
+        $existing = array_column(R::getAll("PRAGMA table_info($table)"), 'name');
+        foreach ($columns as $name => $type) {
+            if (!in_array($name, $existing, true)) {
+                R::exec("ALTER TABLE $table ADD COLUMN $name $type");
+            }
+        }
     }
+}
+
+/**
+ * Runs the post table's one-time row migrations, then indexes it.
+ *
+ * Must be called after ensure_schema(), which is what guarantees the table and
+ * every SCHEMA column exist. This used to add `deleted`, `draft` and
+ * `import_uuid` itself, back when it was bootstrap_db()'s only schema step;
+ * ensure_schema() now ALTER-adds every declared column ahead of it, so those
+ * three branches could no longer fire and the columns it reads are already the
+ * post-ALTER set.
+ *
+ * @return void
+ */
+function migrate_post_table(): void
+{
     $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
-    if (!in_array('deleted', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN deleted INTEGER');
-    }
-    if (!in_array('draft', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN draft INTEGER');
-    }
-    if (!in_array('import_uuid', $columns, true)) {
-        R::exec('ALTER TABLE post ADD COLUMN import_uuid TEXT');
-    }
     backfill_post_version($columns);
     backfill_imported_post_identity($columns);
-    // The backfills above want the columns as they were; the indexes want them
-    // as they now are, so the three the ALTERs just guaranteed are folded back
-    // in — otherwise indexing `draft`/`deleted` would lag a boot behind the
-    // upgrade that added them.
-    ensure_post_indexes(array_merge($columns, ['deleted', 'draft', 'import_uuid']));
+    ensure_post_indexes($columns);
 }
 
 /**
@@ -215,12 +349,12 @@ function ensure_post_indexes(array $columns): void
  * behind it (up to PDO's 60-second busy timeout) instead of being served under
  * a shared read lock. The probe is a read, so it does not.
  *
- * Also skipped when the column does not exist yet: a `post` table predating it
- * has nothing to stamp, and naming it in an UPDATE is an error rather than a
- * no-op. Runs from ensure_post_columns(), which has already established that
- * the table exists and collected its columns.
+ * Skipped when the column is absent, so the function is safe to call against a
+ * `post` table predating it: naming a missing column in an UPDATE is an error
+ * rather than a no-op. ensure_schema() declares `version`, so the guard never
+ * fires under bootstrap_db() — it is what keeps this callable in isolation.
  *
- * @param list<string> $columns Column names as they were before the ALTERs above.
+ * @param list<string> $columns Column names of the post table.
  */
 function backfill_post_version(array $columns): void
 {
@@ -250,7 +384,7 @@ function backfill_post_version(array $columns): void
  * correct — but it probes with a SELECT first, because an UPDATE that matches
  * nothing still takes a write lock (see backfill_post_version()).
  *
- * @param list<string> $columns Column names as they were before this call.
+ * @param list<string> $columns Column names of the post table.
  */
 function backfill_imported_post_identity(array $columns): void
 {

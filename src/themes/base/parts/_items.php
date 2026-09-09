@@ -3,6 +3,7 @@
 global $data;
 global $template;
 
+use function Lamb\is_deleted;
 use function Lamb\Theme\action_delete;
 use function Lamb\Theme\action_edit;
 use function Lamb\Theme\action_preview;
@@ -18,8 +19,13 @@ use function Lamb\Theme\the_reply_context;
 use function Lamb\Theme\title_link;
 
 if (empty($data['posts'])) :
-    ?><p>Sorry no items found.</p>
-    <?php
+    // Search and tag pages set $data['intro'] ("No results found.") which
+    // already states the empty case; only fall back to our own message when
+    // nothing else does, so the two don't double up.
+    if (empty($data['intro'])) :
+        ?><p>Sorry no items found.</p>
+        <?php
+    endif;
 else :
     foreach ($data['posts'] as $bean) :
         /** @var \RedBeanPHP\OODBBean $bean */
@@ -40,7 +46,7 @@ else :
             <div class="e-content"><?= anchor_headings($bean->transformed, !empty($bean->title) ? 3 : 2) ?></div>
             <?= syndication_links($bean) ?>
             <footer>
-                <small><?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+                <small><?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
             </footer>
         </article>
         <?php

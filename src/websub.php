@@ -8,6 +8,7 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
 use function Lamb\get_option;
+use function Lamb\is_draft;
 use function Lamb\is_scheduled;
 use function Lamb\set_option;
 
@@ -84,7 +85,7 @@ function ping_hub(?array $config = null, ?callable $sender = null): void
  */
 function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender = null): void
 {
-    if (!$bean->id || !empty($bean->feed_name) || !empty($bean->draft)) {
+    if (!$bean->id || !empty($bean->feed_name) || is_draft($bean)) {
         return;
     }
     if (is_scheduled($bean)) {

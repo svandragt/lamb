@@ -4,8 +4,10 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Http\apply_dns_resolve_timeout;
 use function Lamb\Http\extract_page_segment;
 use function Lamb\Http\get_request_uri;
+use function Lamb\Http\resolve_host_ips;
 use function Lamb\Http\page_path;
 use function Lamb\Http\request_string;
 use function Lamb\Http\requested_path;
@@ -176,5 +178,37 @@ class HttpTest extends TestCase
     {
         $this->assertSame('42', request_string(42));
         $this->assertSame('1.5', request_string(1.5));
+    }
+
+    // resolve_host_ips() runs before curl connects, and neither dns_get_record()
+    // nor gethostbyname() takes a timeout — so it caps the resolver via
+    // RES_OPTIONS, keeping a black-holed nameserver from holding the /_cron flock
+    // unbounded (#707). '.invalid' never resolves, so this needs no live network.
+    public function testResolveHostIpsBoundsTheResolver(): void
+    {
+        resolve_host_ips('nonexistent.invalid');
+
+        $this->assertStringContainsString('timeout:5 attempts:2', (string) getenv('RES_OPTIONS'));
+    }
+
+    /**
+     * apply_dns_resolve_timeout() is what resolve_host_ips() and
+     * Bootstrap\bootstrap_db() both call to set this bound — pinned directly
+     * (rather than only indirectly via resolve_host_ips() above) so a future
+     * edit that changes the RES_OPTIONS string can't silently drift between
+     * the two callers. bootstrap_db() calling this as its first line — before
+     * any other Lamb code has a chance to resolve a host — is what actually
+     * makes the bound reliable: glibc's resolver only honours a RES_OPTIONS
+     * change made before the process's first hostname lookup, and a real,
+     * timed reproduction (a black-holed nameserver, an unrelated
+     * file_get_contents() resolving first) confirmed that a *second*
+     * putenv() call in the same process is silently ignored — see
+     * apply_dns_resolve_timeout()'s docblock.
+     */
+    public function testApplyDnsResolveTimeoutSetsResOptionsEnvVar(): void
+    {
+        apply_dns_resolve_timeout();
+
+        $this->assertSame('timeout:5 attempts:2', getenv('RES_OPTIONS'));
     }
 }

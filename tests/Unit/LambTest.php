@@ -48,6 +48,21 @@ class LambTest extends TestCase
         $this->assertSame('Hello #foo', add_body_tags('Hello', ['foo', 'foo', 'FOO']));
     }
 
+    public function testAddBodyTagsSanitizesASpaceInATag()
+    {
+        // A Micropub category with a space is real (e.g. "day trip"): appended
+        // verbatim it splits into a bare hashtag plus stray unlinked text, and
+        // get_tags() can only ever recover the part before the space — this
+        // must round-trip instead of silently losing the rest of the tag.
+        $this->assertSame('Hello #day-trip', add_body_tags('Hello', ['day trip']));
+    }
+
+    public function testAddBodyTagsSanitizedTagIsRecoverableByGetTags()
+    {
+        $body = add_body_tags('Hello', ['day trip']);
+        $this->assertSame(['day-trip'], get_tags($body));
+    }
+
     // strip_trailing_body_tags
 
     public function testStripTrailingBodyTagsRemovesTrailingRun()
@@ -109,6 +124,14 @@ class LambTest extends TestCase
     public function testRemoveBodyTagsLeavesALongerTagAlone(): void
     {
         $this->assertSame('Hello #phpstan', remove_body_tags('Hello #phpstan', ['php']));
+    }
+
+    public function testRemoveBodyTagsSanitizesMultiWordTagsLikeAddBodyTags(): void
+    {
+        // Deleting with the same string used to add ("day trip") must still
+        // remove the `#day-trip` that add_body_tags() wrote.
+        $body = add_body_tags('A post about a day trip', ['day trip']);
+        $this->assertSame('A post about a day trip', remove_body_tags($body, ['day trip']));
     }
 
     public function testRemoveBodyTagsIgnoresAnEmptyTagName(): void
@@ -241,6 +264,29 @@ class LambTest extends TestCase
         $result = parse_tags('<p>#foo&amp;bar</p>');
         $this->assertStringNotContainsString('href="/tag/foo&amp"', $result);
         $this->assertStringContainsString('href="/tag/foo"', $result);
+    }
+
+    public function testParseTagsDoesNotLinkHashtagShapedAnchorText(): void
+    {
+        // A Markdown link whose visible text starts with "#" (e.g. referencing a
+        // GitHub issue: `[#42](https://.../issues/42)`) renders as
+        // <a href="...">#42</a>. Without an anchor-text guard, the "#42" text
+        // segment matched TAG_PATTERN on its own and got hashtag-linked too,
+        // nesting an <a> inside the author's own <a> — invalid HTML5 that
+        // browsers de-nest, breaking the intended link.
+        $result = parse_tags('<p>See <a href="https://example.com/issues/42">#42</a> for details.</p>');
+        $this->assertSame(
+            '<p>See <a href="https://example.com/issues/42">#42</a> for details.</p>',
+            $result
+        );
+    }
+
+    public function testParseTagsStillLinksHashtagsOutsideAnAnchor(): void
+    {
+        // The anchor-text guard must not swallow ordinary hashtags that merely
+        // follow a link in the same paragraph.
+        $result = parse_tags('<p>See <a href="/x">a link</a> about #php.</p>');
+        $this->assertStringContainsString('<a href="/tag/php">#php</a>', $result);
     }
     private function connect(): void
     {

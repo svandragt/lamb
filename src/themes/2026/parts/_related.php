@@ -42,7 +42,6 @@ $primary_tag = $tags[0] ?? null;
             $permalink = \Lamb\permalink_path($bean);
             $title = trim(strip_tags($bean->title ?? ''));
             $excerpt = trim(strip_tags($bean->description ?? ''));
-            // If the post has no title, promote a short excerpt to the title slot.
             if ($title === '' && $excerpt !== '') {
                 $title = mb_strimwidth($excerpt, 0, 90, '…');
                 $excerpt = '';

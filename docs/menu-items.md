@@ -1,5 +1,6 @@
 ---
 title: Menu Items
+parent: Site customisation
 ---
 
 # Menu Items

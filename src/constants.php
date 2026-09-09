@@ -54,3 +54,7 @@ define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');
 define('SUBMIT_LOGIN', 'Log in');
+// sitemaps.org caps a single sitemap document at 50,000 URLs. /sitemap.xml
+// splits into a sitemap index of /sitemap.xml/page/N children once the site's
+// visible URL count passes this.
+define('SITEMAP_MAX_URLS', 50000);

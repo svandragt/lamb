@@ -99,9 +99,23 @@ function parse_tags(string $html): string
         return $html;
     }
 
+    // A hashtag can also be the visible text of a link Markdown already built,
+    // e.g. `[#42](https://…/issues/42)`. TAG_PATTERN matches at the start of a
+    // text segment regardless of what preceded it, so without this the anchor's
+    // own text got hashtag-linked too, nesting an `<a>` inside an `<a>` — HTML5
+    // parsers de-nest that, silently breaking the author's link.
+    $anchor_depth = 0;
     foreach ($parts as $i => $part) {
         // Odd indices are the captured tags themselves — never rewritten.
-        if ($i % 2 === 1 || !str_contains($part, '#')) {
+        if ($i % 2 === 1) {
+            if (preg_match('/^<a[\s>]/i', $part) === 1) {
+                $anchor_depth++;
+            } elseif (preg_match('/^<\/a\s*>$/i', $part) === 1) {
+                $anchor_depth = max(0, $anchor_depth - 1);
+            }
+            continue;
+        }
+        if ($anchor_depth > 0 || !str_contains($part, '#')) {
             continue;
         }
         $parts[$i] = preg_replace_callback(TAG_PATTERN, function ($matches) {
@@ -117,11 +131,31 @@ function parse_tags(string $html): string
 }
 
 /**
+ * Normalizes an arbitrary string into a single hashtag-safe token: a run of
+ * characters get_tags() cannot parse past (TAG_TERMINATORS) collapses to one
+ * hyphen. Without this, a multi-word Micropub category like "day trip"
+ * appended verbatim as `#day trip` splits into the hashtag `#day` plus the
+ * bare, unlinked, silently-dropped-from-round-trip text ` trip`.
+ *
+ * @param string $tag
+ * @return string The sanitized tag, or '' if nothing tag-safe remained.
+ */
+function sanitize_tag_name(string $tag): string
+{
+    $safe = preg_replace('/[' . TAG_TERMINATORS . ']+/u', '-', trim($tag));
+
+    return trim($safe ?? '', '-');
+}
+
+/**
  * Appends the given tags to a body as trailing hashtags, skipping ones the
  * body already carries. Returns the body unchanged when nothing is missing.
  *
  * Counterpart of get_tags(): used by Micropub category `add` updates, where
- * categories live in the body as hashtags rather than in a column.
+ * categories live in the body as hashtags rather than in a column. Each tag
+ * is passed through sanitize_tag_name() first, so what get_tags() recovers
+ * from the result always matches what was asked for — see that function's
+ * docblock for why this is necessary.
  *
  * "Already carries" is case-insensitive, and a tag repeated in $tags is added
  * once: `#PHP` and `#php` are one tag everywhere else (the link parse_tags()
@@ -137,6 +171,7 @@ function add_body_tags(string $body, array $tags): string
     $present = array_map('mb_strtolower', get_tags($body));
     $to_add = [];
     foreach ($tags as $tag) {
+        $tag = sanitize_tag_name($tag);
         $key = mb_strtolower($tag);
         if ($tag === '' || in_array($key, $present, true)) {
             continue;
@@ -176,6 +211,11 @@ function strip_trailing_body_tags(string $body): string
  * Removes the named hashtags (and their preceding whitespace) from a body,
  * wherever they appear. Used by Micropub category delete-values updates.
  *
+ * Each tag goes through sanitize_tag_name() first, like add_body_tags(), so a
+ * multi-word category ("day trip") matches the hashtag add wrote (`#day-trip`).
+ * Without it, a client deleting a category it added gets a success response but
+ * the hashtag stays in the body.
+ *
  * @param string       $body The raw post body.
  * @param list<string> $tags Tag names (without `#`) to remove.
  * @return string The body without the named tags.
@@ -183,6 +223,7 @@ function strip_trailing_body_tags(string $body): string
 function remove_body_tags(string $body, array $tags): string
 {
     foreach ($tags as $tag) {
+        $tag = sanitize_tag_name($tag);
         // An empty name would leave a pattern that matches a bare `#`, deleting
         // a literal one out of the body. add_body_tags() skips it the same way.
         if ($tag === '') {
@@ -469,6 +510,9 @@ function render_body(string $body): string
     // lazily-loaded image. Resolved once here, at parse time, and cached in
     // `transformed` — not per request.
     $parser->setImageSizeResolver(Response\asset_dimensions(...));
+    // Stamp a responsive srcset/sizes on the same images, so the browser can
+    // pick a smaller variant instead of always downloading the full-size WebP.
+    $parser->setSrcsetResolver(Response\asset_srcset(...));
 
     return $parser->text(trim($content));
 }
@@ -815,6 +859,19 @@ function is_draft(OODBBean $post): bool
 }
 
 /**
+ * Returns true when a post is not yet publicly visible: a draft, or
+ * scheduled for the future. Deleted is deliberately not part of this — a
+ * trashed post is a separate state from "not published yet".
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_unpublished(OODBBean $post): bool
+{
+    return is_draft($post) || is_scheduled($post);
+}
+
+/**
  * Returns true when a post is soft-deleted. The in-memory counterpart to
  * SQL_NOT_DELETED: an unset column is not deleted, matching the SQL listings.
  *
@@ -888,7 +945,7 @@ function is_publicly_visible(OODBBean $post): bool
  */
 function preview_token_valid(OODBBean $post, ?string $token): bool
 {
-    if (empty($post->id) || $post->deleted == 1) {
+    if (empty($post->id) || is_deleted($post)) {
         return false;
     }
     if (empty($post->preview_token) || $token === null || $token === '') {
@@ -914,7 +971,7 @@ function preview_token_valid(OODBBean $post, ?string $token): bool
  */
 function ensure_preview_token(OODBBean $post): void
 {
-    if ($post->draft != 1 && !is_scheduled($post)) {
+    if (!is_unpublished($post)) {
         return;
     }
     $expires = $post->preview_token_expires ?? '';

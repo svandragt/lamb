@@ -1,5 +1,6 @@
 ---
 title: Scheduling
+parent: Content
 ---
 
 # Scheduling

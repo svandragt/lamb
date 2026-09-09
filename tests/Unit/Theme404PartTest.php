@@ -50,8 +50,24 @@ class Theme404PartTest extends TestCase
     {
         $html = $this->render('missing-post');
 
-        $this->assertStringContainsString('/search/missing-post', $html);
-        $this->assertStringContainsString('searching for missing-post', $html);
+        $this->assertStringContainsString('/search/missing%20post', $html);
+        $this->assertStringContainsString('searching for missing post', $html);
+    }
+
+    public function testTurnsPathSeparatorsIntoSearchWords(): void
+    {
+        $html = $this->render('technology/truly-muting-gmail-conversations');
+
+        $this->assertStringContainsString(
+            '/search/technology%20truly%20muting%20gmail%20conversations',
+            $html
+        );
+        $this->assertStringNotContainsString('%2F', $html);
+    }
+
+    public function testOmitsTheSuggestionWhenThePathHasNoWords(): void
+    {
+        $this->assertStringNotContainsString('/search/', $this->render('/-_/'));
     }
 
     public function testDoesNotSuggestSearchingForTheLiteral404(): void
@@ -71,7 +87,7 @@ class Theme404PartTest extends TestCase
         $html = $this->render('"><script>alert(1)</script>');
 
         $this->assertStringNotContainsString('<script>', $html);
-        $this->assertStringContainsString('&lt;script&gt;', $html);
+        $this->assertStringContainsString('searching for script alert 1 script', $html);
     }
 
     public function testRendersTheHumanTitleRatherThanAStatusLine(): void

@@ -18,8 +18,9 @@
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
- * Replaces the three import-*.php scripts' hand-rolled copies of this
- * bootstrap; they now delegate here and print a deprecation warning.
+ * The single entry point for every importer: it owns the bootstrap, argument
+ * parsing and source registry the three former import-*.php scripts each
+ * hand-rolled a copy of.
  */
 
 namespace Lamb;

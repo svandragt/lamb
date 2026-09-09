@@ -10,6 +10,7 @@ use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 /**
  * Handles the /login route without starting a session for anonymous visitors.
@@ -53,7 +54,8 @@ function redirect_login(): array
 
     // Refuse a client that has already burned through its attempts, before
     // bcrypt runs (issue #443). A refused attempt is not itself recorded, so
-    // retrying can't extend the block indefinitely.
+    // retrying can't extend the block indefinitely. Cheap early exit only;
+    // reserve_login_attempt() below is the race-free gate.
     $ip  = client_ip();
     $now = time();
     $retry_after = login_throttle_retry_after($ip, $now);
@@ -73,10 +75,17 @@ function redirect_login(): array
         return login_page_data('Login is not configured on this site.');
     }
 
+    // Reserve a slot for this attempt atomically, immediately before bcrypt
+    // runs: see reserve_login_attempt()'s docblock for why the peek above is
+    // not enough on its own.
+    $retry_after = reserve_login_attempt($ip, $now);
+    if ($retry_after > 0) {
+        return throttled_login_response($retry_after);
+    }
+
     $user_pass = \Lamb\Http\request_string($_POST['password'] ?? null) ?? '';
     if (!password_verify($user_pass, base64_decode(LOGIN_PASSWORD))) {
         log_failed_login();
-        record_login_failure($ip, $now);
         // Re-render the login page in place with the error: /login is sessionless
         // now, so there is no flash to carry the message across a redirect (#462).
         return login_page_data('Password is incorrect, please try again.');
@@ -329,6 +338,11 @@ function throttle_retry_after(array $state, int $now): int
 /**
  * Reads a client's counter and returns how long it must wait (0 = go ahead).
  *
+ * An unlocked peek, not the enforcement point: it exists only as a cheap
+ * early exit before the CSRF/config checks in redirect_login(). The actual,
+ * race-free gate is reserve_login_attempt(), called immediately before
+ * bcrypt runs.
+ *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return int Seconds to wait.
@@ -341,27 +355,65 @@ function login_throttle_retry_after(string $ip, int $now): int
 }
 
 /**
- * Records a failed attempt for a client, starting a fresh window when the
- * previous one has lapsed, and prunes rows left behind by other clients.
+ * Reserves an attempt slot for a client, atomically with the threshold check,
+ * starting a fresh window when the previous one has lapsed, and prunes rows
+ * left behind by other clients (pruning rides on the write path since that is
+ * the only thing that creates the rows).
  *
- * Pruning rides on the write path because that is the only thing that creates
- * these rows: a burst of attempts from many addresses cleans up after itself
- * once each window lapses, so the `option` table doesn't keep a permanent row
- * per address that ever probed the login form.
+ * A BEGIN IMMEDIATE write lock makes the check-and-increment atomic before
+ * bcrypt: without it a concurrent burst from one address could all read the
+ * same under-limit count and each run password_verify(), the pile-up the
+ * throttle exists to stop. Under WAL (see bootstrap_db()) the lock only contends
+ * with another writer, so a contended login briefly waits for that writer's
+ * counter update — microseconds — and bcrypt runs after this returns, never
+ * behind the lock. See response/README.md ("Login: a sessionless page with its
+ * own CSRF model").
+ *
+ * Any throw in the critical section rolls the transaction back in `finally`, so
+ * the shared connection is never left mid-transaction to poison later queries.
+ *
+ * R::begin()/R::commit() are no-ops in this app's fluid mode (see
+ * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement.
  *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
- * @return void
+ * @return int Seconds to wait before the client may attempt again (0 = reserved, go ahead).
  */
-function record_login_failure(string $ip, int $now): void
+function reserve_login_attempt(string $ip, int $now): int
 {
     prune_login_throttle($now);
 
-    $bean  = \Lamb\get_option(login_throttle_key($ip), '');
-    $state = decode_throttle_state($bean->value);
-    $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
+    R::exec('BEGIN IMMEDIATE');
+    $committed = false;
+    try {
+        $bean  = \Lamb\get_option(login_throttle_key($ip), '');
+        $state = decode_throttle_state($bean->value);
+        $retry_after = throttle_retry_after($state, $now);
+        if ($retry_after > 0) {
+            R::exec('COMMIT');
+            $committed = true;
+            return $retry_after;
+        }
 
-    \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
+        $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
+        \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
+
+        R::exec('COMMIT');
+        $committed = true;
+
+        return 0;
+    } finally {
+        if (!$committed) {
+            try {
+                R::exec('ROLLBACK');
+            } catch (SQL) {
+                // A rollback that itself fails leaves later queries erroring
+                // loudly, the right signal for the genuine DB fault that is the
+                // only way to reach here now WAL keeps routine contention from
+                // throwing.
+            }
+        }
+    }
 }
 
 /**

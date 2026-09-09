@@ -33,19 +33,20 @@ class ThemeItemsEscapeTest extends TestCase
         $_SESSION = [];
     }
 
-    private function renderStatusItem(string $title): string
+    private function renderStatusItem(string $title, int|bool|null $deleted = false): string
     {
         $bean = R::dispense('post');
         $bean->title = $title;
         $bean->transformed = '<p>body</p>';
         $bean->created = '2024-01-01 12:00:00';
-        $bean->deleted = false;
+        $bean->deleted = $deleted;
         R::store($bean);
 
         global $data, $template, $config;
         $config = ['menu_items' => []];
         $data = ['posts' => [$bean]];
         $template = 'status';
+        $_SESSION[SESSION_LOGIN] = true;
 
         ob_start();
         include dirname(__DIR__, 2) . '/src/themes/base/parts/_items.php';
@@ -63,5 +64,26 @@ class ThemeItemsEscapeTest extends TestCase
     {
         $html = $this->renderStatusItem('Hello World');
         $this->assertStringContainsString('Hello World', $html);
+    }
+
+    /**
+     * The base theme's _items.php picked Restore-vs-Delete with the raw
+     * `$bean->deleted` truthy check instead of the canonical is_deleted()
+     * predicate ((bean->deleted ?? null) == 1). A non-canonical truthy value
+     * (deleted = 2) would previously still show Restore even though
+     * is_deleted() says the post is not deleted -- pin the delegation.
+     */
+    public function testNonCanonicalDeletedValueShowsDeleteNotRestore(): void
+    {
+        $html = $this->renderStatusItem('Hello World', 2);
+        $this->assertStringContainsString('form-delete', $html);
+        $this->assertStringNotContainsString('form-restore', $html);
+    }
+
+    public function testCanonicalDeletedValueShowsRestoreNotDelete(): void
+    {
+        $html = $this->renderStatusItem('Hello World', 1);
+        $this->assertStringContainsString('form-restore', $html);
+        $this->assertStringNotContainsString('form-delete', $html);
     }
 }

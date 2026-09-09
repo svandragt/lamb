@@ -417,6 +417,27 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringContainsString('#test2', $post->body);
     }
 
+    public function testCreateCallbackSanitizesMultiWordCategory(): void
+    {
+        // A category with a space ("day trip") appended verbatim as `#day trip`
+        // split into the hashtag `#day` plus stray, unlinked body text — and
+        // get_tags() could only ever recover "day", silently dropping "trip"
+        // from every source query. sanitize_tag_name() must run here too, not
+        // just in add_body_tags()'s update path.
+        $adapter = new LambMicropubAdapter();
+        $data = [
+            'type' => ['h-entry'],
+            'properties' => [
+                'content'  => ['A post about a day trip'],
+                'category' => ['day trip'],
+            ],
+        ];
+        $adapter->createCallback($data);
+        $post = R::findOne('post', ' body LIKE ? ', ['%#day-trip%']);
+        $this->assertNotNull($post);
+        $this->assertStringNotContainsString('#day trip', $post->body);
+    }
+
     public function testCreateCallbackHtmlContentIsRenderedNotEscaped(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -1804,6 +1825,30 @@ class MicropubAdapterTest extends TestCase
             'Bearer error="insufficient_scope", scope="update"',
             $result->getHeaderLine('WWW-Authenticate')
         );
+    }
+
+    public function testUpdateCallbackReturnsInsufficientScopeForNonexistentUrlWhenTokenLacksScope(): void
+    {
+        // Regression: updateCallback() previously checked post existence before
+        // scope, unlike deleteCallback()/undeleteCallback() — so an
+        // insufficiently-scoped token got 'invalid_request' for a URL naming no
+        // post, but 'insufficient_scope' (403) for one naming a real post. Since
+        // ids are sequential, that let any token use the response's shape as an
+        // existence oracle for hidden (draft/scheduled) posts.
+        $adapter = new LambMicropubAdapter();
+        $adapter->user = [
+            'me'    => ROOT_URL . '/',
+            'scope' => ['create'],
+        ];
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/999999',
+            ['replace' => ['content' => ['New content']]]
+        );
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(403, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('insufficient_scope', $body['error']);
     }
 
     // --- bearer_challenge (RFC 6750 §3 WWW-Authenticate value) ---

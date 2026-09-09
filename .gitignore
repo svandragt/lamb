@@ -1,6 +1,11 @@
 *.db
 *.db.bak*
+# SQLite WAL sidecar files (journal_mode=WAL, see bootstrap_db()).
+*.db-wal
+*.db-shm
 /tests/Support/Data/sessions/
+# Acceptance runs set LAMB_DATA_DIR here, so the app's cache lands under it.
+/tests/Support/Data/cache/
 /.docker/*.env
 /data/cache/
 /data/*.log

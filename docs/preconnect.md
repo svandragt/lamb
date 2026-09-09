@@ -1,5 +1,6 @@
 ---
 title: Preconnect
+parent: Site customisation
 ---
 
 # Preconnect

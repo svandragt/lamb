@@ -1,5 +1,6 @@
 ---
 title: Cross-posting From Feeds
+parent: Content
 ---
 
 # Cross-posting From Feeds

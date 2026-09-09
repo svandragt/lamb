@@ -176,6 +176,71 @@ test('handleFiles falls back to the status when the endpoint sends no message', 
   assert.match(document.querySelector('.flash.upload-error').textContent, /Upload failed \(500\)/)
 })
 
+test('attach control uploads a single picked file at the cursor', async () => {
+  const { window, document } = load(
+    '<!DOCTYPE html><body><form><textarea></textarea><input type="file" class="attach-image-input"></form></body>'
+  )
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  const ta = document.querySelector('textarea')
+  ta.value = 'abcd'
+  ta.setSelectionRange(2, 2)
+  const attach = document.querySelector('.attach-image-input')
+
+  let posted
+  window.fetch = (url, opts) => {
+    posted = { url, opts }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve('![](/img.webp)') })
+  }
+
+  Object.defineProperty(attach, 'files', { value: [new window.File(['x'], 'a.png', { type: 'image/png' })], configurable: true })
+  attach.dispatchEvent(new window.Event('change'))
+  await flush()
+
+  assert.equal(posted.url, '/upload')
+  assert.equal(ta.value, 'ab![](/img.webp)cd')
+})
+
+test('attach control uploads multiple picked files as separate imageFiles[] entries', async () => {
+  const { window, document } = load(
+    '<!DOCTYPE html><body><form><textarea></textarea><input type="file" class="attach-image-input"></form></body>'
+  )
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  const ta = document.querySelector('textarea')
+  const attach = document.querySelector('.attach-image-input')
+
+  let posted
+  window.fetch = (url, opts) => {
+    posted = { url, opts }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve('![](/img.webp)') })
+  }
+
+  const files = [
+    new window.File(['x'], 'a.png', { type: 'image/png' }),
+    new window.File(['y'], 'b.png', { type: 'image/png' }),
+  ]
+  Object.defineProperty(attach, 'files', { value: files, configurable: true })
+  attach.dispatchEvent(new window.Event('change'))
+  await flush()
+
+  assert.equal(posted.opts.body.getAll('imageFiles[]').length, 2)
+})
+
+test('attach control clears its value after picking, so the same file fires again', async () => {
+  const { window, document } = load(
+    '<!DOCTYPE html><body><form><textarea></textarea><input type="file" class="attach-image-input"></form></body>'
+  )
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  const attach = document.querySelector('.attach-image-input')
+
+  window.fetch = () => Promise.resolve({ ok: true, json: () => Promise.resolve('![](/img.webp)') })
+
+  Object.defineProperty(attach, 'files', { value: [new window.File(['x'], 'a.png', { type: 'image/png' })], configurable: true })
+  attach.dispatchEvent(new window.Event('change'))
+  await flush()
+
+  assert.equal(attach.value, '')
+})
+
 test('handleFiles does not stack repeated failures, and clears on success', async () => {
   const { window, document, api } = load('<!DOCTYPE html><body><form><textarea></textarea></form></body>')
   const ta = document.querySelector('textarea')

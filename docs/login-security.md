@@ -1,5 +1,6 @@
 ---
 title: Login security
+parent: Site customisation
 ---
 
 # Login security

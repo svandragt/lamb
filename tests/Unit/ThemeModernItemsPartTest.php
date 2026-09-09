@@ -202,4 +202,37 @@ class ThemeModernItemsPartTest extends TestCase
         $loggedIn = $this->render('2026', 'tag', [$bean]);
         $this->assertStringContainsString('<small>', $loggedIn);
     }
+
+    /**
+     * render_post_list() decided Restore-vs-Delete with the raw
+     * `$bean->deleted` truthy check instead of the canonical is_deleted()
+     * predicate ((bean->deleted ?? null) == 1). A non-canonical truthy value
+     * (deleted = 2) would previously still show Restore even though
+     * is_deleted() says the post is not deleted -- pin the delegation.
+     */
+    public function testNonCanonicalDeletedValueShowsDeleteNotRestore(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        $bean = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
+        $bean->deleted = 2;
+        R::store($bean);
+
+        $html = $this->render('2026', 'tag', [$bean]);
+
+        $this->assertStringContainsString('form-delete', $html);
+        $this->assertStringNotContainsString('form-restore', $html);
+    }
+
+    public function testCanonicalDeletedValueShowsRestoreNotDelete(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        $bean = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
+        $bean->deleted = 1;
+        R::store($bean);
+
+        $html = $this->render('2026', 'tag', [$bean]);
+
+        $this->assertStringContainsString('form-restore', $html);
+        $this->assertStringNotContainsString('form-delete', $html);
+    }
 }

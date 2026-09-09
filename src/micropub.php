@@ -12,13 +12,16 @@ use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
 use function Lamb\add_body_tags;
+use function Lamb\Bootstrap\cache_headers;
 use function Lamb\get_tags;
+use function Lamb\is_deleted;
 use function Lamb\is_publicly_visible;
-use function Lamb\is_scheduled;
+use function Lamb\is_unpublished;
 use function Lamb\normalize_datetime;
 use function Lamb\parse_bean;
 use function Lamb\permalink;
 use function Lamb\remove_body_tags;
+use function Lamb\sanitize_tag_name;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
 use function Lamb\Post\matter_string;
@@ -387,7 +390,7 @@ class LambMicropubAdapter extends MicropubAdapter
         // Unpublished posts 404 anonymously (#284), but clients GET the Location
         // URL we return to show the just-created post. Attach a short-lived
         // preview token so that URL works without a Lamb session (#285).
-        $needs_preview = $bean->draft == 1 || is_scheduled($bean);
+        $needs_preview = is_unpublished($bean);
         \Lamb\ensure_preview_token($bean);
 
         // Stores, pins the final slug, and emits post.published — the slug must
@@ -484,18 +487,22 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     public function updateCallback(string $url, array $actions)
     {
+        // Checked before existence, matching deleteCallback()/undeleteCallback():
+        // an insufficiently-scoped token must get the same response whether the
+        // target post exists, is hidden, or doesn't exist, so URL ids (which are
+        // sequential) can't be used as an existence oracle.
+        $rejection = $this->scopeRejection('update');
+        if ($rejection !== null) {
+            return $rejection;
+        }
+
         $bean = $this->findPostByUrl($url);
         // A soft-deleted post is meant to stay immutable until explicitly
         // restored via the delete-scoped undeleteCallback(); treating it the
         // same as "no such post" here also means this can't be used to tell
         // a trashed post's id apart from a nonexistent one.
-        if ($bean === null || (int) $bean->deleted === 1) {
+        if ($bean === null || is_deleted($bean)) {
             return 'invalid_request';
-        }
-
-        $rejection = $this->scopeRejection('update');
-        if ($rejection !== null) {
-            return $rejection;
         }
 
         // Captured before any operation runs: whether this update *mints* a
@@ -1218,7 +1225,10 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private function buildTags(array $categories): string
     {
-        $tags = self::textValues($categories);
+        $tags = array_values(array_filter(array_map(
+            sanitize_tag_name(...),
+            self::textValues($categories)
+        ), fn(string $c) => $c !== ''));
 
         return $tags === [] ? '' : implode(' ', array_map(fn(string $c) => '#' . $c, $tags));
     }
@@ -1392,6 +1402,15 @@ function token_fingerprint(string $token): string
  */
 function respond_micropub(): void
 {
+    // index.php's pre-route cache_headers() call only sees the session cookie, so
+    // it always emits the anonymous max-age=300 header here — Micropub auth is a
+    // bearer token, never that cookie. Override before touching the request: every
+    // code path below (draft source queries, write results, error bodies) carries
+    // bearer-token-gated content that a shared cache must never store or replay.
+    foreach (cache_headers(true) as $cache_header) {
+        header($cache_header);
+    }
+
     $headers = getallheaders() ?: [];
     $rawBody = file_get_contents('php://input') ?: null;
 
@@ -1544,6 +1563,13 @@ function micropub_error(int $status, string $error, string $description, ?string
  */
 function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapter = null): void
 {
+    // Same override as respond_micropub() above, and for the same reason: this
+    // endpoint is bearer-token-gated, not session-cookie-gated, so index.php's
+    // pre-route cache_headers() call always guesses "anonymous" here.
+    foreach (cache_headers(true) as $cache_header) {
+        header($cache_header);
+    }
+
     $headers = getallheaders() ?: [];
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
     $lcHeaders = array_change_key_case($headers, CASE_LOWER);

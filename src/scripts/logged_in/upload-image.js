@@ -17,6 +17,14 @@ onLoaded(() => {
         cancel(ev)
         handleFiles(files, ta)
     })
+
+    const attach = $('.attach-image-input')
+    if (attach) {
+        attach.on('change', () => {
+            if (attach.files.length > 0) handleFiles(attach.files, ta)
+            attach.value = '' // let the same file be picked again
+        })
+    }
 })
 
 /**

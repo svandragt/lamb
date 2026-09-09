@@ -141,6 +141,30 @@ class ThemeTest extends TestCase
         $this->assertSame("ok\u{FFFD}", $result);
     }
 
+    public function testEscapeXmlStripsControlCharactersInvalidInXml10()
+    {
+        // htmlspecialchars() only rewrites & < > " ' — a raw control byte
+        // (e.g. from a Micropub JSON title with a unicode-escaped control char) passes
+        // straight through it, and XML 1.0 forbids that byte even escaped:
+        // embedding it makes the whole document fail to parse. It must be
+        // gone from the result, not merely left "escaped".
+        $result = escape_xml("Hello\x01World");
+        $this->assertSame('HelloWorld', $result);
+
+        $document = new \DOMDocument();
+        $wellFormed = $document->loadXML('<root><title>' . $result . '</title></root>');
+        $this->assertTrue($wellFormed);
+    }
+
+    public function testEscapeXmlStripsOtherXmlInvalidControlCharactersButKeepsTabNewlineCr()
+    {
+        // Tab, LF and CR are explicitly valid in XML 1.0 and must survive;
+        // the rest of the C0 control range (and the U+FFFE/U+FFFF
+        // noncharacters) must not.
+        $result = escape_xml("a\x0Bb\x0Cc\x1Fd\tE\nF\rG\u{FFFE}h\u{FFFF}");
+        $this->assertSame("abcd\tE\nF\rGh", $result);
+    }
+
     // og_escape
 
     public function testOgEscapeConvertsAngleBrackets()

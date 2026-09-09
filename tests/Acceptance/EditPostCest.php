@@ -139,4 +139,26 @@ class EditPostCest
         $I->seeInCurrentUrl('/login');
         $I->dontSeeElement('#editform');
     }
+
+    public function testEditRenamingToAReservedRouteSuffixesTheSlugInsteadOfRejectingTheEdit(AcceptanceTester $I): void
+    {
+        // "search" is a real registered route (src/routes.php), so renaming a
+        // post's title to "Search" used to be rejected outright with a "slug is
+        // in use" flash — the whole edit was silently discarded. finalize_slug()
+        // now suffixes it with the post id instead, matching post creation.
+        $this->login($I);
+        $this->createPost($I);
+
+        $id = (int) $this->editId($I);
+        $I->amOnPage('/edit/' . $id);
+        $I->fillField('contents', "# Search\n\nedit-test-reserved-slug-" . uniqid());
+        $I->click('Update post');
+
+        $I->dontSee('slug is in use');
+        $I->seePostColumnEquals($id, 'slug', 'search-' . $id);
+
+        $I->amOnPage('/search-' . $id);
+        $I->seeResponseCodeIs(200);
+        $I->see('edit-test-reserved-slug-');
+    }
 }

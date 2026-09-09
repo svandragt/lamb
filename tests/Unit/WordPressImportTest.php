@@ -16,6 +16,7 @@ use function Lamb\Import\rewrite_image_links;
 use function Lamb\Import\sanitize_html;
 use function Lamb\Post\on;
 use function Lamb\Post\reset_subscribers;
+use function Lamb\Response\image_ext_for_bytes;
 use function Lamb\Response\persist_image_bytes;
 use function Lamb\Theme\link_source;
 use function Lamb\WordPress\extract_items;
@@ -878,6 +879,41 @@ XML;
         $this->assertSame('/status/' . $bean->id, (string) $redirect->to_url);
     }
 
+    /**
+     * A site using WordPress's default ("Plain") permalink structure exports
+     * <link> as a bare query string (`?p=59`), which carries no path to
+     * redirect from — but <wp:post_name> still records the numeric post-id
+     * leak internally regardless of permalink structure. The slug must be
+     * dropped exactly as it is when a pretty-permalink <link> is present,
+     * even though there is no old path to capture as a redirect.
+     */
+    public function testImportItemDropsNumericSlugEvenWhenLinkHasNoUsablePath(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => '',
+            'guid' => 'https://oldsite.example/?p=59',
+            'link' => 'https://oldsite.example/?p=59',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Status body.</p>',
+            'tags' => [],
+            'status' => 'publish',
+            'post_type' => 'post',
+            'slug' => '59',
+        ];
+
+        $bean = import_item($item, fn() => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame('', (string) $bean->slug);
+        $this->assertStringNotContainsString('slug:', (string) $bean->body);
+        // No usable old path to redirect from — nothing should be stored.
+        $this->assertNull(R::findOne('redirect', ' from_slug = ? ', ['?p=59']));
+    }
+
     public function testImportItemDropsNumericSlugAndRedirectsFromNonStatusPath(): void
     {
         if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
@@ -951,7 +987,7 @@ XML;
     }
 
     /**
-     * Runs the item through the CLI loop exactly as import-wordpress.php does.
+     * Runs the item through the CLI loop exactly as `bin/lamb import wordpress` does.
      *
      * @param array<string, mixed> $item
      */
@@ -1026,7 +1062,7 @@ XML;
     {
         $this->assertSame(
             ['wxr.xml', true, true],
-            parse_import_args(['import-wordpress.php', 'wxr.xml', '--dry-run', '--replace'])
+            parse_import_args(['wordpress', 'wxr.xml', '--dry-run', '--replace'])
         );
         $this->assertSame(['wxr.xml', false, false], parse_import_args(['x', 'wxr.xml']));
         $this->assertSame([null, false, false], parse_import_args(['x', '--help']));
@@ -1131,6 +1167,32 @@ XML;
         }
     }
 
+    public function testImageExtForBytesReflectsActualFormatNotName(): void
+    {
+        // Regression: a WordPress media file renamed at the source — real PNG
+        // bytes served under a `.jpg` name (mime-type image/png in the WXR) —
+        // must be recognised by its bytes. Deriving the extension from the URL
+        // alone hands persist_image_bytes() a 'jpg' that its content gate
+        // rejects against the PNG bytes, leaving the image remote.
+        $png = imagecreatetruecolor(4, 4);
+        ob_start();
+        imagepng($png);
+        $pngBytes = (string) ob_get_clean();
+        imagedestroy($png);
+
+        $jpeg = imagecreatetruecolor(4, 4);
+        ob_start();
+        imagejpeg($jpeg);
+        $jpegBytes = (string) ob_get_clean();
+        imagedestroy($jpeg);
+
+        $this->assertSame('png', image_ext_for_bytes($pngBytes));
+        $this->assertSame('jpg', image_ext_for_bytes($jpegBytes));
+        // A scripted payload must not be mapped to any image extension, so the
+        // content gate still rejects it downstream.
+        $this->assertNull(image_ext_for_bytes('<html><script>alert(1)</script></html>'));
+    }
+
     public function testDefaultImageDownloaderBlocksLoopbackDestination(): void
     {
         // Regression (SSRF): an image URL embedded in the WXR file being
@@ -1143,5 +1205,44 @@ XML;
 
         $this->assertNull(default_image_downloader('http://127.0.0.1/evil.jpg', '2024/03'));
         $this->assertNull(default_image_downloader('http://169.254.169.254/evil.png', '2024/03'));
+    }
+
+    public function testDefaultImageDownloaderLogsWhenAssetDirCannotBeCreated(): void
+    {
+        // A dest-dir mkdir failure (e.g. assets/YYYY owned by another user and
+        // not group-writable) must not masquerade as a 404 or a bad image: it
+        // returns null like any other failure, but a permissions problem is
+        // invisible without a distinct signal. Force the failure deterministically
+        // — parent path component is a file, so mkdir fails for any user, root
+        // included — and assert the diagnostic reaches the log.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_wp_import_' . uniqid('', true));
+        }
+        $assets = ROOT_DIR . '/assets';
+        if (!is_dir($assets)) {
+            mkdir($assets, 0755, true);
+        }
+        // sub_path '9999/01' → parent ROOT_DIR/assets/9999; make that a FILE so
+        // creating the month dir under it can never succeed.
+        $blocker = "$assets/9999";
+        file_put_contents($blocker, 'not a directory');
+
+        $log = sys_get_temp_dir() . '/lamb_imglog_' . uniqid('', true);
+        $prev = ini_set('error_log', $log);
+        try {
+            $result = default_image_downloader('https://example.com/photo.jpg', '9999/01');
+            $this->assertNull($result);
+            $this->assertStringContainsString(
+                'asset directory',
+                (string) @file_get_contents($log),
+                'expected a dest-dir failure to be logged, not a silent null'
+            );
+        } finally {
+            if ($prev !== false) {
+                ini_set('error_log', $prev);
+            }
+            @unlink($blocker);
+            @unlink($log);
+        }
     }
 }

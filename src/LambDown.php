@@ -14,6 +14,21 @@ class LambDown extends Parsedown
     private $imageSizeResolver = null;
 
     /**
+     * Resolves an image `src` to its responsive `srcset` candidates, or null
+     * when there is nothing to offer a browser a choice between.
+     *
+     * @var (callable(string): (list<array{url: string, width: int}>|null))|null
+     */
+    private $srcsetResolver = null;
+
+    /**
+     * The default `sizes` value for an image carrying a `srcset` — the
+     * content column's rendered width in the 2026 theme (max-width ~44rem),
+     * full viewport width below that.
+     */
+    private const DEFAULT_SIZES = '(max-width: 700px) 100vw, 700px';
+
+    /**
      * The checked state of each checkbox the last text() call rendered, in
      * document order.
      *
@@ -264,6 +279,25 @@ class LambDown extends Parsedown
     }
 
     /**
+     * Supplies the lookup used to add a responsive `srcset`/`sizes` pair to
+     * images.
+     *
+     * Injected for the same reason as setImageSizeResolver(): the parser
+     * stays a pure string→string transform, and unit tests can pass a stub
+     * instead of writing real files. Callers wire in Response\asset_srcset();
+     * with no resolver set, or one returning fewer than two candidates, no
+     * srcset/sizes are emitted and the markup is unchanged.
+     *
+     * @param (callable(string): (list<array{url: string, width: int}>|null))|null $resolver
+     *        Receives an image `src`, returns an ordered list of ['url' => …, 'width' => …] or null.
+     * @return void
+     */
+    public function setSrcsetResolver(?callable $resolver): void
+    {
+        $this->srcsetResolver = $resolver;
+    }
+
+    /**
      * Inject lazy-loading attributes on every inline image so post bodies
      * with embedded screenshots do not block first paint on the homepage.
      *
@@ -291,7 +325,7 @@ class LambDown extends Parsedown
             return $image;
         }
 
-        $image['element']['attributes'] += $this->intrinsicDimensions($src) + [
+        $image['element']['attributes'] += $this->intrinsicDimensions($src) + $this->srcsetAttributes($src) + [
             'loading'  => 'lazy',
             'decoding' => 'async',
         ];
@@ -325,6 +359,35 @@ class LambDown extends Parsedown
         return [
             'width'  => (string) (int) $size[0],
             'height' => (string) (int) $size[1],
+        ];
+    }
+
+    /**
+     * The `srcset`/`sizes` attributes for an image, or none when its resolver
+     * is unset or yields fewer than two candidates to choose between.
+     *
+     * @param string $src The image's `src` attribute.
+     * @return array<string, string> `srcset`/`sizes`, or an empty array.
+     */
+    private function srcsetAttributes(string $src): array
+    {
+        if ($this->srcsetResolver === null) {
+            return [];
+        }
+
+        $candidates = ($this->srcsetResolver)($src);
+        if ($candidates === null || count($candidates) < 2) {
+            return [];
+        }
+
+        $srcset = implode(', ', array_map(
+            static fn(array $c): string => sprintf('%s %dw', $c['url'], $c['width']),
+            $candidates
+        ));
+
+        return [
+            'srcset' => $srcset,
+            'sizes'  => self::DEFAULT_SIZES,
         ];
     }
 

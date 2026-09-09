@@ -1,5 +1,6 @@
 ---
 title: Themes
+parent: Site customisation
 ---
 
 # Themes
@@ -27,18 +28,18 @@ separately using git.
 ## Screenshots
 
 Default:
-![theme-default](https://github.com/user-attachments/assets/3d80d860-b54c-4d64-ad7b-7c548157e610)
+![Screenshot of the default Lamb theme](https://github.com/user-attachments/assets/3d80d860-b54c-4d64-ad7b-7c548157e610)
 
 
 ---
 
 2024:
-![theme-2024](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
+![Screenshot of the 2024 Lamb theme](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
 
 ---
 
 2026:
-![theme-2026]({{ site.baseurl }}/2026-theme.png)
+![Screenshot of the 2026 Lamb theme]({{ site.baseurl }}/2026-theme.png)
 
 ## Theme documentation
 
@@ -46,7 +47,7 @@ Default:
 * A theme does not need to provide every file. Lamb falls back to `src/themes/base/` when a file is missing in the active theme.
 * The only file path that is always expected in the active theme is `styles/styles.css`, because `the_styles()` always loads that stylesheet from the selected theme.
 * `html.php` is only needed when you want to change the outer page layout.
-* The Atom and JSON feeds are rendered by Lamb itself (`Lamb\Response`), not by a theme part, so a theme no longer needs `feed.php` or `feed_json.php` to have working feeds. A theme that still ships either file keeps overriding the feed for now, but the file is deprecated and logs a notice; the override support is removed in a later release. Drop the file to inherit the built-in feed.
+* The Atom and JSON feeds are rendered by Lamb itself (`Lamb\Response`), not by a theme part, so a theme needs no `feed.php` or `feed_json.php` to have working feeds. Neither file is read any more: a theme that still ships one can delete it.
 * Use the `part($basename)` function to load any other theme includes. This enables a fallback to the base theme's
   files if the file does not exist in the theme. This makes the base theme a requirement for the 2024 theme.
 * CSS stylesheets must be saved in a subfolder of the theme called `styles/` and are loaded using `the_styles()`.

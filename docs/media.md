@@ -1,5 +1,6 @@
 ---
 title: Media
+parent: Content
 ---
 
 # Media
@@ -8,10 +9,11 @@ Lamb lets you add images and video to posts without leaving the editor. Uploaded
 
 ## Adding images
 
-When logged in, there are two ways to add an image to the post editor:
+When logged in, there are three ways to add an image to the post editor:
 
 - **Drag and drop** one or more image files onto the editor textarea.
 - **Paste** an image straight from the clipboard, for example a screenshot.
+- **Attach** a file using the attach button next to the editor, which opens the device's file picker — on a phone this offers Take Photo, Photo Library, or Choose File.
 
 Either way the file is uploaded and a markdown image link (`![name](url)`) is inserted at the cursor. Pasted screenshots arrive without a real filename, so each is given a unique name before upload.
 
@@ -111,6 +113,7 @@ If WebP support is missing and you want it, install or enable the WebP-capable G
 
 ## Related
 
+* [Write your first post]({{ site.baseurl }}{% link first-post.md %}): A ten-minute walkthrough that includes dragging in your first image.
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): Add images and video to status and page posts.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts and upload photos from external apps.
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A post's first image becomes its social preview card; video-only posts fall back to the default card.

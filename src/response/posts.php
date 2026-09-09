@@ -18,7 +18,6 @@ use function Lamb\Post\populate_bean;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\save;
 use function Lamb\Post\toggle_rendered_checkbox;
-use function Lamb\Route\is_reserved_route;
 
 /**
  * Handles post creation from a form submission.
@@ -314,15 +313,12 @@ function redirect_edited(): void
     $bean->version = POST_VERSION;
     $bean->updated = \Lamb\now();
 
-    if (is_reserved_route($bean->slug)) {
-        $_SESSION['flash'][] = 'Failed to save, slug is in use: "' . $bean->slug . '"';
-
-        return;
-    }
-
     try {
-        // finalize_slug: a slug claimed by another post gets an id suffix,
-        // pinned into the body's front matter so the edit form shows it.
+        // finalize_slug: a slug claimed by another post, or a reserved route
+        // name (e.g. renaming a post's title to "Search"), gets an id suffix,
+        // pinned into the body's front matter so the edit form shows it —
+        // same as redirect_created(), so a reserved-route slug is suffixed
+        // rather than silently discarding the edit.
         // lock_if_feed_sourced: editing a feed-sourced post through the form
         // marks it author-owned, so later crawls stop overwriting it.
         // redirect_on_slug_change/old_slug: records the 301 from the pre-edit
@@ -335,8 +331,8 @@ function redirect_edited(): void
             'old_slug'                => (string) $old_slug,
         ]);
     } catch (SQL $e) {
-        // Return, like the reserved-slug check above: everything below this
-        // point is a consequence of the edit having been saved. Falling through
+        // Return: everything below this point is a consequence of the edit
+        // having been saved. Falling through
         // on a failed write — a locked SQLite file while /_cron holds it is the
         // realistic one — pointed the post's live URL at a slug that was never
         // stored (a 301 to a 404), and announced the unsaved content to

@@ -148,11 +148,11 @@ function call_route(bool|string $action): array
 /**
  * Checks if a given route is reserved.
  *
- * The registry is built on demand when it is empty. A CLI importer
- * (import-lamb.php, import-wordpress.php, import-known.php) bootstraps the
- * database and the config but never the router, so $routes was empty there and
- * this answered "not reserved" for every name — silently disabling the guard on
- * exactly the path that pins a foreign permalink as a slug. A WordPress page at
+ * The registry is built on demand when it is empty. The importer CLI
+ * (`bin/lamb import`) bootstraps the database and the config but never the
+ * router, so $routes was empty there and this answered "not reserved" for every
+ * name — silently disabling the guard on exactly the path that pins a foreign
+ * permalink as a slug. A WordPress page at
  * /login/ therefore imported as slug `login`, and index.php registers a matching
  * post's route *after* register_app_routes(), overwriting it: /login served the
  * post and the author could no longer reach the login form. `feed`, `search`,

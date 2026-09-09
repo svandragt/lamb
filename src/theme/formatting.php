@@ -24,11 +24,32 @@ function escape(string $html): string
  * whole string — it degrades to U+FFFD instead, so one bad byte cannot empty an
  * entire <loc> or <title>.
  *
+ * htmlspecialchars() only ever rewrites `& < > " '` — it has no idea that XML
+ * 1.0 also forbids raw control characters (everything below U+0020 except tab,
+ * LF and CR) and the two U+FFFE/U+FFFF noncharacters, control-character or not.
+ * Those pass through htmlspecialchars() untouched, "escaped" or not, and a
+ * document containing one is not well-formed XML: DOMDocument::loadXML() fails
+ * the whole document on it (`PCDATA invalid Char value`), and
+ * SimpleXMLElement::addChild() (the Atom feed's path) instead silently drops
+ * the value, emitting an empty element. A title containing such a byte is
+ * reachable input, not theoretical: Micropub's JSON create form accepts a
+ * unicode-escaped control character in a string property (valid JSON), and
+ * json_decode() turns it into a literal control byte, with nothing between
+ * there and here stripping it. They are stripped before escaping so one bad
+ * character corrupts only itself, not the surrounding XML document, matching
+ * the "one bad byte" resilience the malformed-UTF8 handling above already
+ * gives this function.
+ *
  * @param string $xml The raw string to escape.
  * @return string XML-safe escaped string.
  */
 function escape_xml(string $xml): string
 {
+    // preg_replace() with /u requires valid UTF-8; on malformed input it
+    // returns null; fall back to $xml unchanged so htmlspecialchars() below
+    // still gets a chance to degrade the bad byte to U+FFFD as before.
+    $xml = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x{FFFE}\x{FFFF}]/u', '', $xml) ?? $xml;
+
     return htmlspecialchars($xml, ENT_XML1 | ENT_QUOTES | ENT_SUBSTITUTE);
 }
 

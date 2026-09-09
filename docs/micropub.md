@@ -1,5 +1,6 @@
 ---
 title: Micropub
+parent: Sharing & discovery
 ---
 
 # Micropub

@@ -1,5 +1,6 @@
 ---
 title: Local PHP setup
+parent: Installation & hosting
 ---
 
 # Local PHP setup

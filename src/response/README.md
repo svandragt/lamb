@@ -99,6 +99,18 @@ retrying cannot extend a block. `client_ip()` reads `REMOTE_ADDR` only; see
 [AGENTS.md](../../AGENTS.md)'s Security section for why `X-Forwarded-For` is
 not trusted here.
 
+The peek only rejects an already-blocked client; the race-free gate is
+`reserve_login_attempt()`, which takes a `BEGIN IMMEDIATE` write lock and
+checks-and-increments the counter atomically before bcrypt. Without it a
+concurrent burst from one IP could all read the same under-limit count and each
+run `password_verify()`, serialising only on the write — the bcrypt pile-up the
+throttle exists to stop. The database runs in WAL mode (see `bootstrap_db()`),
+so this lock only ever contends with another writer, never with the page-render
+reads that share the connection: a contended login waits the microseconds of the
+other writer's counter update, and bcrypt runs only after the reservation
+returns, never behind the lock. Any throw in the critical section rolls the
+transaction back, so the shared connection is never left mid-transaction.
+
 Post-login, `local_redirect_target()` constrains `?redirect_to=` to a local
 path so the parameter can't be turned into an open redirect — the same
 protocol-relative-path check reappears in `posts.php` (see below), because a
@@ -200,11 +212,27 @@ The sitemap is served from disk. `respond_sitemap()` reads the validator
 first — one indexed row for the newest visible `updated`, plus the config
 timestamp — so a crawler revalidating a copy it already holds is answered 304
 without the document being built at all. Those same two values, together with
-`ROOT_URL`, key a cached copy under `data/cache/sitemap-<key>.xml`, so a
+`ROOT_URL`, key a cached copy under `data/cache/sitemap-<key>-<page>.xml`, so a
 request that does get a 200 streams a file instead of rebuilding 25,000
 entries. Keying on the content is what keeps the cache honest: it turns over
 exactly when the ETag does, so the bytes sent always match the validator sent
-with them, and there is no staleness window to reason about. The cached copy is host-independent: it
+with them, and there is no staleness window to reason about.
+
+Past `SITEMAP_MAX_URLS` visible entries — sitemaps.org's 50,000-URL cap on a
+single document — `/sitemap.xml` itself becomes a `<sitemapindex>`
+(`render_sitemap_index()`) and each `/sitemap.xml/page/N` (the site's usual
+`/page/N` pagination convention) serves one `SITEMAP_MAX_URLS`-sized slice,
+sliced in SQL via `LIMIT`/`OFFSET` (`sitemap_urls()`'s `$page`/`$cap`
+arguments) rather than loading everything and cutting it down, for the same
+memory reason described below. `<page>` in the cache filename keeps each
+page's copy distinct so storing one page's cache can't evict another's; only
+an older generation's files (a different `<key>`) get pruned. A page number
+that doesn't exist for the current split — any page at all under the cap, or
+one past the last page once split — 404s like any other unmatched route.
+Under the cap there is exactly one page and behaviour is unchanged from
+before the split existed.
+
+The cached copy is host-independent: it
 holds a `{ROOT}` placeholder where the site root belongs, and the current
 `ROOT_URL` is substituted on the way out. That matters because with no
 `site_url` configured `ROOT_URL` comes from the request's own `Host`, which

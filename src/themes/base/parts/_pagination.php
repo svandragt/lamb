@@ -2,8 +2,6 @@
 
 use function Lamb\Theme\escape;
 
-// Render pagination if available in the page data
-
 $pagination = $data['pagination'] ?? $GLOBALS['data']['pagination'] ?? null;
 if (!empty($pagination)) :
     $current = (int)($pagination['current'] ?? 1);

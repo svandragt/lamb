@@ -1,6 +1,6 @@
 ---
 title: Lamb import
-nav_order: 31
+parent: Import & export
 ---
 
 # Restore a Lamb export
@@ -22,29 +22,19 @@ From the project root:
 
 ```bash
 # Preview what the importer would restore, without writing anything
-php import-lamb.php /path/to/lamb-export-2026-07-26.zip --dry-run
+bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-run
 
 # Run it for real
-php import-lamb.php /path/to/lamb-export-2026-07-26.zip
+bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip
 ```
-
-The preferred entry point is the unified driver, which takes the same flags
-(including `--site-url=`):
-
-```bash
-bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-run
-```
-
-`import-lamb.php` still works but is a deprecated shim that delegates to
-`bin/lamb import lamb` and prints a warning; it is removed a release later.
 
 An already-unpacked export directory works too. Pass its path instead of the `.zip`:
 
 ```bash
-php import-lamb.php /path/to/lamb-export-2026-07-26/
+bin/lamb import lamb /path/to/lamb-export-2026-07-26/
 ```
 
-The script prints one line per post (`imported:`, `would import:`, `replaced:`, or `would replace:`), plus a final summary with the totals for created, existed, and skipped, and a one-line asset tally of restored, skipped, and rejected.
+The importer prints one line per post (`imported:`, `would import:`, `replaced:`, or `would replace:`), plus a final summary with the totals for created, existed, and skipped, and a one-line asset tally of restored, skipped, and rejected.
 
 ### `--site-url=<url>`
 

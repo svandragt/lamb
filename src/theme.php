@@ -103,7 +103,7 @@ function action_preview(OODBBean $bean): string
     if (!\Lamb\preview_token_valid($bean, (string) $bean->preview_token)) {
         return '';
     }
-    if ($bean->draft != 1 && !\Lamb\is_scheduled($bean)) {
+    if (!\Lamb\is_unpublished($bean)) {
         return '';
     }
 
@@ -319,7 +319,15 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
         }
     }
 
-    return array_slice(array_values($related_posts), 0, $limit);
+    // Each tag's own rows arrive created-DESC from SQL, but merging tag by tag
+    // leaves the *combined* list ordered by which tag matched first, not by
+    // date — a post found only via the second tag lands after every post the
+    // first tag matched, however new it is. Re-sort the merged set so the
+    // promised created-DESC order holds across tags too.
+    $posts = array_values($related_posts);
+    usort($posts, static fn(OODBBean $a, OODBBean $b): int => strcmp((string) $b->created, (string) $a->created));
+
+    return array_slice($posts, 0, $limit);
 }
 
 /**
@@ -445,8 +453,13 @@ function render_post_list(bool $hide_author): void
     // PHP tag is part of the rendered HTML, so it cannot be re-indented for
     // being nested inside a function without changing the output.
     if (empty($data['posts'])) :
-        ?><p>Sorry no items found.</p>
+        // Search and tag pages set $data['intro'] ("No results found.") which
+        // already states the empty case; skip our own message then so the two
+        // don't double up.
+        if (empty($data['intro'])) :
+            ?><p>Sorry no items found.</p>
     <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
+        endif;
     else :
         // Wrap the list in <ul>/<li> only when there is more than one post, so a
         // single post renders as a bare <article>. Computed once; the menu-item
@@ -489,7 +502,7 @@ function render_post_list(bool $hide_author): void
             <?= syndication_links($bean) ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
-                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= $bean->deleted ? action_restore($bean) : action_delete($bean) ?></small>
+                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
             <?php endif; ?>
         </article>
         <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
@@ -596,6 +609,32 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Returns the markup for a file-picker control that hands picked files to
+ * upload-image.js, which uploads them the same way as a drag-and-drop or
+ * paste.
+ *
+ * The input has no name attribute on purpose: it must never attach its value
+ * to the surrounding form's own submission, since JS uploads it separately.
+ *
+ * accept is a generic wildcard, not a specific extension list: iOS Safari
+ * only transcodes an HEIC photo to JPEG when accept is generic, handing over
+ * raw HEIC otherwise — which safe_upload_extension() would reject.
+ *
+ * @param string $id Element id, shared between the label's for and the input
+ *                    (distinct per form so two forms on one page don't clash).
+ * @return string
+ */
+function attach_image_control(string $id): string
+{
+    $id = escape($id);
+
+    return <<<HTML
+        <label for="{$id}" class="attach-image">Attach photo</label>
+        <input type="file" id="{$id}" class="attach-image-input" multiple accept="image/*,video/*">
+        HTML;
+}
+
+/**
  * Renders the quick-post entry form. Does nothing when the user is not logged in.
  *
  * @return void
@@ -608,6 +647,7 @@ function the_entry_form(): void
                 <label>
                     <textarea placeholder="What's happening?" name="contents" required><?= preload_text() ?></textarea>
                 </label>
+                <?= attach_image_control('attach-entry') ?>
                 <input type="submit" name="submit" value="<?= SUBMIT_CREATE ?>">
                 <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
             </form>

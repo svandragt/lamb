@@ -1,5 +1,6 @@
 ---
 title: NGINX configuration
+parent: Installation & hosting
 ---
 
 # NGINX configuration

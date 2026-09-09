@@ -709,6 +709,40 @@ section.entry-form {
     margin: 0 0 var(--s-7);
 }
 
+/* Visually hidden but still keyboard-focusable — display:none would drop it
+   from the tab order. label.attach-image is the visible, styled control. */
+.attach-image-input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+label.attach-image {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    min-width: 44px;
+    padding: var(--s-2) var(--s-4);
+    margin: 0 0 var(--s-3);
+    font: 500 var(--text-sm)/1 var(--font-mono);
+    color: var(--ink);
+    background: var(--paper-raised);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: background-color var(--t-fast) var(--ease-out-quart);
+}
+
+label.attach-image:hover {
+    background: var(--paper);
+}
+
 textarea {
     font: 400 var(--text-sm)/1.5 var(--font-mono);
     /* Geist Mono ligates triple characters (###, ---, ===); the fused glyph

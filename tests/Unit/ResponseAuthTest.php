@@ -195,7 +195,7 @@ class ResponseAuthTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
         // One short of the limit, so recording a single failure would trip it.
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES - 1; $i++) {
-            \Lamb\Response\record_login_failure('203.0.113.9', time());
+            \Lamb\Response\reserve_login_attempt('203.0.113.9', time());
         }
 
         $token = \Lamb\Response\issue_login_csrf();
@@ -217,7 +217,7 @@ class ResponseAuthTest extends TestCase
     {
         $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            \Lamb\Response\record_login_failure('203.0.113.7', time());
+            \Lamb\Response\reserve_login_attempt('203.0.113.7', time());
         }
 
         $token = \Lamb\Response\issue_login_csrf();
@@ -242,7 +242,7 @@ class ResponseAuthTest extends TestCase
         $_SERVER['REMOTE_ADDR'] = '203.0.113.7';
         $now = time();
         for ($i = 0; $i < LOGIN_THROTTLE_MAX_FAILURES; $i++) {
-            \Lamb\Response\record_login_failure('203.0.113.7', $now);
+            \Lamb\Response\reserve_login_attempt('203.0.113.7', $now);
         }
         $before = \Lamb\Response\login_throttle_retry_after('203.0.113.7', $now);
 
