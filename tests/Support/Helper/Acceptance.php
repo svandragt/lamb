@@ -16,8 +16,14 @@ use Codeception\TestInterface;
  * search expecting "No results found.") and cause spurious failures on re-runs.
  *
  * Deleting the database before each test gives every test a clean slate. The
- * server recreates the schema on the next request (RedBeanPHP fluid mode), and
- * the deletion happens while no request is in flight, so it is safe.
+ * server recreates the schema on the next request (ensure_schema()), and the
+ * deletion happens while no request is in flight, so it is safe.
+ *
+ * Never open the live file from here. The server may run as another user
+ * (www-data in the release image and under php-fpm) and the database is in WAL
+ * mode, so a connection from this process creates lamb.db-wal/-shm owned by the
+ * test runner. The server can then no longer write them and every request
+ * fails with "attempt to write a readonly database". Reads go through a copy.
  */
 class Acceptance extends Module
 {
@@ -42,7 +48,29 @@ class Acceptance extends Module
         $db = dirname(__DIR__) . '/Data/lamb.db';
         $this->assertFileExists($db, 'Expected the acceptance database to exist');
 
-        $pdo = new \PDO('sqlite:' . $db, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        // The server closes its connection at the end of each request, which
+        // checkpoints the WAL into the main file, so the copy is complete.
+        $copy = tempnam(sys_get_temp_dir(), 'lamb-acceptance-');
+        $this->assertTrue(copy($db, $copy), 'Expected to copy the acceptance database');
+        try {
+            $pdo = new \PDO('sqlite:' . $copy, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+            return $this->fetchPostColumn($pdo, $id, $column);
+        } finally {
+            $pdo = null;
+            @unlink($copy);
+        }
+    }
+
+    /**
+     * Fetches one column of a post row over an open connection.
+     *
+     * @param \PDO   $pdo    Connection to a copy of the acceptance database.
+     * @param int    $id     Post id.
+     * @param string $column Column name, test-supplied.
+     * @return mixed The column value, or false when the row is missing.
+     */
+    private function fetchPostColumn(\PDO $pdo, int $id, string $column): mixed
+    {
         // The column name is test-supplied, never request data; quote it so a
         // reserved word still parses.
         $stmt = $pdo->prepare('SELECT "' . str_replace('"', '', $column) . '" FROM post WHERE id = ?');
