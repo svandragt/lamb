@@ -20,6 +20,11 @@ no version string in the code — **the Git tag is the source of truth**.
       its own server, so don't have another server on the test port.
 - [ ] Static checks pass: `composer lint` && `composer analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
+- [ ] `CHANGELOG.md` has a bullet under `## [Unreleased]` for every user-visible
+      change. Catch anything missed from the milestone's closed issues:
+      `scripts/changelog.sh '<milestone>' <version>` prints a generated section
+      to compare against; hand-written bullets beat generated titles, so add
+      what's missing rather than replacing the block.
 - [ ] Outstanding **major** dependency updates reviewed. Patch/minor bumps
       auto-merge, so majors are the only ones that accumulate — and a stale
       major is how you end up on a branch that no longer gets security fixes.
@@ -51,7 +56,14 @@ no version string in the code — **the Git tag is the source of truth**.
 ## 3. Generate end-user release notes
 
 Notes are for **people running a Lamb blog**, not contributors. Start from the
-commit list, then curate.
+`Unreleased` block in `CHANGELOG.md`, then curate.
+
+- [ ] Promote the changelog block: rename `## [Unreleased]` to
+      `## [<version>] - <date>`, add a fresh empty `## [Unreleased]` above it,
+      and update the link lines at the bottom (`[Unreleased]` compares
+      `<version>...HEAD`; add `[<version>]` comparing `<previous>...<version>`).
+      This lands in the release PR (step 4).
+- [ ] Cross-check against the commit list for anything the changelog missed:
 
 ```sh
 # Everything on main since the last release tag (use the previous final tag):
