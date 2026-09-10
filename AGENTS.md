@@ -505,6 +505,11 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests
+- Every user-visible change adds a bullet under `## [Unreleased]` in
+  `CHANGELOG.md` in the same commit as the code. Say what the user sees, in
+  plain language, with the issue as `([#N](url))`. Use the Keep a Changelog
+  types: Added, Changed, Deprecated, Removed, Fixed, Security. Internal-only changes
+  (tests, tooling, refactors) don't get a bullet.
 - Run `composer lint` before committing
 
 ### Comments
