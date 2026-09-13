@@ -7,6 +7,28 @@ parent: Site customisation
 
 Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
 
+## `/settings` is the normal path
+
+Edit configuration at `/settings` (login required) once the site is running.
+Every setting on that page is stored as INI text in the database, and that
+stored copy is what Lamb reads on every request after the first.
+
+## Seeding from `config.ini`
+
+On the very first request, before anything is stored in the database, Lamb
+looks for a `config.ini` file at the root of the `src/` directory and, if it
+finds one, uses its contents as the initial configuration instead of the
+built-in defaults. It is a first-run seed only: once the settings are stored
+in the database, `config.ini` is never read again, so editing it later has no
+effect — use `/settings` instead.
+
+This is for provisioning a new install without a manual visit to
+`/settings` first, for example when scripting deployment of several sites
+from the same defaults. Nothing ships a `config.ini` — `src/config.ini` is
+listed in `.gitignore`, so you create it yourself, in the same format as the
+default configuration shown below, before the first request reaches the new
+install.
+
 The default configuration. Real defaults ship as active lines so you can edit
 one value rather than write it from scratch; personal details stay commented:
 

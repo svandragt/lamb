@@ -40,6 +40,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Hashtag linking no longer rewrites hashtags inside existing link text.
 - Multi-word tags round-trip through add and remove.
 - Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
+- The first-run `config.ini` seed is now read from `src/config.ini` regardless of the server's working directory, instead of only under `composer serve`.
 - Micropub: a token without `update` scope can no longer tell a real post from a missing one.
 - Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
 - XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.

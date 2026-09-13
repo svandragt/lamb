@@ -23,6 +23,16 @@ class ConfigLoadTest extends TestCase
         // Remove any cached config option so each test starts fresh
         R::exec("DELETE FROM option WHERE name = 'site_config_ini'");
         R::exec("DELETE FROM option WHERE name = 'experimental_gate_version'");
+        // get_ini_text()'s bootstrap path reads from ROOT_DIR. It's a
+        // process-wide constant that other unit tests may have already
+        // pointed at their own temp dir, so operate on wherever it actually
+        // points rather than assume our define() wins.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_test_config_' . getmypid());
+        }
+        if (!is_dir(ROOT_DIR)) {
+            mkdir(ROOT_DIR, 0777, true);
+        }
     }
 
     // parse_ini_safe
@@ -58,6 +68,24 @@ class ConfigLoadTest extends TestCase
         $text = get_ini_text();
         // Default INI has [menu_items] section
         $this->assertStringContainsString('[menu_items]', $text);
+    }
+
+    public function testGetIniTextBootstrapsFromConfigIniAtRootDirRegardlessOfCwd(): void
+    {
+        $configIniPath = ROOT_DIR . '/config.ini';
+        file_put_contents($configIniPath, "site_title = From config.ini seed\n");
+        $originalCwd = getcwd();
+        // Move well away from ROOT_DIR to prove the seed isn't found via CWD.
+        chdir(sys_get_temp_dir());
+
+        try {
+            $text = get_ini_text();
+        } finally {
+            unlink($configIniPath);
+            chdir($originalCwd);
+        }
+
+        $this->assertStringContainsString('From config.ini seed', $text);
     }
 
     public function testGetIniTextReturnsSavedTextOnSubsequentCall(): void
