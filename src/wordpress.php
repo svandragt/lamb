@@ -152,7 +152,6 @@ function wxr_local_datetime(string $gmt, string $local, string $pub_date): strin
  *
  * @param array<string, mixed> $item
  * @return bool
- * @throws void
  */
 function should_import(array $item): bool
 {
@@ -166,7 +165,6 @@ function should_import(array $item): bool
  *
  * @param array<string, mixed> $item
  * @return ?string
- * @throws void
  */
 function skip_reason(array $item): ?string
 {
@@ -235,7 +233,6 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
  *
  * @param array<string, mixed> $item
  * @return string
- * @throws void
  */
 function wordpress_slug(array $item): string
 {

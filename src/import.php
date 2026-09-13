@@ -799,7 +799,6 @@ function store_redirect(string $from, string $to): void
  * @param array<string, mixed> $item
  * @param list<string>         $allowed_types
  * @return ?string
- * @throws void
  */
 function skip_reason(array $item, array $allowed_types): ?string
 {
@@ -818,7 +817,6 @@ function skip_reason(array $item, array $allowed_types): ?string
  * @param array<string, mixed> $item
  * @param list<string>         $allowed_types
  * @return bool
- * @throws void
  */
 function should_import(array $item, array $allowed_types): bool
 {
@@ -877,6 +875,10 @@ function import_item(array $item, array $source, callable $downloader, bool $dry
         }
     }
 
+    // Sanitize and image-rewrite share one DOM so the body is parsed and
+    // serialised once for these two passes. A third parse happens inside the
+    // markdown conversion for normalize_html, which has to stay on its own DOM
+    // because of its placeholder-string substitution dance.
     $body_html = (string) ($item['content'] ?? '');
     $prepared = $body_html === ''
         ? ''

@@ -183,7 +183,6 @@ function extract_items(SimpleXMLElement $rss): array
  *
  * @param array<string, mixed> $item
  * @return bool
- * @throws void
  */
 function should_import(array $item): bool
 {
@@ -197,7 +196,6 @@ function should_import(array $item): bool
  *
  * @param array<string, mixed> $item
  * @return ?string
- * @throws void
  */
 function skip_reason(array $item): ?string
 {
@@ -337,7 +335,6 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
  *
  * @param array<string, mixed> $item
  * @return string
- * @throws void
  */
 function known_title(array $item): string
 {
@@ -351,7 +348,6 @@ function known_title(array $item): string
  *
  * @param array<string, mixed> $item
  * @return list<string>
- * @throws void
  */
 function known_tags(array $item, string $markdown): array
 {
@@ -368,7 +364,6 @@ function known_tags(array $item, string $markdown): array
  *
  * @param array<string, mixed> $item
  * @return string
- * @throws void
  */
 function known_finalize_markdown(array $item, string $markdown): string
 {
