@@ -23,6 +23,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - `sitemap.xml` becomes a sitemap index once a site passes 50,000 URLs.
 - A "Write your first post" tutorial in the docs.
 - The deprecation policy is written down: a deprecation lasts one published release and is removed in the next.
+- `bin/lamb upgrade-posts [--dry-run]` upgrades every post whose stored version is behind the current one in bounded batches, instead of waiting for a render to touch each one.
 
 ### Changed
 

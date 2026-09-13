@@ -150,6 +150,7 @@ XML;
     }
 
     /**
+    /**
      * #831: a CLI run against a database owned by someone else leaves WAL
      * sidecars that a read-only connection can never checkpoint away, so
      * every later web request dies in ensure_schema(). The predicate takes
@@ -190,5 +191,108 @@ XML;
 
         touch($db);
         $this->assertFalse(db_owned_by_another_user($db, null));
+    }
+
+    /**
+     * Dispenses and stores a post bean directly in $data_dir's lamb.db, in a
+     * subprocess: the version and body a bin/lamb upgrade-posts test needs to
+     * seed are set before this test process's own bootstrap runs, so a
+     * separate connection (this file-backed db) never crosses the in-memory
+     * one other tests in this suite use.
+     */
+    private function seedPost(string $data_dir, int $version, string $body): int
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                . '$bean = \RedBeanPHP\R::dispense("post"); '
+                . '$bean->body = getenv("SEED_BODY"); '
+                . '$bean->version = (int) getenv("SEED_VERSION"); '
+                . 'echo \RedBeanPHP\R::store($bean);',
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir, 'SEED_BODY' => $body, 'SEED_VERSION' => (string) $version] + getenv(),
+        );
+        $process->mustRun();
+
+        return (int) trim($process->getOutput());
+    }
+
+    /**
+     * Reads back a stored post's `version` column, in its own subprocess for
+     * the same connection-isolation reason as seedPost().
+     */
+    private function storedPostVersion(string $data_dir, int $id): int
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                . 'echo (int) \RedBeanPHP\R::load("post", (int) getenv("SEED_ID"))->version;',
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir, 'SEED_ID' => (string) $id] + getenv(),
+        );
+        $process->mustRun();
+
+        return (int) trim($process->getOutput());
+    }
+
+    public function testUpgradePostsCommandUpgradesEveryPostBelowPostVersion(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('needs_upgrade=1 upgraded=1', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testUpgradePostsDryRunChangesNothing(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] Done. needs_upgrade=1 upgraded=0', $process->getOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testUpgradePostsCommandLeavesAnAlreadyCurrentPostAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('needs_upgrade=0 upgraded=0', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
     }
 }

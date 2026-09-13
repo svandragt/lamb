@@ -92,3 +92,4 @@ The database and uploads live in the named volumes and survive the recreate.
 - [Installation options]({{ site.baseurl }}{% link index.md %})
 - [Docker]({{ site.baseurl }}{% link docker.md %})
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
+- [Upgrading stored posts]({{ site.baseurl }}{% link upgrade-posts.md %}): Bring every post's stored data up to date in one pass after upgrading Lamb.

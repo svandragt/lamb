@@ -333,6 +333,59 @@ function upgrade_posts(array $posts): void
 }
 
 /**
+ * Posts loaded per page by upgrade_all_posts(), so a large archive of
+ * outdated posts is walked a page at a time rather than held in memory whole.
+ */
+const UPGRADE_POSTS_BATCH = 500;
+
+/**
+ * The bounded, explicit counterpart to the lazy upgrade every render triggers:
+ * walks every post whose `version` is below POST_VERSION and upgrades it via
+ * upgrade_posts(), for `bin/lamb upgrade-posts`.
+ *
+ * Pages on id (`id > $after`), not OFFSET: a batch just upgraded moves those
+ * rows' version to POST_VERSION and out of the `version < ?` filter, so an
+ * OFFSET page would skip over rows the next page hasn't seen yet. Paging on
+ * id instead means each page is a fresh, correct query regardless of how many
+ * earlier rows already got upgraded.
+ *
+ * @param bool $dry_run Count and report only; upgrade_posts() is never called
+ *                       and no row is written.
+ * @return array{0: int, 1: int} [$needing_upgrade, $upgraded]. $upgraded stays
+ *                                0 under $dry_run.
+ */
+function upgrade_all_posts(bool $dry_run = false): array
+{
+    $needing = 0;
+    $upgraded = 0;
+    $after = 0;
+
+    while (true) {
+        $rows = R::getAll(
+            'SELECT id FROM post WHERE version < ? AND id > ? ORDER BY id LIMIT ?',
+            [POST_VERSION, $after, UPGRADE_POSTS_BATCH]
+        );
+        if ($rows === []) {
+            break;
+        }
+        $after = (int) $rows[count($rows) - 1]['id'];
+        $needing += count($rows);
+
+        if (!$dry_run) {
+            $beans = R::batch('post', array_map('intval', array_column($rows, 'id')));
+            upgrade_posts($beans);
+            $upgraded += count($beans);
+        }
+
+        if (count($rows) < UPGRADE_POSTS_BATCH) {
+            break;
+        }
+    }
+
+    return [$needing, $upgraded];
+}
+
+/**
  * Paginates an in-memory array of items.
  *
  * @param list<mixed> $values   Flat array of items to paginate.
