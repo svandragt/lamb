@@ -36,7 +36,7 @@ jobs:
           extensions: sqlite3, gettext, simplexml, mbstring, curl
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        uses: ./.github/actions/composer-install
 
       - name: Generate credentials
         # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to
@@ -87,7 +87,7 @@ jobs:
           extensions: sqlite3, gettext, simplexml, mbstring, curl
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        uses: ./.github/actions/composer-install
 
       - name: Generate credentials
         # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to

@@ -1,0 +1,25 @@
+name: Install Composer dependencies
+description: Runs composer install, retrying past transient dist-download failures.
+
+inputs:
+  args:
+    description: Flags passed to composer install.
+    required: false
+    default: '--prefer-dist --no-progress'
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        COMPOSER_ARGS: ${{ inputs.args }}
+      run: |
+        for attempt in 1 2 3; do
+          # Unquoted on purpose: COMPOSER_ARGS is a flag list that must split.
+          composer install $COMPOSER_ARGS && exit 0
+          # Packagist dist zips mostly carry no shasum, so a truncated download
+          # can be cached and a plain retry would replay the same corruption.
+          composer clear-cache
+          sleep $(( attempt * 10 ))
+        done
+        exit 1

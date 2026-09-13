@@ -35,7 +35,9 @@ jobs:
           extensions: sqlite3, gettext, simplexml
 
       - name: Install production dependencies
-        run: composer install --no-dev --no-interaction --prefer-dist --no-scripts --optimize-autoloader
+        uses: ./.github/actions/composer-install
+        with:
+          args: --no-dev --no-interaction --prefer-dist --no-scripts --optimize-autoloader
 
       - name: Build tarball
         run: |
