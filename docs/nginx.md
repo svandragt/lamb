@@ -36,6 +36,14 @@ sudo chown $USER:www-data src/assets -R
 sudo chmod g+w src/assets -R
 ```
 
+This leaves `data/lamb.db` owned by your shell user, not `www-data`. Run `bin/lamb` (see [Lamb import](lamb-import.md) and [WordPress import](wordpress-import.md)) as the web server user instead of your own:
+
+```shell
+sudo -u www-data bin/lamb import wordpress /path/to/export.xml
+```
+
+`bin/lamb` refuses to run as any other user and tells you so. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone deletes the sidecars by hand.
+
 To allow logins, add the output of `HIDDEN=1 php make-password.php hackme` (don't use hackme) as an
 environment variable
 to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP version):

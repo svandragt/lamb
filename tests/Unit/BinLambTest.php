@@ -147,4 +147,35 @@ XML;
         $this->assertSame(1, $process->getExitCode());
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
     }
+
+    /**
+     * Reproduces #831 without a real second user: `lamb.db` is owned by
+     * whoever runs the test, and LAMB_TEST_UID stands in for a different
+     * invoking user (bin/lamb reads it instead of posix_geteuid() when set).
+     * The real-world trigger is a shell user running bin/lamb against a
+     * database chown'd to www-data; this reproduces that ownership gap
+     * without needing a second real account.
+     */
+    public function testRefusesToRunAgainstADatabaseOwnedByAnotherUser(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+        $data_dir = "$this->tmp_dir/data";
+        $this->enableExperimentalFeaturesInDataDir($data_dir);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
+            codecept_root_dir(),
+            [
+                'LAMB_DATA_DIR' => $data_dir,
+                'LAMB_TEST_UID' => (string) (fileowner("$data_dir/lamb.db") + 1),
+            ] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('lamb.db', $process->getErrorOutput());
+        $this->assertStringContainsString('sudo -u www-data', $process->getErrorOutput());
+        $this->assertFileDoesNotExist("$data_dir/lamb.db-wal", 'must fail before opening the database');
+    }
 }
