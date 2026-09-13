@@ -161,6 +161,15 @@ A deprecation must therefore name the version it is removed in rather than "a fu
 
 ---
 
+## 2026-09-13 — Replace Composer with viv for dependency installation
+
+**Status:** Accepted
+**Context:** Installing dependencies is repeated constantly: on every CI job, every `bin/upgrade` run, and every fresh devbox or Workshop provision. [viv](https://github.com/svandragt/vivace) is a Composer-compatible dependency installer written in Rust that reads the same `composer.json`/`composer.lock` and installs the same resolved dependency set, without re-resolving anything itself. Installing this project's production dependencies from the same lockfile, with both caches warm, takes 1.90s under Composer and 0.04s under viv. Because viv never re-resolves, there is nothing to gain or lose on the dependency graph.
+**Decision:** Every `composer <command>` invocation across the project — CI, `bin/upgrade`, devbox, Workshop, the Docker release build, documentation — is replaced with the equivalent `viv` invocation. `composer.json` and `composer.lock` are untouched: same manifest, same lockfile, same dependencies, only the installer changes. viv requires an explicit `run` for `composer.json` script entries (`viv run lint`, not `viv lint`), and is dist-only and non-interactive, so `--prefer-dist`, `--no-interaction` and `--ignore-platform-reqs` no longer apply anywhere they were passed.
+**Consequences:** Contributors and self-hosters must install viv (`cargo binstall --git https://github.com/svandragt/vivace vivace`, or a release binary from <https://github.com/svandragt/vivace/releases>) before installing dependencies or upgrading — this is a breaking change for anyone upgrading an existing install. `bin/upgrade` checks for viv on `PATH` and refuses to run with an actionable error if it is missing, rather than failing later with a bare "command not found". The restricted-network `--prefer-source` fallback in `.claude/hooks/session-start.sh` is gone: viv has no source-install mode to fall back to, so a network policy blocking `api.github.com`/`codeload.github.com` now just leaves `vendor/` incomplete. There is no published viv container image yet, so `.docker/Dockerfile.release`'s vendor stage builds on a stock `php:8.4-cli` image and fetches a checksum-verified viv release binary instead of `FROM composer:2`. viv is pre-1.0 (currently 0.10.0) and its releases are tagged as prereleases, so this project pins an exact version rather than tracking "latest".
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted
@@ -238,7 +247,7 @@ A deprecation must therefore name the version it is removed in rather than "a fu
 **Status:** Accepted
 **Context:** Lamb targets modern PHP for type safety and performance. PSR-12 provides a widely understood coding standard.
 **Decision:** Require PHP 8.4+; enforce PSR-12 via PHP_CodeSniffer with PHPCompatibility checks.
-**Consequences:** Cannot run on older PHP versions; contributors must run `composer lint` before committing.
+**Consequences:** Cannot run on older PHP versions; contributors must run `viv run lint` before committing.
 
 ---
 

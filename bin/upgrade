@@ -10,6 +10,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Lamb installs dependencies with viv, not Composer. A server that has never
+# needed this before won't have it on PATH, and the failure a few lines down
+# (composer: command not found) wouldn't say what to do about it.
+if ! command -v viv > /dev/null; then
+    echo "bin/upgrade: viv is not installed" >&2
+    echo "Lamb upgrades dependencies with viv instead of Composer." >&2
+    echo "Install it from https://github.com/svandragt/vivace and re-run this script." >&2
+    exit 1
+fi
+
 # git refuses to work in a repository owned by another user ("detected dubious
 # ownership"), which is the normal shape of a deploy: the checkout owned by the
 # webserver user, the cron job running as a human. Every git command below then
@@ -47,7 +57,7 @@ prev=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 
 git reset --hard '@{u}'
-composer install --no-dev --no-interaction --prefer-dist --no-scripts
+viv install --no-dev --no-scripts
 
 echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
 
@@ -56,7 +66,7 @@ site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr 
 if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
     if ! curl -fsS -o /dev/null --max-time 15 "$site_url"; then
         echo "Health check failed for ${site_url}" >&2
-        echo "Roll back with: git reset --hard ${prev} && composer install --no-dev --no-interaction --prefer-dist --no-scripts" >&2
+        echo "Roll back with: git reset --hard ${prev} && viv install --no-dev --no-scripts" >&2
         exit 1
     fi
 fi

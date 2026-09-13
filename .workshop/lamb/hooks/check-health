@@ -5,7 +5,7 @@ set -uo pipefail
 
 missing=()
 command -v php >/dev/null      || missing+=("php")
-command -v composer >/dev/null || missing+=("composer")
+command -v viv >/dev/null      || missing+=("viv")
 command -v node >/dev/null     || missing+=("node")
 command -v ruby >/dev/null     || missing+=("ruby")
 

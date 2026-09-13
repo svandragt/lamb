@@ -18,7 +18,7 @@ no version string in the code — **the Git tag is the source of truth**.
       `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` so the cleartext
       `LAMB_TEST_PASSWORD` is written (it is omitted by default). Acceptance starts
       its own server, so don't have another server on the test port.
-- [ ] Static checks pass: `composer lint` && `composer analyse`.
+- [ ] Static checks pass: `viv run lint` && `viv run analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
 - [ ] `CHANGELOG.md` has a bullet under `## [Unreleased]` for every user-visible
       change. Catch anything missed from the milestone's closed issues:
@@ -29,7 +29,7 @@ no version string in the code — **the Git tag is the source of truth**.
       auto-merge, so majors are the only ones that accumulate — and a stale
       major is how you end up on a branch that no longer gets security fixes.
       List them without needing an install:
-      `composer show --locked --outdated --direct` and `pnpm outdated`.
+      `viv outdated` and `pnpm outdated`.
       Either take the bump now (its own PR, not this release) or consciously
       leave it; check the branch you're on is still supported upstream.
 

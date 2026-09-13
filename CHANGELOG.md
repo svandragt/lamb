@@ -31,6 +31,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Tag archives covering several tags are sorted by date across all of them.
 - Micropub responses send private cache headers.
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
+- Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
 
 ### Fixed
 
@@ -48,6 +49,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 - Replace any cron or script calling the `import-*.php` shims with `bin/lamb import`.
 - If you deploy with Docker, switch from pulling `ghcr.io/svandragt/lamb` to building the image locally; see `docs/docker.md`.
+- Install [viv](https://github.com/svandragt/vivace) before your next upgrade (`cargo binstall --git https://github.com/svandragt/vivace vivace`, or a release binary from the [releases page](https://github.com/svandragt/vivace/releases)); `bin/upgrade` refuses to run without it. See `docs/upgrading.md`.
 - No config changes are needed. `DNS_RESOLVE_TIMEOUT` is a new tunable constant with a safe default.
 - The database now uses SQLite's WAL mode, which keeps `lamb.db-wal` and `lamb.db-shm` beside `lamb.db`. Run `bin/lamb` as the same user as your web server (for example `sudo -u www-data bin/lamb import …`). Run as another user, it leaves those files owned by that user and every page then fails with "attempt to write a readonly database" until you delete them. Tracked in #831.
 

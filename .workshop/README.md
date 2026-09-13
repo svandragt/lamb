@@ -28,7 +28,7 @@ Open that URL in your host browser. Then:
 
 ```sh
 workshop shell dev                    # interactive shell inside the env
-workshop exec dev -- composer lint    # one-off command
+workshop exec dev -- viv run lint     # one-off command
 workshop exec dev -- vendor/bin/codecept run Unit
 workshop refresh dev                  # re-apply after editing the definition / hooks
 workshop stop dev / workshop start dev
@@ -42,15 +42,15 @@ workshop stop dev / workshop start dev
 - `claude-code` (store SDK) — agent tooling.
 - `project-lamb` — an **in-project SDK** (`.workshop/lamb/`) that provides the
   PHP toolchain, because the Workshop Store has no PHP or Ruby SDK.
-- `actions:` — `serve` (runs `composer serve`) and `url` (prints the URL).
+- `actions:` — `serve` (runs `viv run serve`) and `url` (prints the URL).
 
 `lamb/` (the in-project SDK):
 
 | Hook | Runs as | Does |
 |------|---------|------|
-| `setup-base` | root, once on install | `apt-get install` PHP 8.4 + extensions, Composer, Ruby, openssl, pkg-config |
-| `setup-project` | workshop user, every launch/refresh | `composer install` + `pnpm install` (mirrors `devbox.json` `init_hook`) |
-| `check-health` | workshop user, after setup | verifies php/composer/node/ruby + required extensions, reports health |
+| `setup-base` | root, once on install | `apt-get install` PHP 8.4 + extensions, Ruby, openssl, pkg-config; fetches and checksum-verifies a viv release binary (no apt package) |
+| `setup-project` | workshop user, every launch/refresh | `viv install` + `pnpm install` (mirrors `devbox.json` `init_hook`) |
+| `check-health` | workshop user, after setup | verifies php/viv/node/ruby + required extensions, reports health |
 
 ## Accessing the server from the host
 
@@ -70,7 +70,7 @@ the host. The server binds `0.0.0.0:8747`, so:
 ## Gotchas worth knowing
 
 - **Shared project mount.** Workshop bind-mounts your host checkout at
-  `/project`, so `composer install` / `pnpm install` write to the *same*
+  `/project`, so `viv install` / `pnpm install` write to the *same*
   `vendor/` and `node_modules/` that Devbox uses. They are not isolated, but
   both environments install matching PHP/Node versions so this is fine.
 - **`ext-pdo_mysql` is required** even though lamb uses SQLite — RedBeanPHP

@@ -1,7 +1,7 @@
 # Pre-release verification: runs the Codeception Acceptance suite against the
 # server-distinct documented ways of running Lamb that ci.yml does not cover.
 #
-# ci.yml already exercises the built-in PHP server (composer serve) on every PR
+# ci.yml already exercises the built-in PHP server (viv run serve) on every PR
 # across PHP 8.4-8.5, so that path is intentionally not duplicated here. This
 # workflow adds:
 #   - the Docker/FrankenPHP release image (.docker/Dockerfile.release, what
@@ -35,8 +35,10 @@ jobs:
           php-version: '8.4'
           extensions: sqlite3, gettext, simplexml, mbstring, curl
 
+      - uses: ./.github/actions/setup-viv
+
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: viv install --no-progress
 
       - name: Generate credentials
         # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to
@@ -86,8 +88,10 @@ jobs:
           php-version: '8.4'
           extensions: sqlite3, gettext, simplexml, mbstring, curl
 
+      - uses: ./.github/actions/setup-viv
+
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: viv install --no-progress
 
       - name: Generate credentials
         # LAMB_WRITE_TEST_PASSWORD=1 writes the cleartext LAMB_TEST_PASSWORD to

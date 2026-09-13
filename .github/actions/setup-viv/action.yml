@@ -1,0 +1,41 @@
+name: Set up viv
+description: Install the viv PHP dependency installer from its GitHub release.
+
+inputs:
+  version:
+    description: viv release tag to install, without the leading "v".
+    required: false
+    default: "0.10.0"
+
+runs:
+  using: composite
+  steps:
+    - name: Install viv
+      shell: bash
+      env:
+        VIV_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+
+        case "$(uname -m)" in
+          x86_64) target=x86_64-unknown-linux-musl ;;
+          aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
+          *) echo "::error::viv publishes no binary for $(uname -m)" >&2; exit 1 ;;
+        esac
+
+        base="https://github.com/svandragt/vivace/releases/download/v${VIV_VERSION}"
+        archive="vivace-v${VIV_VERSION}-${target}.tar.gz"
+        workdir="$(mktemp -d)"
+
+        curl -fsSL -o "${workdir}/${archive}" "${base}/${archive}"
+        curl -fsSL -o "${workdir}/SHA256SUMS" "${base}/SHA256SUMS"
+
+        # The release publishes one SHA256SUMS for every target, and sha256sum
+        # fails on lines whose file isn't present. Check only our own archive.
+        ( cd "${workdir}" && grep " ${archive}\$" SHA256SUMS | sha256sum --check --strict - )
+
+        tar -xzf "${workdir}/${archive}" -C "${workdir}"
+        install -m 0755 "${workdir}/vivace-v${VIV_VERSION}-${target}/viv" /usr/local/bin/viv
+        rm -rf "${workdir}"
+
+        viv --version

@@ -16,13 +16,13 @@ GitHub Pages publishes the `release` branch's `docs/` folder, so the live site a
 
 ```bash
 # Install dependencies
-composer install
+viv install
 
 # Start dev server (PHP built-in, port 8747)
-composer serve
+viv run serve
 
 # Lint (PSR-2/PSR-12 + PHPCompatibility)
-composer lint
+viv run lint
 
 # Run all tests
 vendor/bin/codecept run
@@ -43,15 +43,15 @@ php make-password.php <your-password>
 LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <your-password>   # for acceptance tests
 
 # Static analysis
-composer analyse
+viv run analyse
 
 # Auto-fix coding standard violations
-composer fix
+viv run fix
 
 # Install pre-commit hook (one-time, after cloning)
-printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+printf '#!/bin/sh\nset -e\nviv run lint\nviv run analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
-# Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
+# Take screenshots at mobile/tablet/desktop (requires viv run serve to be running)
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome \
   pnpm run screenshot [/path] [outdir]
 # Before/after: git stash → screenshot → git stash pop → screenshot
@@ -65,13 +65,13 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 
 ### Worktrees
 
-Run `composer install` inside each git worktree. Don't share or symlink one
-checkout's `vendor/` into another: Composer's generated autoloader resolves to
+Run `viv install` inside each git worktree. Don't share or symlink one
+checkout's `vendor/` into another: the generated autoloader resolves to
 the checkout that created it, so a worktree pointed at another checkout's
 `vendor/` silently runs and tests that checkout's `src/`, not the worktree's —
-green tests against the wrong code. A per-worktree `composer install` also
+green tests against the wrong code. A per-worktree `viv install` also
 registers the PHPCompatibility standard for that checkout (handled on install
-by the `phpcodesniffer-composer-installer` plugin), so `composer lint` works
+by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
 ## Dependencies
@@ -79,8 +79,10 @@ without any global phpcs config.
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
 composer, npm, github-actions, docker, devcontainers — and
 `dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
-Vulnerabilities are caught by `composer audit` (quality job) and `pnpm audit`
-(js-test job).
+Dependabot parses `composer.json`/`composer.lock` directly, so the composer
+ecosystem is unaffected by installing dependencies with viv instead of
+Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
+audit` (js-test job).
 
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
@@ -94,8 +96,8 @@ human:
 - **Major bumps never auto-merge.** They arrive as individual PRs and will sit
   until someone reviews them, which is how a project quietly ends up on an
   unsupported branch. Check for outstanding majors when cutting a release —
-  it's a checklist item in `RELEASING.md` step 1. `composer show --locked
-  --outdated --direct` and `pnpm outdated` list them without needing an install.
+  it's a checklist item in `RELEASING.md` step 1. `viv outdated` and `pnpm
+  outdated` list them without needing an install.
 - **Hand-written pins and overrides are invisible to Dependabot.** It does not
   update pnpm `overrides`, so a pin added to dodge an advisory becomes a
   permanent *ceiling* that silently holds a package below what its parent
@@ -510,7 +512,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
   plain language, with the issue as `([#N](url))`. Use the Keep a Changelog
   types: Added, Changed, Deprecated, Removed, Fixed, Security. Internal-only changes
   (tests, tooling, refactors) don't get a bullet.
-- Run `composer lint` before committing
+- Run `viv run lint` before committing
 
 ### Comments
 
@@ -618,31 +620,26 @@ php make-password.php mysecretpassword
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime. Production deployments
 (FrankenPHP, nginx+php-fpm, Docker) set it as a real environment variable. The PHP
-built-in dev server (`composer serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
+built-in dev server (`viv run serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
 reads it in — but **only under the `cli-server` SAPI** and **non-overriding** (a real
 env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
 this no-ops on a `--no-dev` install.
 
 ### Claude Code on the web
 
-`.claude/hooks/session-start.sh` provisions the toolchain (composer, pnpm, `.env`,
-phpcs's `installed_paths`) at session start, so `composer lint`, `composer analyse`
+`.claude/hooks/session-start.sh` provisions the toolchain (viv, pnpm, `.env`,
+phpcs's `installed_paths`) at session start, so `viv run lint`, `viv run analyse`
 and `vendor/bin/codecept run` work without any manual setup. It exits immediately
 unless `CLAUDE_CODE_REMOTE=true`, so devbox, the devcontainer and Workshop keep
 their own setup paths.
 
-Two remote-only quirks it papers over:
-
-- **Composer scripts refuse to run as root.** The container is root, so every
-  `composer <script>` aborts ("Aborting as no plugin should be loaded…") while
-  `vendor/bin/*` still works. The hook exports `COMPOSER_ALLOW_SUPERUSER=1`.
-- **`api.github.com`/`codeload.github.com` may be blocked** by the environment's
-  network policy, which 403s every dist download. The hook falls back to
-  `--prefer-source` (composer clones through the session's git proxy instead) and
-  clones `phpstan/phpstan` — the one dist-only dependency — at its locked version.
-  Allowing those two hosts in the environment's network policy makes the plain
-  `--prefer-dist` path work and is noticeably faster; see
-  <https://code.claude.com/docs/en/claude-code-on-the-web>.
+One remote-only quirk it cannot paper over: **`api.github.com`/`codeload.github.com`
+may be blocked** by the environment's network policy, which 403s every dist
+download. viv is dist-only — unlike Composer it has no `--prefer-source` fallback
+to retry with — so a blocked network here leaves `vendor/` incomplete and the hook
+logs a warning rather than working around it. Allowing those two hosts in the
+environment's network policy is the only fix; see
+<https://code.claude.com/docs/en/claude-code-on-the-web>.
 
 ## Branching
 
