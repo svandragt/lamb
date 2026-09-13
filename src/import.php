@@ -6,12 +6,15 @@ use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use League\HTMLToMarkdown\HtmlConverter;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
 use SimpleXMLElement;
 
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Post\build_matter;
+use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 use function Lamb\Response\asset_url;
 
 /**
@@ -785,6 +788,124 @@ function store_redirect(string $from, string $to): void
     $redirect->from_slug = $from;
     $redirect->to_url = $to;
     R::store($redirect);
+}
+
+/**
+ * Explains why an item falls outside import scope, or null when it should be
+ * imported. Single source of truth for should_import(); the importer uses the
+ * reason string to break down its skipped tally. $allowed_types is the one
+ * thing that varies per CMS (Known: `['post']`; WordPress: `['post', 'page']`).
+ *
+ * @param array<string, mixed> $item
+ * @param list<string>         $allowed_types
+ * @return ?string
+ * @throws void
+ */
+function skip_reason(array $item, array $allowed_types): ?string
+{
+    $type   = (string) ($item['post_type'] ?? '');
+    $status = (string) ($item['status'] ?? '');
+    if (!in_array($type, $allowed_types, true)) {
+        return "unsupported post_type '" . ($type === '' ? '(none)' : $type) . "'";
+    }
+    if ($status !== 'publish') {
+        return "non-published status '" . ($status === '' ? '(none)' : $status) . "'";
+    }
+    return null;
+}
+
+/**
+ * @param array<string, mixed> $item
+ * @param list<string>         $allowed_types
+ * @return bool
+ * @throws void
+ */
+function should_import(array $item, array $allowed_types): bool
+{
+    return skip_reason($item, $allowed_types) === null;
+}
+
+/**
+ * Runs a single extracted item through the standard post pipeline, shared by
+ * every importer ({@see \Lamb\Known\import_item}, {@see
+ * \Lamb\WordPress\import_item}). $source supplies every piece that differs
+ * per CMS — dedup uuid, allowed post types, and how to read the title, slug
+ * and markdown body (plus its tags and any last-minute rewrite, e.g. Known's
+ * bookmark-link prefix) off the item — so this body runs unchanged for both.
+ *
+ * Returns null when the item is out of scope ({@see skip_reason}). When an
+ * item with the same uuid already exists the existing bean is returned
+ * untouched, before any $source hook runs — re-running an import is
+ * therefore safe, idempotent and side-effect-free on a repeat.
+ *
+ * Passing $bean (run_import() does so under `--replace`) re-imports into that
+ * row instead: everything the item describes is written over it, in place,
+ * so the row keeps its id and its import_uuid and any local edit since the
+ * original import is lost.
+ *
+ * No outbound webmentions or WebSub pings are emitted: the call path stops at
+ * save() without `notify`, so no post.published event fires.
+ *
+ * @param array<string, mixed> $item Item from the source's extract_items().
+ * @param array{
+ *     uuid: callable(string): string,
+ *     allowed_types: list<string>,
+ *     title: callable(array<string, mixed>): string,
+ *     slug: callable(array<string, mixed>): string,
+ *     dom_pass: ?callable(DOMDocument): void,
+ *     markdown: callable(string): string,
+ *     tags: callable(array<string, mixed>, string): list<string>,
+ *     finalize_markdown: callable(array<string, mixed>, string): string,
+ *     store_redirects: callable(array<string, mixed>, OODBBean): void,
+ * } $source
+ * @param callable(string,string):?string $downloader Image downloader.
+ * @param OODBBean|null $bean Existing row to overwrite.
+ * @return OODBBean|null
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ */
+function import_item(array $item, array $source, callable $downloader, bool $dry_run = false, ?OODBBean $bean = null): ?OODBBean
+{
+    if (!should_import($item, $source['allowed_types'])) {
+        return null;
+    }
+
+    $uuid = ($source['uuid'])((string) $item['guid']);
+    if ($bean === null) {
+        $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
+        if ($existing) {
+            return $existing;
+        }
+    }
+
+    $body_html = (string) ($item['content'] ?? '');
+    $prepared = $body_html === ''
+        ? ''
+        : prepare_imported_html($body_html, (string) $item['created'], $downloader, $source['dom_pass']);
+    $markdown = ($source['markdown'])($prepared);
+
+    $tags = ($source['tags'])($item, $markdown);
+    $title = ($source['title'])($item);
+    $slug = ($source['slug'])($item);
+    $markdown = ($source['finalize_markdown'])($item, $markdown);
+
+    $body = build_post_body($title, $markdown, $tags, $slug);
+
+    $bean = populate_bean($body, null, null, $bean);
+    if (!empty($item['created'])) {
+        $bean->created = (string) $item['created'];
+    }
+    if (!empty($item['updated'])) {
+        $bean->updated = (string) $item['updated'];
+    }
+    $bean->import_uuid = $uuid;
+
+    if ($dry_run) {
+        return $bean;
+    }
+
+    save($bean, ['finalize_slug' => true]);
+    ($source['store_redirects'])($item, $bean);
+    return $bean;
 }
 
 /**

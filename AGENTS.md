@@ -202,6 +202,8 @@ Each file declares a namespace; functions are called with the namespace prefix:
 
 `response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
+`known.php` and `wordpress.php` are thin sources over `Lamb\Import\import_item()`, which holds the one shared pipeline body (dedup, HTML prep, markdown conversion, save, redirects). A new importer adds a source array of callables (`uuid`, `allowed_types`, `title`, `slug`, `dom_pass`, `markdown`, `tags`, `finalize_markdown`, `store_redirects`) passed to that shared function — never a copy of `import_item()` itself.
+
 ### Database
 
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
