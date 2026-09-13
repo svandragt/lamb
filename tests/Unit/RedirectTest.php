@@ -193,9 +193,11 @@ class RedirectTest extends TestCase
 
     public function testDeleteRedirectForSlugDoesNothingWhenNoRedirectExists(): void
     {
-        // Should not throw; no redirect to delete
+        $before = R::count('redirect');
+
         delete_redirect_for_slug('non-existent-slug-' . uniqid());
-        $this->assertTrue(true);
+
+        $this->assertSame($before, R::count('redirect'), 'No redirect should have been deleted');
     }
 
     // get_all_redirects

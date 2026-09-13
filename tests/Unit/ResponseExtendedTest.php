@@ -156,8 +156,7 @@ class ResponseExtendedTest extends TestCase
 
     public function testUpgradePostsHandlesEmptyArray(): void
     {
-        // Should not throw
+        $this->expectNotToPerformAssertions();
         upgrade_posts([]);
-        $this->assertTrue(true);
     }
 }
