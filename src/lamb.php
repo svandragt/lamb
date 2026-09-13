@@ -231,10 +231,7 @@ function remove_body_tags(string $body, array $tags): string
         }
         // Matched with the same boundaries as TAG_PATTERN, and case-insensitively
         // like add_body_tags(), so this removes exactly the tags get_tags()
-        // reports. It used to demand whitespace on both sides, which left the
-        // tag in place for most real bodies — `Hello #php.`, `Hello #php, ok`,
-        // `#php at the start` — while Micropub's category delete-values still
-        // answered success, so the client was told the tag was gone.
+        // reports.
         //
         // A callback rather than a replacement string: the leading whitespace
         // goes with the tag (or two spaces close up where one belonged), but a

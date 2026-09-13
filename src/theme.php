@@ -287,9 +287,7 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
         // public_posts_clause(), not visible_clause(): related posts appear on
-        // public permalinks and must also exclude menu pages. The two
-        // _related.php templates used to attempt this filter themselves, on a
-        // non-existent $bean->is_menu_item property, so it never fired (#101).
+        // public permalinks and must also exclude menu pages.
         $visible = public_posts_clause();
         $sql = '(' . $conditions['sql'] . ') AND' . $visible['sql'];
         $params = array_merge($conditions['params'], $visible['params']);

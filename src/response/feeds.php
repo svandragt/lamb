@@ -479,8 +479,7 @@ function get_tag_feed_data(string $tag): array
     global $config;
 
     // Twenty newest by `updated`, chosen from ids so the scan can stop as soon
-    // as it has them: this used to load a bean per match and then slice, which
-    // on a tag covering a large archive exhausted memory before it got here.
+    // as it has them.
     $posts = load_posts_in_order(post_ids_by_tag($tag, true, 20));
 
     return [

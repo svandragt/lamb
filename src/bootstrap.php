@@ -74,10 +74,7 @@ function data_dir(?string $cli_base = null): string
  * password, read from LAMB_LOGIN_PASSWORD.
  *
  * response.php's LOGIN_PASSWORD constant and should_start_session()'s marker
- * verification used to call getenv('LAMB_LOGIN_PASSWORD') independently —
- * the same "read independently" duplication LAMB_DATA_DIR had before
- * data_dir() converged it (issue #732, building on #691). Both now go
- * through this single resolver.
+ * verification both go through this single resolver.
  *
  * @return string The bcrypt hash (base64-encoded), or '' when unset.
  */
@@ -257,11 +254,7 @@ function ensure_schema(): void
  * Runs the post table's one-time row migrations, then indexes it.
  *
  * Must be called after ensure_schema(), which is what guarantees the table and
- * every SCHEMA column exist. This used to add `deleted`, `draft` and
- * `import_uuid` itself, back when it was bootstrap_db()'s only schema step;
- * ensure_schema() now ALTER-adds every declared column ahead of it, so those
- * three branches could no longer fire and the columns it reads are already the
- * post-ALTER set.
+ * every SCHEMA column exist.
  *
  * @return void
  */

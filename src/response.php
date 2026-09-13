@@ -158,8 +158,7 @@ function build_exclude_slugs_clause(array $slugs): ?array
  * the chronological stream and the feeds.
  *
  * Owned in one place so the homepage and the feeds can't drift apart on what
- * "public" means; both used to assemble the two clauses inline, in opposite
- * orders.
+ * "public" means.
  *
  * @return array{sql: string, params: array<int, mixed>}
  */
