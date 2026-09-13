@@ -2,10 +2,6 @@ Branching Structure:
  - main branch: This is the main development branch where new features are implemented and merged.
  - release branch: This is the branch used to create and manage releases.
 
-Other Branches:
- - next: allows targeting the next major version, when the next release is a bugfix one.
- - *-pinned: pinned branch, kept for reference reasons.
-
 Default Branch:
  - The default branch should be main, as this is the branch where the active development and feature work is happening.
  - This allows for continuous integration and deployment of new changes, as the main branch represents the most up-to-date state of the project.

@@ -98,16 +98,12 @@
             "php -S 0.0.0.0:8747 -t src"
         ],
         "serve:frankenphp": "sudo -E frankenphp run",
-        "serve:nginx": "sudo systemctl nginx start",
         "test": "vendor/bin/codecept run",
         "coverage": [
             "vendor/bin/codecept run Unit --coverage-xml",
             "php check-coverage.php tests/_output/coverage.xml 70"
         ],
         "e2e": "pnpm exec playwright test",
-        "docs": [
-            "Composer\\Config::disableProcessTimeout",
-            "docker run --rm -v \"$PWD/docs:/site\" -v \"$PWD/.jekyll-bundle:/usr/local/bundle\" -p 4000:4000 bretfisher/jekyll-serve:stable-20260315-2119a31"
-        ]
+        "docs": "make docs"
     }
 }
