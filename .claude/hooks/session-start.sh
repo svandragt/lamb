@@ -20,25 +20,16 @@ log() { printf '[session-start] %s\n' "$1"; }
 # Dependencies
 # ---------------------------------------------------------------------------
 
-# Installs dependencies from composer.json/composer.lock via viv.
-#
-# viv is dist-only — unlike composer it has no --prefer-source fallback, so
-# there is nothing to retry with when a restrictive network policy 403s the
-# dist downloads (api.github.com/codeload.github.com). A failure here just
-# leaves vendor/ incomplete; the WARNING below says so.
-install_deps() {
-  if viv install; then
-    log "viv install complete"
-    return 0
-  fi
-
-  return 1
-}
-
+# viv is dist-only — unlike composer it has no --prefer-source fallback, so a
+# network policy blocking the dist hosts (api.github.com/codeload.github.com)
+# leaves vendor/ incomplete with nothing to retry with. Hence a warning rather
+# than a fallback path.
 if [ -x vendor/bin/codecept ] && [ -x vendor/bin/phpcs ] && [ -e vendor/bin/phpstan ]; then
   log "dependencies already present"
+elif viv install; then
+  log "viv install complete"
 else
-  install_deps || log "WARNING: viv install incomplete — dependencies are missing and, viv being dist-only, a restricted network here has no workaround"
+  log "WARNING: viv install incomplete — dependencies are missing and, viv being dist-only, a restricted network here has no workaround"
 fi
 
 # composer.json's post-install-cmd does this, but set it either way in case
