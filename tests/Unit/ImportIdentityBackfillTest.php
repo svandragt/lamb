@@ -93,8 +93,11 @@ class ImportIdentityBackfillTest extends TestCase
     {
         $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);
         migrate_post_table();
+        // Probe now finds nothing: this call records completion (one write,
+        // the marker row) rather than truly nothing (issue #811).
+        migrate_post_table();
 
-        // First call migrated the row; a second has nothing left to do.
+        // Marker is set: the probe itself is skipped on the next call.
         $this->assertSame([], $this->writesDuringEnsureColumns());
     }
 
@@ -111,7 +114,10 @@ class ImportIdentityBackfillTest extends TestCase
         $this->assertStringContainsString('version', $writes[0]);
         $this->assertSame(1, (int) R::getCell('SELECT version FROM post LIMIT 1'));
 
-        // Stamped: nothing left to write.
+        // Stamped: the next call's probe finds nothing and records that (one
+        // write, the marker row) — see issue #811.
+        $this->writesDuringEnsureColumns();
+        // Only the call after that is truly silent.
         $this->assertSame([], $this->writesDuringEnsureColumns());
     }
 
