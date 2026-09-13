@@ -39,6 +39,29 @@ function load_dotenv(string $root): void
 }
 
 /**
+ * Reports whether the database file exists and belongs to a uid other than
+ * the one running this process.
+ *
+ * WAL sidecars inherit the uid of whoever opens the database, and a
+ * read-only connection cannot checkpoint them away, so a CLI run under the
+ * wrong user leaves files behind that break every later web request. The uid
+ * is a parameter rather than read here so this stays a pure predicate.
+ *
+ * @param string $db_path Absolute path to lamb.db.
+ * @param int|null $current_uid The running process's uid, or null when it
+ *                              cannot be determined.
+ * @return bool True only when the file exists and another uid owns it.
+ */
+function db_owned_by_another_user(string $db_path, ?int $current_uid): bool
+{
+    if ($current_uid === null || !file_exists($db_path)) {
+        return false;
+    }
+    $owner_uid = fileowner($db_path);
+    return $owner_uid !== false && $owner_uid !== $current_uid;
+}
+
+/**
  * The directory holding this install's mutable state: the SQLite database, the
  * session files, the SimplePie cache and the /_cron lock.
  *

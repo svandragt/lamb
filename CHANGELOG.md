@@ -23,10 +23,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - `sitemap.xml` becomes a sitemap index once a site passes 50,000 URLs.
 - A "Write your first post" tutorial in the docs.
 - The deprecation policy is written down: a deprecation lasts one published release and is removed in the next.
-- `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
 
 ### Changed
 
+- `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
 - The database schema is declared explicitly and frozen. Existing installs get any missing columns added on first boot. Code that writes an undeclared column now fails instead of silently adding one.
 - Outbound DNS lookups for feeds and webmentions are capped by `DNS_RESOLVE_TIMEOUT` (5 seconds), so a stalled resolver can no longer hold the `/_cron` lock.
 - Tag archives covering several tags are sorted by date across all of them.

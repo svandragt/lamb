@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
@@ -149,33 +150,45 @@ XML;
     }
 
     /**
-     * Reproduces #831 without a real second user: `lamb.db` is owned by
-     * whoever runs the test, and LAMB_TEST_UID stands in for a different
-     * invoking user (bin/lamb reads it instead of posix_geteuid() when set).
-     * The real-world trigger is a shell user running bin/lamb against a
-     * database chown'd to www-data; this reproduces that ownership gap
-     * without needing a second real account.
+     * #831: a CLI run against a database owned by someone else leaves WAL
+     * sidecars that a read-only connection can never checkpoint away, so
+     * every later web request dies in ensure_schema(). The predicate takes
+     * the uid as a parameter, so these cases need no second real account
+     * and no test-only override inside bin/lamb.
+     *
+     * @return void
      */
-    public function testRefusesToRunAgainstADatabaseOwnedByAnotherUser(): void
+    public function testDbOwnedByAnotherUserDetectsAMismatchedOwner(): void
     {
-        $wxr = "$this->tmp_dir/export.xml";
-        file_put_contents($wxr, self::SAMPLE_WXR);
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
+        $db = "$this->tmp_dir/lamb.db";
+        touch($db);
+        $owner = fileowner($db);
+        $this->assertIsInt($owner);
 
-        $process = new Process(
-            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
-            codecept_root_dir(),
-            [
-                'LAMB_DATA_DIR' => $data_dir,
-                'LAMB_TEST_UID' => (string) (fileowner("$data_dir/lamb.db") + 1),
-            ] + getenv(),
+        $this->assertTrue(
+            db_owned_by_another_user($db, $owner + 1),
+            'a different uid must be refused',
         );
-        $process->run();
+        $this->assertFalse(
+            db_owned_by_another_user($db, $owner),
+            'the owning uid must be allowed through',
+        );
+    }
 
-        $this->assertSame(1, $process->getExitCode());
-        $this->assertStringContainsString('lamb.db', $process->getErrorOutput());
-        $this->assertStringContainsString('sudo -u www-data', $process->getErrorOutput());
-        $this->assertFileDoesNotExist("$data_dir/lamb.db-wal", 'must fail before opening the database');
+    /**
+     * A database that isn't there yet is the normal first run, and an
+     * undeterminable uid (no posix extension) must not block a legitimate
+     * run — an unnecessary refusal costs an import, a missed one costs a
+     * 500 the operator can recover from by deleting two files.
+     *
+     * @return void
+     */
+    public function testDbOwnedByAnotherUserAllowsMissingFileAndUnknownUid(): void
+    {
+        $db = "$this->tmp_dir/absent.db";
+        $this->assertFalse(db_owned_by_another_user($db, 12345));
+
+        touch($db);
+        $this->assertFalse(db_owned_by_another_user($db, null));
     }
 }

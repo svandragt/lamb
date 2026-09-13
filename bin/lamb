@@ -41,24 +41,6 @@ if (PHP_SAPI !== 'cli') {
 define('ROOT_DIR', dirname(__DIR__) . '/src');
 require dirname(__DIR__) . '/vendor/autoload.php';
 
-/**
- * Checks whether $db_path exists and belongs to a different uid than
- * $current_uid — see the #831 preflight below this function's only caller.
- *
- * @param string $db_path Absolute path to lamb.db.
- * @param int|null $current_uid The running process's uid, or null when it
- *                               can't be determined.
- * @return bool True when $db_path exists and is owned by another uid.
- */
-function db_owned_by_another_user(string $db_path, ?int $current_uid): bool
-{
-    if ($current_uid === null || !file_exists($db_path)) {
-        return false;
-    }
-    $owner_uid = fileowner($db_path);
-    return $owner_uid !== false && $owner_uid !== $current_uid;
-}
-
 Import\register_source([
     'name'        => 'wordpress',
     'parse'       => WordPress\parse_wxr_file(...),
@@ -138,15 +120,13 @@ $data_dir = Bootstrap\data_dir(dirname(__DIR__));
 // someone removes the sidecars by hand. Refuse before bootstrap_db() opens
 // the database, so this process never creates one of those sidecars itself.
 //
-// LAMB_TEST_UID lets tests simulate a mismatched invoking user without a
-// real second account (see tests/Unit/BinLambTest.php). posix_geteuid() is
-// unavailable when the posix extension isn't built in; when we can't
-// determine the uid we proceed rather than block a legitimate run.
-$current_uid = getenv('LAMB_TEST_UID') !== false
-    ? (int) getenv('LAMB_TEST_UID')
-    : (function_exists('posix_geteuid') ? posix_geteuid() : null);
+// posix_geteuid() is unavailable when the posix extension isn't built in.
+// When the uid can't be determined we proceed rather than block a legitimate
+// run: an unnecessary refusal costs someone their import, a missed one costs
+// them a 500 they can recover from by deleting two files.
+$current_uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
 
-if (db_owned_by_another_user("$data_dir/lamb.db", $current_uid)) {
+if (Bootstrap\db_owned_by_another_user("$data_dir/lamb.db", $current_uid)) {
     fwrite(STDERR, "bin/lamb: $data_dir/lamb.db is owned by a different user than the one running this command.\n");
     fwrite(STDERR, "A read-only connection can't checkpoint away the WAL sidecar files it would leave behind, and every later web request would then fail with \"attempt to write a readonly database\" until someone removes them by hand.\n");
     fwrite(STDERR, "Run bin/lamb as the web server user instead, for example:\n");
