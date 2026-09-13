@@ -345,9 +345,11 @@ function ensure_post_indexes(array $columns): void
  * Once the probe itself comes back empty, every later boot is that same read
  * forever — an install that finished migrating years ago still pays a table
  * scan every request. backfill_marker_done()/mark_backfill_done() short the
- * probe out once it has nothing left to find (issue #811): the marker only
- * ever removes the probe, never the migration below it, so an install that
- * still needs the UPDATE keeps getting it regardless of the marker's state.
+ * probe out once it has nothing left to find (issue #811). The marker latches:
+ * once set, this function returns before both the probe AND the UPDATE, so a
+ * database that somehow gains `version IS NULL` rows afterwards — a restored
+ * old backup, a direct write — will not be migrated. Delete the marker row
+ * from `option` to arm it again.
  *
  * Skipped when the column is absent, so the function is safe to call against a
  * `post` table predating it: naming a missing column in an UPDATE is an error
@@ -392,8 +394,9 @@ function backfill_post_version(array $columns): void
  * Once the probe comes back empty, backfill_marker_done()/mark_backfill_done()
  * (see backfill_post_version()) short it out on every later boot rather than
  * scanning `post` forever for a match that finished migrating long ago. The
- * marker only ever skips the probe, never the UPDATE, so an install that still
- * has rows to move keeps getting them regardless of the marker.
+ * marker latches the same way: once set this returns before the UPDATE too, so
+ * rows arriving in the old shape afterwards stay unmigrated until someone
+ * deletes the marker row from `option`.
  *
  * @param list<string> $columns Column names of the post table.
  * @return void
