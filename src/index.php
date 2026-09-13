@@ -64,14 +64,17 @@ if ($page_from_path !== null) {
 }
 
 # Legacy ?page=N links → permanent redirect to the clean /…/page/N URL.
-# str_contains() is a cheap pre-check before the parse_str() below: every
-# request pays for this block, but only ones whose query string could
-# possibly carry a 'page' key need the actual parse. It may be
-# over-inclusive (e.g. ?otherpage=1, ?page_size=2 also parse), which only
-# costs an unnecessary parse_str() call, never changes which requests
-# redirect.
+# The pre-check is a cheap filter before the parse_str() below: every request
+# pays for this block, but only ones whose query string could carry a 'page'
+# key need the actual parse. Over-inclusive is fine (?otherpage=1, ?page_size=2
+# parse for nothing); under-inclusive is not, because a missed redirect leaves
+# the querystring URL serving the same posts as /page/N with neither canonical.
+# Hence the '%' arm: parse_str() decodes keys, so ?%70age=2 and ?pa%67e=5 both
+# produce a 'page' key that a plain substring test cannot see.
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-if (in_array($method, ['GET', 'HEAD'], true) && str_contains($_SERVER['QUERY_STRING'] ?? '', 'page')) {
+$query_string = $_SERVER['QUERY_STRING'] ?? '';
+$may_carry_page = str_contains($query_string, 'page') || str_contains($query_string, '%');
+if (in_array($method, ['GET', 'HEAD'], true) && $may_carry_page) {
     parse_str($_SERVER['QUERY_STRING'] ?? '', $query_params);
     if (isset($query_params['page'])) {
         $page_num = max(1, (int)$query_params['page']);

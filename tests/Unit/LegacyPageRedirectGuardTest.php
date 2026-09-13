@@ -13,6 +13,15 @@ use PHPUnit\Framework\TestCase;
  * cause parse_str() to populate a 'page' key must also make the guard
  * return true. It may be over-inclusive (parsing unnecessarily is only a
  * cost, never a bug), as shown by the 'otherpage'/'page_size' cases.
+ *
+ * The '%' arm exists because parse_str() urldecodes keys: '%70age=2' and
+ * 'pa%67e=5' both yield a 'page' key that a plain substring test misses.
+ * A missed redirect is not a cosmetic loss — the querystring URL keeps
+ * serving the same posts as /page/N, with neither marked canonical.
+ *
+ * The guard below mirrors the expression in src/index.php by hand, because
+ * that file is a procedural entry point with no function to call. Change one
+ * and you must change the other.
  */
 class LegacyPageRedirectGuardTest extends TestCase
 {
@@ -24,7 +33,7 @@ class LegacyPageRedirectGuardTest extends TestCase
      */
     private function guard(string $query_string): bool
     {
-        return str_contains($query_string, 'page');
+        return str_contains($query_string, 'page') || str_contains($query_string, '%');
     }
 
     /**
@@ -45,6 +54,10 @@ class LegacyPageRedirectGuardTest extends TestCase
             'empty query string' => ['', false],
             'unrelated key containing "page" as substring' => ['otherpage=1', false],
             'unrelated key prefixed with "page"' => ['page_size=2', false],
+            'percent-encoded first letter' => ['%70age=2', true],
+            'percent-encoded middle letter' => ['pa%67e=5', true],
+            'percent-encoded page among siblings' => ['a=1&%70age=3', true],
+            'percent-encoding on an unrelated key' => ['%66oo=bar', false],
         ];
     }
 
