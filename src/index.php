@@ -64,8 +64,14 @@ if ($page_from_path !== null) {
 }
 
 # Legacy ?page=N links → permanent redirect to the clean /…/page/N URL.
+# str_contains() is a cheap pre-check before the parse_str() below: every
+# request pays for this block, but only ones whose query string could
+# possibly carry a 'page' key need the actual parse. It may be
+# over-inclusive (e.g. ?otherpage=1, ?page_size=2 also parse), which only
+# costs an unnecessary parse_str() call, never changes which requests
+# redirect.
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-if (in_array($method, ['GET', 'HEAD'], true)) {
+if (in_array($method, ['GET', 'HEAD'], true) && str_contains($_SERVER['QUERY_STRING'] ?? '', 'page')) {
     parse_str($_SERVER['QUERY_STRING'] ?? '', $query_params);
     if (isset($query_params['page'])) {
         $page_num = max(1, (int)$query_params['page']);
