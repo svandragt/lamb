@@ -1,15 +1,43 @@
 services:
-  composer:
+  viv:
     container_name: lamb-deps
-    image: composer:2
+    image: php:8.4-cli
+    working_dir: /app
+    environment:
+      VIV_VERSION: "0.10.0"
     volumes:
       - ../composer.json:/app/composer.json:ro
       - ../composer.lock:/app/composer.lock:ro
       - vendor:/app/vendor
     # --no-scripts: post-install runs phpcs, which fatals in this image
-    # because the composer image lacks the pdo_mysql extension RedBean's
+    # because the base PHP image lacks the pdo_mysql extension RedBean's
     # autoloaded functions reference. Linting runs on the host instead.
-    command: install --ignore-platform-reqs --no-interaction --no-scripts
+    #
+    # There is no published viv image, so fetch and verify the binary release
+    # in a stock PHP image before running it — the same install steps as
+    # .docker/Dockerfile.release and .github/actions/setup-viv.
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        set -euo pipefail
+        apt-get update
+        apt-get install -y --no-install-recommends ca-certificates curl
+        rm -rf /var/lib/apt/lists/*
+        case "$(uname -m)" in
+          x86_64) target=x86_64-unknown-linux-musl ;;
+          aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
+          *) echo "viv publishes no binary for $(uname -m)" >&2; exit 1 ;;
+        esac
+        base="https://github.com/svandragt/vivace/releases/download/v${VIV_VERSION}"
+        archive="vivace-v${VIV_VERSION}-${target}.tar.gz"
+        workdir="$(mktemp -d)"
+        curl -fsSL -o "${workdir}/${archive}" "${base}/${archive}"
+        curl -fsSL -o "${workdir}/SHA256SUMS" "${base}/SHA256SUMS"
+        (cd "${workdir}" && grep " ${archive}\$" SHA256SUMS | sha256sum --check --strict -)
+        tar -xzf "${workdir}/${archive}" -C "${workdir}"
+        install -m 0755 "${workdir}/vivace-v${VIV_VERSION}-${target}/viv" /usr/local/bin/viv
+        rm -rf "${workdir}"
+        viv install --no-scripts
 
   app:
     build:
@@ -17,7 +45,7 @@ services:
       dockerfile: .docker/Dockerfile
     container_name: lamb-app
     depends_on:
-      composer:
+      viv:
         condition: service_completed_successfully
     env_file:
       - ../.ddev/.env
@@ -26,7 +54,7 @@ services:
     volumes:
       # Mount the whole project so Codeception config and tests are available
       # inside the container. The vendor volume is overlaid on top so the
-      # container uses the dependencies installed by the composer service.
+      # container uses the dependencies installed by the viv service.
       - ..:/srv/app
       - vendor:/srv/app/vendor
       - ./Caddyfile:/etc/frankenphp/Caddyfile

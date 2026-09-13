@@ -46,20 +46,22 @@ jobs:
         with:
           php-version: '8.4'
 
-      - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+      - uses: ./.github/actions/setup-viv
 
-      - name: Validate Composer
-        run: composer validate
+      - name: Install dependencies
+        run: viv install --no-progress
+
+      - name: Validate manifest
+        run: viv validate
 
       - name: Security audit
-        run: composer audit
+        run: viv audit
 
       - name: Run PHPCS
-        run: composer run lint
+        run: viv run lint
 
       - name: Run PHPStan
-        run: composer run analyse
+        run: viv run analyse
 
   test:
     runs-on: ubuntu-latest
@@ -76,8 +78,10 @@ jobs:
           php-version: ${{ matrix.php-version }}
           coverage: ${{ matrix.php-version == '8.4' && 'pcov' || 'none' }}
 
+      - uses: ./.github/actions/setup-viv
+
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: viv install --no-progress
 
       # GITHUB_REF is quoted, and reached through env: rather than interpolated
       # into the script. git allows `'`, `;`, `&`, `|` and `$( )` in a ref name
@@ -95,7 +99,7 @@ jobs:
 
       - name: Check code coverage
         if: matrix.php-version == '8.4'
-        run: composer coverage
+        run: viv run coverage
 
   # Client-side JavaScript unit tests (node:test + jsdom). Fast and
   # dependency-light, so it always runs and feeds the aggregate `ci` gate.
@@ -115,10 +119,10 @@ jobs:
           restore-keys: pnpm-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # Mirrors `composer audit` in the quality job for the JS side. Every JS
+      # Mirrors `viv audit` in the quality job for the JS side. Every JS
       # dependency here is a devDependency, so an advisory affects CI runners
       # and dev machines rather than a deployed site — hence the `high`
-      # threshold instead of composer audit's fail-on-anything. Dependabot
+      # threshold instead of viv audit's fail-on-anything. Dependabot
       # alerts still surface the lower-severity ones.
       - name: Security audit
         run: pnpm audit --audit-level=high
@@ -140,13 +144,14 @@ jobs:
         with:
           php-version: '8.4'
           extensions: sqlite3, gettext, simplexml
-      - name: Cache Composer dependencies
+      - uses: ./.github/actions/setup-viv
+      - name: Cache viv dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: vendor
-          key: composer-${{ hashFiles('composer.lock') }}
-      - name: Install Composer dependencies
-        run: composer install --no-dev --no-interaction --no-scripts
+          key: viv-${{ hashFiles('composer.lock') }}
+      - name: Install viv dependencies
+        run: viv install --no-dev --no-scripts
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:

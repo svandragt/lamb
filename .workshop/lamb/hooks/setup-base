@@ -20,11 +20,31 @@ apt-get install -y --no-install-recommends \
   php8.4-zip \
   php8.4-gd \
   php8.4-xdebug \
-  composer \
   ruby-full \
   openssl \
   pkg-config \
   git \
   unzip \
-  ca-certificates
+  ca-certificates \
+  curl
 rm -rf /var/lib/apt/lists/*
+
+# viv (composer-compatible dependency installer) has no apt package; fetch and
+# verify the release binary the same way .github/actions/setup-viv does.
+viv_version=0.10.0
+case "$(uname -m)" in
+  x86_64) viv_target=x86_64-unknown-linux-musl ;;
+  aarch64 | arm64) viv_target=aarch64-unknown-linux-musl ;;
+  *) echo "viv publishes no binary for $(uname -m)" >&2; exit 1 ;;
+esac
+
+viv_base="https://github.com/svandragt/vivace/releases/download/v${viv_version}"
+viv_archive="vivace-v${viv_version}-${viv_target}.tar.gz"
+viv_workdir="$(mktemp -d)"
+
+curl -fsSL -o "${viv_workdir}/${viv_archive}" "${viv_base}/${viv_archive}"
+curl -fsSL -o "${viv_workdir}/SHA256SUMS" "${viv_base}/SHA256SUMS"
+( cd "${viv_workdir}" && grep " ${viv_archive}\$" SHA256SUMS | sha256sum --check --strict - )
+tar -xzf "${viv_workdir}/${viv_archive}" -C "${viv_workdir}"
+install -m 0755 "${viv_workdir}/vivace-v${viv_version}-${viv_target}/viv" /usr/local/bin/viv
+rm -rf "${viv_workdir}"

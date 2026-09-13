@@ -7,7 +7,6 @@ xdebug_enabled: true
 additional_hostnames: [ ]
 additional_fqdns: [ ]
 use_dns_when_possible: true
-composer_version: "2"
 corepack_enable: false
 xhprof_enabled: true
 omit_containers: [ db ]

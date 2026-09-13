@@ -15,7 +15,7 @@ A working `Caddyfile` is provided in the project root. From the project director
 sudo -E frankenphp run
 ```
 
-(or `composer serve:frankenphp`, which runs the same command). `sudo` is needed to bind port 80; `-E` keeps your environment variables — see below. Update the `lamb.test` site address in the `Caddyfile` to your own domain; with a public domain on port 443 Caddy provisions HTTPS certificates automatically.
+(or `viv run serve:frankenphp`, which runs the same command). `sudo` is needed to bind port 80; `-E` keeps your environment variables — see below. Update the `lamb.test` site address in the `Caddyfile` to your own domain; with a public domain on port 443 Caddy provisions HTTPS certificates automatically.
 
 ## Logins
 

@@ -48,13 +48,13 @@ Point your webserver at the `src/` directory ([FrankenPHP]({{ site.baseurl }}{% 
 
 ### 3. Git checkout
 
-Requires git and [Composer](https://getcomposer.org):
+Requires git and [viv](https://github.com/svandragt/vivace), a Composer-compatible dependency installer:
 
 ```
 # Checkout project - release branch is stable
 git clone --branch release https://github.com/svandragt/lamb.git
 cd lamb
-composer install --no-dev
+viv install --no-dev
 php make-password.php <your-password>
 ```
 

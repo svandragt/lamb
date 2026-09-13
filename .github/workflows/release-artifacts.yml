@@ -34,8 +34,10 @@ jobs:
           php-version: '8.4'
           extensions: sqlite3, gettext, simplexml
 
+      - uses: ./.github/actions/setup-viv
+
       - name: Install production dependencies
-        run: composer install --no-dev --no-interaction --prefer-dist --no-scripts --optimize-autoloader
+        run: viv install --no-dev --no-scripts -o
 
       - name: Build tarball
         run: |

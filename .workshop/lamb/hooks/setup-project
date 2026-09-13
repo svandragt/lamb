@@ -1,6 +1,6 @@
 #!/bin/bash
 # Runs as the 'workshop' user at every launch/refresh (cwd /project).
-# Mirrors devbox.json init_hook: composer install + pnpm install.
+# Mirrors devbox.json init_hook: viv install + pnpm install.
 set -euo pipefail
 
 # Enable pnpm via corepack (mirrors devbox DEVBOX_COREPACK_ENABLED).
@@ -10,7 +10,7 @@ if command -v corepack >/dev/null 2>&1; then
 fi
 
 if [ -f composer.json ]; then
-  composer install --no-interaction --prefer-dist
+  viv install
 fi
 
 if [ -f package.json ] && command -v pnpm >/dev/null 2>&1; then

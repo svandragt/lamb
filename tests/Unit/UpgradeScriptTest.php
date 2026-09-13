@@ -7,7 +7,7 @@ use Symfony\Component\Process\Process;
 
 /**
  * Exercises bin/upgrade against a temporary origin + clone pair, with
- * composer and curl replaced by PATH stubs that log their invocations.
+ * viv and curl replaced by PATH stubs that log their invocations.
  */
 class UpgradeScriptTest extends TestCase
 {
@@ -16,7 +16,7 @@ class UpgradeScriptTest extends TestCase
     private string $seed;
     private string $site;
     private string $stubs;
-    private string $composerLog;
+    private string $vivLog;
     private string $curlLog;
 
     protected function setUp(): void
@@ -26,12 +26,12 @@ class UpgradeScriptTest extends TestCase
         $this->seed = $this->workspace . '/seed';
         $this->site = $this->workspace . '/site';
         $this->stubs = $this->workspace . '/stubs';
-        $this->composerLog = $this->workspace . '/composer.log';
+        $this->vivLog = $this->workspace . '/viv.log';
         $this->curlLog = $this->workspace . '/curl.log';
 
         mkdir($this->workspace, 0777, true);
         mkdir($this->stubs, 0777, true);
-        $this->writeStub('composer', $this->composerLog);
+        $this->writeStub('viv', $this->vivLog);
         $this->writeStub('curl', $this->curlLog);
 
         $this->git(['git', 'init', '--bare', '--initial-branch=main', $this->origin], $this->workspace);
@@ -70,11 +70,11 @@ class UpgradeScriptTest extends TestCase
         $this->assertSame($this->revParse($this->seed), $this->revParse($this->site), 'site should be at origin HEAD');
         $this->assertSame("v2\n", file_get_contents($this->site . '/file.txt'), 'local edits should be discarded');
 
-        $this->assertFileExists($this->composerLog);
-        $composerArgs = file_get_contents($this->composerLog);
-        $this->assertStringContainsString('install', $composerArgs);
-        $this->assertStringContainsString('--no-dev', $composerArgs);
-        $this->assertStringContainsString('--no-interaction', $composerArgs);
+        $this->assertFileExists($this->vivLog);
+        $vivArgs = file_get_contents($this->vivLog);
+        $this->assertStringContainsString('install', $vivArgs);
+        $this->assertStringContainsString('--no-dev', $vivArgs);
+        $this->assertStringContainsString('--no-scripts', $vivArgs);
     }
 
     public function testUpgradeReportsOldAndNewRevisions(): void
