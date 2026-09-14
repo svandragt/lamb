@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
@@ -146,5 +147,48 @@ XML;
 
         $this->assertSame(1, $process->getExitCode());
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
+    }
+
+    /**
+     * #831: a CLI run against a database owned by someone else leaves WAL
+     * sidecars that a read-only connection can never checkpoint away, so
+     * every later web request dies in ensure_schema(). The predicate takes
+     * the uid as a parameter, so these cases need no second real account
+     * and no test-only override inside bin/lamb.
+     *
+     * @return void
+     */
+    public function testDbOwnedByAnotherUserDetectsAMismatchedOwner(): void
+    {
+        $db = "$this->tmp_dir/lamb.db";
+        touch($db);
+        $owner = fileowner($db);
+        $this->assertIsInt($owner);
+
+        $this->assertTrue(
+            db_owned_by_another_user($db, $owner + 1),
+            'a different uid must be refused',
+        );
+        $this->assertFalse(
+            db_owned_by_another_user($db, $owner),
+            'the owning uid must be allowed through',
+        );
+    }
+
+    /**
+     * A database that isn't there yet is the normal first run, and an
+     * undeterminable uid (no posix extension) must not block a legitimate
+     * run — an unnecessary refusal costs an import, a missed one costs a
+     * 500 the operator can recover from by deleting two files.
+     *
+     * @return void
+     */
+    public function testDbOwnedByAnotherUserAllowsMissingFileAndUnknownUid(): void
+    {
+        $db = "$this->tmp_dir/absent.db";
+        $this->assertFalse(db_owned_by_another_user($db, 12345));
+
+        touch($db);
+        $this->assertFalse(db_owned_by_another_user($db, null));
     }
 }
