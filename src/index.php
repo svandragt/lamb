@@ -56,6 +56,15 @@ header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false)
 # Routing
 $request_uri = Http\get_request_uri();
 
+# GET/HEAD only: a 301 on POST would make a Micropub or webmention client
+# re-issue the request without its body. get_request_uri() maps '/' to
+# '/home', so the trailing-slash check reads $_SERVER['REQUEST_URI'] directly.
+$canonical = Http\canonical_redirect($_SERVER['REQUEST_URI'] ?? '');
+if ($canonical !== null && in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD'], true)) {
+    header('Location: ' . Http\sanitize_location($canonical), true, 301);
+    exit;
+}
+
 # Strip a trailing /page/N pagination segment so list routes keep routing on
 # their base path; the page number flows through the normal $_GET['page'] path.
 [$request_uri, $page_from_path] = Http\extract_page_segment((string)$request_uri);
