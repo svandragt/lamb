@@ -32,6 +32,10 @@ class PostIndexesTest extends TestCase
         }
         R::freeze(false);
         R::nuke();
+        // Pre-create `option`: without it, a backfill's first empty probe
+        // auto-vivifies the table via RedBeanPHP's fluid mode, and that CREATE
+        // TABLE would otherwise show up as unrelated DDL in these assertions.
+        R::exec('CREATE TABLE option (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, value TEXT, updated TEXT)');
     }
 
     /**

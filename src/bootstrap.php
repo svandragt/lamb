@@ -342,19 +342,33 @@ function ensure_post_indexes(array $columns): void
  * behind it (up to PDO's 60-second busy timeout) instead of being served under
  * a shared read lock. The probe is a read, so it does not.
  *
+ * Once the probe itself comes back empty, every later boot is that same read
+ * forever — an install that finished migrating years ago still pays a table
+ * scan every request. backfill_marker_done()/mark_backfill_done() short the
+ * probe out once it has nothing left to find (issue #811). The marker latches:
+ * once set, this function returns before both the probe AND the UPDATE, so a
+ * database that somehow gains `version IS NULL` rows afterwards — a restored
+ * old backup, a direct write — will not be migrated. Delete the marker row
+ * from `option` to arm it again.
+ *
  * Skipped when the column is absent, so the function is safe to call against a
  * `post` table predating it: naming a missing column in an UPDATE is an error
  * rather than a no-op. ensure_schema() declares `version`, so the guard never
  * fires under bootstrap_db() — it is what keeps this callable in isolation.
  *
  * @param list<string> $columns Column names of the post table.
+ * @return void
  */
 function backfill_post_version(array $columns): void
 {
     if (!in_array('version', $columns, true)) {
         return;
     }
+    if (backfill_marker_done('backfill_post_version')) {
+        return;
+    }
     if (!R::getCell('SELECT 1 FROM post WHERE version IS NULL LIMIT 1')) {
+        mark_backfill_done('backfill_post_version');
         return;
     }
 
@@ -377,11 +391,22 @@ function backfill_post_version(array $columns): void
  * correct — but it probes with a SELECT first, because an UPDATE that matches
  * nothing still takes a write lock (see backfill_post_version()).
  *
+ * Once the probe comes back empty, backfill_marker_done()/mark_backfill_done()
+ * (see backfill_post_version()) short it out on every later boot rather than
+ * scanning `post` forever for a match that finished migrating long ago. The
+ * marker latches the same way: once set this returns before the UPDATE too, so
+ * rows arriving in the old shape afterwards stay unmigrated until someone
+ * deletes the marker row from `option`.
+ *
  * @param list<string> $columns Column names of the post table.
+ * @return void
  */
 function backfill_imported_post_identity(array $columns): void
 {
     if (!in_array('feed_name', $columns, true) || !in_array('feeditem_uuid', $columns, true)) {
+        return;
+    }
+    if (backfill_marker_done('backfill_imported_post_identity')) {
         return;
     }
     $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
@@ -393,10 +418,61 @@ function backfill_imported_post_identity(array $columns): void
     // Probe first: see backfill_post_version() for why an unconditional UPDATE
     // makes every request a writer even once there is nothing left to migrate.
     if (!R::getCell('SELECT 1 FROM post WHERE ' . $where . ' LIMIT 1')) {
+        mark_backfill_done('backfill_imported_post_identity');
         return;
     }
 
     R::exec('UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL WHERE ' . $where);
+}
+
+/**
+ * Whether a one-time backfill has already recorded its probe as empty, via a
+ * hidden row in the `option` table — the same mechanic EXPERIMENTAL_GATE_VERSION
+ * uses to persist one-off state across boots (see config.php), reused here
+ * rather than a new table or file.
+ *
+ * Any failure to read — most notably a fresh install, or an upgrade from
+ * before this marker existed, where the row (or the whole `option` table)
+ * does not exist yet — is treated as "not done": the caller falls back to
+ * probing, exactly as every boot did before this existed.
+ *
+ * @param string $name Marker key, e.g. "backfill_post_version".
+ * @return bool
+ */
+function backfill_marker_done(string $name): bool
+{
+    try {
+        return (bool) R::getCell('SELECT 1 FROM option WHERE name = ? AND value = ?', [$name, '1']);
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Records that a backfill's probe came back empty, so later boots can skip it
+ * via backfill_marker_done() instead of running a SELECT against `post`
+ * forever.
+ *
+ * Never called before the probe has run and found nothing — a failed write
+ * here must not be mistaken for the migration itself having failed. Any
+ * exception (a read-only database, most plausibly, since bootstrap_db() runs
+ * on every request including anonymous ones) is swallowed rather than
+ * surfaced: worst case, the next boot probes again, which is what happened on
+ * every boot before this existed.
+ *
+ * @param string $name Marker key, matching backfill_marker_done()'s argument.
+ * @return void
+ */
+function mark_backfill_done(string $name): void
+{
+    try {
+        $bean = R::findOneOrDispense('option', ' name = ? ', [$name]);
+        $bean->name = $name;
+        $bean->value = '1';
+        R::store($bean);
+    } catch (\Throwable $e) {
+        // See docblock: a boot that cannot write here just probes again.
+    }
 }
 
 /**
