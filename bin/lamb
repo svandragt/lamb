@@ -2,9 +2,10 @@
 <?php
 
 /**
- * Lamb's operator CLI. Currently one subcommand:
+ * Lamb's operator CLI. Two subcommands:
  *
  *   bin/lamb import <source> <path> [--dry-run] [--replace]
+ *   bin/lamb upgrade-posts [--dry-run]
  *
  * <source> is one of the registered importers (wordpress, known, lamb — see
  * the registrations below). Each parses its own file format into items, then
@@ -17,6 +18,10 @@
  *               are lost. For re-running an export after a conversion fix.
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
+ *
+ * upgrade-posts walks every post whose `version` is below POST_VERSION and
+ * upgrades it eagerly through Response\upgrade_all_posts(), rather than
+ * waiting for a render to touch it (see docs/upgrade-posts.md).
  *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
@@ -32,6 +37,8 @@ use Lamb\WordPress;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
+
+use function Lamb\Response\upgrade_all_posts;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "bin/lamb must be run from the command line.\n");
@@ -84,8 +91,72 @@ Import\register_source([
     },
 ]);
 
-if (($argv[1] ?? null) !== 'import') {
+/**
+ * Resolves the data directory, refuses a database owned by another user, and
+ * opens it.
+ *
+ * Every bin/lamb path that touches the database goes through here on purpose.
+ * The #831 ownership check only protects the call it sits in front of, so a
+ * command calling bootstrap_db() itself would open the database unguarded and
+ * leave exactly the WAL sidecars that check exists to prevent.
+ *
+ * @return string Absolute path to the data directory.
+ */
+function open_data_dir(): string
+{
+    $data_dir = Bootstrap\data_dir(dirname(__DIR__));
+
+    // #831: WAL mode (#780) leaves lamb.db-wal/-shm sidecars owned by whoever
+    // opens the database. A read-only connection can never checkpoint them away,
+    // so once lamb.db and its invoker's uid disagree, every later web request
+    // dies in ensure_schema() with "attempt to write a readonly database" until
+    // someone removes the sidecars by hand. Refuse before bootstrap_db() opens
+    // the database, so this process never creates one of those sidecars itself.
+    //
+    // posix_geteuid() is unavailable when the posix extension isn't built in.
+    // When the uid can't be determined we proceed rather than block a legitimate
+    // run: an unnecessary refusal costs someone their import, a missed one costs
+    // them a 500 they can recover from by deleting two files.
+    $current_uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
+
+    if (Bootstrap\db_owned_by_another_user("$data_dir/lamb.db", $current_uid)) {
+        fwrite(STDERR, "bin/lamb: $data_dir/lamb.db is owned by a different user than the one running this command.\n");
+        fwrite(STDERR, "A read-only connection can't checkpoint away the WAL sidecar files it would leave behind, and every later web request would then fail with \"attempt to write a readonly database\" until someone removes them by hand.\n");
+        fwrite(STDERR, "Run bin/lamb as the web server user instead, for example:\n");
+        fwrite(STDERR, "    sudo -u www-data bin/lamb import ...\n");
+        exit(1);
+    }
+
+    Bootstrap\bootstrap_db($data_dir);
+
+    return $data_dir;
+}
+
+$command = $argv[1] ?? null;
+
+if ($command === 'upgrade-posts') {
+    $rest = array_slice($argv, 2);
+    $dry_run = in_array('--dry-run', $rest, true);
+    if (array_diff($rest, ['--dry-run']) !== []) {
+        fwrite(STDERR, "Usage: bin/lamb upgrade-posts [--dry-run]\n");
+        exit(1);
+    }
+
+    $data_dir = open_data_dir();
+
+    global $config;
+    $config = Config\load();
+    Config\apply_timezone($config);
+
+    [$needing, $upgraded] = upgrade_all_posts($dry_run);
+    $prefix = $dry_run ? '[dry-run] ' : '';
+    echo "{$prefix}Done. needs_upgrade=$needing upgraded=$upgraded\n";
+    exit(0);
+}
+
+if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace]\n");
+    fwrite(STDERR, "       bin/lamb upgrade-posts [--dry-run]\n");
     fwrite(STDERR, 'Sources: ' . implode(', ', Import\source_names()) . "\n");
     exit(1);
 }
@@ -111,30 +182,7 @@ if ($path === null) {
     exit(1);
 }
 
-$data_dir = Bootstrap\data_dir(dirname(__DIR__));
-
-// #831: WAL mode (#780) leaves lamb.db-wal/-shm sidecars owned by whoever
-// opens the database. A read-only connection can never checkpoint them away,
-// so once lamb.db and its invoker's uid disagree, every later web request
-// dies in ensure_schema() with "attempt to write a readonly database" until
-// someone removes the sidecars by hand. Refuse before bootstrap_db() opens
-// the database, so this process never creates one of those sidecars itself.
-//
-// posix_geteuid() is unavailable when the posix extension isn't built in.
-// When the uid can't be determined we proceed rather than block a legitimate
-// run: an unnecessary refusal costs someone their import, a missed one costs
-// them a 500 they can recover from by deleting two files.
-$current_uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
-
-if (Bootstrap\db_owned_by_another_user("$data_dir/lamb.db", $current_uid)) {
-    fwrite(STDERR, "bin/lamb: $data_dir/lamb.db is owned by a different user than the one running this command.\n");
-    fwrite(STDERR, "A read-only connection can't checkpoint away the WAL sidecar files it would leave behind, and every later web request would then fail with \"attempt to write a readonly database\" until someone removes them by hand.\n");
-    fwrite(STDERR, "Run bin/lamb as the web server user instead, for example:\n");
-    fwrite(STDERR, "    sudo -u www-data bin/lamb import ...\n");
-    exit(1);
-}
-
-Bootstrap\bootstrap_db($data_dir);
+$data_dir = open_data_dir();
 
 global $config;
 $config = Config\load();
