@@ -505,10 +505,13 @@ function get_ini_text(): string
         return $ini_text;
     }
 
-    // Bootstrap
+    // Bootstrap. Anchored to ROOT_DIR so it seeds the same way under every
+    // entry point (composer serve, FrankenPHP, nginx+fpm, bin/lamb), rather
+    // than only when the process CWD happens to be src/.
     $ini_text = '';
-    if (file_exists('config.ini')) {
-        $ini_text = file_get_contents('config.ini');
+    $config_ini_path = ROOT_DIR . '/config.ini';
+    if (file_exists($config_ini_path)) {
+        $ini_text = file_get_contents($config_ini_path);
     }
 
     if (empty($ini_text)) {
