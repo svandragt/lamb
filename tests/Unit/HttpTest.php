@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Http\apply_dns_resolve_timeout;
+use function Lamb\Http\canonical_redirect;
 use function Lamb\Http\extract_page_segment;
 use function Lamb\Http\get_request_uri;
 use function Lamb\Http\resolve_host_ips;
@@ -150,6 +151,42 @@ class HttpTest extends TestCase
     public function testPagePathStripsExistingPageSegment(): void
     {
         $this->assertSame('/tag/foo/page/4', page_path('/tag/foo/page/2', 4));
+    }
+
+    public function testCanonicalRedirectRootIsCanonical(): void
+    {
+        $this->assertNull(canonical_redirect('/'));
+    }
+
+    public function testCanonicalRedirectNoTrailingSlashIsCanonical(): void
+    {
+        $this->assertNull(canonical_redirect('/about'));
+    }
+
+    public function testCanonicalRedirectStripsTrailingSlash(): void
+    {
+        $this->assertSame('/about', canonical_redirect('/about/'));
+    }
+
+    public function testCanonicalRedirectStripsTrailingSlashFromNestedPath(): void
+    {
+        $this->assertSame('/tag/foo/page/2', canonical_redirect('/tag/foo/page/2/'));
+    }
+
+    public function testCanonicalRedirectStripsMultipleTrailingSlashes(): void
+    {
+        $this->assertSame('/about', canonical_redirect('/about//'));
+        $this->assertSame('/about', canonical_redirect('/about///'));
+    }
+
+    public function testCanonicalRedirectDoubleSlashRedirectsToRoot(): void
+    {
+        $this->assertSame('/', canonical_redirect('//'));
+    }
+
+    public function testCanonicalRedirectPreservesQueryString(): void
+    {
+        $this->assertSame('/about?utm=1', canonical_redirect('/about/?utm=1'));
     }
     // request_string — a request value can always arrive as an array, and PHP 8
     // fatals at the first string-typed sink rather than coercing it.

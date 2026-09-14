@@ -9,6 +9,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Fixed
+
+- A URL with a trailing slash now redirects (301) to the version without it, so each page has a single canonical address.
+
 ### Removed
 
 - The `import-wordpress.php`, `import-known.php` and `import-lamb.php` shims are removed. Run `bin/lamb import <wordpress|known|lamb> <path>` instead; the flags and output are the same.
