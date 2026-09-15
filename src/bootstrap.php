@@ -132,15 +132,7 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
-    // WAL lets a writer commit without waiting for concurrent readers. Without
-    // it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
-    // lock that any page-render read holds off, so an ordinary concurrent visitor
-    // could make a correct-password login stall or fail. Under WAL that
-    // reservation only ever contends with another writer, keeping its lock hold
-    // to the microseconds of a counter update.
-    // ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
-    // fall back to the slower rollback journal and lose this guarantee.
-    R::exec('PRAGMA journal_mode=WAL');
+    ensure_wal_journal_mode();
     R::useWriterCache(true);
 
     ensure_schema();
@@ -153,6 +145,34 @@ function bootstrap_db(string $data_dir): void
     // migrate_post_table(), which are themselves schema changes and would be
     // refused too.
     R::freeze(true);
+}
+
+/**
+ * Switches the connection to WAL journal mode, unless it is already there.
+ *
+ * WAL lets a writer commit without waiting for concurrent readers. Without
+ * it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
+ * lock that any page-render read holds off, so an ordinary concurrent visitor
+ * could make a correct-password login stall or fail. Under WAL that
+ * reservation only ever contends with another writer, keeping its lock hold
+ * to the microseconds of a counter update.
+ * ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
+ * fall back to the slower rollback journal and lose this guarantee.
+ *
+ * Gated on a read first, same reasoning as ensure_post_indexes(): setting the
+ * journal mode is a write even when it changes nothing, and this runs on
+ * every boot, so an unconditional PRAGMA journal_mode=WAL made every
+ * anonymous page view a writer forever after the first boot (issue #831).
+ * WAL is a persisted property of the file, so once the first boot sets it,
+ * every later boot sees "wal" on this read and skips the write.
+ *
+ * @return void
+ */
+function ensure_wal_journal_mode(): void
+{
+    if (strtolower((string) R::getCell('PRAGMA journal_mode')) !== 'wal') {
+        R::exec('PRAGMA journal_mode=WAL');
+    }
 }
 
 /**
@@ -246,6 +266,14 @@ const SCHEMA = [
  * ALTER and freezing anyway would turn that column's next write into a thrown
  * exception where fluid mode would have quietly added it.
  *
+ * The CREATE is gated on a read of sqlite_master first, same reasoning as
+ * ensure_post_indexes(): DDL takes a write lock even when IF NOT EXISTS makes
+ * it a no-op, and this runs on every boot, so an unconditional CREATE made
+ * every anonymous page view a writer forever after the schema was already
+ * current (issue #831). The read still leaves IF NOT EXISTS on the CREATE so
+ * two requests racing a fresh install both succeed. PRAGMA table_info is
+ * already a read, so the per-table ALTER path needs no equivalent change.
+ *
  * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
  * are themselves schema changes, which a frozen connection also refuses.
  *
@@ -253,16 +281,19 @@ const SCHEMA = [
  */
 function ensure_schema(): void
 {
+    $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
     foreach (SCHEMA as $table => $columns) {
         $definitions = [];
         foreach ($columns as $name => $type) {
             $definitions[] = "$name $type";
         }
-        R::exec(sprintf(
-            'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
-            $table,
-            implode(', ', $definitions)
-        ));
+        if (!in_array($table, $existing_tables, true)) {
+            R::exec(sprintf(
+                'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
+                $table,
+                implode(', ', $definitions)
+            ));
+        }
 
         $existing = array_column(R::getAll("PRAGMA table_info($table)"), 'name');
         foreach ($columns as $name => $type) {
