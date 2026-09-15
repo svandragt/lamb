@@ -13,6 +13,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 - A URL with a trailing slash now redirects (301) to the version without it, so each page has a single canonical address.
 - Boot no longer takes a write lock on a request whose schema and journal mode are already current, so an ordinary page render is a pure reader (#831). This doesn't cure a `lamb.db` left with unwritable WAL sidecars by a wrong-user `bin/lamb` run; see the refusal added for that above.
+- The login throttle's refusal message states sub-minute waits in seconds, so it no longer disagrees with the `Retry-After` header (#791).
 
 ### Removed
 
