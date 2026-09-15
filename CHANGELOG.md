@@ -12,6 +12,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 ### Fixed
 
 - A URL with a trailing slash now redirects (301) to the version without it, so each page has a single canonical address.
+- The login throttle's refusal message states sub-minute waits in seconds, so it no longer disagrees with the `Retry-After` header (#791).
 
 ### Removed
 
