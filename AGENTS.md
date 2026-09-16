@@ -219,7 +219,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 ### Configuration
 
-Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
+Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from built-in defaults. Edit it at `/settings` (login required).
 
 Config keys: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`, `[redirections]`.
 

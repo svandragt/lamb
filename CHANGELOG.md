@@ -17,6 +17,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Removed
 
+- A `config.ini` in the app root is no longer read as a first-run seed. Configure the site at `/settings` instead.
 - The `import-wordpress.php`, `import-known.php` and `import-lamb.php` shims are removed. Run `bin/lamb import <wordpress|known|lamb> <path>` instead; the flags and output are the same.
 - A theme's `feed.php` or `feed_json.php` override is no longer read. Lamb's built-in feeds are used; delete the file from your theme.
 - The prebuilt Docker image at `ghcr.io/svandragt/lamb` is no longer published. Build from `Dockerfile.release` with `docker-compose.yml`; images up to 0.14.0 stay pullable.

@@ -70,24 +70,6 @@ class ConfigLoadTest extends TestCase
         $this->assertStringContainsString('[menu_items]', $text);
     }
 
-    public function testGetIniTextBootstrapsFromConfigIniAtRootDirRegardlessOfCwd(): void
-    {
-        $configIniPath = ROOT_DIR . '/config.ini';
-        file_put_contents($configIniPath, "site_title = From config.ini seed\n");
-        $originalCwd = getcwd();
-        // Move well away from ROOT_DIR to prove the seed isn't found via CWD.
-        chdir(sys_get_temp_dir());
-
-        try {
-            $text = get_ini_text();
-        } finally {
-            unlink($configIniPath);
-            chdir($originalCwd);
-        }
-
-        $this->assertStringContainsString('From config.ini seed', $text);
-    }
-
     public function testGetIniTextReturnsSavedTextOnSubsequentCall(): void
     {
         // Includes an explicit theme so the themeless-migration is a no-op and
