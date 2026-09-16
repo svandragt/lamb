@@ -14,6 +14,16 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - A URL with a trailing slash now redirects (301) to the version without it, so each page has a single canonical address.
 - Boot no longer takes a write lock on a request whose schema and journal mode are already current, so an ordinary page render is a pure reader (#831). This doesn't cure a `lamb.db` left with unwritable WAL sidecars by a wrong-user `bin/lamb` run; see the refusal added for that above.
 - The login throttle's refusal message states sub-minute waits in seconds, so it no longer disagrees with the `Retry-After` header (#791).
+- WordPress import: images renamed at the source (PNG bytes under a `.jpg` name) now import; an assets directory that can't be created is logged instead of leaving the image remote; numeric slugs are dropped even without an old path to redirect.
+- Search shows one empty-state message, not two.
+- Hashtag linking no longer rewrites hashtags inside existing link text.
+- Multi-word tags round-trip through add and remove.
+- Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
+- The first-run `config.ini` seed is now read from `src/config.ini` regardless of the server's working directory, instead of only under `composer serve`.
+- Micropub: a token without `update` scope can no longer tell a real post from a missing one.
+- Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
+- XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
+- Webmention reads on the post page are bounded.
 
 ### Removed
 
@@ -40,19 +50,6 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Micropub responses send private cache headers.
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
 - Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
-
-### Fixed
-
-- WordPress import: images renamed at the source (PNG bytes under a `.jpg` name) now import; an assets directory that can't be created is logged instead of leaving the image remote; numeric slugs are dropped even without an old path to redirect.
-- Search shows one empty-state message, not two.
-- Hashtag linking no longer rewrites hashtags inside existing link text.
-- Multi-word tags round-trip through add and remove.
-- Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
-- The first-run `config.ini` seed is now read from `src/config.ini` regardless of the server's working directory, instead of only under `composer serve`.
-- Micropub: a token without `update` scope can no longer tell a real post from a missing one.
-- Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
-- XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
-- Webmention reads on the post page are bounded.
 
 ### Upgrade notes
 
