@@ -607,6 +607,32 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Resolves the configured theme to a name that actually has a directory under `src/themes/`.
+ *
+ * Falls back to $fallback for anything that doesn't resolve to a real theme
+ * directory: no `theme` key (null), a `[theme]` section header (which
+ * normalize_config() drops before this is ever called), a typo saved at
+ * /settings, or a custom theme whose directory was since deleted. This is a
+ * live check rather than a stored migration, so it also covers the historical
+ * pre-#289 name (`default`, before `src/themes/default` was renamed to
+ * `src/themes/base`) without needing to know that name specifically.
+ *
+ * sanitize_filename() runs first and is what closes the path-traversal and
+ * stored-XSS surface (see src/index.php) — this function only adds the
+ * existence check on top of it.
+ *
+ * @param mixed $configured The raw `theme` config value.
+ * @param string $fallback The theme to use when $configured names no existing directory.
+ * @return string The sanitized name of an existing theme directory.
+ */
+function resolve_theme(mixed $configured, string $fallback = 'base'): string
+{
+    $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
+
+    return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
+}
+
+/**
  * Returns the markup for a file-picker control that hands picked files to
  * upload-image.js, which uploads them the same way as a drag-and-drop or
  * paste.

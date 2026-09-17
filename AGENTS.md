@@ -260,10 +260,10 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### How themes are selected
 
-`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Config\resolve_theme()`, which falls back to `'base'` when unset and aliases the legacy name `'default'` to `'base'`:
+`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Theme\resolve_theme()`, which sanitises the value and falls back to `'base'` when it names no directory under `src/themes/` — a missing key, a malformed `[theme]` section, a typo, or a deleted custom theme all resolve the same way:
 
 ```php
-define("THEME",     Config\resolve_theme($config['theme'] ?? null));
+define("THEME",     Theme\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');   // absolute FS path
 define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relative)
 ```
@@ -272,7 +272,7 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
 
-New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs without an explicit theme are migrated to `theme = base` on first read (`Config\ensure_explicit_theme()` in `get_ini_text()`), so the `'base'` fallback and the `default`→`base` alias can be removed once all installs carry an explicit theme.
+New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. An install with no `theme` key set falls back to `theme = base` via `Theme\resolve_theme()` at read time — nothing is rewritten in storage.
 
 ### Part resolution (`Theme\part`)
 
