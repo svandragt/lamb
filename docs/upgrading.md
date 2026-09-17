@@ -77,6 +77,16 @@ It's safe to run at any time: each migration checks whether it still has anythin
 
 `bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
 
+### What `bin/upgrade` does with the result
+
+`bin/lamb migrate` reports one of three outcomes, and `bin/upgrade` reacts differently to each:
+
+- **Ran successfully.** The upgrade continues straight to the health check, as normal.
+- **Refused to run.** `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the [ownership guard](#the-deploying-user-must-own-the-checkout) that protects against leaving unwritable WAL sidecar files behind. This is the *normal* shape of a cron deploy: the checkout and database owned by the webserver user, cron running as a human. `bin/upgrade` prints a loud warning naming the exact command to run by hand (`sudo -u <owner> bin/lamb migrate`), then carries on to the health check and finishes the upgrade successfully — the code and dependencies are fine, only the migration is outstanding.
+- **Genuinely failed.** Something else went wrong running a migration. `bin/upgrade` prints a rollback command and stops before the health check, the same as a failed dependency install.
+
+If you see the ownership warning in cron mail, run the command it prints as the user it names, once, and you're caught up.
+
 **Upgrade floor:** these migrations shipped in 0.14.0. Restoring a `lamb.db` backup older than 0.14.0, or upgrading a checkout that has been stuck before it, needs a stop at 0.14.0 first — run `bin/lamb migrate` there — before continuing on to a later version.
 
 ## Tarball install

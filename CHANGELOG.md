@@ -41,7 +41,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Micropub responses send private cache headers.
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
 - Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
-- Boot no longer stamps pre-versioning posts, moves legacy WordPress/Known imports onto `import_uuid`, or seeds a feed's watermark from its legacy option row — those one-time migrations moved to `bin/lamb migrate` ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically after installing dependencies, before the health check.
+- Boot no longer stamps pre-versioning posts, moves legacy WordPress/Known imports onto `import_uuid`, or seeds a feed's watermark from its legacy option row — those one-time migrations moved to `bin/lamb migrate` ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically after installing dependencies, before the health check. When `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the normal shape of a cron deploy — the migration can't run there either; `bin/upgrade` warns and names the command to run by hand instead of failing the whole upgrade over it.
 
 ### Fixed
 

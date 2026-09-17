@@ -146,6 +146,34 @@ class UpgradeScriptTest extends TestCase
         $this->assertFileDoesNotExist($this->curlLog, 'health check must not run after a failed migration');
     }
 
+    /**
+     * #811: exit 3 from bin/lamb migrate means the #831 ownership guard
+     * refused before touching the database — the normal shape of a cron
+     * deploy (checkout owned by the webserver user, cron running as a
+     * human), not a broken upgrade. bin/upgrade must warn and keep going
+     * to the health check and a successful exit, not take the fatal path
+     * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
+     * covers for every other nonzero code.
+     */
+    public function testMigrateOwnershipRefusalWarnsAndContinuesToTheHealthCheck(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+
+        $this->writeRepoStub('bin/lamb', $this->lambLog, 3);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', 'lamb refuses on ownership'], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('bin/lamb migrate', $output, 'should name the command to run by hand');
+        $this->assertStringContainsString('sudo -u', $output, 'should tell the operator which user to run it as');
+        $this->assertStringContainsString('Upgraded', $output, 'the upgrade itself still succeeded');
+        $this->assertFileExists($this->curlLog, 'health check must still run after an ownership refusal');
+    }
+
     private function runUpgrade(): Process
     {
         $process = new Process(

@@ -107,9 +107,17 @@ Import\register_source([
  * command calling bootstrap_db() itself would open the database unguarded and
  * leave exactly the WAL sidecars that check exists to prevent.
  *
+ * @param int $refusal_exit_code Exit code when the ownership guard refuses.
+ *                               Every command but `migrate` keeps the
+ *                               original 1 ("something failed"); `migrate`
+ *                               passes 3 so `bin/upgrade` can tell "refused,
+ *                               never touched the database" apart from "ran
+ *                               and a migration genuinely failed" (#811).
+ * @param string $example Command shown in the "run as the web server user"
+ *                         hint, so it matches whichever command refused.
  * @return string Absolute path to the data directory.
  */
-function open_data_dir(): string
+function open_data_dir(int $refusal_exit_code = 1, string $example = 'import ...'): string
 {
     $data_dir = Bootstrap\data_dir(dirname(__DIR__));
 
@@ -130,8 +138,8 @@ function open_data_dir(): string
         fwrite(STDERR, "bin/lamb: $data_dir/lamb.db is owned by a different user than the one running this command.\n");
         fwrite(STDERR, "A read-only connection can't checkpoint away the WAL sidecar files it would leave behind, and every later web request would then fail with \"attempt to write a readonly database\" until someone removes them by hand.\n");
         fwrite(STDERR, "Run bin/lamb as the web server user instead, for example:\n");
-        fwrite(STDERR, "    sudo -u www-data bin/lamb import ...\n");
-        exit(1);
+        fwrite(STDERR, "    sudo -u www-data bin/lamb $example\n");
+        exit($refusal_exit_code);
     }
 
     Bootstrap\bootstrap_db($data_dir);
@@ -149,7 +157,7 @@ if ($command === 'upgrade-posts') {
         exit(1);
     }
 
-    $data_dir = open_data_dir();
+    $data_dir = open_data_dir(example: 'upgrade-posts');
 
     global $config;
     $config = Config\load();
@@ -169,7 +177,11 @@ if ($command === 'migrate') {
         exit(1);
     }
 
-    $data_dir = open_data_dir();
+    // Refuses with exit 3, not the usual 1, when the #831 ownership guard
+    // fires: bin/upgrade runs this automatically, and it must be able to
+    // tell "never touched the database" apart from "a migration genuinely
+    // failed" so it can warn and finish the upgrade instead of failing it.
+    $data_dir = open_data_dir(refusal_exit_code: 3, example: 'migrate');
 
     global $config;
     $config = Config\load();
