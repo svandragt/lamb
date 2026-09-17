@@ -159,4 +159,34 @@ class ResponseExtendedTest extends TestCase
         $this->expectNotToPerformAssertions();
         upgrade_posts([]);
     }
+
+    // get_results — the render path no longer stores a stale post's upgrade (#814)
+
+    public function testGetResultsDoesNotStoreAnUpgradeForAStalePost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = "```php\necho 1;\n```";
+        $bean->transformed = '<pre><code class="language-php">echo 1;</code></pre>';
+        $bean->version = 1;
+        R::store($bean);
+
+        get_results([], [$bean], build_pagination_meta(1, 10, 1, 0));
+
+        $stored = R::getRow('SELECT version, transformed FROM post WHERE id = ?', [$bean->id]);
+        $this->assertSame(1, (int) $stored['version']);
+        $this->assertSame('<pre><code class="language-php">echo 1;</code></pre>', $stored['transformed']);
+    }
+
+    public function testGetResultsStillRendersUpToDateHtmlForAStalePost(): void
+    {
+        $bean = R::dispense('post');
+        $bean->body = "```php\necho 1;\n```";
+        $bean->transformed = '<pre><code class="language-php">echo 1;</code></pre>';
+        $bean->version = 1;
+        R::store($bean);
+
+        get_results([], [$bean], build_pagination_meta(1, 10, 1, 0));
+
+        $this->assertStringContainsString('phiki', $bean->transformed);
+    }
 }

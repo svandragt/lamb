@@ -8,10 +8,14 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\extract_description;
+use function Lamb\front_matter_summary;
 use function Lamb\get_option;
+use function Lamb\highlight_and_link;
 use function Lamb\parse_bean;
 use function Lamb\Post\inject_title_matter;
 use function Lamb\Post\parse_matter;
+use function Lamb\render_body;
 use function Lamb\set_option;
 
 // The built-in dev server (`composer serve`) does not load .env, so read it here
@@ -333,6 +337,37 @@ function upgrade_posts(array $posts): void
 }
 
 /**
+ * Refreshes a stale post's `transformed` HTML and `description` in memory
+ * only, for a render that must not carry a data migration (#814).
+ *
+ * A POST_VERSION bump only ever means `transformed` output changed (new
+ * syntax highlighting, image sizing); every other column upgrade_posts()
+ * juggles (title, slug, draft) is already correct as stored and untouched by
+ * the version, so — unlike upgrade_posts() — this skips parse_bean() and its
+ * title/slug/draft restore dance entirely, along with the store. The row
+ * keeps its old version and gets the real, persisted upgrade the next time
+ * `bin/lamb migrate` or `bin/lamb upgrade-posts` runs.
+ *
+ * @param array<int, mixed> $posts The posts about to be rendered.
+ * @return void
+ */
+function render_stale_posts(array $posts): void
+{
+    foreach ($posts as $bean) {
+        if (!$bean instanceof \RedBeanPHP\OODBBean) {
+            continue;
+        }
+        if ((int)$bean->version === POST_VERSION) {
+            continue;
+        }
+        $markdown = render_body((string)$bean->body);
+        $front_matter = parse_matter((string)$bean->body);
+        $bean->description = front_matter_summary($front_matter) ?? extract_description($markdown);
+        $bean->transformed = highlight_and_link($markdown);
+    }
+}
+
+/**
  * Posts loaded per page by upgrade_all_posts(), so a large archive of
  * outdated posts is walked a page at a time rather than held in memory whole.
  */
@@ -432,7 +467,7 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
         $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page);
     }
 
-    upgrade_posts($items);
+    render_stale_posts($items);
     return [
         'items'      => $items,
         'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),

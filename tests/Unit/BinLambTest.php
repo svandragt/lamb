@@ -347,4 +347,43 @@ XML;
         $this->assertStringContainsString('needs_upgrade=0 upgraded=0', $process->getOutput());
         $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
     }
+
+    /**
+     * #814: `bin/lamb migrate` now covers the post upgrade too, so an
+     * operator restoring an old backup has one command for every
+     * outstanding data migration instead of two.
+     */
+    public function testMigrateCommandAlsoUpgradesStalePosts(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testMigrateDryRunDoesNotUpgradeStalePosts(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $process->getOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+    }
 }
