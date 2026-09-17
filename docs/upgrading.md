@@ -61,6 +61,24 @@ Run that command as the user the cron job runs as, not as root — `--global` wr
 
 Watch for this after moving to a new server, where ownership often differs from the old one. Nothing else reports it: the upgrade simply stops running, and the site keeps serving the version it already has.
 
+## Data migrations
+
+A few one-off changes to stored data — the kind that ship once and never run again — live behind `bin/lamb migrate`:
+
+```bash
+# See what would run, without changing anything
+bin/lamb migrate --dry-run
+
+# Run it
+bin/lamb migrate
+```
+
+It's safe to run at any time: each migration checks whether it still has anything to do and does nothing on a database that's already current.
+
+`bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
+
+**Upgrade floor:** these migrations shipped in 0.14.0. Restoring a `lamb.db` backup older than 0.14.0, or upgrading a checkout that has been stuck before it, needs a stop at 0.14.0 first — run `bin/lamb migrate` there — before continuing on to a later version.
+
 ## Tarball install
 
 Download the latest `lamb-<version>.tar.gz` from the [releases page](https://github.com/svandragt/lamb/releases) and extract it over your existing installation:
@@ -93,3 +111,5 @@ The database and uploads live in the named volumes and survive the recreate.
 - [Docker]({{ site.baseurl }}{% link docker.md %})
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 - [Upgrading stored posts]({{ site.baseurl }}{% link upgrade-posts.md %}): Bring every post's stored data up to date in one pass after upgrading Lamb.
+
+`bin/lamb migrate` and `bin/lamb upgrade-posts` are different: `migrate` runs a fixed, one-off set of data changes shipped in a specific version; `upgrade-posts` re-runs the post upgrade every render already does, for every post, on demand.

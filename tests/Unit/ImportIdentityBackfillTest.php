@@ -5,16 +5,19 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\Bootstrap\migrate_post_table;
+use function Lamb\Bootstrap\backfill_imported_post_identity;
+use function Lamb\Bootstrap\backfill_post_version;
 
 /**
- * Covers the one-time migration in migrate_post_table() that moves posts
- * stamped by the old WordPress/Known importers off the feed columns and onto
- * import_uuid.
+ * Covers backfill_imported_post_identity() and backfill_post_version(), the
+ * one-time post-table migrations that used to run from migrate_post_table()
+ * on every boot and now run only from `bin/lamb migrate` (#811).
  *
- * The migration keys on `source_url IS NULL` because a user may legitimately
- * subscribe to a feed literally named `wordpress` or `known`; feed ingestion
- * always records the item permalink in source_url, the importers never did.
+ * backfill_imported_post_identity() moves posts stamped by the old
+ * WordPress/Known importers off the feed columns and onto import_uuid. It
+ * keys on `source_url IS NULL` because a user may legitimately subscribe to
+ * a feed literally named `wordpress` or `known`; feed ingestion always
+ * records the item permalink in source_url, the importers never did.
  */
 class ImportIdentityBackfillTest extends TestCase
 {
@@ -28,8 +31,7 @@ class ImportIdentityBackfillTest extends TestCase
         R::exec(
             'CREATE TABLE post (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT,'
             // import_uuid is the migration's destination: both its probe and its
-            // UPDATE name it. ensure_schema() declares it in production now that
-            // migrate_post_table() no longer ALTER-adds it itself.
+            // UPDATE name it. ensure_schema() declares it in production.
             . ' feed_name TEXT, feeditem_uuid TEXT, source_url TEXT, import_uuid TEXT)'
         );
     }
@@ -53,22 +55,30 @@ class ImportIdentityBackfillTest extends TestCase
     }
 
     /**
-     * The write statements a call to migrate_post_table() issues.
+     * @return list<string>
+     */
+    private function columns(): array
+    {
+        return array_column(R::getAll('PRAGMA table_info(post)'), 'name');
+    }
+
+    /**
+     * The write statements a callable issues.
      *
      * SQLite takes a write lock for an UPDATE even when no row matches it, and
-     * writers serialise — so a migration that runs unconditionally makes every
-     * request a writer and every read wait behind any concurrent write (up to
-     * PDO's 60-second busy timeout) instead of sharing a read lock. What
-     * matters is therefore not just the resulting rows but whether anything was
-     * written at all.
+     * writers serialise — so a migration that ran unconditionally on every
+     * boot made every request a writer and every read wait behind any
+     * concurrent write (up to PDO's 60-second busy timeout) instead of
+     * sharing a read lock. What matters is therefore not just the resulting
+     * rows but whether anything was written at all.
      *
      * @return list<string>
      */
-    private function writesDuringEnsureColumns(): array
+    private function writesDuring(callable $fn): array
     {
         R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
         try {
-            migrate_post_table();
+            $fn();
             $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
         } finally {
             R::debug(false);
@@ -82,43 +92,40 @@ class ImportIdentityBackfillTest extends TestCase
 
     public function testNoWriteWhenThereIsNothingToMigrate(): void
     {
-        // Steady state: the columns exist and no row needs either migration.
+        // Steady state: the columns exist and no row needs the migration.
         $this->insert('', '', null);
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
-        $this->assertSame([], $this->writesDuringEnsureColumns());
+        $this->assertSame([], $this->writesDuring(fn () => backfill_imported_post_identity($this->columns())));
     }
 
     public function testTheIdentityBackfillWritesOnlyWhenARowMatches(): void
     {
         $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
         // Probe now finds nothing: this call records completion (one write,
         // the marker row) rather than truly nothing (issue #811).
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         // Marker is set: the probe itself is skipped on the next call.
-        $this->assertSame([], $this->writesDuringEnsureColumns());
+        $this->assertSame([], $this->writesDuring(fn () => backfill_imported_post_identity($this->columns())));
     }
 
     public function testTheVersionStampWritesOnlyWhenAPostNeedsIt(): void
     {
-        // Settle the schema first: the ALTERs that add deleted/draft/import_uuid
-        // are writes too, and they are not what this measures.
-        migrate_post_table();
         R::exec('ALTER TABLE post ADD COLUMN version INTEGER');
         R::exec("INSERT INTO post (body, version) VALUES ('body', NULL)");
 
-        $writes = $this->writesDuringEnsureColumns();
+        $writes = $this->writesDuring(fn () => backfill_post_version($this->columns()));
         $this->assertCount(1, $writes);
         $this->assertStringContainsString('version', $writes[0]);
         $this->assertSame(1, (int) R::getCell('SELECT version FROM post LIMIT 1'));
 
         // Stamped: the next call's probe finds nothing and records that (one
         // write, the marker row) — see issue #811.
-        $this->writesDuringEnsureColumns();
+        $this->writesDuring(fn () => backfill_post_version($this->columns()));
         // Only the call after that is truly silent.
-        $this->assertSame([], $this->writesDuringEnsureColumns());
+        $this->assertSame([], $this->writesDuring(fn () => backfill_post_version($this->columns())));
     }
 
     public function testTheVersionStampIsSkippedWhenTheColumnDoesNotExist(): void
@@ -126,9 +133,8 @@ class ImportIdentityBackfillTest extends TestCase
         // A post table predating the version column has nothing to stamp, and
         // naming a missing column in an UPDATE is an error rather than a no-op.
         $this->insert('', '', null);
-        migrate_post_table();
 
-        $this->assertSame([], $this->writesDuringEnsureColumns());
+        $this->assertSame([], $this->writesDuring(fn () => backfill_post_version($this->columns())));
     }
 
     public function testBackfillMovesLegacyImportedPostsOntoImportUuid(): void
@@ -136,7 +142,7 @@ class ImportIdentityBackfillTest extends TestCase
         $wp = $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);
         $known = $this->insert('known', md5('known-https://old.example/view/a'), null);
 
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         foreach ([$wp => 'wordpress-https://old.example/?p=1', $known => 'known-https://old.example/view/a'] as $id => $seed) {
             $row = $this->row($id);
@@ -150,7 +156,7 @@ class ImportIdentityBackfillTest extends TestCase
     {
         $id = $this->insert('wordpress', md5('wordpressitem-1'), 'https://feed.example/item-1');
 
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         $row = $this->row($id);
         $this->assertSame('wordpress', $row['feed_name']);
@@ -162,9 +168,9 @@ class ImportIdentityBackfillTest extends TestCase
     {
         $id = $this->insert('wordpress', md5('wordpress-https://old.example/?p=1'), null);
 
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
         $first = $this->row($id);
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         $this->assertSame($first, $this->row($id));
     }
@@ -179,7 +185,7 @@ class ImportIdentityBackfillTest extends TestCase
         );
         $legacy = $this->insert('wordpress', $uuid, null);
 
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         $row = $this->row($legacy);
         $this->assertNull($row['import_uuid']);
@@ -191,7 +197,7 @@ class ImportIdentityBackfillTest extends TestCase
     {
         R::exec('DROP TABLE post');
 
-        migrate_post_table();
+        backfill_imported_post_identity($this->columns());
 
         $this->assertNull(R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name='post'"));
     }

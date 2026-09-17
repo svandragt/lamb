@@ -305,18 +305,20 @@ function ensure_schema(): void
 }
 
 /**
- * Runs the post table's one-time row migrations, then indexes it.
+ * Indexes the post table.
  *
  * Must be called after ensure_schema(), which is what guarantees the table and
- * every SCHEMA column exist.
+ * every SCHEMA column exist. The post table's one-time row migrations
+ * (backfill_post_version(), backfill_imported_post_identity()) used to also
+ * run from here, on every boot; they now run only from `bin/lamb migrate`,
+ * so restoring an old `lamb.db` backup needs that command run once — see
+ * docs/upgrading.md (#811).
  *
  * @return void
  */
 function migrate_post_table(): void
 {
     $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
-    backfill_post_version($columns);
-    backfill_imported_post_identity($columns);
     ensure_post_indexes($columns);
 }
 
@@ -333,14 +335,23 @@ function migrate_post_table(): void
  * - `updated`   — latest_content_timestamp() takes the newest row by it for the
  *                 conditional-GET validator, on every anonymous page view, and
  *                 the feeds order by it.
- * - `version`   — backfill_post_version()'s "is there anything left to migrate"
- *                 probe. Once nothing is, the answer costs a whole scan to find.
- * - `feed_name` — same, for backfill_imported_post_identity().
  * - `draft`,
  *   `deleted`   — the admin toolbar's drafts/trash counts, on every logged-in
  *                 page render.
  *
- * `created` is deliberately absent: it would serve the listings' `ORDER BY
+ * `version` and `feed_name` are deliberately absent, both removed alongside
+ * their backfills moving to `bin/lamb migrate` (#811):
+ *
+ * - `version` existed only to make backfill_post_version()'s probe cheap.
+ *   `version` names no other SQL predicate anywhere in the codebase —
+ *   upgrade_posts() (response.php) reads `$bean->version` in PHP, not SQL.
+ * - `feed_name` has one live SQL consumer, ping_scheduled_publishes()
+ *   (websub.php): `feed_name IS NULL OR feed_name = ''`. That predicate has
+ *   near-zero selectivity (almost every post matches it), so SQLite picked a
+ *   multi-index OR plan that measured ~2x *slower* than the plain table scan
+ *   it replaced (1.775ms → 3.517ms on 20,000 rows) — the index helped nothing.
+ *
+ * `created` is deliberately absent too: it would serve the listings' `ORDER BY
  * created DESC`, but SQLite then also picks it for the search page's `body
  * LIKE` queries, where an index scan plus a row lookup per row is slower than
  * the table scan it replaces. Measured on 30,000 posts, that trade cost the
@@ -349,8 +360,6 @@ function migrate_post_table(): void
 const POST_INDEXES = [
     'idx_post_slug'      => 'slug',
     'idx_post_updated'   => 'updated',
-    'idx_post_version'   => 'version',
-    'idx_post_feed_name' => 'feed_name',
     'idx_post_draft'     => 'draft',
     'idx_post_deleted'   => 'deleted',
 ];
@@ -389,44 +398,50 @@ function ensure_post_indexes(array $columns): void
  * creation/edit time); only the version column needs stamping so
  * upgrade_posts() never writes them again.
  *
- * Probes with a SELECT before writing. SQLite takes a write lock for an UPDATE
- * even when no row matches it, so running this unconditionally made every
- * request — an anonymous page view included — a writer, and writers serialise:
- * with another request or a /_cron run holding the lock, the read blocked
- * behind it (up to PDO's 60-second busy timeout) instead of being served under
- * a shared read lock. The probe is a read, so it does not.
- *
- * Once the probe itself comes back empty, every later boot is that same read
- * forever — an install that finished migrating years ago still pays a table
- * scan every request. backfill_marker_done()/mark_backfill_done() short the
- * probe out once it has nothing left to find (issue #811). The marker latches:
- * once set, this function returns before both the probe AND the UPDATE, so a
- * database that somehow gains `version IS NULL` rows afterwards — a restored
- * old backup, a direct write — will not be migrated. Delete the marker row
- * from `option` to arm it again.
+ * Used to run on every boot, probing with a SELECT before writing because
+ * SQLite takes a write lock for an UPDATE even when no row matches it — an
+ * unconditional UPDATE would have made every anonymous page view a writer.
+ * It now runs only from `bin/lamb migrate` (#811), which pays that COUNT
+ * either way to report how many rows it touched (or would, under
+ * `--dry-run`), so the cheap-probe shape is no longer load-bearing — kept
+ * anyway because backfill_marker_done()/mark_backfill_done() make a repeat
+ * run (e.g. from `bin/upgrade`'s nightly cron) skip the scan once nothing is
+ * left to find. The marker latches: once set, this function returns before
+ * both the count AND the UPDATE, so a database that somehow gains `version
+ * IS NULL` rows afterwards — a restored old backup, a direct write — will
+ * not be migrated. Delete the marker row from `option` to arm it again.
  *
  * Skipped when the column is absent, so the function is safe to call against a
  * `post` table predating it: naming a missing column in an UPDATE is an error
  * rather than a no-op. ensure_schema() declares `version`, so the guard never
- * fires under bootstrap_db() — it is what keeps this callable in isolation.
+ * fires when called from `bin/lamb migrate` — it is what keeps this callable
+ * in isolation (see the tests).
  *
  * @param list<string> $columns Column names of the post table.
- * @return void
+ * @param bool $dry_run When true, report the row count but write nothing.
+ * @return int Number of rows stamped (or that dry-run would stamp).
  */
-function backfill_post_version(array $columns): void
+function backfill_post_version(array $columns, bool $dry_run = false): int
 {
     if (!in_array('version', $columns, true)) {
-        return;
+        return 0;
     }
     if (backfill_marker_done('backfill_post_version')) {
-        return;
+        return 0;
     }
-    if (!R::getCell('SELECT 1 FROM post WHERE version IS NULL LIMIT 1')) {
-        mark_backfill_done('backfill_post_version');
-        return;
+    $count = (int) R::getCell('SELECT COUNT(*) FROM post WHERE version IS NULL');
+    if ($count === 0) {
+        if (!$dry_run) {
+            mark_backfill_done('backfill_post_version');
+        }
+        return 0;
+    }
+    if ($dry_run) {
+        return $count;
     }
 
     R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
+    return $count;
 }
 
 /**
@@ -441,42 +456,43 @@ function backfill_post_version(array $columns): void
  * are not available here — the guard is the only discriminator there is.
  *
  * Rows whose uuid is already claimed by another post's import_uuid are left
- * alone rather than duplicated. Idempotent, so running it every boot is
- * correct — but it probes with a SELECT first, because an UPDATE that matches
- * nothing still takes a write lock (see backfill_post_version()).
- *
- * Once the probe comes back empty, backfill_marker_done()/mark_backfill_done()
- * (see backfill_post_version()) short it out on every later boot rather than
- * scanning `post` forever for a match that finished migrating long ago. The
- * marker latches the same way: once set this returns before the UPDATE too, so
- * rows arriving in the old shape afterwards stay unmigrated until someone
- * deletes the marker row from `option`.
+ * alone rather than duplicated. Idempotent, so running it more than once is
+ * correct. Now runs only from `bin/lamb migrate` (#811), same as
+ * backfill_post_version() — see that function's docblock for why the count
+ * is still probed before writing, and what the completion marker buys once
+ * this has nothing left to migrate.
  *
  * @param list<string> $columns Column names of the post table.
- * @return void
+ * @param bool $dry_run When true, report the row count but write nothing.
+ * @return int Number of rows moved onto import_uuid (or that dry-run would move).
  */
-function backfill_imported_post_identity(array $columns): void
+function backfill_imported_post_identity(array $columns, bool $dry_run = false): int
 {
     if (!in_array('feed_name', $columns, true) || !in_array('feeditem_uuid', $columns, true)) {
-        return;
+        return 0;
     }
     if (backfill_marker_done('backfill_imported_post_identity')) {
-        return;
+        return 0;
     }
     $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
-    // One predicate, used by the probe and the update, so the two cannot
+    // One predicate, used by the count and the update, so the two cannot
     // disagree about which rows this migration is for.
     $where = "feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
         . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)';
 
-    // Probe first: see backfill_post_version() for why an unconditional UPDATE
-    // makes every request a writer even once there is nothing left to migrate.
-    if (!R::getCell('SELECT 1 FROM post WHERE ' . $where . ' LIMIT 1')) {
-        mark_backfill_done('backfill_imported_post_identity');
-        return;
+    $count = (int) R::getCell('SELECT COUNT(*) FROM post WHERE ' . $where);
+    if ($count === 0) {
+        if (!$dry_run) {
+            mark_backfill_done('backfill_imported_post_identity');
+        }
+        return 0;
+    }
+    if ($dry_run) {
+        return $count;
     }
 
     R::exec('UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL WHERE ' . $where);
+    return $count;
 }
 
 /**

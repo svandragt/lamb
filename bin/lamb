@@ -2,10 +2,11 @@
 <?php
 
 /**
- * Lamb's operator CLI. Two subcommands:
+ * Lamb's operator CLI. Three subcommands:
  *
  *   bin/lamb import <source> <path> [--dry-run] [--replace]
  *   bin/lamb upgrade-posts [--dry-run]
+ *   bin/lamb migrate [--dry-run]
  *
  * <source> is one of the registered importers (wordpress, known, lamb — see
  * the registrations below). Each parses its own file format into items, then
@@ -22,6 +23,12 @@
  * upgrade-posts walks every post whose `version` is below POST_VERSION and
  * upgrades it eagerly through Response\upgrade_all_posts(), rather than
  * waiting for a render to touch it (see docs/upgrade-posts.md).
+ *
+ * migrate runs the one-time data migrations that used to run implicitly on
+ * every boot (backfill_post_version(), backfill_imported_post_identity(),
+ * migrate_feed_watermarks()) — see docs/upgrading.md (#811). `bin/upgrade`
+ * runs it automatically; restoring an old `lamb.db` backup by hand needs it
+ * run explicitly.
  *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
@@ -154,9 +161,42 @@ if ($command === 'upgrade-posts') {
     exit(0);
 }
 
+if ($command === 'migrate') {
+    $rest = array_slice($argv, 2);
+    $dry_run = in_array('--dry-run', $rest, true);
+    if (array_diff($rest, ['--dry-run']) !== []) {
+        fwrite(STDERR, "Usage: bin/lamb migrate [--dry-run]\n");
+        exit(1);
+    }
+
+    $data_dir = open_data_dir();
+
+    global $config;
+    $config = Config\load();
+    Config\apply_timezone($config);
+
+    $prefix = $dry_run ? '[dry-run] ' : '';
+    $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
+    $verb = $dry_run ? 'would stamp' : 'stamped';
+    $version_count = Bootstrap\backfill_post_version($columns, $dry_run);
+    echo "{$prefix}backfill_post_version: $verb version=1 on $version_count post(s)\n";
+
+    $verb = $dry_run ? 'would move' : 'moved';
+    $identity_count = Bootstrap\backfill_imported_post_identity($columns, $dry_run);
+    echo "{$prefix}backfill_imported_post_identity: $verb $identity_count post(s) onto import_uuid\n";
+
+    $verb = $dry_run ? 'would seed' : 'seeded';
+    $watermark_count = Network\migrate_feed_watermarks(Network\get_feeds(), $dry_run);
+    echo "{$prefix}migrate_feed_watermarks: $verb $watermark_count feed(s) from their legacy watermark\n";
+
+    echo "{$prefix}Done.\n";
+    exit(0);
+}
+
 if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace]\n");
     fwrite(STDERR, "       bin/lamb upgrade-posts [--dry-run]\n");
+    fwrite(STDERR, "       bin/lamb migrate [--dry-run]\n");
     fwrite(STDERR, 'Sources: ' . implode(', ', Import\source_names()) . "\n");
     exit(1);
 }

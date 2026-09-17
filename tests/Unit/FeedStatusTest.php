@@ -11,6 +11,7 @@ use function Lamb\Network\begin_crawl;
 use function Lamb\Network\feed_fetch_due;
 use function Lamb\Network\feed_status_bean;
 use function Lamb\Network\get_feed_statuses;
+use function Lamb\Network\migrate_feed_watermarks;
 use function Lamb\Network\prune_feed_status;
 use function Lamb\Network\record_crawl_failure;
 use function Lamb\Network\record_crawl_success;
@@ -69,8 +70,10 @@ class FeedStatusTest extends TestCase
         $this->assertSame(md5('TestBlog' . 'https://testblog.example.com/feed'), $bean->feedkey);
     }
 
-    public function testFeedStatusBeanSeedsSuccessWatermarkFromLegacyOption(): void
+    public function testFeedStatusBeanNoLongerSeedsFromTheLegacyOption(): void
     {
+        // That seed moved to migrate_feed_watermarks(), run only from
+        // `bin/lamb migrate` (#811) — a fresh bean now always starts at 0.
         $key    = md5('TestBlog' . 'https://testblog.example.com/feed');
         $option = R::dispense('option');
         $option->name  = 'last_processed_date_' . $key;
@@ -78,7 +81,64 @@ class FeedStatusTest extends TestCase
         R::store($option);
 
         $bean = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $this->assertSame(0, (int)$bean->last_success);
+    }
+
+    // migrate_feed_watermarks
+
+    public function testMigrateFeedWatermarksSeedsAFreshFeedFromItsLegacyOption(): void
+    {
+        $key    = md5('TestBlog' . 'https://testblog.example.com/feed');
+        $option = R::dispense('option');
+        $option->name  = 'last_processed_date_' . $key;
+        $option->value = 1700000000;
+        R::store($option);
+
+        $count = migrate_feed_watermarks(['TestBlog' => 'https://testblog.example.com/feed']);
+
+        $this->assertSame(1, $count);
+        $bean = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
         $this->assertSame(1700000000, (int)$bean->last_success);
+    }
+
+    public function testMigrateFeedWatermarksDryRunChangesNothing(): void
+    {
+        $key    = md5('TestBlog' . 'https://testblog.example.com/feed');
+        $option = R::dispense('option');
+        $option->name  = 'last_processed_date_' . $key;
+        $option->value = 1700000000;
+        R::store($option);
+
+        $count = migrate_feed_watermarks(['TestBlog' => 'https://testblog.example.com/feed'], true);
+
+        $this->assertSame(1, $count);
+        $bean = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $this->assertSame(0, (int)$bean->last_success);
+    }
+
+    public function testMigrateFeedWatermarksSkipsAFeedWithNoLegacyOption(): void
+    {
+        $count = migrate_feed_watermarks(['TestBlog' => 'https://testblog.example.com/feed']);
+
+        $this->assertSame(0, $count);
+    }
+
+    public function testMigrateFeedWatermarksSkipsAFeedThatAlreadyHasAStatusRow(): void
+    {
+        // A feed already crawled since upgrading has a real watermark; a
+        // stale legacy option row must not clobber it.
+        R::store(feed_status_bean('TestBlog', 'https://testblog.example.com/feed'));
+        $key    = md5('TestBlog' . 'https://testblog.example.com/feed');
+        $option = R::dispense('option');
+        $option->name  = 'last_processed_date_' . $key;
+        $option->value = 1700000000;
+        R::store($option);
+
+        $count = migrate_feed_watermarks(['TestBlog' => 'https://testblog.example.com/feed']);
+
+        $this->assertSame(0, $count);
+        $bean = feed_status_bean('TestBlog', 'https://testblog.example.com/feed');
+        $this->assertSame(0, (int)$bean->last_success);
     }
 
     // record_feed_crawl — failure path

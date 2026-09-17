@@ -59,6 +59,16 @@ branch=$(git rev-parse --abbrev-ref HEAD)
 git reset --hard '@{u}'
 viv install --no-dev --no-scripts
 
+# Runs the one-time data migrations (#811) against the new code, before the
+# health check declares the site healthy. A failure here must not be masked
+# by a later health check that only asks "does the site respond?" — a stale
+# migration can leave that true while the data itself is still wrong.
+if ! bin/lamb migrate; then
+    echo "Data migration failed after upgrading to $(git rev-parse --short HEAD)" >&2
+    echo "Roll back with: git reset --hard ${prev} && viv install --no-dev --no-scripts" >&2
+    exit 1
+fi
+
 echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
 
 # Health check: only when SITE_URL is configured (written by make-password.php).
