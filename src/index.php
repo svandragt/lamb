@@ -28,19 +28,17 @@ if ($root_url === null) {
     die('Bad Request');
 }
 define('ROOT_URL', $root_url);
-// Config\ensure_explicit_theme() guarantees a renderable theme value on read,
-// so no runtime fallback/alias is needed here (see #291). The value still
-// comes verbatim from the admin-editable config INI, though, and is used
-// both to build a require() path (THEME_DIR) and echoed raw into HTML on
-// every page view (THEME_URL, e.g. themes/2026/html.php's font preload
-// links) — sanitize_filename() (already used by Theme\part() for the same
-// reason) keeps it to a safe filename charset, closing both a path-traversal
-// primitive and a site-wide stored-XSS surface a stray HTML-breaking
-// character in `theme = ...` would otherwise open up.
-// `?? 'base'` guards the one case ensure_explicit_theme() cannot rewrite: a
-// `[theme]` section header, which normalize_config() drops because an array
-// cannot name a theme directory.
-define("THEME", Theme\sanitize_filename((string) ($config['theme'] ?? 'base')));
+// The configured theme comes verbatim from the admin-editable config INI, and
+// is used both to build a require() path (THEME_DIR) and echoed raw into HTML
+// on every page view (THEME_URL, e.g. themes/2026/html.php's font preload
+// links). Theme\resolve_theme() sanitizes it to a safe filename charset first
+// — closing both a path-traversal primitive and a site-wide stored-XSS
+// surface a stray HTML-breaking character in `theme = ...` would otherwise
+// open up — then falls back to the base theme for any name (no `theme` key,
+// a `[theme]` section header, a typo saved at /settings, a custom theme
+// whose directory was deleted) that has no matching directory under
+// src/themes/, rather than letting a broken value produce a broken page.
+define("THEME", Theme\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 

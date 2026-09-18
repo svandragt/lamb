@@ -19,7 +19,6 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Hashtag linking no longer rewrites hashtags inside existing link text.
 - Multi-word tags round-trip through add and remove.
 - Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
-- The first-run `config.ini` seed is now read from `src/config.ini` regardless of the server's working directory, instead of only under `composer serve`.
 - Micropub: a token without `update` scope can no longer tell a real post from a missing one.
 - Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
 - XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
@@ -27,6 +26,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Removed
 
+- A `config.ini` in the app root is no longer read as a first-run seed. Configure the site at `/settings` instead.
 - The `import-wordpress.php`, `import-known.php` and `import-lamb.php` shims are removed. Run `bin/lamb import <wordpress|known|lamb> <path>` instead; the flags and output are the same.
 - A theme's `feed.php` or `feed_json.php` override is no longer read. Lamb's built-in feeds are used; delete the file from your theme.
 - The prebuilt Docker image at `ghcr.io/svandragt/lamb` is no longer published. Build from `Dockerfile.release` with `docker-compose.yml`; images up to 0.14.0 stay pullable.
@@ -45,6 +45,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Changed
 
+- An unknown or missing theme now falls back to the default theme instead of producing a broken page.
 - `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
 - The database schema is declared explicitly and frozen. Existing installs get any missing columns added on first boot. Code that writes an undeclared column now fails instead of silently adding one.
 - Outbound DNS lookups for feeds and webmentions are capped by `DNS_RESOLVE_TIMEOUT` (5 seconds), so a stalled resolver can no longer hold the `/_cron` lock.

@@ -12,6 +12,7 @@ use function Lamb\Theme\escape_xml;
 use function Lamb\Theme\format_past_date;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\og_escape;
+use function Lamb\Theme\resolve_theme;
 use function Lamb\Theme\sanitize_filename;
 use function Lamb\Theme\the_entry_form;
 use function Lamb\Theme\the_preconnect;
@@ -239,6 +240,97 @@ class ThemeTest extends TestCase
         $this->assertStringNotContainsString('"', $sanitized);
         $this->assertStringNotContainsString('<', $sanitized);
         $this->assertStringNotContainsString('>', $sanitized);
+    }
+
+    // resolve_theme
+
+    /**
+     * ROOT_DIR is a process-wide constant that other unit tests may have
+     * already pointed at their own temp dir (see ConfigLoadTest), so we
+     * operate on wherever it actually points rather than assume our own
+     * define() wins — same rationale as ThemeMetaTest::resetWebRoot().
+     */
+    private function ensureRootDir(): void
+    {
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_theme_resolve_test_' . getmypid());
+        }
+    }
+
+    private function themesDir(): string
+    {
+        $this->ensureRootDir();
+        $dir = ROOT_DIR . '/themes';
+        if (!is_dir($dir)) {
+            mkdir($dir, 0777, true);
+        }
+        return $dir;
+    }
+
+    public function testResolveThemeReturnsBaseWhenNoThemeConfigured(): void
+    {
+        $this->assertSame('base', resolve_theme(null));
+    }
+
+    // Regression: this is the legacy pre-#289 theme name (src/themes/default
+    // was renamed to src/themes/base) that a migration used to rewrite on
+    // read. Without a directory of that name, it must still resolve to a
+    // working theme rather than a broken THEME_DIR.
+    public function testResolveThemeFallsBackToBaseForLegacyDefaultName(): void
+    {
+        $this->ensureRootDir();
+
+        $this->assertSame('base', resolve_theme('default'));
+    }
+
+    public function testResolveThemeFallsBackForNonScalarConfiguredValue(): void
+    {
+        // normalize_config() drops a `[theme]` section header entirely, so in
+        // practice this arrives as null — covered directly here too since
+        // resolve_theme() takes mixed input.
+        $this->assertSame('base', resolve_theme(['nested' => 'array']));
+    }
+
+    public function testResolveThemeReturnsTheConfiguredNameWhenItsDirectoryExists(): void
+    {
+        $dir = $this->themesDir() . '/resolve_theme_fixture';
+        mkdir($dir, 0777, true);
+
+        try {
+            $this->assertSame('resolve_theme_fixture', resolve_theme('resolve_theme_fixture'));
+        } finally {
+            rmdir($dir);
+        }
+    }
+
+    public function testResolveThemeFallsBackWhenConfiguredThemeHasNoDirectory(): void
+    {
+        $this->ensureRootDir();
+
+        $this->assertSame('base', resolve_theme('totally-made-up-theme-xyz'));
+    }
+
+    public function testResolveThemeSanitizesBeforeMatchingADirectory(): void
+    {
+        $dir = $this->themesDir() . '/sanitized_theme_name';
+        mkdir($dir, 0777, true);
+
+        try {
+            $this->assertSame('sanitized_theme_name', resolve_theme('sanitized theme name'));
+        } finally {
+            rmdir($dir);
+        }
+    }
+
+    public function testResolveThemeNeverEscapesThemesDirectoryViaTraversal(): void
+    {
+        $this->ensureRootDir();
+
+        $resolved = resolve_theme('../../../../etc/passwd');
+
+        $this->assertSame('base', $resolved);
+        $this->assertStringNotContainsString('/', $resolved);
+        $this->assertStringNotContainsString('.', $resolved);
     }
 
     // format_past_date

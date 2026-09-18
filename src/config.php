@@ -140,67 +140,6 @@ function parse_ini_safe(string $ini_text): array
 }
 
 /**
- * Ensures the stored INI records an explicit, renderable top-level `theme` key.
- *
- * This is the single place that normalises the legacy theme shapes, so the
- * render path (`index.php`) can read `$config['theme']` directly without a
- * runtime fallback or alias (see #291):
- *  - no `theme` key at all (older installs relied on a PHP fallback): an
- *    explicit line is prepended;
- *  - an empty value, or the pre-rename name `default`: the line is rewritten to
- *    the bundled `base` theme (the part-fallback library).
- *
- * Idempotent: text that already names a real theme is returned unchanged.
- *
- * @param string $ini_text The raw INI configuration text.
- * @param string $default_theme The theme to record when none is usable.
- * @return string The INI text with an explicit, renderable `theme` value.
- */
-function ensure_explicit_theme(string $ini_text, string $default_theme = 'base'): string
-{
-    // Unparseable INI is not themeless INI, and parse_ini_safe() answers []
-    // for both. Prepending a `theme =` line to a file with a syntax error
-    // leaves it exactly as unparseable, so the migration below fired again on
-    // the next request — and every request after that, since get_ini_text()
-    // saves whenever the text changed. The stored config grew by a line per
-    // request, each one a write, and save_ini_text() advances the config
-    // timestamp monotonically, so latest_content_timestamp() moved every
-    // request too and no anonymous response could be served from cache.
-    //
-    // A broken file needs fixing, not migrating: leave it alone. Nothing
-    // downstream depends on the migration having run — normalize_config()
-    // drops an unusable theme and index.php falls back to the base theme,
-    // which is the same outcome this function aims at.
-    if (!validate_ini($ini_text)['valid']) {
-        return $ini_text;
-    }
-
-    $parsed = parse_ini_safe($ini_text);
-
-    if (!array_key_exists('theme', $parsed)) {
-        return "theme = {$default_theme}\n\n" . $ini_text;
-    }
-
-    // A `[theme]` header rather than a `theme = ...` line parses to an array;
-    // casting that to a string warns and yields the literal "Array", which
-    // looked like a real theme name and stopped the migration here. Treat any
-    // non-scalar as unusable — there is no `theme =` line for the rewrite below
-    // to find, so the text is returned unchanged and normalize_config() drops
-    // the key, leaving index.php to fall back to the base theme.
-    $current = is_scalar($parsed['theme']) ? trim((string) $parsed['theme']) : '';
-    if ($current === '' || $current === 'default') {
-        return (string) preg_replace(
-            '/^(\h*theme\h*=).*$/mi',
-            '${1} ' . $default_theme,
-            $ini_text,
-            1
-        );
-    }
-
-    return $ini_text;
-}
-
-/**
  * Loads the configuration settings.
  *
  * @return array<string, mixed> The configuration settings.
@@ -228,8 +167,8 @@ function compose_config(string $stored_ini, string $default_ini): array
     $config = normalize_config(parse_ini_safe($stored_ini), $defaults);
 
     // Theme is intentionally not defaulted here. An install without an explicit
-    // theme is migrated per-install on read (see ensure_explicit_theme /
-    // get_ini_text), so inheriting the seeded theme would silently re-theme
+    // theme falls back to the base theme in Theme\resolve_theme() (index.php);
+    // inheriting the seeded theme here instead would silently re-theme
     // existing sites.
     unset($defaults['theme']);
 
@@ -491,34 +430,19 @@ function get_ini_text(): string
 {
     $option = get_option('site_config_ini', '');
     if ($option->id > 0) {
-        // Migrate themeless installs to an explicit theme so the PHP fallback
-        // can eventually be removed. Only rewrites (and bumps the cache
-        // validator) on the first request after upgrade.
-        $ini_text = ensure_explicit_theme($option->value);
-        // Same idea for the experimental-features gate: force a re-opt-in
-        // whenever the set of features it covers has changed since this
-        // install last saw it.
-        $ini_text = reset_stale_experimental_flag($ini_text);
+        // Force a re-opt-in to the experimental-features gate whenever the
+        // set of features it covers has changed since this install last saw it.
+        $ini_text = reset_stale_experimental_flag($option->value);
         if ($ini_text !== $option->value) {
             save_ini_text($ini_text);
         }
         return $ini_text;
     }
 
-    // Bootstrap. Anchored to ROOT_DIR so it seeds the same way under every
-    // entry point (composer serve, FrankenPHP, nginx+fpm, bin/lamb), rather
-    // than only when the process CWD happens to be src/.
-    $ini_text = '';
-    $config_ini_path = ROOT_DIR . '/config.ini';
-    if (file_exists($config_ini_path)) {
-        $ini_text = file_get_contents($config_ini_path);
-    }
+    // Bootstrap from the built-in defaults; the author edits from there at
+    // /settings.
+    $ini_text = get_default_ini_text();
 
-    if (empty($ini_text)) {
-        $ini_text = get_default_ini_text();
-    }
-
-    $ini_text = ensure_explicit_theme($ini_text);
     $ini_text = reset_stale_experimental_flag($ini_text);
     save_ini_text($ini_text);
 
