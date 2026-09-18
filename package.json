@@ -4,7 +4,7 @@
     "@mozilla/readability": "^0.6.0",
     "@playwright/test": "^1.63.0",
     "@types/jsdom": "^30.0.0",
-    "@types/node": "^26.5.0",
+    "@types/node": "^26.5.1",
     "jsdom": "^30.0.1"
   },
   "scripts": {
