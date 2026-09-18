@@ -2,7 +2,7 @@
 # Self-contained: app + vendor baked in, FrankenPHP (Caddy + PHP) serves it.
 # Build from the repository root: docker build -f .docker/Dockerfile.release .
 
-FROM php:8.4-cli AS vendor
+FROM php:8.5-cli AS vendor
 ARG VIV_VERSION=0.10.0
 WORKDIR /app
 
