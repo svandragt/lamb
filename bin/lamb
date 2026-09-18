@@ -21,14 +21,17 @@
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
  * upgrade-posts walks every post whose `version` is below POST_VERSION and
- * upgrades it eagerly through Response\upgrade_all_posts(), rather than
- * waiting for a render to touch it (see docs/upgrade-posts.md).
+ * upgrades it through Response\upgrade_all_posts(), so an archive of stale
+ * posts is brought current in one pass instead of stamping the version, one
+ * at a time, as each post gets viewed (see docs/upgrade-posts.md).
  *
  * migrate runs the one-time data migrations that used to run implicitly on
  * every boot (backfill_post_version(), backfill_imported_post_identity(),
- * migrate_feed_watermarks()) — see docs/upgrading.md (#811). `bin/upgrade`
- * runs it automatically; restoring an old `lamb.db` backup by hand needs it
- * run explicitly.
+ * migrate_feed_watermarks()), plus the same post upgrade as upgrade-posts
+ * (#814, reusing Response\upgrade_all_posts() rather than duplicating its
+ * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
+ * automatically; restoring an old `lamb.db` backup by hand needs it run
+ * explicitly.
  *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
@@ -200,6 +203,15 @@ if ($command === 'migrate') {
     $verb = $dry_run ? 'would seed' : 'seeded';
     $watermark_count = Network\migrate_feed_watermarks(Network\get_feeds(), $dry_run);
     echo "{$prefix}migrate_feed_watermarks: $verb $watermark_count feed(s) from their legacy watermark\n";
+
+    // Must run after backfill_post_version() above: that's what gives a
+    // pre-versioning post a `version` at all, so upgrade_all_posts()'s
+    // `WHERE version < ?` sees it in the same pass instead of on a second
+    // `bin/lamb migrate` run.
+    $verb = $dry_run ? 'would upgrade' : 'upgraded';
+    [$needing_upgrade, $upgraded_count] = upgrade_all_posts($dry_run);
+    $post_count = $dry_run ? $needing_upgrade : $upgraded_count;
+    echo "{$prefix}upgrade_all_posts: $verb $post_count post(s) to version " . POST_VERSION . "\n";
 
     echo "{$prefix}Done.\n";
     exit(0);

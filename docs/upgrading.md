@@ -75,6 +75,8 @@ bin/lamb migrate
 
 It's safe to run at any time: each migration checks whether it still has anything to do and does nothing on a database that's already current.
 
+`bin/lamb migrate` also brings every stored post up to date, the same upgrade `bin/lamb upgrade-posts` runs on its own. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
+
 `bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
 
 ### What `bin/upgrade` does with the result
@@ -122,4 +124,4 @@ The database and uploads live in the named volumes and survive the recreate.
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 - [Upgrading stored posts]({{ site.baseurl }}{% link upgrade-posts.md %}): Bring every post's stored data up to date in one pass after upgrading Lamb.
 
-`bin/lamb migrate` and `bin/lamb upgrade-posts` are different: `migrate` runs a fixed, one-off set of data changes shipped in a specific version; `upgrade-posts` re-runs the post upgrade every render already does, for every post, on demand.
+`bin/lamb migrate` and `bin/lamb upgrade-posts` overlap on purpose: `migrate` runs every outstanding one-off data change, including the post upgrade, in one command; `upgrade-posts` runs only the post upgrade, for when that's all you need.
