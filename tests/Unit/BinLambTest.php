@@ -194,6 +194,58 @@ XML;
     }
 
     /**
+     * Whether this environment can chown a file to another real user without
+     * a password prompt, which is what simulating the #831 mismatch for real
+     * (rather than via db_owned_by_another_user()'s injectable uid) needs.
+     * True on GitHub Actions' ubuntu runners (see .github/workflows/release-verify.yml
+     * for the existing precedent) and on this dev sandbox; not guaranteed
+     * everywhere, so the test that needs it skips rather than fails when absent.
+     */
+    private static function canChownToAnotherUser(): bool
+    {
+        return (new Process(['sudo', '-n', 'true']))->run() === 0;
+    }
+
+    /**
+     * #811: bin/upgrade must tell "bin/lamb refused before touching the
+     * database" apart from "a migration genuinely failed" to decide whether
+     * to fail the upgrade or just warn and continue. That distinction is
+     * carried entirely by open_data_dir()'s $refusal_exit_code parameter —
+     * this pins that migrate is wired to 3 while every other command stays
+     * on the original 1, against a real ownership mismatch rather than the
+     * injectable-uid unit tests above, so the shared seam can't regress
+     * silently for one command without the others noticing.
+     */
+    public function testMigrateExitsThreeOnOwnershipRefusalWhileOtherCommandsExitOne(): void
+    {
+        if (!self::canChownToAnotherUser()) {
+            $this->markTestSkipped('Requires passwordless sudo to chown a file to another real user.');
+        }
+
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+        $db = "$data_dir/lamb.db";
+        touch($db);
+        (new Process(['sudo', '-n', 'chown', 'nobody:nogroup', $db]))->mustRun();
+
+        $migrate = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $migrate->run();
+        $this->assertSame(3, $migrate->getExitCode(), $migrate->getErrorOutput());
+
+        $upgradePosts = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $upgradePosts->run();
+        $this->assertSame(1, $upgradePosts->getExitCode(), $upgradePosts->getErrorOutput());
+    }
+
+    /**
      * Dispenses and stores a post bean directly in $data_dir's lamb.db, in a
      * subprocess: the version and body a bin/lamb upgrade-posts test needs to
      * seed are set before this test process's own bootstrap runs, so a

@@ -8,10 +8,15 @@ use RedBeanPHP\R;
 /**
  * Returns (creating if needed) the per-feed status bean, keyed by md5(name . url).
  * Records crawl *health* only — config stays the source of truth for which feeds
- * exist. A fresh bean seeds its success watermark from any legacy
- * `last_processed_date_<key>` option so an upgraded install does not re-ingest
- * everything on the first run. See network/README.md ("The watermark model",
- * "feedstatus bean") for why the three timestamps are kept apart.
+ * exist. See network/README.md ("The watermark model", "feedstatus bean") for
+ * why the three timestamps are kept apart.
+ *
+ * A fresh bean's watermark starts at 0 rather than seeding from any legacy
+ * `last_processed_date_<key>` option — that seed used to happen here, on
+ * whatever request first dispensed the bean for a feed, which is what made it
+ * an implicit boot-time migration. It now runs only from `bin/lamb migrate`
+ * (migrate_feed_watermarks(), #811), so a database restored from a backup
+ * needs that command run once before the feed is next crawled.
  *
  * @param string $name Feed name from config.
  * @param string $url  Feed URL from config.
@@ -25,8 +30,7 @@ function feed_status_bean(string $name, string $url): OODBBean
     if ((int)$bean->id === 0) {
         $bean->name         = $name;
         $bean->url          = $url;
-        $legacy             = R::findOne('option', ' name = ? ', ['last_processed_date_' . $key]);
-        $bean->last_success = $legacy ? (int)$legacy->value : 0;
+        $bean->last_success = 0;
         $bean->last_item_date = 0;
         $bean->last_attempt = 0;
         $bean->last_error   = 0;
@@ -35,6 +39,49 @@ function feed_status_bean(string $name, string $url): OODBBean
     }
 
     return $bean;
+}
+
+/**
+ * One-time migration: seeds a feed's success watermark from its legacy
+ * `last_processed_date_<key>` option row, so an install upgrading from before
+ * the feedstatus table existed does not re-ingest every item in that feed on
+ * its first crawl. feed_status_bean() used to do this itself, implicitly, the
+ * first time anything dispensed a fresh bean for the feed; it now only runs
+ * from `bin/lamb migrate` (#811).
+ *
+ * Skips a feed that already has a feedstatus row: only a fresh bean has
+ * anything to seed, and re-seeding an already-crawled feed would clobber a
+ * real watermark with a stale legacy one. Skips a feed with no legacy option
+ * row too — nothing to migrate, and dispensing a bean for it here would just
+ * be feed_status_bean()'s own job done early.
+ *
+ * @param array<string, string> $feeds Feed name => URL map, e.g. get_feeds().
+ * @param bool $dry_run When true, report the count but write nothing.
+ * @return int Number of feeds seeded (or that dry-run would seed).
+ */
+function migrate_feed_watermarks(array $feeds, bool $dry_run = false): int
+{
+    $count = 0;
+    foreach ($feeds as $name => $url) {
+        $key = md5($name . $url);
+        if (R::findOne('feedstatus', ' feedkey = ? ', [$key])) {
+            continue;
+        }
+        $legacy = R::findOne('option', ' name = ? ', ['last_processed_date_' . $key]);
+        if (!$legacy) {
+            continue;
+        }
+
+        $count++;
+        if ($dry_run) {
+            continue;
+        }
+        $bean = feed_status_bean((string) $name, (string) $url);
+        $bean->last_success = (int) $legacy->value;
+        R::store($bean);
+    }
+
+    return $count;
 }
 
 /**

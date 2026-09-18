@@ -41,6 +41,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - A "Write your first post" tutorial in the docs.
 - The deprecation policy is written down: a deprecation lasts one published release and is removed in the next.
 - `bin/lamb upgrade-posts [--dry-run]` upgrades every post whose stored version is behind the current one in bounded batches, instead of waiting for a render to touch each one.
+- `bin/lamb migrate [--dry-run]` runs the one-time data migrations that used to run implicitly on every boot ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically; restoring an old `lamb.db` backup by hand needs it run explicitly.
 
 ### Changed
 
@@ -51,6 +52,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Micropub responses send private cache headers.
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
 - Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
+- Boot no longer stamps pre-versioning posts, moves legacy WordPress/Known imports onto `import_uuid`, or seeds a feed's watermark from its legacy option row — those one-time migrations moved to `bin/lamb migrate` ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically after installing dependencies, before the health check. When `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the normal shape of a cron deploy — the migration can't run there either; `bin/upgrade` warns and names the command to run by hand instead of failing the whole upgrade over it.
 
 ### Upgrade notes
 
@@ -59,6 +61,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Install [viv](https://github.com/svandragt/vivace) before your next upgrade (`cargo binstall --git https://github.com/svandragt/vivace vivace`, or a release binary from the [releases page](https://github.com/svandragt/vivace/releases)); `bin/upgrade` refuses to run without it. See `docs/upgrading.md`.
 - No config changes are needed. `DNS_RESOLVE_TIMEOUT` is a new tunable constant with a safe default.
 - The database now uses SQLite's WAL mode, which keeps `lamb.db-wal` and `lamb.db-shm` beside `lamb.db`. Run `bin/lamb` as the same user as your web server (for example `sudo -u www-data bin/lamb import …`). Run as another user, it leaves those files owned by that user and every page then fails with "attempt to write a readonly database" until you delete them. Tracked in #831.
+- An install (or a restored `lamb.db` backup) older than 0.14.0 must step through 0.14.0 first: that's where the migrations behind `bin/lamb migrate` shipped. A git install using `bin/upgrade` gets this automatically; any other upgrade path needs `bin/lamb migrate` run by hand once, right after switching to the new code. See `docs/upgrading.md`.
 
 ## [0.14.0] - 2026-08-24
 

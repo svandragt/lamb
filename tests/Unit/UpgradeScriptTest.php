@@ -18,6 +18,7 @@ class UpgradeScriptTest extends TestCase
     private string $stubs;
     private string $vivLog;
     private string $curlLog;
+    private string $lambLog;
 
     protected function setUp(): void
     {
@@ -28,6 +29,7 @@ class UpgradeScriptTest extends TestCase
         $this->stubs = $this->workspace . '/stubs';
         $this->vivLog = $this->workspace . '/viv.log';
         $this->curlLog = $this->workspace . '/curl.log';
+        $this->lambLog = $this->workspace . '/lamb.log';
 
         mkdir($this->workspace, 0777, true);
         mkdir($this->stubs, 0777, true);
@@ -37,10 +39,14 @@ class UpgradeScriptTest extends TestCase
         $this->git(['git', 'init', '--bare', '--initial-branch=main', $this->origin], $this->workspace);
         $this->git(['git', 'clone', $this->origin, $this->seed], $this->workspace);
 
-        // Seed the repo with the working tree's upgrade script and a content file.
+        // Seed the repo with the working tree's upgrade script, a stand-in
+        // bin/lamb (the real one needs a full PHP app; #811 only needs bin/upgrade
+        // to run *something* at that step and react to its exit code), and a
+        // content file.
         mkdir($this->seed . '/bin');
         copy(codecept_root_dir('bin/upgrade'), $this->seed . '/bin/upgrade');
         chmod($this->seed . '/bin/upgrade', 0755);
+        $this->writeRepoStub('bin/lamb', $this->lambLog);
         file_put_contents($this->seed . '/file.txt', "v1\n");
         $this->git(['git', 'add', '.'], $this->seed);
         $this->git(['git', 'commit', '-m', 'v1'], $this->seed);
@@ -119,6 +125,55 @@ class UpgradeScriptTest extends TestCase
         $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
     }
 
+    public function testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+
+        // bin/lamb is a tracked file, reset back to whatever origin has on
+        // every run — so the failing version must be committed and pushed,
+        // not just written into the site checkout.
+        $this->writeRepoStub('bin/lamb', $this->lambLog, 1);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', 'fail migrate'], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+
+        $process = $this->runUpgrade();
+
+        $this->assertNotSame(0, $process->getExitCode(), 'migration failure should be visible to cron');
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
+        $this->assertFileDoesNotExist($this->curlLog, 'health check must not run after a failed migration');
+    }
+
+    /**
+     * #811: exit 3 from bin/lamb migrate means the #831 ownership guard
+     * refused before touching the database — the normal shape of a cron
+     * deploy (checkout owned by the webserver user, cron running as a
+     * human), not a broken upgrade. bin/upgrade must warn and keep going
+     * to the health check and a successful exit, not take the fatal path
+     * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
+     * covers for every other nonzero code.
+     */
+    public function testMigrateOwnershipRefusalWarnsAndContinuesToTheHealthCheck(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+
+        $this->writeRepoStub('bin/lamb', $this->lambLog, 3);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', 'lamb refuses on ownership'], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('bin/lamb migrate', $output, 'should name the command to run by hand');
+        $this->assertStringContainsString('sudo -u', $output, 'should tell the operator which user to run it as');
+        $this->assertStringContainsString('Upgraded', $output, 'the upgrade itself still succeeded');
+        $this->assertFileExists($this->curlLog, 'health check must still run after an ownership refusal');
+    }
+
     private function runUpgrade(): Process
     {
         $process = new Process(
@@ -136,6 +191,21 @@ class UpgradeScriptTest extends TestCase
         $script = "#!/bin/sh\necho \"$*\" >> " . escapeshellarg($log) . "\nexit {$exitCode}\n";
         file_put_contents($this->stubs . '/' . $name, $script);
         chmod($this->stubs . '/' . $name, 0755);
+    }
+
+    /**
+     * Same as writeStub(), but written into the seeded git repo rather than
+     * onto PATH — for a command bin/upgrade invokes by relative path (like
+     * bin/lamb), which must be committed and pushed to survive that script's
+     * own `git reset --hard '@{u}'`.
+     */
+    private function writeRepoStub(string $relativePath, string $log, int $exitCode = 0): void
+    {
+        $path = $this->seed . '/' . $relativePath;
+        @mkdir(dirname($path), 0755, true);
+        $script = "#!/bin/sh\necho \"$*\" >> " . escapeshellarg($log) . "\nexit {$exitCode}\n";
+        file_put_contents($path, $script);
+        chmod($path, 0755);
     }
 
     private function git(array $command, string $cwd): void

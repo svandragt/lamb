@@ -14,14 +14,15 @@ use const Lamb\Bootstrap\POST_INDEXES;
  *
  * RedBeanPHP's fluid mode creates columns but never indexes, so the lookups
  * every request runs — the slug the router resolves the path against, the
- * newest `updated` the conditional-GET validator reads, the two migration
- * probes — were full table scans of `post`.
+ * newest `updated` the conditional-GET validator reads — were full table
+ * scans of `post`.
  *
  * Two things matter beyond "the index exists": that a column the install does
  * not have yet is skipped (naming it in a CREATE INDEX is an error, not a
  * no-op), and that the steady state issues no DDL at all — a `CREATE INDEX IF
  * NOT EXISTS` on every request would take a write lock even though it changes
- * nothing, which is exactly what the migration probes were rewritten to avoid.
+ * nothing. `version` and `feed_name` are covered separately below: neither is
+ * indexed any more, even when the column exists (#811).
  */
 class PostIndexesTest extends TestCase
 {
@@ -91,6 +92,19 @@ class PostIndexesTest extends TestCase
         $this->assertSame($expected, $this->postIndexes());
     }
 
+    public function testVersionAndFeedNameAreNotIndexedEvenWhenPresent(): void
+    {
+        // Both used to be indexed solely to make their now-moved backfills'
+        // probes cheap (#811); `version` names no other SQL predicate, and
+        // `feed_name`'s one live consumer (ping_scheduled_publishes()) was
+        // measurably slower with the index than without it.
+        $this->createPostTable(['version INTEGER', 'feed_name TEXT']);
+
+        migrate_post_table();
+
+        $this->assertSame([], $this->postIndexes());
+    }
+
     public function testAColumnTheInstallDoesNotHaveIsSkipped(): void
     {
         // A post table carrying only two of the indexed columns. Under
@@ -109,20 +123,17 @@ class PostIndexesTest extends TestCase
     {
         $this->createPostTable(['slug TEXT', 'updated TEXT']);
         migrate_post_table();
-        $this->assertNotContains('idx_post_version', $this->postIndexes());
+        $this->assertNotContains('idx_post_draft', $this->postIndexes());
 
-        R::exec('ALTER TABLE post ADD COLUMN version INTEGER');
+        R::exec('ALTER TABLE post ADD COLUMN draft INTEGER');
         migrate_post_table();
 
-        $this->assertContains('idx_post_version', $this->postIndexes());
+        $this->assertContains('idx_post_draft', $this->postIndexes());
     }
 
     public function testTheSteadyStateIssuesNoDdl(): void
     {
-        $this->createPostTable([
-            'slug TEXT', 'updated TEXT', 'version INTEGER', 'feed_name TEXT',
-            'draft INTEGER', 'deleted INTEGER', 'import_uuid TEXT',
-        ]);
+        $this->createPostTable(['slug TEXT', 'updated TEXT', 'draft INTEGER', 'deleted INTEGER']);
         migrate_post_table();
 
         $this->assertSame([], $this->ddlDuringEnsureColumns());
