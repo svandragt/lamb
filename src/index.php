@@ -28,19 +28,17 @@ if ($root_url === null) {
     die('Bad Request');
 }
 define('ROOT_URL', $root_url);
-// Config\ensure_explicit_theme() guarantees a renderable theme value on read,
-// so no runtime fallback/alias is needed here (see #291). The value still
-// comes verbatim from the admin-editable config INI, though, and is used
-// both to build a require() path (THEME_DIR) and echoed raw into HTML on
-// every page view (THEME_URL, e.g. themes/2026/html.php's font preload
-// links) — sanitize_filename() (already used by Theme\part() for the same
-// reason) keeps it to a safe filename charset, closing both a path-traversal
-// primitive and a site-wide stored-XSS surface a stray HTML-breaking
-// character in `theme = ...` would otherwise open up.
-// `?? 'base'` guards the one case ensure_explicit_theme() cannot rewrite: a
-// `[theme]` section header, which normalize_config() drops because an array
-// cannot name a theme directory.
-define("THEME", Theme\sanitize_filename((string) ($config['theme'] ?? 'base')));
+// The configured theme comes verbatim from the admin-editable config INI, and
+// is used both to build a require() path (THEME_DIR) and echoed raw into HTML
+// on every page view (THEME_URL, e.g. themes/2026/html.php's font preload
+// links). Theme\resolve_theme() sanitizes it to a safe filename charset first
+// — closing both a path-traversal primitive and a site-wide stored-XSS
+// surface a stray HTML-breaking character in `theme = ...` would otherwise
+// open up — then falls back to the base theme for any name (no `theme` key,
+// a `[theme]` section header, a typo saved at /settings, a custom theme
+// whose directory was deleted) that has no matching directory under
+// src/themes/, rather than letting a broken value produce a broken page.
+define("THEME", Theme\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');
 define("THEME_URL", 'themes/' . THEME . '/');
 
@@ -67,36 +65,13 @@ if ($canonical !== null && in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET',
 
 # Strip a trailing /page/N pagination segment so list routes keep routing on
 # their base path; the page number flows through the normal $_GET['page'] path.
+# Cleared unconditionally first: PHP itself populates $_GET['page'] from a
+# `?page=` query string, and the path segment is the only canonical source,
+# so a stale `?page=` link cannot serve paginated content at a second URL.
 [$request_uri, $page_from_path] = Http\extract_page_segment((string)$request_uri);
+unset($_GET['page']);
 if ($page_from_path !== null) {
     $_GET['page'] = $page_from_path;
-}
-
-# Legacy ?page=N links → permanent redirect to the clean /…/page/N URL.
-# The pre-check is a cheap filter before the parse_str() below: every request
-# pays for this block, but only ones whose query string could carry a 'page'
-# key need the actual parse. Over-inclusive is fine (?otherpage=1, ?page_size=2
-# parse for nothing); under-inclusive is not, because a missed redirect leaves
-# the querystring URL serving the same posts as /page/N with neither canonical.
-# Hence the '%' arm: parse_str() decodes keys, so ?%70age=2 and ?pa%67e=5 both
-# produce a 'page' key that a plain substring test cannot see.
-$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
-$query_string = $_SERVER['QUERY_STRING'] ?? '';
-$may_carry_page = str_contains($query_string, 'page') || str_contains($query_string, '%');
-if (in_array($method, ['GET', 'HEAD'], true) && $may_carry_page) {
-    parse_str($_SERVER['QUERY_STRING'] ?? '', $query_params);
-    if (isset($query_params['page'])) {
-        $page_num = max(1, (int)$query_params['page']);
-        unset($query_params['page']);
-        $clean_path = (string)strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
-        $target = Http\page_path($clean_path, $page_num);
-        $remaining = http_build_query($query_params);
-        if ($remaining !== '') {
-            $target .= '?' . $remaining;
-        }
-        header('Location: ' . Http\sanitize_location($target), true, 301);
-        exit;
-    }
 }
 
 $action = strtok($request_uri, '/');

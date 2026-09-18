@@ -14,12 +14,23 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - A URL with a trailing slash now redirects (301) to the version without it, so each page has a single canonical address.
 - Boot no longer takes a write lock on a request whose schema and journal mode are already current, so an ordinary page render is a pure reader (#831). This doesn't cure a `lamb.db` left with unwritable WAL sidecars by a wrong-user `bin/lamb` run; see the refusal added for that above.
 - The login throttle's refusal message states sub-minute waits in seconds, so it no longer disagrees with the `Retry-After` header (#791).
+- WordPress import: images renamed at the source (PNG bytes under a `.jpg` name) now import; an assets directory that can't be created is logged instead of leaving the image remote; numeric slugs are dropped even without an old path to redirect.
+- Search shows one empty-state message, not two.
+- Hashtag linking no longer rewrites hashtags inside existing link text.
+- Multi-word tags round-trip through add and remove.
+- Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
+- Micropub: a token without `update` scope can no longer tell a real post from a missing one.
+- Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
+- XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
+- Webmention reads on the post page are bounded.
 
 ### Removed
 
+- A `config.ini` in the app root is no longer read as a first-run seed. Configure the site at `/settings` instead.
 - The `import-wordpress.php`, `import-known.php` and `import-lamb.php` shims are removed. Run `bin/lamb import <wordpress|known|lamb> <path>` instead; the flags and output are the same.
 - A theme's `feed.php` or `feed_json.php` override is no longer read. Lamb's built-in feeds are used; delete the file from your theme.
 - The prebuilt Docker image at `ghcr.io/svandragt/lamb` is no longer published. Build from `Dockerfile.release` with `docker-compose.yml`; images up to 0.14.0 stay pullable.
+- The legacy `?page=N` redirect is removed. A `?page=N` link no longer redirects or paginates; it serves page one. `/page/N` is the only way to reach page N (#813).
 
 ### Added
 
@@ -34,6 +45,8 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Changed
 
+- Viewing a post whose stored version is behind the current one no longer re-saves it; a listing, feed or search render shows the up-to-date HTML without writing anything. `bin/lamb migrate` now covers this upgrade too, alongside the other one-time data migrations, so it's the one command to run after restoring an old backup ([#814](https://github.com/svandragt/lamb/issues/814)).
+- An unknown or missing theme now falls back to the default theme instead of producing a broken page.
 - `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
 - The database schema is declared explicitly and frozen. Existing installs get any missing columns added on first boot. Code that writes an undeclared column now fails instead of silently adding one.
 - Outbound DNS lookups for feeds and webmentions are capped by `DNS_RESOLVE_TIMEOUT` (5 seconds), so a stalled resolver can no longer hold the `/_cron` lock.
@@ -42,20 +55,6 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
 - Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
 - Boot no longer stamps pre-versioning posts, moves legacy WordPress/Known imports onto `import_uuid`, or seeds a feed's watermark from its legacy option row — those one-time migrations moved to `bin/lamb migrate` ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically after installing dependencies, before the health check. When `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the normal shape of a cron deploy — the migration can't run there either; `bin/upgrade` warns and names the command to run by hand instead of failing the whole upgrade over it.
-- Viewing a post whose stored version is behind the current one no longer re-saves it; a listing, feed or search render shows the up-to-date HTML without writing anything. `bin/lamb migrate` now covers this upgrade too, alongside the other one-time data migrations, so it's the one command to run after restoring an old backup ([#814](https://github.com/svandragt/lamb/issues/814)).
-
-### Fixed
-
-- WordPress import: images renamed at the source (PNG bytes under a `.jpg` name) now import; an assets directory that can't be created is logged instead of leaving the image remote; numeric slugs are dropped even without an old path to redirect.
-- Search shows one empty-state message, not two.
-- Hashtag linking no longer rewrites hashtags inside existing link text.
-- Multi-word tags round-trip through add and remove.
-- Login throttling: closed a check-then-act race before the password check and fixed the counter's read-increment-write under load.
-- The first-run `config.ini` seed is now read from `src/config.ini` regardless of the server's working directory, instead of only under `composer serve`.
-- Micropub: a token without `update` scope can no longer tell a real post from a missing one.
-- Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
-- XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
-- Webmention reads on the post page are bounded.
 
 ### Upgrade notes
 

@@ -343,8 +343,10 @@ function migrate_post_table(): void
  * their backfills moving to `bin/lamb migrate` (#811):
  *
  * - `version` existed only to make backfill_post_version()'s probe cheap.
- *   `version` names no other SQL predicate anywhere in the codebase —
- *   upgrade_posts() (response.php) reads `$bean->version` in PHP, not SQL.
+ *   One other SQL predicate names it — upgrade_all_posts() (response.php)
+ *   pages through `WHERE version < ?` — but that runs from `bin/lamb migrate`
+ *   and `bin/lamb upgrade-posts`, never from a render (#814), so a one-shot
+ *   scan there does not justify an index every write has to maintain.
  * - `feed_name` has one live SQL consumer, ping_scheduled_publishes()
  *   (websub.php): `feed_name IS NULL OR feed_name = ''`. That predicate has
  *   near-zero selectivity (almost every post matches it), so SQLite picked a
