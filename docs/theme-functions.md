@@ -59,6 +59,7 @@ re-render `body`), `$bean->description`, `$bean->created`, `$bean->updated`,
 | `author_card()` | `string` | A representative author `<a class="p-author h-card">` (name from `$config['author_name']`, linked to the site root), or `''` when no author name is set. Emit it inside each post's `h-entry`. |
 | `link_source($bean)` | `string` | A "Via …" attribution link for feed-ingested posts (uses `source_url`, falling back to the configured feed URL), or `''` for ordinary posts. |
 | `the_reply_context($bean)` | `string` | A "In reply to …" line with the `u-in-reply-to` microformats class when the post replies to another URL, or `''`. |
+| `listing_details($bean)` | `string` | The price/condition/contact block for a [listing]({{ site.baseurl }}{% link listings.md %}), marked up with `p-price` and `p-condition`, or `''` for any other post. |
 | `anchor_headings($html, $top)` | `string` | Shifts the heading levels in a rendered body so its highest heading sits at level `$top`, keeping the rest relative (clamped at `<h6>`). The built-in themes title posts at `<h2>` and pass `$top = 3`. |
 | `related_posts($body, $exclude_id = 0)` | `array` | `['posts' => OODBBean[]]` — posts that share a hashtag with `$body`, excluding `$exclude_id`. |
 | `human_time($timestamp)` | `string` | A relative time string ("3 hours ago", "Yesterday at 2:15 pm", or an absolute date for older posts). Takes a Unix timestamp. |
@@ -91,6 +92,7 @@ logged in.
 | `the_styles()` | `void` | Emits the stylesheet. It always loads `styles/styles.css` from the active theme — small stylesheets are inlined, larger ones linked with a cache-busting hash. |
 | `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`; logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
 | `the_opengraph()` | `void` | Emits OpenGraph/Twitter `<meta>` tags (status pages only). |
+| `the_schema_org()` | `void` | Emits the schema.org JSON-LD `Product` block for a listing on its own page; nothing for any other post. |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` tags for the origins in `$config['preconnect']`. |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` on admin pages and `?preview=` links; nothing on public pages. Call it in your theme's `<head>` so previews stay out of search results. |
 | `the_reply_context($bean)` | `string` | See "Posts and content" above. |
@@ -125,6 +127,7 @@ The built-in themes mark each post up with [microformats2](https://microformats.
 * `date_created($bean)` supplies `u-url` + `dt-published`.
 * `author_card()` supplies the `p-author h-card`, placed inside the `h-entry`.
 * `the_reply_context($bean)` supplies `u-in-reply-to` for replies.
+* `class="h-product"` replaces `h-entry` on a listing, and `listing_details($bean)` supplies its `p-price`/`p-condition`.
 
 The classes coexist with the schema.org markup the themes also emit, and can be hidden visually (e.g. with `screen-reader-text`) without affecting parsers.
 

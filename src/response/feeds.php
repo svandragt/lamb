@@ -469,6 +469,94 @@ function respond_feed_json(): void
 }
 
 /**
+ * Returns the view data for the /listings page.
+ *
+ * The public counterpart to the listings feed: the same selection, paginated
+ * for a reader rather than capped for a subscriber, and carrying the feed URL
+ * so the page advertises its own feed the way a tag archive does.
+ *
+ * @return array<string, mixed>
+ */
+function respond_listings(): array
+{
+    global $config;
+
+    $listings = listings_clause();
+
+    $data = listing_data(
+        ($config['site_title'] ?? '') . ' — listings',
+        'created DESC',
+        $listings['sql'],
+        $listings['params']
+    );
+    $data['intro'] = 'Things for sale.';
+    $data['feed_url'] = ROOT_URL . '/listings/feed';
+
+    return $data;
+}
+
+/**
+ * The WHERE clause selecting publicly visible listings.
+ *
+ * `post_type` is the one part of a listing held in a column rather than in
+ * front matter, precisely so this selection is an indexed comparison instead
+ * of a body scan.
+ *
+ * @return array{sql: string, params: array<int, mixed>}
+ */
+function listings_clause(): array
+{
+    $public = public_posts_clause();
+
+    return [
+        'sql'    => $public['sql'] . ' AND post_type = ? ',
+        'params' => [...$public['params'], \Lamb\Listing\POST_TYPE_LISTING],
+    ];
+}
+
+/**
+ * Returns the data needed to render the listings Atom feed.
+ *
+ * @return array{posts: array<int, \RedBeanPHP\OODBBean>, title: string, feed_url: string, updated: string}
+ */
+function get_listings_feed_data(): array
+{
+    global $config;
+
+    $listings = listings_clause();
+    $posts = R::find('post', $listings['sql'] . ' ORDER BY updated DESC LIMIT 20', $listings['params']);
+
+    return [
+        'updated'  => get_feed_updated_date($posts),
+        'title'    => ($config['site_title'] ?? '') . ' — listings',
+        'feed_url' => ROOT_URL . '/listings/feed',
+        'posts'    => $posts,
+    ];
+}
+
+/**
+ * Responds to a listings feed request by rendering an Atom feed of listings.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_listings_feed(): void
+{
+    emit_feed(get_listings_feed_data(), 'feed');
+}
+
+/**
+ * Responds to a listings feed request by rendering a JSON Feed of listings.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_listings_feed_json(): void
+{
+    emit_feed(get_listings_feed_data(), 'feed_json', ROOT_URL . '/listings/feed.json');
+}
+
+/**
  * Returns the data needed to render a tag Atom feed.
  *
  * @param string $tag The already-sanitised tag name.

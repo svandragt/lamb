@@ -67,6 +67,46 @@ function the_opengraph(): void
 }
 
 /**
+ * Emits the schema.org JSON-LD block describing the current listing.
+ *
+ * Only for a listing on its own page: a Product is a claim about one item for
+ * sale, so emitting it from a list view would describe the page as a product
+ * rather than the post it belongs to. Nothing is emitted for any other post,
+ * which keeps every existing page's markup byte-identical.
+ *
+ * @return void
+ */
+function the_schema_org(): void
+{
+    global $template;
+    global $config;
+    global $data;
+
+    if ($template !== 'status' || empty($data['posts'][0])) {
+        return;
+    }
+
+    $schema = \Lamb\Listing\schema_org($data['posts'][0], $config);
+    if ($schema === null) {
+        return;
+    }
+
+    // JSON_HEX_TAG is what keeps a `<` inside any value — a title, a contact
+    // line — from closing this script element early and turning post content
+    // into live markup. The other HEX flags cover the same class of breakout.
+    $json = json_encode(
+        $schema,
+        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+            | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+    );
+    if ($json === false) {
+        return;
+    }
+
+    printf('<script type="application/ld+json">%s</script>' . PHP_EOL, $json);
+}
+
+/**
  * Resolves the OpenGraph/Twitter card image for a status post. See
  * theme/README.md ("OpenGraph image selection") for the fallback order and
  * why dimensions are only emitted for a locally-resolvable image.

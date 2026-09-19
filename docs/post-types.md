@@ -91,6 +91,7 @@ The following sections of the site are special:
 - `/search/<keywords>` search the content for keywords
 - `/login` and `/logout` to login and out.
 - `/feed` for the Atom newsfeed.
+- `/listings` and `/listings/feed` for posts marked `post-type: listing`.
 
 ## Related
 
@@ -101,4 +102,5 @@ The following sections of the site are special:
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}): A `summary:` in front-matter sets the description used in social preview cards.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %}): Page posts with slugs can be pinned as menu items.
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Add `in-reply-to:` to front-matter to mark a post as a reply to another URL.
+* [Listings]({{ site.baseurl }}{% link listings.md %}): Add `post-type: listing` to front-matter to offer something for sale.
 * [Syntax Highlighting]({{ site.baseurl }}{% link syntax-highlighting.md %}): Fenced code blocks with a language hint are highlighted server-side.

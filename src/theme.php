@@ -407,6 +407,50 @@ function syndication_links(OODBBean $bean): string
 }
 
 /**
+ * Returns the price/condition/contact block for a listing, or '' for any other
+ * post.
+ *
+ * Marked up with microformats2 (`p-price`, `p-condition`) so a reader that
+ * parses mf2 sees the same terms the JSON-LD Product states to a search engine
+ * — the two must not disagree, which is why both read
+ * Lamb\Listing\listing_fields() rather than the raw front matter.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string The details HTML, or '' when the post is not a listing.
+ */
+function listing_details(OODBBean $bean): string
+{
+    if (!\Lamb\Listing\is_listing($bean)) {
+        return '';
+    }
+
+    $fields = \Lamb\Listing\listing_fields($bean);
+    $rows = [];
+
+    if (isset($fields['price'])) {
+        $price = isset($fields['currency'])
+            ? $fields['currency'] . ' ' . $fields['price']
+            : $fields['price'];
+        $rows[] = '<dt>Price</dt><dd class="p-price">' . escape($price) . '</dd>';
+    }
+    if (isset($fields['condition'])) {
+        $rows[] = '<dt>Condition</dt><dd class="p-condition">' . escape($fields['condition']) . '</dd>';
+    }
+    if (isset($fields['contact'])) {
+        // Deliberately plain text, not a mailto: — a listing's contact line is
+        // free text (a handle, a phone number, an address) and turning whatever
+        // it holds into a link would guess wrong more often than not.
+        $rows[] = '<dt>Contact</dt><dd>' . escape($fields['contact']) . '</dd>';
+    }
+
+    if ($rows === []) {
+        return '';
+    }
+
+    return '<dl class="listing-details">' . implode('', $rows) . '</dl>';
+}
+
+/**
  * Returns true when a post-list row should be hidden for being a menu page —
  * a post pinned in [menu_items] and reachable from the nav instead of the
  * chronological stream.
@@ -477,7 +521,7 @@ function render_post_list(bool $hide_author): void
 
             ?>
 
-        <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
+        <article class="<?= \Lamb\Listing\is_listing($bean) ? 'h-product' : 'h-entry' ?>" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="<?= \Lamb\Listing\is_listing($bean) ? 'https://schema.org/Product' : 'https://schema.org/BlogPosting' ?>">
             <header>
                 <?php // On a post page the h1 already shows the title, and the
                       // stylesheet hides this h2 — but the h-entry still needs a
@@ -497,7 +541,7 @@ function render_post_list(bool $hide_author): void
             <?= the_reply_context($bean) ?>
             <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
             <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
-            <?= syndication_links($bean) ?>
+            <?= listing_details($bean) ?><?= syndication_links($bean) ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
                 <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>

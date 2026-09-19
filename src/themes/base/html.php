@@ -6,6 +6,7 @@ use function Lamb\Theme\page_title;
 use function Lamb\Theme\part;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
+use function Lamb\Theme\the_schema_org;
 use function Lamb\Theme\the_preconnect;
 use function Lamb\Theme\the_robots;
 use function Lamb\Theme\the_scripts;
@@ -46,6 +47,7 @@ global $template;
     the_preconnect();
     the_styles();
     the_opengraph();
+    the_schema_org();
     ?>
 </head>
 <body class="<?= escape($template) ?>">

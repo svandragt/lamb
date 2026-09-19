@@ -209,6 +209,7 @@ const SCHEMA = [
         'feed_locked' => 'INTEGER',
         'preview_token' => 'TEXT',
         'preview_token_expires' => 'TEXT',
+        'post_type' => 'TEXT',
     ],
     'option' => [
         'name' => 'TEXT',
