@@ -54,7 +54,15 @@ Listings appear in your ordinary site feed alongside everything else, and also i
 
 The dedicated feed is the point of the whole exercise: someone building a directory of sellers can subscribe to the listings alone, without having to filter your holiday photos out of your main feed. Drafts, trashed posts and posts scheduled for the future stay out of it, exactly as they do everywhere else.
 
+Each entry carries the listing's terms, not just its prose: the price, condition and contact are appended to the item content as the same `p-price`/`p-condition` microformats markup the page uses, and the JSON Feed additionally carries them as a `_listing` extension object — so an aggregator reads them straight from the feed instead of fetching every permalink.
+
 If you have a [WebSub]({{ site.baseurl }}{% link feeds.md %}) hub configured, publishing a listing notifies it about the listings feed as well as the main one, so a directory subscribed to your listings is pushed the new one instead of waiting to poll.
+
+## Subscribing to someone else's listings
+
+Lamb's [feed reader]({{ site.baseurl }}{% link cross-posting.md %}) can subscribe to another seller's `/listings/feed`, but what it stores is a short quoted excerpt with a link back to the original — a citation, not a copy. An ingested listing is deliberately **not** marked as a listing of yours: it stays out of your `/listings` page and its feed, and publishes no product markup.
+
+That is on purpose. Your site would otherwise advertise a schema.org `Offer` for goods you do not have, naming you as the seller, on the strength of someone else's feed. A directory that aggregates other people's listings is a different job from the personal feed reader.
 
 ## Publishing a listing over Micropub
 

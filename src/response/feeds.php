@@ -232,12 +232,21 @@ function sanitize_tag_arg(array $args): string
  * result through normalize_utf8() for the XML text node; the JSON renderer
  * relies on json_encode()'s JSON_INVALID_UTF8_SUBSTITUTE instead.
  *
+ * A listing's price and condition are appended here rather than left to the
+ * theme, because `transformed` holds the post body alone: without this the
+ * entry for a priced item is its prose and nothing else, and a subscriber to
+ * /listings/feed would have to fetch every permalink to learn what anything
+ * costs. The markup is the same mf2 block the page renders, so the feed and
+ * the page cannot state different terms.
+ *
  * @param \RedBeanPHP\OODBBean $bean The post bean.
  * @return string The item content as HTML.
  */
 function feed_item_content_html(\RedBeanPHP\OODBBean $bean): string
 {
-    return \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed);
+    return \Lamb\Theme\the_reply_context($bean)
+        . \Lamb\absolute_urls($bean->transformed)
+        . \Lamb\Theme\listing_details($bean);
 }
 
 /**
@@ -401,6 +410,15 @@ function render_json_feed(array $data, array $config): void
                 break;
             }
         }
+        // A `_`-prefixed extension is JSON Feed's own mechanism for this, and
+        // the sibling `_microblog` above is the same idea: a reader that knows
+        // nothing about listings ignores it, while an aggregator gets the terms
+        // without having to parse them back out of content_html.
+        $listing = \Lamb\Listing\listing_fields($bean);
+        if ($listing !== []) {
+            $item['_listing'] = $listing;
+        }
+
         $feed['items'][] = $item;
     }
 
