@@ -54,6 +54,8 @@ Listings appear in your ordinary site feed alongside everything else, and also i
 
 The dedicated feed is the point of the whole exercise: someone building a directory of sellers can subscribe to the listings alone, without having to filter your holiday photos out of your main feed. Drafts, trashed posts and posts scheduled for the future stay out of it, exactly as they do everywhere else.
 
+If you have a [WebSub]({{ site.baseurl }}{% link feeds.md %}) hub configured, publishing a listing notifies it about the listings feed as well as the main one, so a directory subscribed to your listings is pushed the new one instead of waiting to poll.
+
 ## Publishing a listing over Micropub
 
 A [Micropub]({{ site.baseurl }}{% link micropub.md %}) client that creates an `h-product` gets a listing. The listing fields are ordinary Micropub properties:
