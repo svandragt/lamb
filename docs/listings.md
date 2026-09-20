@@ -22,7 +22,7 @@ contact: sander@example.com
 Warm, barely worn, no holes. Collection from Brighton or postage at cost. #knitwear
 ```
 
-Every field except `post-type` is optional. A listing with no price is published as a product without an offer, which is the right shape for "free to a good home" or "make me an offer".
+Every field except `post-type` is optional. A listing with no price is published as a product without an offer, which is the right shape for "free to a good home" or "make me an offer". A price needs a `currency` beside it to become an offer.
 
 | Field | Meaning |
 |-------|---------|
@@ -34,7 +34,17 @@ Every field except `post-type` is optional. A listing with no price is published
 
 `post_type` works as well as `post-type`, as it does for every front-matter key.
 
-A malformed value is held back from the structured data rather than published as nonsense: `price: best offer` is not a number, `currency: euros` is not a code, and `condition: mint` is not one of the four. The line stays in your post, so you can see it and correct it — it simply does not reach the machine-readable markup until it is well-formed.
+A malformed value is held back from the structured data rather than published as nonsense: `price: best offer` is not a number, `currency: euros` is not a code, and `condition: mint` is not one of the four.
+
+You don't have to spot that yourself. Open the listing while logged in and Lamb shows you — and only you — what its data actually says:
+
+> Only you can see this. This listing's data:
+> - currency: "euros" was not understood, so it is not in the listing data. Expected a three-letter code, like EUR, GBP or USD.
+> - price is set but currency is not, so no offer is published. Add a currency, like EUR, GBP or USD.
+
+A listing with nothing to report shows nothing at all, and visitors never see the note. Because it checks the finished product rather than each line on its own, it also catches the mistake no single field can: a price and a currency are each optional, but an amount with no currency is an offer nobody can act on, so Lamb publishes the item without an offer rather than claiming 25.00 of unspecified money.
+
+Save a listing as a `draft: true` first and its [preview]({{ site.baseurl }}{% link drafts.md %}) link shows the same report, so you can get the data right before anything is published.
 
 Tags work as normal, and are what categorise a listing. Write `#knitwear` in the body rather than reaching for a separate category field — there isn't one, on purpose.
 

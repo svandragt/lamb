@@ -138,6 +138,87 @@ function normalize_field(string $key, string $value): ?string
 }
 
 /**
+ * Human-readable descriptions of what each listing field will accept.
+ *
+ * Only ever shown to the author, alongside the value that was refused, so a
+ * mistyped line says what to type instead of only that it was wrong.
+ */
+const FIELD_EXPECTATIONS = [
+    'price'     => 'a number, like 25 or 25.00',
+    'currency'  => 'a three-letter code, like EUR, GBP or USD',
+    'condition' => 'one of new, used, refurbished or damaged',
+];
+
+/**
+ * Reports what a listing's structured data will and will not claim.
+ *
+ * A listing is written in a plain textarea — there is no form to reject a bad
+ * value at the point of typing — and a value this module refuses is dropped in
+ * silence, leaving a page that still looks right. This is the author's check
+ * that what they meant is what the machines will read.
+ *
+ * It validates the *result* rather than each field in isolation, because the
+ * mistake that matters most is not a single bad value: a price and a currency
+ * are each optional, yet an amount without a currency is an offer nobody can
+ * act on. Only a check that looks at the finished Product can see that.
+ *
+ * Levels: an `error` means the structured data is missing something it needs,
+ * a `notice` that a value was dropped. An unpriced listing is neither — "free
+ * to a good home" is a legitimate listing, not a mistake.
+ *
+ * @param OODBBean $post The post bean.
+ * @return list<array{level: string, message: string}> Empty when there is nothing to report.
+ */
+function validate(OODBBean $post): array
+{
+    if (!is_listing($post)) {
+        return [];
+    }
+
+    $matter = parse_matter((string) ($post->body ?? ''));
+    $fields = listing_fields($post);
+    $issues = [];
+
+    // A key the author wrote that did not survive normalisation. Reported
+    // against the raw value, which is what they will search their post for.
+    foreach (LISTING_FIELDS as $key) {
+        $raw = matter_string($matter[$key] ?? null);
+        if ($raw === null || trim($raw) === '' || isset($fields[$key])) {
+            continue;
+        }
+        $issues[] = [
+            'level'   => 'notice',
+            'message' => sprintf(
+                '%s: "%s" was not understood, so it is not in the listing data. Expected %s.',
+                $key,
+                trim($raw),
+                FIELD_EXPECTATIONS[$key] ?? 'a plain value'
+            ),
+        ];
+    }
+
+    if (isset($fields['price']) && !isset($fields['currency'])) {
+        $issues[] = [
+            'level'   => 'error',
+            'message' => 'price is set but currency is not, so no offer is published. '
+                . 'Add a currency, like EUR, GBP or USD.',
+        ];
+    }
+
+    $name = trim((string) ($post->title ?? '')) !== ''
+        ? trim((string) $post->title)
+        : trim((string) ($post->description ?? ''));
+    if ($name === '') {
+        $issues[] = [
+            'level'   => 'error',
+            'message' => 'This listing has no name. Add a title, or open the post with a line of text.',
+        ];
+    }
+
+    return $issues;
+}
+
+/**
  * Builds the schema.org Product description of a listing.
  *
  * This is what makes a listing readable as commerce rather than as another
@@ -200,10 +281,13 @@ function schema_org(OODBBean $post, array $config): ?array
 }
 
 /**
- * Builds the Offer node of a listing's Product, or null when there is no price.
+ * Builds the Offer node of a listing's Product, or null when it is incomplete.
  *
- * An Offer without a price says nothing a consumer can act on, so a listing
- * that names no price is published as a bare Product instead.
+ * Price and currency are required together: an amount with no currency is not
+ * a price a buyer or an aggregator can act on, and publishing "25.00" of
+ * unspecified money is a claim the site cannot substantiate. A listing missing
+ * either is published as a bare Product instead, and validate() tells the
+ * author why their price did not appear.
  *
  * Availability is always InStock: v1 has no sold/reserved status, so a listing
  * is on offer for exactly as long as its post exists (see docs/listings.md).
@@ -215,20 +299,17 @@ function schema_org(OODBBean $post, array $config): ?array
  */
 function offer(array $fields, string $url, array $config): ?array
 {
-    if (!isset($fields['price'])) {
+    if (!isset($fields['price'], $fields['currency'])) {
         return null;
     }
 
     $offer = [
-        '@type'        => 'Offer',
-        'price'        => $fields['price'],
-        'url'          => $url,
-        'availability' => 'https://schema.org/InStock',
+        '@type'         => 'Offer',
+        'price'         => $fields['price'],
+        'priceCurrency' => $fields['currency'],
+        'url'           => $url,
+        'availability'  => 'https://schema.org/InStock',
     ];
-
-    if (isset($fields['currency'])) {
-        $offer['priceCurrency'] = $fields['currency'];
-    }
 
     $seller = (string) ($config['author_name'] ?? '');
     if ($seller !== '') {

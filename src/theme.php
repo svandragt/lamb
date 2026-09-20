@@ -451,6 +451,47 @@ function listing_details(OODBBean $bean): string
 }
 
 /**
+ * Returns the listing's validation report, for the author's eyes only.
+ *
+ * A listing is written in a plain textarea, so a refused value fails silently:
+ * the page still renders, the price still shows, and only the structured data
+ * is quietly poorer. This is the preview of what the machines will actually
+ * read, shown where the author is already looking — on the listing itself, and
+ * on its `?preview=` link before it is published.
+ *
+ * Logged-in only, and never for a visitor: it is a note to the author about
+ * their own draft, not a defect notice on a public page.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string The report HTML, or '' when there is nothing to say (or nobody to say it to).
+ */
+function listing_validation(OODBBean $bean): string
+{
+    if (!isset($_SESSION[SESSION_LOGIN])) {
+        return '';
+    }
+
+    $issues = \Lamb\Listing\validate($bean);
+    if ($issues === []) {
+        return '';
+    }
+
+    $items = '';
+    foreach ($issues as $issue) {
+        // escape(): the values echoed back are the author's own front matter,
+        // which a Micropub client may have written.
+        $items .= sprintf(
+            '<li class="%s">%s</li>',
+            escape('listing-' . $issue['level']),
+            escape($issue['message'])
+        );
+    }
+
+    return '<div class="listing-validation"><p>Only you can see this. This listing\'s data:</p><ul>'
+        . $items . '</ul></div>';
+}
+
+/**
  * Returns true when a post-list row should be hidden for being a menu page —
  * a post pinned in [menu_items] and reachable from the nav instead of the
  * chronological stream.
@@ -541,7 +582,7 @@ function render_post_list(bool $hide_author): void
             <?= the_reply_context($bean) ?>
             <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
             <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
-            <?= listing_details($bean) ?><?= syndication_links($bean) ?>
+            <?= listing_details($bean) ?><?= listing_validation($bean) ?><?= syndication_links($bean) ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
                 <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
