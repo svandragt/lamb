@@ -439,3 +439,48 @@ textarea {
 .task-list-item input[type="checkbox"] {
     margin: 0 .4em 0 -1.4em;
 }
+
+/* Listings. The price is the fact the page exists to state, so it is the one
+   thing set apart from the body copy; the terms sit together, away from the
+   prose. See docs/listings.md. */
+.listing-details {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 1.5rem;
+    row-gap: 0.25rem;
+    align-items: baseline;
+    margin: 1.5rem 0;
+    padding: 1rem;
+    background: var(--bg-alt, #f4f4f4);
+    border-radius: 3px;
+}
+
+.listing-details dt {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.7;
+}
+
+.listing-details dd {
+    margin: 0;
+}
+
+.listing-details .p-price {
+    font-size: 1.4rem;
+    font-weight: 600;
+}
+
+/* Author-only note about a listing's own data (see Lamb\Listing\validate). */
+.listing-validation {
+    margin: 1.5rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--info, #fee684);
+    background: var(--bg-alt, #f4f4f4);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.listing-validation p { margin: 0 0 0.5rem; }
+.listing-validation ul { margin: 0; padding-left: 1rem; }
+.listing-validation .listing-error { font-weight: 600; }

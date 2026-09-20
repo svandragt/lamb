@@ -232,7 +232,7 @@ function sanitize_tag_arg(array $args): string
  * result through normalize_utf8() for the XML text node; the JSON renderer
  * relies on json_encode()'s JSON_INVALID_UTF8_SUBSTITUTE instead.
  *
- * A listing's price and condition are appended here rather than left to the
+ * A listing's price and condition are included here rather than left to the
  * theme, because `transformed` holds the post body alone: without this the
  * entry for a priced item is its prose and nothing else, and a subscriber to
  * /listings/feed would have to fetch every permalink to learn what anything

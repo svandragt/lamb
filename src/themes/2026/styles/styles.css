@@ -985,3 +985,70 @@ footer a:hover { color: var(--accent-link); }
 .task-list-item input[type="checkbox"] {
     margin: 0 .4em 0 -1.4em;
 }
+
+/* Listings.
+   The price is the one fact a listing exists to state, so it carries the
+   weight the body copy does not; the terms sit in a raised panel to separate
+   what is being offered from the prose describing it. Colours are the theme
+   tokens throughout, so the dark-mode block above re-skins this for free. */
+.listing-details {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: var(--s-5);
+    row-gap: var(--s-2);
+    align-items: baseline;
+    margin: var(--s-5) 0;
+    padding: var(--s-4);
+    background: var(--paper-raised);
+    border-radius: var(--radius);
+}
+
+.listing-details dt {
+    font: 500 var(--text-xs)/1.2 var(--font-mono);
+    color: var(--ink-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+.listing-details dd {
+    margin: 0;
+    color: var(--ink);
+}
+
+.listing-details .p-price {
+    font: 600 var(--text-lg)/1.1 var(--font-mono);
+    color: var(--accent-link);
+}
+
+/* Author-only note about a listing's own data (see Lamb\Listing\validate).
+   Deliberately unlike the post's own voice: this is scaffolding the author
+   sees on their site, not content a reader is meant to take as part of it. */
+.listing-validation {
+    margin: var(--s-5) 0;
+    padding: var(--s-3) var(--s-4);
+    border-left: 3px solid var(--accent);
+    background: var(--accent-tint);
+    border-radius: 0 var(--radius) var(--radius) 0;
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    line-height: 1.5;
+}
+
+.listing-validation p {
+    margin: 0 0 var(--s-2);
+    color: var(--ink-soft);
+}
+
+.listing-validation ul {
+    margin: 0;
+    padding-left: var(--s-4);
+}
+
+.listing-validation li {
+    color: var(--ink);
+    margin: var(--s-1) 0;
+}
+
+.listing-validation .listing-error {
+    font-weight: 600;
+}

@@ -410,6 +410,10 @@ function syndication_links(OODBBean $bean): string
  * Returns the price/condition/contact block for a listing, or '' for any other
  * post.
  *
+ * Rendered before the post body, not after it: a listing usually opens with a
+ * photo, and a price below one is a price below the fold. Title, terms, then
+ * the picture and the prose — the order a classified ad has always used.
+ *
  * Marked up with microformats2 (`p-price`, `p-condition`) so a reader that
  * parses mf2 sees the same terms the JSON-LD Product states to a search engine
  * — the two must not disagree, which is why both read
@@ -579,10 +583,10 @@ function render_post_list(bool $hide_author): void
                     <?= date_created($bean) ?>
                 </div>
             </header>
-            <?= the_reply_context($bean) ?>
+            <?= the_reply_context($bean) ?><?= listing_details($bean) ?><?= listing_validation($bean) ?>
             <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
             <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
-            <?= listing_details($bean) ?><?= listing_validation($bean) ?><?= syndication_links($bean) ?>
+            <?= syndication_links($bean) ?>
 
             <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
                 <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
