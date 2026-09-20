@@ -254,30 +254,41 @@ mark {
    thing set apart from the body copy; the terms sit together, away from the
    prose. See docs/listings.md. */
 .listing-details {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    column-gap: 1.5rem;
-    row-gap: 0.25rem;
+    display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
+    gap: 0 0.75rem;
     margin: 1.5rem 0;
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     background: var(--bg-alt, #f4f4f4);
     border-radius: 3px;
 }
 
+/* Labels are carried for a screen reader and a parser rather than drawn, so
+   the terms read as one line. See the 2026 theme for the reasoning. */
 .listing-details dt {
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    opacity: 0.7;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .listing-details dd {
     margin: 0;
 }
 
+/* The separator trails its value, so a wrap cannot orphan it onto the next
+   line where it would read as a bullet. See the 2026 theme. */
+.listing-details dd:not(:last-of-type)::after {
+    content: "·";
+    margin-left: 0.75rem;
+    opacity: 0.6;
+}
+
 .listing-details .p-price {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
     font-weight: 600;
 }
 

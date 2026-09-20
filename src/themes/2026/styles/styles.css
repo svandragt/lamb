@@ -992,22 +992,27 @@ footer a:hover { color: var(--accent-link); }
    what is being offered from the prose describing it. Colours are the theme
    tokens throughout, so the dark-mode block above re-skins this for free. */
 .listing-details {
-    display: grid;
-    grid-template-columns: max-content minmax(0, 1fr);
-    column-gap: var(--s-5);
-    row-gap: var(--s-2);
+    display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
+    gap: 0 var(--s-3);
     margin: var(--s-5) 0;
-    padding: var(--s-4);
+    padding: var(--s-3) var(--s-4);
     background: var(--paper-raised);
     border-radius: var(--radius);
 }
 
+/* The terms read as a single line — "EUR 25.00 · used · me@example.com" —
+   so the labels are carried for a screen reader and a parser rather than
+   drawn. A price, a condition and a contact are each self-evident beside
+   one another; spelling them out tripled the height of the box. */
 .listing-details dt {
-    font: 500 var(--text-xs)/1.2 var(--font-mono);
-    color: var(--ink-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
 }
 
 .listing-details dd {
@@ -1015,8 +1020,18 @@ footer a:hover { color: var(--accent-link); }
     color: var(--ink);
 }
 
+/* The separator trails the value it follows rather than leading the next one:
+   on a narrow screen the box wraps, and a leading separator orphans onto the
+   start of the new line where it reads as a bullet. `:not(:last-of-type)`
+   counts dd siblings, so it works whichever fields the listing sets. */
+.listing-details dd:not(:last-of-type)::after {
+    content: "·";
+    margin-left: var(--s-3);
+    color: var(--ink-faint);
+}
+
 .listing-details .p-price {
-    font: 600 var(--text-lg)/1.1 var(--font-mono);
+    font: 600 var(--text-md)/1.2 var(--font-mono);
     color: var(--accent-link);
 }
 
