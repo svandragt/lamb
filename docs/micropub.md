@@ -71,6 +71,8 @@ token_endpoint = https://token.example.com/token
 
 A Micropub `h-entry` with a `content` property creates a status post (no title, no slug). If a `name` property is also present, it creates a titled post with a slug derived from the title.
 
+`in-reply-to` makes the post a [reply]({{ site.baseurl }}{% link replies.md %}), and `rsvp` — one of `yes`, `no`, `maybe` or `interested` — makes it an [RSVP]({{ site.baseurl }}{% link rsvp.md %}) to the event it replies to. Both are reported back in a `q=source` response and can be changed by an update. Any other property a client sends is preserved in the post body as a JSON code block rather than dropped.
+
 ## Draft and scheduled post previews
 
 Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a secret preview token to the URL it returns (`?preview=…`). That link shows the unpublished post to anyone who has it — without logging in — and expires after 24 hours. The plain permalink (without the token) stays hidden until the post is published.
@@ -126,4 +128,5 @@ Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's impl
 * [Media]({{ site.baseurl }}{% link media.md %}): Uploaded photos are stored under `src/assets/` and JPEG/PNG are converted to WebP.
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Send a future `published` date or `post-status: scheduled` to schedule a post.
+* [RSVP posts]({{ site.baseurl }}{% link rsvp.md %}): Send the `rsvp` property to reply to an event with whether you are going.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Receive notifications when other sites link to your posts.

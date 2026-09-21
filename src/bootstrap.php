@@ -202,6 +202,7 @@ const SCHEMA = [
         'import_uuid' => 'TEXT',
         'source_url' => 'TEXT',
         'in_reply_to' => 'TEXT',
+        'rsvp' => 'TEXT',
         'syndicated_to' => 'TEXT',
         'draft' => 'INTEGER',
         'deleted' => 'INTEGER',

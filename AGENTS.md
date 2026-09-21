@@ -236,7 +236,7 @@ Post content here. Use #hashtags inline.
 ```
 
 `parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
-`parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
+`parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean. Two of those are validated rather than copied: `in-reply-to` (one or more URLs, stored space-separated in `in_reply_to`) and `rsvp` (one of `Lamb\RSVP_VALUES` — the mf2 RSVP vocabulary — with a YAML boolean mapped onto `yes`/`no`, anything else discarded). Both are consumed from the front-matter array before the allowlisted copy in `apply_frontmatter()`, and both are re-derived on every parse, so removing the line clears the column.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
 On `main`/`release`, slugs are effectively immutable after creation: editing a post will not overwrite an existing slug from changed front matter or title. New page-like posts get their slug at creation time; status posts keep the numeric `/status/<id>` permalink.

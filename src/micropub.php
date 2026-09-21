@@ -45,6 +45,7 @@ class LambMicropubAdapter extends MicropubAdapter
      */
     private const MATTER_PROPERTIES = [
         'name'            => 'title',
+        'rsvp'            => 'rsvp',
         'syndication'     => 'syndicated-to',
         'mp-syndicate-to' => 'syndicated-to',
     ];
@@ -129,6 +130,10 @@ class LambMicropubAdapter extends MicropubAdapter
         $reply_targets = split_reply_targets((string) ($bean->in_reply_to ?? ''));
         if ($reply_targets !== []) {
             $props['in-reply-to'] = $reply_targets;
+        }
+
+        if (!empty($bean->rsvp)) {
+            $props['rsvp'] = [(string) $bean->rsvp];
         }
 
         if (!empty($bean->syndicated_to)) {
@@ -805,6 +810,11 @@ class LambMicropubAdapter extends MicropubAdapter
      * else takes the first value. An empty value list is Micropub's "replace
      * with nothing", so it clears the key.
      *
+     * An `rsvp` outside the four replies mf2 defines is reported as unwritable
+     * rather than stored: \Lamb\normalize_rsvp() would discard it on the next
+     * parse, so accepting it here would answer the client with a success its
+     * own `q=source` then contradicts.
+     *
      * @param string      $property
      * @param list<mixed> $values
      * @return string|null Null when the value carries no faithful text, which is
@@ -818,6 +828,12 @@ class LambMicropubAdapter extends MicropubAdapter
 
         if ($property === 'name') {
             return matter_string($values[0] ?? null);
+        }
+
+        if ($property === 'rsvp') {
+            $reply = strtolower(trim(matter_string($values[0] ?? null) ?? ''));
+
+            return in_array($reply, \Lamb\RSVP_VALUES, true) ? $reply : null;
         }
 
         $targets = array_filter(
@@ -907,10 +923,11 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param string|null $title
      * @param list<string> $replyTo One or more reply targets (#583), or [] for none.
+     * @param string|null $rsvp One of \Lamb\RSVP_VALUES, or null when the post is not an RSVP.
      * @param string|null $syndicatedTo
      * @return array<string, string|list<string>>
      */
-    private function assembleFrontMatter(?string $title, array $replyTo, ?string $syndicatedTo): array
+    private function assembleFrontMatter(?string $title, array $replyTo, ?string $rsvp, ?string $syndicatedTo): array
     {
         $matter = [];
         if ($title !== null) {
@@ -920,6 +937,9 @@ class LambMicropubAdapter extends MicropubAdapter
             // A single target keeps the plain `in-reply-to: url` shape every
             // existing post already has; two or more become a YAML list.
             $matter['in-reply-to'] = count($replyTo) === 1 ? $replyTo[0] : $replyTo;
+        }
+        if ($rsvp !== null && $rsvp !== '') {
+            $matter['rsvp'] = $rsvp;
         }
         if ($syndicatedTo !== null && $syndicatedTo !== '') {
             $matter['syndicated-to'] = $syndicatedTo;
@@ -1026,6 +1046,12 @@ class LambMicropubAdapter extends MicropubAdapter
             }
         }
 
+        // Validated the same way an update's is (matterValue()), and by the
+        // same vocabulary \Lamb\normalize_rsvp() enforces on the way back in:
+        // an unrecognised reply is left out of the front matter rather than
+        // written for the next parse to discard.
+        $rsvp = $this->matterValue('rsvp', array_values((array) ($props['rsvp'] ?? [])));
+
         $photos = $this->buildPhotos($props['photo'] ?? []);
         if ($photos !== '') {
             $content = $content . "\n\n" . $photos;
@@ -1036,7 +1062,7 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . ' ' . $tags;
         }
 
-        $extra = $this->buildExtraProperties($props);
+        $extra = $this->buildExtraProperties($props, $rsvp !== null ? ['rsvp'] : []);
         if ($extra !== '') {
             $content = $content . "\n\n" . $extra;
         }
@@ -1051,7 +1077,7 @@ class LambMicropubAdapter extends MicropubAdapter
         $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
         return build_matter(
-            $this->assembleFrontMatter($title, $replyTargets, $syndicatedTo),
+            $this->assembleFrontMatter($title, $replyTargets, $rsvp, $syndicatedTo),
             $content
         );
     }
@@ -1061,17 +1087,23 @@ class LambMicropubAdapter extends MicropubAdapter
      * as a JSON code block so they are preserved in storage.
      *
      * @param array<string, mixed> $props
+     * @param list<string> $consumed Properties buildBody() has written into the
+     *                               front matter, on top of the always-known set.
      * @return string
      */
-    private function buildExtraProperties(array $props): string
+    private function buildExtraProperties(array $props, array $consumed = []): string
     {
         // `in-reply-to` belongs here with the rest: buildBody() consumes it into
         // front matter, so leaving it out dumped the reply target into the post
         // body a second time as a JSON code block readers could see.
-        $known = [
+        //
+        // `rsvp` is only known when it was actually written ($consumed): a reply
+        // outside the mf2 vocabulary has no front-matter line to carry it, so it
+        // falls through to the JSON block rather than being dropped on the floor.
+        $known = array_merge([
             'content', 'name', 'category', 'photo', 'published', 'post-status',
             'mp-syndicate-to', 'in-reply-to',
-        ];
+        ], $consumed);
         $extra = array_diff_key($props, array_flip($known));
 
         if (empty($extra)) {

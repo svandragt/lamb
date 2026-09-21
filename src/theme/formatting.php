@@ -89,16 +89,24 @@ function anchor_headings(string $html, int $top): string
 
 
 /**
- * Renders the reply-context line for a post that is a reply to another URL,
- * or '' when the post has no `in_reply_to` target. The link carries the
+ * Renders the reply-context line for a post that is a reply to another URL or
+ * an RSVP to an event, or '' when it is neither. The link carries the
  * `u-in-reply-to` microformats2 class so Webmention receivers categorise the
- * mention as a reply.
+ * mention as a reply, and an RSVP reply is emitted as the `p-rsvp` property the
+ * IndieWeb vocabulary defines — on the same line, because an RSVP *is* a reply
+ * to the event ("RSVP yes to example.com"), and two stacked lines would say so
+ * twice.
  *
- * `in_reply_to` is not author-only (a Micropub client holding just `create`
- * scope can set it) and this markup is also served inside the Atom/JSON
- * feeds' content_html, so a target that isn't a genuine http(s) URL is shown
- * as text rather than linked. See theme/README.md ("Escaping is per-context,
- * not per-file").
+ * `<data value>` rather than plain text: the machine-readable value stays the
+ * bare `yes`/`no`/`maybe`/`interested` a parser expects however the line is
+ * worded for readers.
+ *
+ * Neither field is author-only (a Micropub client holding just `create` scope
+ * can set both) and this markup is also served inside the Atom/JSON feeds'
+ * content_html, so a target that isn't a genuine http(s) URL is shown as text
+ * rather than linked, and a stored reply outside RSVP_VALUES is dropped rather
+ * than emitted as a `p-rsvp` no consumer can read. See theme/README.md
+ * ("Escaping is per-context, not per-file").
  *
  * @param \RedBeanPHP\OODBBean $bean
  * @return string
@@ -106,7 +114,11 @@ function anchor_headings(string $html, int $top): string
 function the_reply_context(\RedBeanPHP\OODBBean $bean): string
 {
     $targets = \Lamb\Post\split_reply_targets((string) ($bean->in_reply_to ?? ''));
-    if ($targets === []) {
+    $rsvp = strtolower(trim((string) ($bean->rsvp ?? '')));
+    if (!in_array($rsvp, \Lamb\RSVP_VALUES, true)) {
+        $rsvp = '';
+    }
+    if ($targets === [] && $rsvp === '') {
         return '';
     }
 
@@ -125,7 +137,16 @@ function the_reply_context(\RedBeanPHP\OODBBean $bean): string
             . escape($url) . '">' . escape($label) . '</a>';
     }
 
-    return '<p class="reply-context">In reply to ' . implode(', ', $parts) . '</p>';
+    $links = implode(', ', $parts);
+    if ($rsvp === '') {
+        return '<p class="reply-context">In reply to ' . $links . '</p>';
+    }
+
+    $reply = 'RSVP <data class="p-rsvp" value="' . $rsvp . '">' . $rsvp . '</data>';
+
+    return '<p class="reply-context">'
+        . ($links === '' ? $reply : $reply . ' to ' . $links)
+        . '</p>';
 }
 
 /**
@@ -141,13 +162,60 @@ function og_escape(string $html): string
 }
 
 /**
- * Returns the HTML-escaped value of the ?text= query parameter, used to pre-fill the entry form textarea.
+ * Returns the HTML-escaped body the entry form's textarea is pre-filled with.
  *
- * @return string Escaped text string, or '' when the parameter is absent.
+ * `?text=` supplies the content. `?in-reply-to=` and `?rsvp=` supply the two
+ * front-matter keys that turn that content into a reply or an RSVP, so a
+ * bookmarklet on an event page can open the compose box with the post already
+ * addressed — the one-click path that spares the author typing a front-matter
+ * block by hand (see docs/rsvp.md). Nothing is published: this is a draft in a
+ * textarea the author still reviews and submits.
+ *
+ * Both keys are validated here rather than trusted: the block is assembled
+ * through build_matter()'s YAML writer, so a newline in a value cannot inject
+ * further keys, and a target that is not an http(s) URL — or a reply outside
+ * the mf2 vocabulary — is left out rather than pre-filled for
+ * \Lamb\normalize_rsvp() to discard on save.
+ *
+ * @return string Escaped body text, or '' when no parameter is present.
  */
 function preload_text(): string
 {
-    return htmlspecialchars(\Lamb\Http\request_string($_GET['text'] ?? null) ?? '', ENT_QUOTES, 'UTF-8');
+    $text = \Lamb\Http\request_string($_GET['text'] ?? null) ?? '';
+
+    return htmlspecialchars(
+        \Lamb\Post\build_matter(preload_matter(), $text),
+        ENT_QUOTES,
+        'UTF-8'
+    );
+}
+
+/**
+ * Builds the front matter the entry form is pre-filled with from the query
+ * string, or [] when the request asks for none.
+ *
+ * Accepts either spelling of the reply target (`in-reply-to`, `in_reply_to`),
+ * the way \Lamb\Post\normalize_matter_keys() folds them together for a
+ * hand-written block — a query string is the one place an author (or their
+ * bookmarklet) types the key themselves.
+ *
+ * @return array<string, string> Front matter keyed as parse_matter() reads it.
+ */
+function preload_matter(): array
+{
+    $matter = [];
+
+    $target = \Lamb\Http\request_string($_GET['in-reply-to'] ?? $_GET['in_reply_to'] ?? null) ?? '';
+    if (\Lamb\Http\is_valid_http_url(trim($target))) {
+        $matter['in-reply-to'] = trim($target);
+    }
+
+    $rsvp = strtolower(trim(\Lamb\Http\request_string($_GET['rsvp'] ?? null) ?? ''));
+    if (in_array($rsvp, \Lamb\RSVP_VALUES, true)) {
+        $matter['rsvp'] = $rsvp;
+    }
+
+    return $matter;
 }
 
 /**

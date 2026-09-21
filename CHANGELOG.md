@@ -42,6 +42,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - The deprecation policy is written down: a deprecation lasts one published release and is removed in the next.
 - `bin/lamb upgrade-posts [--dry-run]` upgrades every post whose stored version is behind the current one in bounded batches, instead of waiting for a render to touch each one.
 - `bin/lamb migrate [--dry-run]` runs the one-time data migrations that used to run implicitly on every boot ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically; restoring an old `lamb.db` backup by hand needs it run explicitly.
+- **RSVP posts.** Add `rsvp: yes` (or `no`, `maybe`, `interested`) to a post's front matter alongside `in-reply-to:` to reply to an event with whether you are going. The post shows "RSVP yes to …", is marked up with the IndieWeb `p-rsvp` property, and notifies the event by webmention like any other reply. Micropub clients can send and edit the standard `rsvp` property, and the entry form can be pre-filled from a link (`/?rsvp=yes&in-reply-to=…`), so an event page can be RSVP'd to with a bookmarklet.
 
 ### Changed
 

@@ -58,6 +58,12 @@ const TAG_PATTERN = '/(^|[\s>])#([^' . TAG_TERMINATORS . ']+)/u';
 // allowlist check in apply_frontmatter() for why this is not open-ended.
 const FRONT_MATTER_FIELDS = ['title', 'slug', 'created', 'draft', 'description', 'transformed'];
 
+// The four replies microformats2 defines for `p-rsvp`. A post's `rsvp` value is
+// validated against this on the way in (normalize_rsvp()) and on the way out
+// (Theme\the_reply_context()), so the value a consumer parses out of the
+// markup is always one it recognises.
+const RSVP_VALUES = ['yes', 'no', 'maybe', 'interested'];
+
 /**
  * Retrieves the tags from the given HTML.
  *
@@ -611,6 +617,45 @@ function normalize_in_reply_to(array &$front_matter): string
 }
 
 /**
+ * Normalises the front-matter `rsvp` value to one of the four replies
+ * microformats2 defines, or '' when the post is not an RSVP.
+ *
+ * YAML types a value by how it is written. `rsvp: yes` stays the string the
+ * author typed under YAML 1.2 (what Symfony's parser implements), but
+ * `rsvp: true` is a boolean, which matter_string() reports as absent for having
+ * no faithful text — so booleans are mapped onto the yes/no they stand for
+ * rather than dropped. A quoted or capitalised spelling (`"Yes"`, `MAYBE`)
+ * folds onto the canonical lower-case value.
+ *
+ * A value outside the vocabulary is discarded rather than stored, so the
+ * `p-rsvp` a reader parses out of the markup is always one it recognises.
+ * `rsvp` is not author-only — a Micropub client holding `create` scope sets it
+ * — so this is the boundary that makes that guarantee, not the theme.
+ *
+ * The key is consumed from the passed-by-reference front matter, as
+ * normalize_in_reply_to() consumes its own, so the blind copy in
+ * apply_frontmatter() cannot write the raw value back over the validated one.
+ *
+ * @param array<int|string, mixed> $front_matter The parsed front matter, modified in place.
+ * @return string One of RSVP_VALUES, or '' when absent or unrecognised.
+ *
+ * @internal Decomposed step of parse_bean(); not part of the public API.
+ */
+function normalize_rsvp(array &$front_matter): string
+{
+    $value = $front_matter['rsvp'] ?? null;
+    unset($front_matter['rsvp']);
+
+    if (is_bool($value)) {
+        return $value ? 'yes' : 'no';
+    }
+
+    $reply = strtolower(trim(matter_string($value) ?? ''));
+
+    return in_array($reply, RSVP_VALUES, true) ? $reply : '';
+}
+
+/**
  * Applies non-date front-matter fields onto the bean.
  *
  * Resets `in_reply_to`, `title`, and `draft` to their defaults when absent so
@@ -632,6 +677,11 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
     // Normalise the reply target(s). Empty when absent, so removing it from
     // front matter on edit clears the stored value.
     $bean->in_reply_to = normalize_in_reply_to($front_matter);
+
+    // Validate the RSVP reply. Empty when absent or unrecognised, so removing
+    // (or mistyping) it on edit clears the stored value rather than leaving a
+    // stale reply on a post that no longer claims one.
+    $bean->rsvp = normalize_rsvp($front_matter);
 
     // Normalise syndication record. Hyphenated key can't map via the loop below.
     $bean->syndicated_to = matter_string($front_matter['syndicated-to'] ?? null) ?? '';

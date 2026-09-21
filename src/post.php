@@ -187,7 +187,10 @@ function parse_matter(string $body): array
  * (mf2 `u-in-reply-to` repeats, RFC 4685 allows several `thr:in-reply-to`
  * elements — #583), and coercing it here would collapse that list to its
  * first entry before \Lamb\normalize_in_reply_to() gets a chance to keep
- * every target via matter_url_list().
+ * every target via matter_url_list(). `rsvp` is outside it for the mirror-image
+ * reason: `rsvp: yes` parses as a boolean, which has no faithful text, so
+ * coercing it here would drop the value before \Lamb\normalize_rsvp() can map
+ * it back onto the reply the author wrote.
  */
 const MATTER_TEXT_KEYS = ['title', 'slug', 'summary', 'description', 'syndicated-to'];
 

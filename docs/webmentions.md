@@ -46,6 +46,7 @@ When you delete a post that already sent webmentions, Lamb re-sends them on the 
 ## Related
 
 * [Reply posts]({{ site.baseurl }}{% link replies.md %}): Mark a post as `in-reply-to` another URL — the most common webmention type.
+* [RSVP posts]({{ site.baseurl }}{% link rsvp.md %}): A reply that tells an event whether you are coming.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish posts from any Micropub client; uses the same IndieWeb discovery pattern.
 * [Cron / scheduled tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): How `/_cron` drives feed ingestion and outbound webmentions.
 * [Scheduling posts]({{ site.baseurl }}{% link scheduling.md %}): Scheduled posts send their webmentions when they go live.

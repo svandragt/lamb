@@ -39,7 +39,10 @@ here:
   scope — so each calls `Http\is_valid_http_url()` before emitting an
   `<a href>`, and falls back to plain escaped text for anything that isn't a
   genuine `http(s)` URL. A `javascript:`-scheme value would otherwise reach
-  the page verbatim.
+  the page verbatim. `the_reply_context()` guards its `rsvp` the same way
+  and for the same reason, by vocabulary rather than by scheme: only one of
+  `Lamb\RSVP_VALUES` is emitted as a `p-rsvp`, so nothing else can reach the
+  attribute.
 
 ## Part resolution is theme-optional by design
 
