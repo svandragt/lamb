@@ -48,7 +48,7 @@ Save a listing as a `draft: true` first and its [preview]({{ site.baseurl }}{% l
 
 ### Contact without publishing an address
 
-Prefer a URL in `contact` — a link to your contact page, a profile, or a form:
+Prefer a URL in `contact` — a link to your contact page, a profile, or a form. Lamb has no contact form of its own yet ([#862](https://github.com/svandragt/lamb/issues/862)), so this points at a page you host:
 
 ```yaml
 contact: https://example.com/contact
@@ -102,7 +102,7 @@ h=product
 &price=25.00
 &currency=EUR
 &condition=used
-&contact=sander@example.com
+&contact=https://example.com/contact
 &category=knitwear
 ```
 
