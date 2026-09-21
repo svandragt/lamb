@@ -439,3 +439,59 @@ textarea {
 .task-list-item input[type="checkbox"] {
     margin: 0 .4em 0 -1.4em;
 }
+
+/* Listings. The price is the fact the page exists to state, so it is the one
+   thing set apart from the body copy; the terms sit together, away from the
+   prose. See docs/listings.md. */
+.listing-details {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 0.75rem;
+    margin: 1.5rem 0;
+    padding: 0.75rem 1rem;
+    background: var(--bg-alt, #f4f4f4);
+    border-radius: 3px;
+}
+
+/* Labels are carried for a screen reader and a parser rather than drawn, so
+   the terms read as one line. See the 2026 theme for the reasoning. */
+.listing-details dt {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.listing-details dd {
+    margin: 0;
+}
+
+/* The separator trails its value, so a wrap cannot orphan it onto the next
+   line where it would read as a bullet. See the 2026 theme. */
+.listing-details dd:not(:last-of-type)::after {
+    content: "·";
+    margin-left: 0.75rem;
+    opacity: 0.6;
+}
+
+.listing-details .p-price {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+/* Author-only note about a listing's own data (see Lamb\Listing\validate). */
+.listing-validation {
+    margin: 1.5rem 0;
+    padding: 0.75rem 1rem;
+    border-left: 3px solid var(--info, #fee684);
+    background: var(--bg-alt, #f4f4f4);
+    font-size: 0.8125rem;
+    line-height: 1.5;
+}
+
+.listing-validation p { margin: 0 0 0.5rem; }
+.listing-validation ul { margin: 0; padding-left: 1rem; }
+.listing-validation .listing-error { font-weight: 600; }

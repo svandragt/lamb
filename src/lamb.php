@@ -613,9 +613,9 @@ function normalize_in_reply_to(array &$front_matter): string
 /**
  * Applies non-date front-matter fields onto the bean.
  *
- * Resets `in_reply_to`, `title`, and `draft` to their defaults when absent so
- * removing a line on edit clears the stored value, then copies the remaining
- * front-matter keys. Keys that are not valid bean column names (e.g. a
+ * Resets `in_reply_to`, `post_type`, `title`, and `draft` to their defaults when
+ * absent so removing a line on edit clears the stored value, then copies the
+ * remaining front-matter keys. Keys that are not valid bean column names (e.g. a
  * normalised multi-word key like `reading-time`) are skipped rather than
  * written, since RedBean rejects them — only the recognised single-word fields
  * map to columns. Date normalisation is handled separately by
@@ -635,6 +635,11 @@ function apply_frontmatter(OODBBean $bean, array $front_matter): void
 
     // Normalise syndication record. Hyphenated key can't map via the loop below.
     $bean->syndicated_to = matter_string($front_matter['syndicated-to'] ?? null) ?? '';
+
+    // Same reason as syndicated_to: `post-type` normalises to a hyphenated key,
+    // which is not a column name, so the loop below can never carry it. Reset
+    // when absent so deleting the line turns a listing back into a normal post.
+    $bean->post_type = \Lamb\Listing\normalize_post_type($front_matter['post-type'] ?? null);
 
     // Reset the title to empty when it is absent from front matter, so removing
     // the `title:` line (or all front matter) on an edit clears a previously

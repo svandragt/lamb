@@ -232,12 +232,21 @@ function sanitize_tag_arg(array $args): string
  * result through normalize_utf8() for the XML text node; the JSON renderer
  * relies on json_encode()'s JSON_INVALID_UTF8_SUBSTITUTE instead.
  *
+ * A listing's price and condition are included here rather than left to the
+ * theme, because `transformed` holds the post body alone: without this the
+ * entry for a priced item is its prose and nothing else, and a subscriber to
+ * /listings/feed would have to fetch every permalink to learn what anything
+ * costs. The markup is the same mf2 block the page renders, so the feed and
+ * the page cannot state different terms.
+ *
  * @param \RedBeanPHP\OODBBean $bean The post bean.
  * @return string The item content as HTML.
  */
 function feed_item_content_html(\RedBeanPHP\OODBBean $bean): string
 {
-    return \Lamb\Theme\the_reply_context($bean) . \Lamb\absolute_urls($bean->transformed);
+    return \Lamb\Theme\the_reply_context($bean)
+        . \Lamb\absolute_urls($bean->transformed)
+        . \Lamb\Theme\listing_details($bean);
 }
 
 /**
@@ -401,6 +410,15 @@ function render_json_feed(array $data, array $config): void
                 break;
             }
         }
+        // A `_`-prefixed extension is JSON Feed's own mechanism for this, and
+        // the sibling `_microblog` above is the same idea: a reader that knows
+        // nothing about listings ignores it, while an aggregator gets the terms
+        // without having to parse them back out of content_html.
+        $listing = \Lamb\Listing\listing_fields($bean);
+        if ($listing !== []) {
+            $item['_listing'] = $listing;
+        }
+
         $feed['items'][] = $item;
     }
 
@@ -466,6 +484,94 @@ function respond_feed(): void
 function respond_feed_json(): void
 {
     emit_feed(get_feed_data(), 'feed_json', ROOT_URL . '/feed.json');
+}
+
+/**
+ * Returns the view data for the /listings page.
+ *
+ * The public counterpart to the listings feed: the same selection, paginated
+ * for a reader rather than capped for a subscriber, and carrying the feed URL
+ * so the page advertises its own feed the way a tag archive does.
+ *
+ * @return array<string, mixed>
+ */
+function respond_listings(): array
+{
+    global $config;
+
+    $listings = listings_clause();
+
+    $data = listing_data(
+        ($config['site_title'] ?? '') . ' — listings',
+        'created DESC',
+        $listings['sql'],
+        $listings['params']
+    );
+    $data['intro'] = 'Things for sale.';
+    $data['feed_url'] = ROOT_URL . '/listings/feed';
+
+    return $data;
+}
+
+/**
+ * The WHERE clause selecting publicly visible listings.
+ *
+ * `post_type` is the one part of a listing held in a column rather than in
+ * front matter, precisely so this selection is an indexed comparison instead
+ * of a body scan.
+ *
+ * @return array{sql: string, params: array<int, mixed>}
+ */
+function listings_clause(): array
+{
+    $public = public_posts_clause();
+
+    return [
+        'sql'    => $public['sql'] . ' AND post_type = ? ',
+        'params' => [...$public['params'], \Lamb\Listing\POST_TYPE_LISTING],
+    ];
+}
+
+/**
+ * Returns the data needed to render the listings Atom feed.
+ *
+ * @return array{posts: array<int, \RedBeanPHP\OODBBean>, title: string, feed_url: string, updated: string}
+ */
+function get_listings_feed_data(): array
+{
+    global $config;
+
+    $listings = listings_clause();
+    $posts = R::find('post', $listings['sql'] . ' ORDER BY updated DESC LIMIT 20', $listings['params']);
+
+    return [
+        'updated'  => get_feed_updated_date($posts),
+        'title'    => ($config['site_title'] ?? '') . ' — listings',
+        'feed_url' => ROOT_URL . '/listings/feed',
+        'posts'    => $posts,
+    ];
+}
+
+/**
+ * Responds to a listings feed request by rendering an Atom feed of listings.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_listings_feed(): void
+{
+    emit_feed(get_listings_feed_data(), 'feed');
+}
+
+/**
+ * Responds to a listings feed request by rendering a JSON Feed of listings.
+ *
+ * @return void
+ */
+#[NoReturn]
+function respond_listings_feed_json(): void
+{
+    emit_feed(get_listings_feed_data(), 'feed_json', ROOT_URL . '/listings/feed.json');
 }
 
 /**

@@ -106,6 +106,13 @@ function register_app_routes(
     } else {
         register_route('home', 'Lamb\\Response\\respond_home');
     }
+    if ($action === 'listings' && $lookup === 'feed') {
+        register_route('listings', 'Lamb\\Response\\respond_listings_feed');
+    } elseif ($action === 'listings' && $lookup === 'feed.json') {
+        register_route('listings', 'Lamb\\Response\\respond_listings_feed_json');
+    } else {
+        register_route('listings', 'Lamb\\Response\\respond_listings');
+    }
     register_private_route('login', 'Lamb\\Response\\redirect_login');
     register_private_route('logout', 'Lamb\\Response\\redirect_logout');
     register_route('search', 'Lamb\\Response\\respond_search', $lookup);

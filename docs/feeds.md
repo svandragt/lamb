@@ -70,3 +70,4 @@ run after it goes live — keep `/_cron` on a schedule for timely real-time push
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}) — the `websub_hubs` setting
 * [Social Embeds]({{ site.baseurl }}{% link social-embeds.md %}) — the related `og-image.*` web-root convention for social preview cards
 * [Themes]({{ site.baseurl }}{% link themes.md %}) — the feeds are rendered by Lamb, not a theme part, so a theme cannot override them
+* [Listings]({{ site.baseurl }}{% link listings.md %}) — `/listings/feed` carries the for-sale posts on their own

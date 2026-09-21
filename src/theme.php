@@ -407,6 +407,122 @@ function syndication_links(OODBBean $bean): string
 }
 
 /**
+ * Returns the price/condition/contact block for a listing, or '' for any other
+ * post.
+ *
+ * Rendered before the post body, not after it: a listing usually opens with a
+ * photo, and a price below one is a price below the fold. Title, terms, then
+ * the picture and the prose — the order a classified ad has always used.
+ *
+ * Marked up with microformats2 (`p-price`, `p-condition`) so a reader that
+ * parses mf2 sees the same terms the JSON-LD Product states to a search engine
+ * — the two must not disagree, which is why both read
+ * Lamb\Listing\listing_fields() rather than the raw front matter.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string The details HTML, or '' when the post is not a listing.
+ */
+function listing_details(OODBBean $bean): string
+{
+    if (!\Lamb\Listing\is_listing($bean)) {
+        return '';
+    }
+
+    $fields = \Lamb\Listing\listing_fields($bean);
+    $rows = [];
+
+    if (isset($fields['price'])) {
+        $price = isset($fields['currency'])
+            ? $fields['currency'] . ' ' . $fields['price']
+            : $fields['price'];
+        $rows[] = '<dt>Price</dt><dd class="p-price">' . escape($price) . '</dd>';
+    }
+    if (isset($fields['condition'])) {
+        $rows[] = '<dt>Condition</dt><dd class="p-condition">' . escape($fields['condition']) . '</dd>';
+    }
+    if (isset($fields['contact'])) {
+        $rows[] = '<dt>Contact</dt><dd>' . contact_value($fields['contact']) . '</dd>';
+    }
+
+    if ($rows === []) {
+        return '';
+    }
+
+    return '<dl class="listing-details">' . implode('', $rows) . '</dl>';
+}
+
+/**
+ * Renders a listing's contact value: a link when it is one, plain text when
+ * it is not.
+ *
+ * A URL is the value to prefer — it points at a contact page or profile
+ * instead of putting an address in the markup, and the value reaches further
+ * than the page does: it is carried in both feeds and in the JSON Feed's
+ * `_listing` object, so anything written here is syndicated to every
+ * subscriber. There is no link relation that means "contact me" (HTML's
+ * rel=contact was removed for colliding with XFN's), so this is a plain
+ * anchor.
+ *
+ * Only http(s) is linked. escape() does not cover a URL scheme, and the value
+ * is author- or Micropub-client-supplied, so `javascript:` must never reach an
+ * href — the same reasoning as link_source() and syndication_links(). Anything
+ * else (a handle, a phone number, a postal address) stays text, because
+ * guessing a link for it would be wrong more often than right.
+ *
+ * @param string $contact The normalised contact value.
+ * @return string Escaped HTML: an anchor, or plain text.
+ */
+function contact_value(string $contact): string
+{
+    if (!is_valid_http_url($contact)) {
+        return escape($contact);
+    }
+
+    return '<a href="' . escape($contact) . '">' . escape($contact) . '</a>';
+}
+
+/**
+ * Returns the listing's validation report, for the author's eyes only.
+ *
+ * A listing is written in a plain textarea, so a refused value fails silently:
+ * the page still renders, the price still shows, and only the structured data
+ * is quietly poorer. This is the preview of what the machines will actually
+ * read, shown where the author is already looking — on the listing itself, and
+ * on its `?preview=` link before it is published.
+ *
+ * Logged-in only, and never for a visitor: it is a note to the author about
+ * their own draft, not a defect notice on a public page.
+ *
+ * @param OODBBean $bean The post bean.
+ * @return string The report HTML, or '' when there is nothing to say (or nobody to say it to).
+ */
+function listing_validation(OODBBean $bean): string
+{
+    if (!isset($_SESSION[SESSION_LOGIN])) {
+        return '';
+    }
+
+    $issues = \Lamb\Listing\validate($bean);
+    if ($issues === []) {
+        return '';
+    }
+
+    $items = '';
+    foreach ($issues as $issue) {
+        // escape(): the values echoed back are the author's own front matter,
+        // which a Micropub client may have written.
+        $items .= sprintf(
+            '<li class="%s">%s</li>',
+            escape('listing-' . $issue['level']),
+            escape($issue['message'])
+        );
+    }
+
+    return '<div class="listing-validation"><p>Only you can see this. This listing\'s data:</p><ul>'
+        . $items . '</ul></div>';
+}
+
+/**
  * Returns true when a post-list row should be hidden for being a menu page —
  * a post pinned in [menu_items] and reachable from the nav instead of the
  * chronological stream.
@@ -477,7 +593,7 @@ function render_post_list(bool $hide_author): void
 
             ?>
 
-        <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
+        <article class="<?= \Lamb\Listing\is_listing($bean) ? 'h-product' : 'h-entry' ?>" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="<?= \Lamb\Listing\is_listing($bean) ? 'https://schema.org/Product' : 'https://schema.org/BlogPosting' ?>">
             <header>
                 <?php // On a post page the h1 already shows the title, and the
                       // stylesheet hides this h2 — but the h-entry still needs a
@@ -494,7 +610,7 @@ function render_post_list(bool $hide_author): void
                     <?= date_created($bean) ?>
                 </div>
             </header>
-            <?= the_reply_context($bean) ?>
+            <?= the_reply_context($bean) ?><?= listing_details($bean) ?><?= listing_validation($bean) ?>
             <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
             <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
             <?= syndication_links($bean) ?>

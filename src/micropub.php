@@ -35,6 +35,9 @@ use function Lamb\Post\set_reply_to;
 use function Lamb\Post\split_frontmatter;
 use function Lamb\Post\split_reply_targets;
 
+use const Lamb\Listing\LISTING_FIELDS;
+use const Lamb\Listing\POST_TYPE_LISTING;
+
 class LambMicropubAdapter extends MicropubAdapter
 {
     /**
@@ -47,7 +50,20 @@ class LambMicropubAdapter extends MicropubAdapter
         'name'            => 'title',
         'syndication'     => 'syndicated-to',
         'mp-syndicate-to' => 'syndicated-to',
+        'price'           => 'price',
+        'currency'        => 'currency',
+        'condition'       => 'condition',
+        'contact'         => 'contact',
     ];
+
+    /**
+     * The microformats2 type a create must declare to be stored as a listing.
+     *
+     * Everything else — an absent type included, which is what most clients
+     * send for a note — is an h-entry, so adding this type cannot change how
+     * any existing client's posts are stored.
+     */
+    private const LISTING_TYPE = 'h-product';
 
     /**
      * Return the source properties of a post identified by URL.
@@ -81,7 +97,9 @@ class LambMicropubAdapter extends MicropubAdapter
             $props = array_intersect_key($props, array_flip($properties));
         }
 
-        return ['type' => ['h-entry'], 'properties' => $props];
+        $type = \Lamb\Listing\is_listing($bean) ? self::LISTING_TYPE : 'h-entry';
+
+        return ['type' => [$type], 'properties' => $props];
     }
 
     /**
@@ -133,6 +151,19 @@ class LambMicropubAdapter extends MicropubAdapter
 
         if (!empty($bean->syndicated_to)) {
             $props['syndication'] = preg_split('/\s+/', trim((string) $bean->syndicated_to));
+        }
+
+        // Read back from the body, not from columns: the listing details live
+        // in front matter (only `post_type` is a column), so this is where a
+        // client's own q=source round-trip has to find them.
+        if (\Lamb\Listing\is_listing($bean)) {
+            $matter = parse_matter($body);
+            foreach (LISTING_FIELDS as $key) {
+                $value = matter_string($matter[$key] ?? null);
+                if ($value !== null && $value !== '') {
+                    $props[$key] = [$value];
+                }
+            }
         }
 
         return $props;
@@ -361,7 +392,9 @@ class LambMicropubAdapter extends MicropubAdapter
             return 'invalid_request';
         }
 
-        $body = $this->buildBody($props, $isHtml ? strip_tags($content) : $content);
+        $isListing = in_array(self::LISTING_TYPE, (array) ($data['type'] ?? []), true);
+
+        $body = $this->buildBody($props, $isHtml ? strip_tags($content) : $content, $isListing);
 
         $bean = populate_bean($body);
 
@@ -908,14 +941,21 @@ class LambMicropubAdapter extends MicropubAdapter
      * @param string|null $title
      * @param list<string> $replyTo One or more reply targets (#583), or [] for none.
      * @param string|null $syndicatedTo
+     * @param array<string, string> $listing The h-product keys from listingMatter(), or [].
      * @return array<string, string|list<string>>
      */
-    private function assembleFrontMatter(?string $title, array $replyTo, ?string $syndicatedTo): array
-    {
+    private function assembleFrontMatter(
+        ?string $title,
+        array $replyTo,
+        ?string $syndicatedTo,
+        array $listing = []
+    ): array {
         $matter = [];
         if ($title !== null) {
             $matter['title'] = $title;
         }
+        // After the title, so a listing reads top-down as name then terms.
+        $matter += $listing;
         if ($replyTo !== []) {
             // A single target keeps the plain `in-reply-to: url` shape every
             // existing post already has; two or more become a YAML list.
@@ -1004,9 +1044,10 @@ class LambMicropubAdapter extends MicropubAdapter
      *
      * @param array<string, mixed> $props   Micropub properties.
      * @param string $content Plain-text body content.
+     * @param bool $isListing True when the create declared the h-product type.
      * @return string
      */
-    private function buildBody(array $props, string $content): string
+    private function buildBody(array $props, string $content, bool $isListing = false): string
     {
         // Microformats properties are arrays of values, and a value is not
         // necessarily a string: `in-reply-to` is legitimately an embedded
@@ -1036,7 +1077,9 @@ class LambMicropubAdapter extends MicropubAdapter
             $content = $content . ' ' . $tags;
         }
 
-        $extra = $this->buildExtraProperties($props);
+        $listing = $isListing ? $this->listingMatter($props) : [];
+
+        $extra = $this->buildExtraProperties($props, array_keys($listing));
         if ($extra !== '') {
             $content = $content . "\n\n" . $extra;
         }
@@ -1051,9 +1094,35 @@ class LambMicropubAdapter extends MicropubAdapter
         $syndicatedTo = !empty($syndicateTo) ? implode(' ', $syndicateTo) : null;
 
         return build_matter(
-            $this->assembleFrontMatter($title, $replyTargets, $syndicatedTo),
+            $this->assembleFrontMatter($title, $replyTargets, $syndicatedTo, $listing),
             $content
         );
+    }
+
+    /**
+     * The front-matter keys an h-product create contributes.
+     *
+     * The values are stored as the client sent them rather than validated
+     * here: a price of "best offer" is the seller's own copy, and silently
+     * dropping it at the endpoint would leave them nothing to correct in the
+     * editor. Lamb\Listing\listing_fields() is where a malformed value is
+     * held back from the structured data a machine reads.
+     *
+     * @param array<string, mixed> $props Micropub properties.
+     * @return array<string, string> Front-matter keys, in the order they are written.
+     */
+    private function listingMatter(array $props): array
+    {
+        $matter = ['post-type' => POST_TYPE_LISTING];
+
+        foreach (LISTING_FIELDS as $key) {
+            $value = matter_string($props[$key][0] ?? null);
+            if ($value !== null && trim($value) !== '') {
+                $matter[$key] = trim($value);
+            }
+        }
+
+        return $matter;
     }
 
     /**
@@ -1061,9 +1130,12 @@ class LambMicropubAdapter extends MicropubAdapter
      * as a JSON code block so they are preserved in storage.
      *
      * @param array<string, mixed> $props
+     * @param list<string> $consumed Property names an outer step has already
+     *        written to front matter (the h-product listing keys), which must
+     *        not also be dumped into the body.
      * @return string
      */
-    private function buildExtraProperties(array $props): string
+    private function buildExtraProperties(array $props, array $consumed = []): string
     {
         // `in-reply-to` belongs here with the rest: buildBody() consumes it into
         // front matter, so leaving it out dumped the reply target into the post
@@ -1072,7 +1144,7 @@ class LambMicropubAdapter extends MicropubAdapter
             'content', 'name', 'category', 'photo', 'published', 'post-status',
             'mp-syndicate-to', 'in-reply-to',
         ];
-        $extra = array_diff_key($props, array_flip($known));
+        $extra = array_diff_key($props, array_flip([...$known, ...$consumed]));
 
         if (empty($extra)) {
             return '';

@@ -50,6 +50,7 @@
             "src/import.php",
             "src/known.php",
             "src/lamb.php",
+            "src/listing.php",
             "src/routes.php",
             "src/network.php",
             "src/network/status.php",

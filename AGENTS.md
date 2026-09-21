@@ -123,6 +123,7 @@ lamb/
 │   ├── export.php        # Site export: archive layout, manifest, zip assembly
 │   ├── routes.php        # register_route() / call_route() helpers
 │   ├── lamb.php          # Core helpers: parse_bean, parse_tags, permalink, visibility clauses, redirects
+│   ├── listing.php       # Listing post type: post_type normalisation, front-matter fields, schema.org Product
 │   ├── post.php          # Post helpers: populate_bean, parse_matter, slugify, finalize_slug
 │   ├── restore.php       # Lamb export importer: archive reader, manifest validation, post/asset restore
 │   ├── response.php      # Response helpers: pagination, conditional GET/304, 404, upgrade_posts
@@ -189,6 +190,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `highlight.php` | `Lamb\Highlight` |
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
+| `listing.php` | `Lamb\Listing` |
 | `micropub.php` | `Lamb\Micropub` |
 | `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
@@ -209,7 +211,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
 
 **Tables used:**
-- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`
+- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`, `post_type`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
@@ -497,6 +499,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); bearer tokens are introspected against the configured `token_endpoint`
 - `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered by `parts/_webmentions.php`); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
+- `/listings`, `/listings/feed`, `/listings/feed.json` (`listing.php` + `response/feeds.php`) — the posts carrying `post_type = 'listing'`, as a page and as its own Atom/JSON feed. A Micropub `h-product` create writes that post type; the detail fields (`price`, `currency`, `condition`, `contact`) stay in front matter, so `post_type` is the only column the feature adds
 - `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
 
 ### Pagination
@@ -642,6 +645,21 @@ to retry with — so a blocked network here leaves `vendor/` incomplete and the 
 logs a warning rather than working around it. Allowing those two hosts in the
 environment's network policy is the only fix; see
 <https://code.claude.com/docs/en/claude-code-on-the-web>.
+
+The block is not limited to package downloads: whole documentation hosts can be
+unreachable too (`w3.org` and `indieweb.org` both were, while researching the
+Webmention spec for #863). This is the dangerous case, because unlike a failed
+install it produces no error — you simply end up reasoning from search snippets,
+or from memory, without noticing.
+
+**Say so, every time.** Whenever a network block stops you verifying something,
+state it where the claim lands — in the reply, and in the commit message, PR or
+issue that carries it — naming what was unreachable and what the claim rests on
+instead. A reader cannot tell a checked fact from a recalled one, so an
+unqualified statement is read as verified. The same applies to a check that was
+skipped rather than failed: `viv run analyse` cannot run without a complete
+`vendor/`, so a PR opened from such a session says that CI is the first type
+check.
 
 ## Branching
 

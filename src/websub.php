@@ -50,6 +50,36 @@ function hub_urls(?array $config = null): array
 }
 
 /**
+ * The feed URLs a hub is notified about.
+ *
+ * Every feed Lamb renders advertises `<link rel="hub">` (the Atom and JSON
+ * renderers are shared, so the listings feed gets it too), and a hub
+ * advertised on a topic it is never told about is worse than no hub at all:
+ * the subscriber waits for a push that cannot arrive rather than falling back
+ * to polling. So a feed that carries the hub link must appear here whenever
+ * its contents can have changed.
+ *
+ * The listings topics are only added for a listing. Tying the ping to the post
+ * that changed is the same rule the main feed follows, edge for edge: neither
+ * feed is pinged when a post is deleted or edited out of it, because the only
+ * hub ping is on `post.published` (see Post\register_default_subscribers()).
+ *
+ * @param bool $listings Whether the listings feeds changed too.
+ * @return list<string>
+ */
+function feed_topics(bool $listings = false): array
+{
+    $topics = [ROOT_URL . '/feed', ROOT_URL . '/feed.json'];
+
+    if ($listings) {
+        $topics[] = ROOT_URL . '/listings/feed';
+        $topics[] = ROOT_URL . '/listings/feed.json';
+    }
+
+    return $topics;
+}
+
+/**
  * Notify the configured hubs that the site's feeds have new content.
  *
  * Sends one `hub.mode=publish` ping per hub per feed URL (Atom and JSON).
@@ -59,14 +89,17 @@ function hub_urls(?array $config = null): array
  *
  * @param array<string, mixed>|null $config Config array; defaults to the global config.
  * @param callable|null $sender fn(string $hub, string $topic): void.
+ * @param list<string>|null $topics The feed URLs that changed; defaults to the
+ *        site feeds alone, see {@see feed_topics}.
  * @return void
  */
-function ping_hub(?array $config = null, ?callable $sender = null): void
+function ping_hub(?array $config = null, ?callable $sender = null, ?array $topics = null): void
 {
     $sender ??= __NAMESPACE__ . '\\send_ping';
+    $topics ??= feed_topics();
 
     foreach (hub_urls($config) as $hub) {
-        foreach ([ROOT_URL . '/feed', ROOT_URL . '/feed.json'] as $topic) {
+        foreach ($topics as $topic) {
             $sender($hub, $topic);
         }
     }
@@ -92,7 +125,7 @@ function ping_for_post(OODBBean $bean, ?array $config = null, ?callable $sender 
         return;
     }
 
-    ping_hub($config, $sender);
+    ping_hub($config, $sender, feed_topics(\Lamb\Listing\is_listing($bean)));
 }
 
 /**
@@ -163,7 +196,14 @@ function ping_scheduled_publishes(?array $config = null, ?callable $sender = nul
 
     $count = count($posts);
     if ($count > 0) {
-        ping_hub($config, $sender);
+        $listings = false;
+        foreach ($posts as $post) {
+            if (\Lamb\Listing\is_listing($post)) {
+                $listings = true;
+                break;
+            }
+        }
+        ping_hub($config, $sender, feed_topics($listings));
     }
 
     set_option($option, $now);

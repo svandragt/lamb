@@ -35,6 +35,7 @@ class SchemaFreezeTest extends TestCase
                 'syndicated_to' => 'y', 'draft' => 0, 'deleted' => 0,
                 'deleted_at' => '2024-01-01', 'feed_locked' => 0,
                 'preview_token' => 'tok', 'preview_token_expires' => '2024-01-01',
+                'post_type' => 'listing',
             ],
             'option' => ['name' => 'n', 'value' => 'v', 'updated' => '2024-01-01 00:00:00'],
             'redirect' => ['from_slug' => 'a', 'to_url' => 'b'],
