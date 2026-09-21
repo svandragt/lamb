@@ -646,6 +646,21 @@ logs a warning rather than working around it. Allowing those two hosts in the
 environment's network policy is the only fix; see
 <https://code.claude.com/docs/en/claude-code-on-the-web>.
 
+The block is not limited to package downloads: whole documentation hosts can be
+unreachable too (`w3.org` and `indieweb.org` both were, while researching the
+Webmention spec for #863). This is the dangerous case, because unlike a failed
+install it produces no error — you simply end up reasoning from search snippets,
+or from memory, without noticing.
+
+**Say so, every time.** Whenever a network block stops you verifying something,
+state it where the claim lands — in the reply, and in the commit message, PR or
+issue that carries it — naming what was unreachable and what the claim rests on
+instead. A reader cannot tell a checked fact from a recalled one, so an
+unqualified statement is read as verified. The same applies to a check that was
+skipped rather than failed: `viv run analyse` cannot run without a complete
+`vendor/`, so a PR opened from such a session says that CI is the first type
+check.
+
 ## Branching
 
 - `release` — stable branch for end users running a blog; check out this branch if you want the latest released version
