@@ -132,6 +132,41 @@ class ListingRenderTest extends TestCase
         $this->assertSame('', listing_details($bean));
     }
 
+    public function testAContactUrlBecomesALink(): void
+    {
+        // The recommended contact value is a URL to a contact page, so an
+        // address never has to appear in the page, the feed or an aggregator.
+        $body = "---\npost-type: listing\ncontact: https://example.com/contact\n---\n\nFor sale.\n";
+
+        $html = listing_details(populate_bean($body));
+
+        $this->assertStringContainsString('<a href="https://example.com/contact"', $html);
+    }
+
+    public function testANonUrlContactStaysPlainText(): void
+    {
+        // A handle, a phone number or an address is not a link, and guessing
+        // one would be wrong more often than right.
+        $body = "---\npost-type: listing\ncontact: 07700 900123\n---\n\nFor sale.\n";
+
+        $html = listing_details(populate_bean($body));
+
+        $this->assertStringNotContainsString('<a ', $html);
+        $this->assertStringContainsString('07700 900123', $html);
+    }
+
+    public function testANonHttpContactSchemeIsNotLinked(): void
+    {
+        // is_valid_http_url() is the guard: escape() does not cover a URL
+        // scheme, so a javascript: or data: value must never reach an href.
+        $body = "---\npost-type: listing\ncontact: \"javascript:alert(1)\"\n---\n\nFor sale.\n";
+
+        $html = listing_details(populate_bean($body));
+
+        $this->assertStringNotContainsString('<a ', $html);
+        $this->assertStringNotContainsString('javascript:alert(1)"', $html);
+    }
+
     public function testListingDetailsEscapeTheContactLine(): void
     {
         $body = "---\npost-type: listing\ncontact: \"<b>me</b>\"\n---\n\nFor sale.\n";

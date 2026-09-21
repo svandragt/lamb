@@ -16,7 +16,7 @@ post-type: listing
 price: '25.00'
 currency: EUR
 condition: used
-contact: sander@example.com
+contact: https://example.com/contact
 ---
 
 Warm, barely worn, no holes. Collection from Brighton or postage at cost. #knitwear
@@ -30,7 +30,7 @@ Every field except `post-type` is optional. A listing with no price is published
 | `price` | A number, e.g. `25` or `25.00`. Quote it to keep trailing zeros. |
 | `currency` | A three-letter ISO code, e.g. `EUR`, `GBP`, `USD`. |
 | `condition` | One of `new`, `used`, `refurbished`, `damaged`. |
-| `contact` | How a buyer reaches you. Free text — an address, a handle, a phone number. |
+| `contact` | How a buyer reaches you. Prefer a URL — see below. Free text otherwise: a handle, a phone number, an address. |
 
 `post_type` works as well as `post-type`, as it does for every front-matter key.
 
@@ -45,6 +45,20 @@ You don't have to spot that yourself. Open the listing while logged in and Lamb 
 A listing with nothing to report shows nothing at all, and visitors never see the note. Because it checks the finished product rather than each line on its own, it also catches the mistake no single field can: a price and a currency are each optional, but an amount with no currency is an offer nobody can act on, so Lamb publishes the item without an offer rather than claiming 25.00 of unspecified money.
 
 Save a listing as a `draft: true` first and its [preview]({{ site.baseurl }}{% link drafts.md %}) link shows the same report, so you can get the data right before anything is published.
+
+### Contact without publishing an address
+
+Prefer a URL in `contact` — a link to your contact page, a profile, or a form:
+
+```yaml
+contact: https://example.com/contact
+```
+
+A value that is a well-formed `http(s)` URL renders as a link; anything else (a handle, a phone number, an address) stays as plain text. Other schemes are never linked.
+
+This matters more than it does on an ordinary page, because the contact value travels: it is in the listing page, in both feeds, and in the JSON Feed's `_listing` object, so it reaches every subscriber and aggregator, not just people who visit. An address written here is published widely and permanently.
+
+There is no web standard that means "contact me here" — HTML's `rel="contact"` was removed for colliding with [XFN](https://microformats.org/wiki/rel), where it describes a relationship instead. The [IndieWeb convention](https://indieweb.org/contact) is to keep an `h-card` on a contact page listing the ways you want to be reached, in your order of preference, and to link to that. Obfuscating an address is not a substitute: the [IndieWeb wiki](https://indieweb.org/spam) notes that robots still index the tricks, and that information given to an arbitrary site is available to attackers too.
 
 Tags work as normal, and are what categorise a listing. Write `#knitwear` in the body rather than reaching for a separate category field — there isn't one, on purpose.
 

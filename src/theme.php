@@ -441,10 +441,7 @@ function listing_details(OODBBean $bean): string
         $rows[] = '<dt>Condition</dt><dd class="p-condition">' . escape($fields['condition']) . '</dd>';
     }
     if (isset($fields['contact'])) {
-        // Deliberately plain text, not a mailto: — a listing's contact line is
-        // free text (a handle, a phone number, an address) and turning whatever
-        // it holds into a link would guess wrong more often than not.
-        $rows[] = '<dt>Contact</dt><dd>' . escape($fields['contact']) . '</dd>';
+        $rows[] = '<dt>Contact</dt><dd>' . contact_value($fields['contact']) . '</dd>';
     }
 
     if ($rows === []) {
@@ -452,6 +449,36 @@ function listing_details(OODBBean $bean): string
     }
 
     return '<dl class="listing-details">' . implode('', $rows) . '</dl>';
+}
+
+/**
+ * Renders a listing's contact value: a link when it is one, plain text when
+ * it is not.
+ *
+ * A URL is the value to prefer — it points at a contact page or profile
+ * instead of putting an address in the markup, and the value reaches further
+ * than the page does: it is carried in both feeds and in the JSON Feed's
+ * `_listing` object, so anything written here is syndicated to every
+ * subscriber. There is no link relation that means "contact me" (HTML's
+ * rel=contact was removed for colliding with XFN's), so this is a plain
+ * anchor.
+ *
+ * Only http(s) is linked. escape() does not cover a URL scheme, and the value
+ * is author- or Micropub-client-supplied, so `javascript:` must never reach an
+ * href — the same reasoning as link_source() and syndication_links(). Anything
+ * else (a handle, a phone number, a postal address) stays text, because
+ * guessing a link for it would be wrong more often than right.
+ *
+ * @param string $contact The normalised contact value.
+ * @return string Escaped HTML: an anchor, or plain text.
+ */
+function contact_value(string $contact): string
+{
+    if (!is_valid_http_url($contact)) {
+        return escape($contact);
+    }
+
+    return '<a href="' . escape($contact) . '">' . escape($contact) . '</a>';
 }
 
 /**
