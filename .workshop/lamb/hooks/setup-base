@@ -31,7 +31,7 @@ rm -rf /var/lib/apt/lists/*
 
 # viv (composer-compatible dependency installer) has no apt package; fetch and
 # verify the release binary the same way .github/actions/setup-viv does.
-viv_version=0.10.0
+viv_version=0.22.0
 case "$(uname -m)" in
   x86_64) viv_target=x86_64-unknown-linux-musl ;;
   aarch64 | arm64) viv_target=aarch64-unknown-linux-musl ;;

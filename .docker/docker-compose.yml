@@ -4,7 +4,7 @@ services:
     image: php:8.5-cli
     working_dir: /app
     environment:
-      VIV_VERSION: "0.10.0"
+      VIV_VERSION: "0.22.0"
     volumes:
       - ../composer.json:/app/composer.json:ro
       - ../composer.lock:/app/composer.lock:ro
@@ -28,16 +28,17 @@ services:
           aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
           *) echo "viv publishes no binary for $(uname -m)" >&2; exit 1 ;;
         esac
-        base="https://github.com/svandragt/vivace/releases/download/v${VIV_VERSION}"
-        archive="vivace-v${VIV_VERSION}-${target}.tar.gz"
+        base="https://github.com/svandragt/vivace/releases/download/v$${VIV_VERSION}"
+        archive="vivace-v$${VIV_VERSION}-$${target}.tar.gz"
         workdir="$(mktemp -d)"
-        curl -fsSL -o "${workdir}/${archive}" "${base}/${archive}"
-        curl -fsSL -o "${workdir}/SHA256SUMS" "${base}/SHA256SUMS"
-        (cd "${workdir}" && grep " ${archive}\$" SHA256SUMS | sha256sum --check --strict -)
-        tar -xzf "${workdir}/${archive}" -C "${workdir}"
-        install -m 0755 "${workdir}/vivace-v${VIV_VERSION}-${target}/viv" /usr/local/bin/viv
-        rm -rf "${workdir}"
-        viv install --no-scripts
+        curl -fsSL -o "$${workdir}/$${archive}" "$${base}/$${archive}"
+        curl -fsSL -o "$${workdir}/SHA256SUMS" "$${base}/SHA256SUMS"
+        (cd "$${workdir}" && grep " $${archive}\$" SHA256SUMS | sha256sum --check --strict -)
+        tar -xzf "$${workdir}/$${archive}" -C "$${workdir}"
+        install -m 0755 "$${workdir}/vivace-v$${VIV_VERSION}-$${target}/viv" /usr/local/bin/viv
+        rm -rf "$${workdir}"
+        # This service only builds vendor/; the app service's image installs these two extensions.
+        viv install --no-scripts --ignore-platform-req=ext-gettext --ignore-platform-req=ext-pdo_mysql
 
   app:
     build:
