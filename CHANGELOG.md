@@ -65,14 +65,14 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Tag archives covering several tags are sorted by date across all of them.
 - Micropub responses send private cache headers.
 - The 404 page's search suggestion searches for the words in the missing path rather than the raw path.
-- Dependencies are installed with [viv](https://github.com/svandragt/vivace) instead of Composer. `bin/upgrade` now checks for viv on `PATH` and stops with an actionable error if it's missing, instead of failing partway through.
+- `bin/upgrade` installs dependencies with Composer, or with [viv](https://github.com/svandragt/vivace) 0.22.0 or later when it's on `PATH`, and prints which one it used. A viv older than 0.22.0 is skipped in favour of Composer, because it writes vendor files the web server can't read. With neither installed, `bin/upgrade` stops with an actionable error before touching your checkout, instead of failing partway through.
 - Boot no longer stamps pre-versioning posts, moves legacy WordPress/Known imports onto `import_uuid`, or seeds a feed's watermark from its legacy option row — those one-time migrations moved to `bin/lamb migrate` ([#811](https://github.com/svandragt/lamb/issues/811)). `bin/upgrade` runs it automatically after installing dependencies, before the health check. When `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the normal shape of a cron deploy — the migration can't run there either; `bin/upgrade` warns and names the command to run by hand instead of failing the whole upgrade over it.
 
 ### Upgrade notes
 
 - Replace any cron or script calling the `import-*.php` shims with `bin/lamb import`.
 - If you deploy with Docker, switch from pulling `ghcr.io/svandragt/lamb` to building the image locally; see `docs/docker.md`.
-- Install [viv](https://github.com/svandragt/vivace) before your next upgrade (`cargo binstall --git https://github.com/svandragt/vivace vivace`, or a release binary from the [releases page](https://github.com/svandragt/vivace/releases)); `bin/upgrade` refuses to run without it. See `docs/upgrading.md`.
+- Nothing to install if you already use Composer: `bin/upgrade` uses it. [viv](https://github.com/svandragt/vivace) 0.22.0 or later is an optional, faster alternative that `bin/upgrade` prefers when it finds one. See `docs/upgrading.md`.
 - No config changes are needed. `DNS_RESOLVE_TIMEOUT` is a new tunable constant with a safe default.
 - The database now uses SQLite's WAL mode, which keeps `lamb.db-wal` and `lamb.db-shm` beside `lamb.db`. Run `bin/lamb` as the same user as your web server (for example `sudo -u www-data bin/lamb import …`). Run as another user, it leaves those files owned by that user and every page then fails with "attempt to write a readonly database" until you change their owner to the web server user (`chown www-data data/lamb.db-wal data/lamb.db-shm`). Don't delete them: they can hold committed writes. Tracked in #831.
 - An install (or a restored `lamb.db` backup) older than 0.14.0 must step through 0.14.0 first: that's where the migrations behind `bin/lamb migrate` shipped. A git install using `bin/upgrade` gets this automatically; any other upgrade path needs `bin/lamb migrate` run by hand once, right after switching to the new code. See `docs/upgrading.md`.
