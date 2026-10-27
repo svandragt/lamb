@@ -145,8 +145,7 @@ function bootstrap_db(string $data_dir): void
     try {
         ensure_wal_journal_mode();
     } catch (SQL $e) {
-        // 8 is SQLITE_READONLY; RedBeanPHP wraps the PDOException, which holds the driver code.
-        if (($e->getDriverDetails()[1] ?? null) !== 8) {
+        if (!is_readonly_database_error($e)) {
             throw $e;
         }
         throw new RuntimeException(readonly_database_message($data_dir), 0, $e);
@@ -166,13 +165,31 @@ function bootstrap_db(string $data_dir): void
 }
 
 /**
+ * Whether a query failure is SQLite's "attempt to write a readonly database".
+ *
+ * RedBeanPHP wraps the PDOException in RedException\SQL and keeps the driver
+ * code in the driver details. The low byte is the primary result code, 8 for
+ * SQLITE_READONLY; the extended variants (READONLY_RECOVERY 264, READONLY_CANTINIT
+ * 1288, READONLY_DIRECTORY 1544) share it, so the code is masked before comparing.
+ *
+ * @param SQL $e The exception thrown by a RedBeanPHP query.
+ * @return bool True for SQLITE_READONLY or one of its extended codes.
+ */
+function is_readonly_database_error(SQL $e): bool
+{
+    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 8;
+}
+
+/**
  * The operator-facing explanation for SQLite's "attempt to write a readonly
  * database" on a data directory.
  *
  * Two causes raise that error and need different fixes, so the message follows
  * the cause: an existing WAL sidecar this process can't write (left by a
- * wrong-user run, #831) is cured by deleting it, while an unwritable directory
- * or lamb.db has no sidecars to delete and needs its permissions fixed.
+ * wrong-user run, #831) needs its owner changed, while an unwritable directory
+ * or lamb.db has no sidecars to fix and needs its permissions corrected. The
+ * sidecars are never to be deleted: a WAL a wrong-user run left can hold
+ * committed writes (a whole import, say) that lamb.db does not have yet.
  *
  * @param string $data_dir The directory holding lamb.db.
  * @return string The message, naming the files or the directory to act on.
@@ -183,8 +200,8 @@ function readonly_database_message(string $data_dir): string
         if (file_exists("$data_dir/$sidecar") && !is_writable("$data_dir/$sidecar")) {
             return sprintf(
                 'SQLite cannot write to the database in "%1$s": its WAL files are owned by another user. '
-                . 'Stop the web server, delete "%1$s/lamb.db-wal" and "%1$s/lamb.db-shm", then reload; '
-                . 'SQLite recreates them. Anything those files held that was not yet checkpointed is lost.',
+                . 'Change their owner to the user PHP runs as, then reload, for example '
+                . '`chown www-data "%1$s/lamb.db-wal" "%1$s/lamb.db-shm"` (www-data is only an example).',
                 $data_dir
             );
         }

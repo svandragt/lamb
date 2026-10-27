@@ -35,7 +35,7 @@ sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dr
 sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml
 ```
 
-`data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone deletes the sidecars by hand. `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.
+`data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone changes the sidecars' owner (see [NGINX configuration](nginx.md)). `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.
 
 The importer prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'wordpress-' + guid`) and left alone.
 

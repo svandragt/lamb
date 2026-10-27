@@ -4,9 +4,11 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 use Symfony\Component\Process\Process;
 
 use function Lamb\Bootstrap\ensure_schema;
+use function Lamb\Bootstrap\is_readonly_database_error;
 use function Lamb\Bootstrap\readonly_database_message;
 
 use const Lamb\Bootstrap\SCHEMA;
@@ -192,7 +194,8 @@ class BootWriteGateTest extends TestCase
     public function testReadonlyDatabaseErrorInAnUnwritableDataDirNamesTheDirectory(): void
     {
         $dir = sys_get_temp_dir() . '/lamb_readonly_wal_test_' . uniqid();
-        $this->bootInSubprocess($dir)->mustRun();
+        // The subprocess catches Throwable and exits 0, so a failed first boot shows only in its output.
+        $this->assertSame('OK', $this->bootInSubprocess($dir)->getOutput());
 
         chmod($dir, 0555);
         try {
@@ -233,8 +236,9 @@ class BootWriteGateTest extends TestCase
 
         $this->assertStringContainsString($dir . '/lamb.db-wal', $message);
         $this->assertStringContainsString($dir . '/lamb.db-shm', $message);
-        $this->assertStringContainsString('delete', $message);
-        $this->assertStringContainsString('not yet checkpointed', $message);
+        $this->assertStringContainsString('chown', $message);
+        // A wrong-user run's WAL can hold committed writes lamb.db doesn't have yet.
+        $this->assertStringNotContainsString('delete', $message);
     }
 
     public function testReadonlyMessageIgnoresSidecarsTheProcessCanWrite(): void
@@ -247,8 +251,36 @@ class BootWriteGateTest extends TestCase
         unlink($dir . '/lamb.db-wal');
         rmdir($dir);
 
-        $this->assertStringNotContainsString('delete', $message);
+        $this->assertStringNotContainsString('chown', $message);
         $this->assertStringContainsString($dir, $message);
+    }
+
+    /**
+     * @dataProvider readonlyCodeProvider
+     */
+    public function testIsReadonlyDatabaseErrorMatchesThePrimaryCodeOfExtendedResultCodes(?int $code, bool $expected): void
+    {
+        $e = new SQL('x');
+        $e->setDriverDetails(['HY000', $code, 'x']);
+
+        $this->assertSame($expected, is_readonly_database_error($e));
+    }
+
+    /**
+     * @return array<string, array{?int, bool}>
+     */
+    public static function readonlyCodeProvider(): array
+    {
+        return [
+            'SQLITE_READONLY' => [8, true],
+            'READONLY_RECOVERY' => [264, true],
+            'READONLY_CANTINIT' => [1288, true],
+            'READONLY_DIRECTORY' => [1544, true],
+            'SQLITE_CANTOPEN' => [14, false],
+            'SQLITE_NOTADB' => [26, false],
+            'IOERR_SHORT_READ' => [1034, false],
+            'no driver code' => [null, false],
+        ];
     }
 
     public function testOtherDatabaseErrorsAreNotRewrittenAsAWalRecoveryHint(): void
