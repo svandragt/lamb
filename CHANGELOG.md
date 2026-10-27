@@ -45,6 +45,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Changed
 
+- PHP 8.5 is now the default in the Docker images, devbox, devcontainer, DDEV and the docs; PHP 8.4 remains supported. The sample nginx snippet is renamed `php-84.conf` → `php-85.conf`.
 - Viewing a post whose stored version is behind the current one no longer re-saves it; a listing, feed or search render shows the up-to-date HTML without writing anything. `bin/lamb migrate` now covers this upgrade too, alongside the other one-time data migrations, so it's the one command to run after restoring an old backup ([#814](https://github.com/svandragt/lamb/issues/814)).
 - An unknown or missing theme now falls back to the default theme instead of producing a broken page.
 - `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).

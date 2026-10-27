@@ -38,7 +38,7 @@ RUN viv install --no-dev --no-scripts
 COPY src/ src/
 RUN viv dump-autoload --no-dev -o
 
-FROM dunglas/frankenphp:php8.4
+FROM dunglas/frankenphp:php8.5
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 

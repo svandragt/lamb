@@ -3,6 +3,9 @@ includes:
 
 parameters:
     level: 8
+    # Analyse against the minimum supported PHP (composer.json require), not
+    # the runtime default, so 8.5-only APIs are flagged.
+    phpVersion: 80400
     parallel:
         maximumNumberOfProcesses: 1
     paths:
