@@ -4,7 +4,7 @@ services:
     image: php:8.5-cli
     working_dir: /app
     environment:
-      VIV_VERSION: "0.10.0"
+      VIV_VERSION: "0.22.0"
     volumes:
       - ../composer.json:/app/composer.json:ro
       - ../composer.lock:/app/composer.lock:ro

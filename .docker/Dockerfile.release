@@ -3,7 +3,7 @@
 # Build from the repository root: docker build -f .docker/Dockerfile.release .
 
 FROM php:8.5-cli AS vendor
-ARG VIV_VERSION=0.10.0
+ARG VIV_VERSION=0.22.0
 WORKDIR /app
 
 # viv is a drop-in Composer-compatible dependency installer reading the same
