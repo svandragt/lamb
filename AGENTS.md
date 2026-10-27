@@ -673,6 +673,8 @@ When a task's work is complete and pushed, open a pull request for it by default
 
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
 
+Keep the PR body short enough to read in a minute, about 200 words. Lead with the symptom and the fix in one or two sentences. In **Why this shape**, give the option you rejected and why, in one to three plain sentences: "Considered streaming to disk; dropped it, 50 MB fits in memory." Leave out function names, line numbers and mechanism there; the diff carries those. List evidence as the command and its result, and keep **Not checked** to one bullet per gap.
+
 Before any bulk PR operation — merging, rebasing, or force-pushing across several PRs — check whether the branches are stacked. Branches can be built on each other even when every PR targets `main`, so a diff or a squash can carry a lower branch's content, and a PR's real base may be another feature branch (check `baseRefName`). Merge stacked PRs bottom-up, re-check each remaining PR's mergeable state after every merge (earlier merges turn later ones `DIRTY`), and never force-push a shared branch without confirming the remote tip is what you expect — another session or GitHub's base-retargeting may have moved it. Prefer merging `main` into the branch over rebasing, so the push stays a fast-forward. When resolving the merge, keep the content the stacked branch legitimately owns rather than blindly taking `main`'s side, and run the tests locally before pushing.
 
 ## Deprecations
