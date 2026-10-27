@@ -25,6 +25,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - Theme CSS minification no longer strips comment-like text inside string literals and `url()`.
 - XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
 - Webmention reads on the post page are bounded.
+- `bin/lamb import lamb` reads a `.zip` export on a PHP without the zip extension, using the phar extension instead, and says to unzip the archive and pass the directory when neither is available, rather than crashing with `Class "ZipArchive" not found` (#875).
 
 ### Removed
 

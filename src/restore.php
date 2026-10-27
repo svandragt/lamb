@@ -2,11 +2,15 @@
 
 namespace Lamb\Restore;
 
+use BadMethodCallException;
 use JsonException;
 use Lamb\Post;
 use Lamb\Response;
+use PharData;
+use PharFileInfo;
 use RedBeanPHP\OODBBean;
 use RuntimeException;
+use UnexpectedValueException;
 use ZipArchive;
 
 use const Lamb\Export\EXPORT_FORMAT;
@@ -59,10 +63,18 @@ function parse_restore_args(array $argv): array
  * surface to defend. Destination paths are built later from validated
  * `YYYY/MM/<name>` components instead.
  *
+ * A zip is read with ext-zip when it is loaded, and with ext-phar's PharData
+ * otherwise. $has_zip and $has_phar default to what this PHP has; tests pass
+ * them to reach the branches the running PHP would not take.
+ *
+ * @param string    $path     A `.zip` archive or an unpacked export directory.
+ * @param bool|null $has_zip  Whether ZipArchive may be used; null detects it.
+ * @param bool|null $has_phar Whether PharData may be used; null detects it.
  * @return array{0: list<string>, 1: callable(string):?string}
- * @throws RuntimeException When the source cannot be read or exceeds the caps.
+ * @throws RuntimeException When the source cannot be read or exceeds the caps,
+ *                          or a zip is given and this PHP has no reader for it.
  */
-function open_source(string $path): array
+function open_source(string $path, ?bool $has_zip = null, ?bool $has_phar = null): array
 {
     if (is_dir($path)) {
         return open_directory($path);
@@ -71,6 +83,28 @@ function open_source(string $path): array
         throw new RuntimeException("Cannot read export archive: $path");
     }
 
+    if ($has_zip ?? class_exists(ZipArchive::class)) {
+        return open_zip_archive($path);
+    }
+    if ($has_phar ?? class_exists(PharData::class)) {
+        return open_phar_archive($path);
+    }
+
+    throw new RuntimeException(
+        "This PHP has neither the zip nor the phar extension, so it cannot read $path. "
+        . 'Unzip the archive and pass the unpacked directory instead.'
+    );
+}
+
+/**
+ * Reads a zip with ext-zip.
+ *
+ * @param string $path The `.zip` archive.
+ * @return array{0: list<string>, 1: callable(string):?string}
+ * @throws RuntimeException When the archive is unreadable or exceeds the caps.
+ */
+function open_zip_archive(string $path): array
+{
     $zip = new ZipArchive();
     if ($zip->open($path) !== true) {
         throw new RuntimeException("Not a readable zip archive: $path");
@@ -99,9 +133,66 @@ function open_source(string $path): array
     // $zip stays referenced by the closure, so the handle lives as long as the
     // reader does.
     $reader = static function (string $name) use ($zip): ?string {
-        $contents = $zip->getFromName($name);
+        // Silenced like the PharData reader: a damaged entry warns on newer
+        // libzip, and the restore reports it as a skip instead.
+        $contents = @$zip->getFromName($name);
 
         return $contents === false ? null : $contents;
+    };
+
+    return [$names, $reader];
+}
+
+/**
+ * Reads a zip with ext-phar, for a PHP without ext-zip.
+ *
+ * Same caps and the same no-extraction rule as {@see open_zip_archive}: PharData
+ * only looks entries up inside the archive, it never writes one to disk.
+ * PharData refuses a file name with no extension, which ZipArchive does not.
+ *
+ * @param string $path The `.zip` archive.
+ * @return array{0: list<string>, 1: callable(string):?string}
+ * @throws RuntimeException When the archive is unreadable or exceeds the caps.
+ */
+function open_phar_archive(string $path): array
+{
+    try {
+        $phar = new PharData($path);
+    } catch (UnexpectedValueException) {
+        throw new RuntimeException("Not a readable zip archive: $path. Without ext-zip the file name also needs an extension, such as .zip.");
+    }
+
+    if (count($phar) > MAX_ENTRIES) {
+        throw new RuntimeException("Archive has more than " . MAX_ENTRIES . " entries: $path");
+    }
+
+    $prefix = 'phar://' . $phar->getPath() . '/';
+    $names = [];
+    $bytes = 0;
+    foreach (new \RecursiveIteratorIterator($phar) as $file) {
+        if (!$file instanceof PharFileInfo || $file->isDir()) {
+            continue;
+        }
+        $names[] = substr($file->getPathname(), strlen($prefix));
+        $bytes += $file->getSize();
+    }
+    if ($bytes > MAX_UNCOMPRESSED_BYTES) {
+        throw new RuntimeException("Archive unpacks to more than " . MAX_UNCOMPRESSED_BYTES . " bytes: $path");
+    }
+
+    $reader = static function (string $name) use ($phar): ?string {
+        if (!isset($phar[$name]) || $phar[$name]->isDir()) {
+            return null;
+        }
+
+        // A damaged entry throws (a CRC mismatch) and raises a notice (a bad
+        // deflate stream). ZipArchive reads those as false, so both become null:
+        // an entry that cannot be read is absent, and the restore carries on.
+        try {
+            return @$phar[$name]->getContent();
+        } catch (BadMethodCallException | UnexpectedValueException) {
+            return null;
+        }
     };
 
     return [$names, $reader];
