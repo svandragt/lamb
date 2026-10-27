@@ -17,6 +17,7 @@ The first-pass scope is intentionally small:
 - HTML post bodies are sanitised (`<script>`, `<style>`, `<iframe>` and `on*` event attributes are stripped) and converted to Markdown.
 - Categories and tags become inline `#hashtags` at the end of the body — Lamb's tag index picks them up automatically.
 - Every image referenced in the body is downloaded into `src/assets/YYYY/MM/` (using the post's own creation date), re-encoded to WebP and scaled down to the upload pipeline's max edge ([details](media.md)), and the body links are rewritten to point at the local copies. Coverage includes `<img src>`, `data-full-url` (gallery blocks ship the original full-resolution URL there and a downscaled copy in `src` — the importer prefers the full one), `data-src` (lazy-loaded), and `<a href>` that points at an image file (so "view full size" links survive the migration). Images on a different host than `<wp:base_blog_url>` are pulled in too — a typical WP migration ships images from a CDN or a previous domain, and the downloader's content-type and extension checks keep arbitrary URLs safe. Downloads are capped at 20 MB and deduped by URL hash within a month, so a logo used across many posts is fetched once. Failed downloads, data: URIs and unresolvable relative URLs are left as-is.
+- Video files are downloaded too. A `<video src>`, a `<source src>` inside a `<video>`, and an `<a href>` that points at an `.mp4`, `.webm` or `.mov` file are saved into `src/assets/YYYY/MM/` exactly as downloaded (Lamb doesn't re-encode video) and rewritten to the local copy. Video downloads are capped at 50 MB. A video that is larger, fails to download, or has another file extension keeps pointing at the old host.
 - Imported posts are **silent**: the importer calls the low-level save pipeline directly, so no outbound webmentions or WebSub hub pings are emitted. The content already exists somewhere else.
 
 ## Exporting from WordPress
@@ -45,7 +46,7 @@ By default, an item that was already imported is left alone on a second run — 
 
 This is deliberately total, not a merge. Local edits made to an imported post since the import are lost when you `--replace` it — that is what "replace" means. The case it exists for is re-running an export after fixing something in the conversion, where the freshly converted version is the one you want.
 
-Images already downloaded by an earlier run are not fetched again: the downloader names each file after `sha1(<source url>)` and returns the existing file when it is already on disk.
+Images and videos already downloaded by an earlier run are not fetched again: the downloader names each file after `sha1(<source url>)` and returns the existing file when it is already on disk.
 
 Imported posts are treated as **your own content**, not as syndicated feed items: they carry no "Via …" attribution line, and they take part in webmentions and WebSub exactly like a post you wrote in Lamb. The import run itself stays silent — nothing is pinged for content that was published years ago — but editing an imported post later notifies the way any other edit does.
 
