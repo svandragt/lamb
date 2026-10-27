@@ -201,17 +201,32 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
         }
     }
 
-    $videos = $xpath->query('//video[@src]') ?: [];
+    // Lamb renders a video from `![](clip.mp4)`, so a supported clip becomes an
+    // image node for the converter. `poster` is dropped: LambDown has no poster
+    // support. Any other `<video src>` keeps the plain autolink.
+    $videos = $xpath->query('//video[@src or source/@src]') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement || $video->parentNode === null) {
             continue;
         }
-        $src = $video->getAttribute('src');
-        $link = $dom->createElement('a');
-        $link->setAttribute('href', $src);
-        $link->appendChild($dom->createTextNode($src));
+        $urls = [$video->getAttribute('src')];
+        foreach ($video->getElementsByTagName('source') as $source) {
+            $urls[] = $source->getAttribute('src');
+        }
+        $src = array_find($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS));
+        if ($src !== null) {
+            $node = $dom->createElement('img');
+            $node->setAttribute('src', $src);
+            $node->setAttribute('alt', '');
+        } elseif ($urls[0] !== '') {
+            $node = $dom->createElement('a');
+            $node->setAttribute('href', $urls[0]);
+            $node->appendChild($dom->createTextNode($urls[0]));
+        } else {
+            continue;
+        }
         $p = $dom->createElement('p');
-        $p->appendChild($link);
+        $p->appendChild($node);
         $video->parentNode->replaceChild($p, $video);
     }
 

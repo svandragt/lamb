@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Lamb\LambDown;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimpleXMLElement;
@@ -10,6 +11,7 @@ use function Lamb\Import\asset_dir_for_date;
 use function Lamb\Import\build_post_body;
 use function Lamb\Import\default_media_downloader;
 use function Lamb\Import\parse_import_args;
+use function Lamb\Import\prepare_imported_html;
 use function Lamb\Import\response_is_media;
 use function Lamb\Import\run_import;
 use function Lamb\Import\rewrite_media_links;
@@ -19,6 +21,7 @@ use function Lamb\Post\reset_subscribers;
 use function Lamb\Response\image_ext_for_bytes;
 use function Lamb\Response\persist_image_bytes;
 use function Lamb\Theme\link_source;
+use function Lamb\WordPress\convert_video_shortcodes_in_dom;
 use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
@@ -274,15 +277,175 @@ XML;
         $this->assertStringNotContainsString('<table', $md);
     }
 
-    public function testHtmlToMarkdownConvertsVideoToLink(): void
+    public function testHtmlToMarkdownConvertsVideoSrcToImageSyntax(): void
     {
         if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
             $this->markTestSkipped('league/html-to-markdown is not installed');
         }
 
-        $md = html_to_markdown('<video controls src="https://example.test/demo.mp4"></video>');
+        $md = html_to_markdown('<p><video controls src="https://example.test/demo.mp4"></video></p>');
 
-        $this->assertSame('<https://example.test/demo.mp4>', $md);
+        $this->assertSame('![](https://example.test/demo.mp4)', $md);
+    }
+
+    public function testHtmlToMarkdownConvertsVideoSourceChildToImageSyntax(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $md = html_to_markdown(
+            '<video controls poster="https://example.test/p.jpg">'
+            . '<source src="https://example.test/b.webm" type="video/webm">'
+            . '<source src="https://example.test/b.mp4" type="video/mp4"></video>'
+        );
+
+        // First supported source wins; LambDown has no poster support, so it is dropped.
+        $this->assertSame('![](https://example.test/b.webm)', $md);
+    }
+
+    public function testHtmlToMarkdownKeepsAutolinkForVideoSrcWithUnsupportedExtension(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+
+        $md = html_to_markdown('<video src="https://example.test/demo.ogv"></video>');
+
+        $this->assertSame('<https://example.test/demo.ogv>', $md);
+    }
+
+    public function testImportedVideoRendersAsPlayer(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $prepared = prepare_imported_html(
+            '<p>Look</p><video controls><source src="https://oldsite.example/clip.mp4"></video>',
+            '2024-03-03 10:00:00',
+            fn(): string => 'abc123.mp4'
+        );
+        $parser = new LambDown();
+        $parser->setSafeMode(true);
+
+        $html = $parser->text(html_to_markdown($prepared));
+
+        $this->assertStringContainsString('<video src="/assets/2024/03/abc123.mp4" controls="controls"', $html);
+        $this->assertStringNotContainsString('&lt;video', $html);
+    }
+
+    public function testVideoShortcodesBecomeLocalVideoElements(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'h' . count($downloaded) . '.mp4';
+        };
+
+        $html = '<p>Before</p>[video mp4="https://oldsite.example/wp-content/uploads/a.mp4"][/video]'
+            . '<p>[video src="https://oldsite.example/b.mp4" loop="on"]</p>';
+        $out = prepare_imported_html($html, '2024-03-03 10:00:00', $downloader, convert_video_shortcodes_in_dom(...));
+
+        $this->assertSame(
+            ['https://oldsite.example/wp-content/uploads/a.mp4', 'https://oldsite.example/b.mp4'],
+            $downloaded
+        );
+        $this->assertStringContainsString('<video src="/assets/2024/03/h1.mp4"></video>', $out);
+        $this->assertStringContainsString('<video src="/assets/2024/03/h2.mp4"></video>', $out);
+        $this->assertStringNotContainsString('[video', $out);
+        $this->assertStringNotContainsString('[/video]', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testVideoShortcodeAcceptsWebmMovAndSingleQuotedValues(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'x.mp4';
+        };
+
+        $html = "[video webm='https://oldsite.example/a.webm'/] [video mov=https://oldsite.example/b.mov]";
+        prepare_imported_html($html, '2024-03-03 10:00:00', $downloader, convert_video_shortcodes_in_dom(...));
+
+        $this->assertSame(['https://oldsite.example/a.webm', 'https://oldsite.example/b.mov'], $downloaded);
+    }
+
+    public function testVideoShortcodeWithFailedDownloadKeepsOriginalUrl(): void
+    {
+        $html = '[video src="https://oldsite.example/a.mp4"][/video]';
+        $out = prepare_imported_html($html, '2024-03-03 10:00:00', fn(): ?string => null, convert_video_shortcodes_in_dom(...));
+
+        $this->assertStringContainsString('<video src="https://oldsite.example/a.mp4"></video>', $out);
+        $this->assertStringNotContainsString('assets/', $out);
+    }
+
+    public function testVideoShortcodeWithoutSupportedUrlStaysText(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'x.mp4';
+        };
+
+        $html = '<p>[video src="https://oldsite.example/a.ogv"] [video] [video src="javascript:alert(1).mp4"]'
+            . ' [video src="/relative/b.mp4"] [video poster="https://oldsite.example/p.mp4"]'
+            . ' [[video src="https://oldsite.example/escaped.mp4"]] [videos src="https://oldsite.example/c.mp4"]</p>';
+        $out = prepare_imported_html($html, '2024-03-03 10:00:00', $downloader, convert_video_shortcodes_in_dom(...));
+
+        $this->assertSame([], $downloaded);
+        $this->assertStringNotContainsString('<video', $out);
+        $this->assertSame($html, $out);
+    }
+
+    public function testVideoShortcodeDoesNotSwallowAcrossShortcodes(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return null;
+        };
+
+        $html = '[video src="https://oldsite.example/a.ogv"] keep this [gallery ids="1"] and [video src="https://oldsite.example/b.mp4"]';
+        $out = prepare_imported_html($html, '2024-03-03 10:00:00', $downloader, convert_video_shortcodes_in_dom(...));
+
+        $this->assertSame(['https://oldsite.example/b.mp4'], $downloaded);
+        $this->assertStringContainsString('[video src="https://oldsite.example/a.ogv"] keep this [gallery ids="1"] and <video', $out);
+    }
+
+    public function testVideoShortcodeUrlIsEscapedInTheElement(): void
+    {
+        $html = '[video src=\'https://oldsite.example/a.mp4?x=&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;\']';
+        $out = prepare_imported_html($html, '2024-03-03 10:00:00', fn(): ?string => null, convert_video_shortcodes_in_dom(...));
+
+        // The quote is escaped, so the value cannot close the attribute and open a script element.
+        $this->assertStringContainsString('a.mp4?x=&quot;', $out);
+        $dom = \Lamb\Import\load_html_fragment($out);
+        $this->assertSame(0, $dom->getElementsByTagName('script')->length);
+        $this->assertSame(1, $dom->getElementsByTagName('video')->length);
+    }
+
+    public function testImportItemDownloadsAndRendersVideoShortcode(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $item = [
+            'title' => 'Clip',
+            'guid' => 'https://oldsite.example/?p=77',
+            'created' => '2024-03-03 10:00:00',
+            'updated' => '2024-03-03 10:00:00',
+            'content' => '<p>Before</p>[video mp4="https://oldsite.example/a.mp4"][/video]',
+            'tags' => [],
+            'status' => 'publish',
+            'post_type' => 'post',
+        ];
+
+        $bean = import_item($item, fn(): string => 'abc123.mp4', false);
+
+        $this->assertNotNull($bean);
+        $this->assertStringContainsString('![](/assets/2024/03/abc123.mp4)', (string) $bean->body);
+        $this->assertStringNotContainsString('[video', (string) $bean->body);
     }
 
     public function testBuildPostBodyEmitsFrontMatterAndHashtags(): void

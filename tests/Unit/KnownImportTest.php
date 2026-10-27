@@ -289,6 +289,13 @@ XML;
         $this->assertStringContainsString('https://vandragt.com', $markdown);
     }
 
+    public function testHtmlToMarkdownConvertsVideoToImageSyntaxForPlayback(): void
+    {
+        $markdown = html_to_markdown('<video src="https://example.test/known.mp4" controls></video>');
+
+        $this->assertSame('![](https://example.test/known.mp4)', $markdown);
+    }
+
     public function testNormalizeKnownHtmlRemovesUnfurlBlockEntirely(): void
     {
         $items = $this->sampleItems();
