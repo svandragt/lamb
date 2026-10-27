@@ -3,14 +3,12 @@
 # Build from the repository root: docker build -f .docker/Dockerfile.release .
 
 FROM php:8.5-cli AS vendor
-ARG VIV_VERSION=0.10.0
+ARG VIV_VERSION=0.22.0
 WORKDIR /app
 
 # viv is a drop-in Composer-compatible dependency installer reading the same
 # composer.json/composer.lock. There is no published viv container image, so
-# fetch the verified binary release into a stock PHP image instead. Building
-# on the project's own PHP version means platform requirements genuinely
-# match, so no --ignore-platform-reqs escape hatch is needed here.
+# fetch the verified binary release into a stock PHP image instead.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/* \
@@ -33,7 +31,8 @@ RUN apt-get update \
 # invalidate this layer and refetch every package. The optimised classmap
 # needs src/ present, so it's deferred to dump-autoload, which is cheap.
 COPY composer.json composer.lock ./
-RUN viv install --no-dev --no-scripts
+# This stage only produces vendor/; the runtime stage installs these two extensions.
+RUN viv install --no-dev --no-scripts --ignore-platform-req=ext-gettext --ignore-platform-req=ext-pdo_mysql
 
 COPY src/ src/
 RUN viv dump-autoload --no-dev -o

@@ -5,7 +5,7 @@ inputs:
   version:
     description: viv release tag to install, without the leading "v".
     required: false
-    default: "0.10.0"
+    default: "0.22.0"
 
 runs:
   using: composite

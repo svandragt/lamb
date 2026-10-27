@@ -99,7 +99,11 @@ jobs:
 
       - name: Check code coverage
         if: matrix.php-version == '8.5'
-        run: viv run coverage
+        # Not `viv run coverage`: viv runs scripts on the static PHP that
+        # config.platform.php pins, which has no coverage driver.
+        run: |
+          vendor/bin/codecept run Unit --coverage-xml
+          php check-coverage.php tests/_output/coverage.xml 70
 
   # Client-side JavaScript unit tests (node:test + jsdom). Fast and
   # dependency-light, so it always runs and feeds the aggregate `ci` gate.
