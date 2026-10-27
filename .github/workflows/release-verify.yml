@@ -77,7 +77,9 @@ jobs:
         run: docker logs lamb-verify
 
   nginx-fpm:
-    runs-on: ubuntu-latest
+    # shortcut: the ondrej/php PPA has no Ubuntu 26.04 (resolute) build, so stay on
+    # 24.04 until this job installs from packages.sury.org instead.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
