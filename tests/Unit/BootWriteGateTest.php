@@ -152,4 +152,76 @@ class BootWriteGateTest extends TestCase
             "stdout:\n" . $boot->getOutput() . "\nstderr:\n" . $boot->getErrorOutput()
         );
     }
+
+    /**
+     * Boots a data dir in a subprocess (bootstrap_db() calls R::setup(), which
+     * would clobber this suite's shared connection) and reports what it threw.
+     *
+     * @param string $dir Data directory handed to bootstrap_db().
+     * @return Process The finished process; stdout is "OK", or the thrown
+     *                 class, its message and its previous exception's class on
+     *                 separate lines.
+     */
+    private function bootInSubprocess(string $dir): Process
+    {
+        $script = <<<'PHP'
+        require "vendor/autoload.php";
+        try {
+            \Lamb\Bootstrap\bootstrap_db($argv[1]);
+            echo "OK";
+        } catch (\Throwable $e) {
+            echo get_class($e), "\n", $e->getMessage(), "\n", get_class($e->getPrevious() ?? $e);
+        }
+        PHP;
+
+        $boot = new Process(['php', '-r', $script, $dir]);
+        $boot->run();
+
+        return $boot;
+    }
+
+    /**
+     * A data dir the web user can't write to reproduces the SQLite error 8
+     * that wrong-owner WAL sidecars cause (#831): an owner-only chmod can't
+     * fake the sidecars themselves, because SQLite repairs the mode of an
+     * empty -shm it owns on open.
+     */
+    public function testReadonlyDatabaseErrorNamesTheWalSidecarsAndTheRecoveryStep(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_wal_test_' . uniqid();
+        $this->bootInSubprocess($dir)->mustRun();
+
+        chmod($dir, 0555);
+        try {
+            if (is_writable($dir)) {
+                $this->markTestSkipped('Directory permissions are not enforced (running as root).');
+            }
+            $boot = $this->bootInSubprocess($dir);
+        } finally {
+            chmod($dir, 0750);
+            @unlink($dir . '/lamb.db');
+            @rmdir($dir);
+        }
+
+        [$class, $message, $previous] = explode("\n", $boot->getOutput()) + [null, '', null];
+        $this->assertSame('RuntimeException', $class, $boot->getOutput() . $boot->getErrorOutput());
+        $this->assertStringContainsString($dir . '/lamb.db-wal', $message);
+        $this->assertStringContainsString($dir . '/lamb.db-shm', $message);
+        $this->assertStringContainsString('delete', $message);
+        $this->assertSame(\RedBeanPHP\RedException\SQL::class, $previous);
+    }
+
+    public function testOtherDatabaseErrorsAreNotRewrittenAsAWalRecoveryHint(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_corrupt_db_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        file_put_contents($dir . '/lamb.db', str_repeat('not a database ', 400));
+
+        $boot = $this->bootInSubprocess($dir);
+        @unlink($dir . '/lamb.db');
+        @rmdir($dir);
+
+        $this->assertStringStartsWith(\RedBeanPHP\RedException\SQL::class . "\n", $boot->getOutput());
+        $this->assertStringNotContainsString('lamb.db-wal', $boot->getOutput());
+    }
 }

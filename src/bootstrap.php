@@ -7,6 +7,7 @@ use Dotenv\Repository\Adapter\PutenvAdapter;
 use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Http\apply_dns_resolve_timeout;
 
@@ -115,9 +116,17 @@ function login_password(): string
  * index.php/bin/lamb do anything else network-shaped, so it wins that race no
  * matter which code ends up resolving a host first later in the process's life.
  *
+ * The first query is where an install with unwritable WAL sidecars fails (SQLite
+ * error 8, "attempt to write a readonly database", even for reads: readers map
+ * -shm read-write too), so that call alone is wrapped to turn the bare stack
+ * trace into recovery steps. It stays fatal: a degraded read-only mode is not
+ * possible, and schema problems are meant to be loud (#796).
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
- * @throws RuntimeException If the specified directory cannot be created.
+ * @throws RuntimeException If the specified directory cannot be created, or the
+ *                          database is read-only because of unwritable WAL sidecars.
+ * @throws SQL For any other database error on the first query.
  */
 function bootstrap_db(string $data_dir): void
 {
@@ -132,7 +141,20 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
-    ensure_wal_journal_mode();
+    try {
+        ensure_wal_journal_mode();
+    } catch (SQL $e) {
+        // 8 is SQLITE_READONLY; RedBeanPHP wraps the PDOException, which holds the driver code.
+        if (($e->getDriverDetails()[1] ?? null) !== 8) {
+            throw $e;
+        }
+        throw new RuntimeException(sprintf(
+            'SQLite cannot write to the database in "%1$s": its WAL files are probably owned by another user. '
+            . 'Stop the web server, delete "%1$s/lamb.db-wal" and "%1$s/lamb.db-shm", then reload; '
+            . 'SQLite recreates them. Anything those files held that was not yet checkpointed is lost.',
+            $data_dir
+        ), 0, $e);
+    }
     R::useWriterCache(true);
 
     ensure_schema();
