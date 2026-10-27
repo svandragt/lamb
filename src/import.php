@@ -415,7 +415,8 @@ function asset_dir_for_date(string $created): string
  *    `data-src` for lazy-loaded markup.
  *  - `<video src>` and `<video><source src>` whose URL has a
  *    VIDEO_UPLOAD_EXTENSIONS extension: the old host would otherwise keep
- *    serving the clip until it goes away.
+ *    serving the clip until it goes away. A `<video poster>` image is
+ *    downloaded through the image path too.
  *  - `<a>` elements whose `href` points at an image or video extension:
  *    thumbnails wrapped in "view full size" links would otherwise leave dead
  *    off-site links in the body once the source site is decommissioned.
@@ -479,29 +480,34 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
-    $videos = $xpath->query('//video[@src] | //video/source[@src]') ?: [];
+    // `poster` is an image, so it takes the image extensions and the image
+    // download path; `<source>` never carries one, which reads as empty.
+    $videos = $xpath->query('//video[@src or @poster] | //video/source[@src]') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement) {
             continue;
         }
-        $url = normalize_media_url($video->getAttribute('src'));
-        if ($url === null || !href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
-            continue;
+        foreach (['src' => VIDEO_UPLOAD_EXTENSIONS, 'poster' => IMAGE_UPLOAD_EXTENSIONS] as $attr => $extensions) {
+            $url = normalize_media_url($video->getAttribute($attr));
+            if ($url === null || !href_has_extension($url, $extensions)) {
+                continue;
+            }
+            $filename = $downloader($url, $sub_path);
+            if (!is_string($filename) || $filename === '') {
+                continue;
+            }
+            $video->setAttribute($attr, asset_url($sub_path, $filename));
         }
-        $filename = $downloader($url, $sub_path);
-        if (!is_string($filename) || $filename === '') {
-            continue;
-        }
-        $video->setAttribute('src', asset_url($sub_path, $filename));
     }
 
+    $link_extensions = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
     $anchors = $xpath->query('//a[@href]') ?: [];
     foreach ($anchors as $a) {
         if (!$a instanceof DOMElement) {
             continue;
         }
         $href = $a->getAttribute('href');
-        if (!href_has_extension($href, array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS))) {
+        if (!href_has_extension($href, $link_extensions)) {
             continue;
         }
         $url = normalize_media_url($href);
@@ -784,14 +790,25 @@ function default_media_downloader(string $url, string $sub_path): ?string
  * returned for unauthenticated asset URLs — situations the URL extension and
  * status code alone don't catch.
  *
+ * Video also accepts the generic `application/octet-stream` and
+ * `binary/octet-stream`: S3 and some CDNs serve mp4/webm that way. The caller
+ * has already matched the URL against VIDEO_UPLOAD_EXTENSIONS, and
+ * persist_image_bytes() sniffs the container, so the header only has to rule
+ * out an HTML page. upload_content_types() is keyed by extension and lacks
+ * `binary/octet-stream`, so it can't stand in for this check.
+ *
  * @param string[] $headers Raw response header lines.
  * @param string   $family  The media type prefix to require: `image` or `video`.
  * @return bool
  */
 function response_is_media(array $headers, string $family): bool
 {
+    $accepted = preg_quote($family, '/') . '\/';
+    if ($family === 'video') {
+        $accepted .= '|(?:application|binary)\/octet-stream';
+    }
     foreach ($headers as $header) {
-        if (preg_match('/^content-type\s*:\s*' . preg_quote($family, '/') . '\//i', $header)) {
+        if (preg_match('/^content-type\s*:\s*(?:' . $accepted . ')/i', $header)) {
             return true;
         }
     }

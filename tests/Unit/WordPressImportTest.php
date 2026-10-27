@@ -792,16 +792,38 @@ XML;
         $this->assertStringNotContainsString('oldsite.example', $out);
     }
 
+    public function testRewriteMediaLinksDownloadsVideoPoster(): void
+    {
+        $downloaded = [];
+        $downloader = function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return str_ends_with($url, '.mp4') ? 'clip.mp4' : 'poster.webp';
+        };
+
+        $html = '<video controls src="https://oldsite.example/clip.mp4"'
+            . ' poster="https://oldsite.example/clip-poster.jpg"></video>';
+        $out = rewrite_media_links($html, '2024-03-03 10:00:00', $downloader);
+
+        $this->assertSame(
+            ['https://oldsite.example/clip.mp4', 'https://oldsite.example/clip-poster.jpg'],
+            $downloaded
+        );
+        $this->assertStringContainsString('src="/assets/2024/03/clip.mp4"', $out);
+        $this->assertStringContainsString('poster="/assets/2024/03/poster.webp"', $out);
+        $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
     public function testRewriteMediaLinksLeavesVideoUrlsWhenDownloadFails(): void
     {
         $downloader = fn(): ?string => null;
 
-        $html = '<video src="https://oldsite.example/a.mp4"></video>'
+        $html = '<video src="https://oldsite.example/a.mp4" poster="https://oldsite.example/a.jpg"></video>'
             . '<video><source src="https://oldsite.example/b.webm"></video>'
             . '<a href="https://oldsite.example/c.mov">c</a>';
         $out = rewrite_media_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertStringContainsString('src="https://oldsite.example/a.mp4"', $out);
+        $this->assertStringContainsString('poster="https://oldsite.example/a.jpg"', $out);
         $this->assertStringContainsString('src="https://oldsite.example/b.webm"', $out);
         $this->assertStringContainsString('href="https://oldsite.example/c.mov"', $out);
         $this->assertStringNotContainsString('assets/', $out);
@@ -817,7 +839,8 @@ XML;
 
         $html = '<video src="https://oldsite.example/a.ogv"></video>'
             . '<video><source src="https://oldsite.example/stream.m3u8"></video>'
-            . '<video src="/relative/b.mp4"></video>'
+            . '<video src="/relative/b.mp4" poster="/relative/b.jpg"></video>'
+            . '<video poster="https://oldsite.example/poster.mp4"></video>'
             . '<a href="https://oldsite.example/page.html">page</a>';
         $out = rewrite_media_links($html, '2024-03-03 10:00:00', $downloader);
 
@@ -857,6 +880,19 @@ XML;
         $this->assertFalse(response_is_media(['HTTP/1.1 200 OK', 'Content-Type: image/jpeg'], 'video'));
         $this->assertFalse(response_is_media(['HTTP/1.1 200 OK', 'Content-Type: video/mp4'], 'image'));
         $this->assertFalse(response_is_media(['HTTP/1.1 200 OK', 'Content-Type: text/html'], 'video'));
+    }
+
+    public function testResponseIsMediaAcceptsOctetStreamForVideoOnly(): void
+    {
+        // S3 and some CDNs serve mp4/webm as a generic binary type. The URL
+        // extension has already been checked and persist_image_bytes() sniffs
+        // the container, so the header need not say video/* — but an image
+        // download must still be image/*.
+        foreach (['application/octet-stream', 'binary/octet-stream'] as $type) {
+            $this->assertTrue(response_is_media(['HTTP/1.1 200 OK', "Content-Type: $type"], 'video'), $type);
+            $this->assertFalse(response_is_media(['HTTP/1.1 200 OK', "Content-Type: $type"], 'image'), $type);
+        }
+        $this->assertTrue(response_is_media(['HTTP/1.1 200 OK', 'content-type: Binary/Octet-Stream; x=y'], 'video'));
     }
 
     public function testPersistImageBytesStoresVideoUnchanged(): void
