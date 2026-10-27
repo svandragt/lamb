@@ -44,6 +44,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Added
 
+- The admin toolbar has a "Help" link, next to "Logout", that opens the Lamb documentation in a new tab ([#890](https://github.com/svandragt/lamb/issues/890)).
 - The new-entry editor autosaves your draft in the browser, so a reload or accidental navigation doesn't lose the post. The edit form offers a "Restore unsaved changes" link when a saved draft differs from the stored post.
 - An attach-photo button on the entry and edit forms opens the phone's camera or photo library.
 - Uploaded images get 800px and 1200px WebP variants, and posts render them with `srcset` so phones download a smaller file.

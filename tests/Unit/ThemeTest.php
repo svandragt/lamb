@@ -500,6 +500,10 @@ class ThemeTest extends TestCase
         $this->assertStringContainsString('<a href="/trash">', $html);
         $this->assertStringContainsString('<a href="/settings">', $html);
         $this->assertStringContainsString('<a href="/logout">', $html);
+        $this->assertMatchesRegularExpression(
+            '~<a href="https://svandragt\.github\.io/lamb"[^>]*>Help</a><a href="/logout">~',
+            $html
+        );
     }
 
     public function testAdminToolbarHtmlShowsDraftCountWhenDraftsExist(): void
