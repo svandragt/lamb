@@ -1,10 +1,43 @@
 {
   "permissions": {
     "allow": [
-      "Bash(vendor/bin/codecept run *)",
-      "Bash(composer lint)",
       "Bash(git fetch *)",
-      "Bash(lxc info *)"
+      "Bash(git status *)",
+      "Bash(git log *)",
+      "Bash(git diff *)",
+      "Bash(git show *)",
+      "Bash(git rev-parse *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git checkout -b *)",
+      "Bash(git switch -c *)",
+      "Bash(git push -u origin *)",
+      "Bash(git push origin *)",
+      "Bash(git worktree add *)",
+      "Bash(git worktree list *)",
+      "Bash(git worktree remove *)",
+      "Bash(php *)",
+      "Bash(composer *)",
+      "Bash(vendor/bin/*)",
+      "Bash(curl -s http://127.0.0.1:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -i http://127.0.0.1:*)",
+      "Bash(curl -i http://localhost:*)",
+      "Bash(curl http://127.0.0.1:*)",
+      "Bash(curl http://localhost:*)",
+      "Bash(lxc info *)",
+      "Edit(//home/user/lamb/**)",
+      "Write(//home/user/lamb/**)"
+    ],
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)",
+      "Bash(git push * --delete*)",
+      "Bash(git push origin :*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean *)"
     ]
   },
   "hooks": {
