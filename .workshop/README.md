@@ -48,7 +48,7 @@ workshop stop dev / workshop start dev
 
 | Hook | Runs as | Does |
 |------|---------|------|
-| `setup-base` | root, once on install | `apt-get install` PHP 8.4 + extensions, Ruby, openssl, pkg-config; fetches and checksum-verifies a viv release binary (no apt package) |
+| `setup-base` | root, once on install | `apt-get install` PHP 8.5 + extensions, Ruby, openssl, pkg-config; fetches and checksum-verifies a viv release binary (no apt package) |
 | `setup-project` | workshop user, every launch/refresh | `viv install` + `pnpm install` (mirrors `devbox.json` `init_hook`) |
 | `check-health` | workshop user, after setup | verifies php/viv/node/ruby + required extensions, reports health |
 
@@ -75,7 +75,7 @@ the host. The server binds `0.0.0.0:8747`, so:
   both environments install matching PHP/Node versions so this is fine.
 - **`ext-pdo_mysql` is required** even though lamb uses SQLite — RedBeanPHP
   references a MySQL PDO constant at load time and fatals without it. It's
-  declared in `composer.json`; `setup-base` installs `php8.4-mysql`.
+  declared in `composer.json`; `setup-base` installs `php8.5-mysql`.
 - **`workshopctl set-health`** statuses are lowercase (`okay` / `waiting` /
   `error` / `unknown`).
 

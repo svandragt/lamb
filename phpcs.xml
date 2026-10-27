@@ -2,7 +2,7 @@
 <ruleset name="Lamb standard">
     <description>PHP Coding Standards for Lamb</description>
 
-    <!-- Set the PHP version to use for PHP_CodeSniffer (and thus HM Linter) to PHP 8.0. -->
+    <!-- Minimum supported PHP (matches composer.json require); keep at the floor, not the default. -->
     <config name="php_version" value="80400"/>
 
     <!-- Set the PHP version range for PHPCompatibility (matches composer.json require). -->

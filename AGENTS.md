@@ -111,6 +111,21 @@ New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
 hand — e.g. a same-day security patch — use
 `pnpm install --config.minimum-release-age=0`.
 
+### PHP versions
+
+Lamb supports every PHP version in `composer.json`'s `require` (currently
+8.4–8.5) and defaults to the newest. Two kinds of setting, kept apart:
+
+- **Floor (oldest supported):** `composer.json` `require.php` and
+  `config.platform.php` (so the lock never picks a dependency the floor can't
+  run), `phpcs.xml` `php_version`/`testVersion`, `phpstan.neon` `phpVersion`,
+  and the CI `test` matrix's lowest entry.
+- **Default (newest):** Docker images, devbox, devcontainer, DDEV, `.workshop`,
+  `.nginx` snippet, single-version CI jobs, and doc examples.
+
+When a new PHP ships, add it to the CI matrix and `testVersion`, then move the
+defaults. Raise the floor only when that version reaches end of life.
+
 ## Project Structure
 
 ```

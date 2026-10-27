@@ -46,7 +46,7 @@ sudo -u www-data bin/lamb import wordpress /path/to/export.xml
 
 To allow logins, add the output of `HIDDEN=1 php make-password.php hackme` (don't use hackme) as an
 environment variable
-to `/etc/php/8.4/fpm/pool.d/www.conf` (replace `8.4` with your installed PHP version):
+to `/etc/php/8.5/fpm/pool.d/www.conf` (replace `8.5` with your installed PHP version):
 
 ```text
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
@@ -126,12 +126,12 @@ map $request_method $lamb_skip_cache_method {
 ### 2. Enable the cache on the PHP location (server context)
 
 Add the cache directives to the `location ~ \.php$` block in
-`snippets/php-84.conf` (or your own copy):
+`snippets/php-85.conf` (or your own copy):
 
 ```nginx
 location ~ \.php$  {
     include snippets/fastcgi-php.conf;
-    fastcgi_pass unix:/run/php/php8.4-fpm.sock;
+    fastcgi_pass unix:/run/php/php8.5-fpm.sock;
 
     # --- fastcgi_cache (optional) ---
     fastcgi_cache       lamb;
@@ -175,7 +175,7 @@ feature).
 
 ```shell
 sudo systemctl restart nginx
-sudo systemctl restart php8.4-fpm
+sudo systemctl restart php8.5-fpm
 ```
 
 ## Related
