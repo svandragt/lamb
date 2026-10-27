@@ -2,6 +2,7 @@
 
 namespace Lamb\Restore;
 
+use BadMethodCallException;
 use JsonException;
 use Lamb\Post;
 use Lamb\Response;
@@ -98,6 +99,7 @@ function open_source(string $path, ?bool $has_zip = null, ?bool $has_phar = null
 /**
  * Reads a zip with ext-zip.
  *
+ * @param string $path The `.zip` archive.
  * @return array{0: list<string>, 1: callable(string):?string}
  * @throws RuntimeException When the archive is unreadable or exceeds the caps.
  */
@@ -146,6 +148,7 @@ function open_zip_archive(string $path): array
  * only looks entries up inside the archive, it never writes one to disk.
  * PharData refuses a file name with no extension, which ZipArchive does not.
  *
+ * @param string $path The `.zip` archive.
  * @return array{0: list<string>, 1: callable(string):?string}
  * @throws RuntimeException When the archive is unreadable or exceeds the caps.
  */
@@ -180,7 +183,14 @@ function open_phar_archive(string $path): array
             return null;
         }
 
-        return $phar[$name]->getContent();
+        // A damaged entry throws (a CRC mismatch) and raises a notice (a bad
+        // deflate stream). ZipArchive reads those as false, so both become null:
+        // an entry that cannot be read is absent, and the restore carries on.
+        try {
+            return @$phar[$name]->getContent();
+        } catch (BadMethodCallException | UnexpectedValueException) {
+            return null;
+        }
     };
 
     return [$names, $reader];

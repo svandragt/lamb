@@ -335,6 +335,85 @@ class LambRestoreTest extends TestCase
         $this->assertNull(read_entry($reader, 'posts/2026/07'));
     }
 
+    /**
+     * @return array<string, array{0: ?bool}>
+     */
+    public static function zipReaders(): array
+    {
+        return [
+            'ext-zip'  => [null],
+            'ext-phar' => [false],
+        ];
+    }
+
+    /**
+     * @dataProvider zipReaders
+     */
+    public function testAnEntryThatCannotBeInflatedIsSkippedAndTheRestoreContinues(?bool $has_zip): void
+    {
+        [, $reader] = open_source($this->zipWithDamagedFirstEntry(true), $has_zip);
+
+        // ext-zip reads a garbled entry as '' or false depending on the damage,
+        // so compare what the restore does with it, not the raw read.
+        $items = manifest_items([
+            'posts' => [
+                ['id' => 1, 'path' => 'posts/2026/07/bad.md'],
+                ['id' => 2, 'path' => 'posts/2026/07/good.md'],
+            ],
+        ], $reader, 'https://example.test');
+
+        $this->assertNotNull(item_skip_reason($items[0]));
+        $this->assertNull(item_skip_reason($items[1]));
+    }
+
+    public function testAnEntryWithABadChecksumReadsAsMissingWithoutExtZip(): void
+    {
+        // ext-zip hands back the unverified bytes here; PharData checks the
+        // CRC and throws, which the reader turns into "absent".
+        $path = $this->zipWithDamagedFirstEntry(false);
+
+        [, $reader] = open_source($path, false);
+
+        $this->assertNull(read_entry($reader, 'posts/2026/07/bad.md'));
+        $this->assertSame('Good body.', read_entry($reader, 'posts/2026/07/good.md'));
+    }
+
+    /**
+     * Writes a zip whose first entry, posts/2026/07/bad.md, is deflated and
+     * then damaged: its compressed stream is garbled, or only the CRC the
+     * archive recorded for it is wrong. The second entry is intact.
+     */
+    private function zipWithDamagedFirstEntry(bool $garble_stream): string
+    {
+        $path = $this->zip([
+            'posts/2026/07/bad.md'  => str_repeat('Deflate me again and again. ', 40),
+            'posts/2026/07/good.md' => 'Good body.',
+        ]);
+        $zip = new ZipArchive();
+        $zip->open($path);
+        $zip->setCompressionName('posts/2026/07/bad.md', ZipArchive::CM_DEFLATE);
+        $zip->close();
+
+        // The first entry's local header is at offset 0 and its central
+        // directory record is the first "PK\x01\x02".
+        $bytes = (string) file_get_contents($path);
+        $this->assertSame("PK\x03\x04", substr($bytes, 0, 4));
+        if ($garble_stream) {
+            $lengths = unpack('vname/vextra', substr($bytes, 26, 4));
+            $this->assertIsArray($lengths);
+            $start = 30 + $lengths['name'] + $lengths['extra'];
+            $bytes = substr_replace($bytes, str_repeat("\xFF", 6), $start, 6);
+        } else {
+            $central = strpos($bytes, "PK\x01\x02");
+            $this->assertIsInt($central);
+            $bytes = substr_replace($bytes, "\x00\x00\x00\x00", 14, 4);
+            $bytes = substr_replace($bytes, "\x00\x00\x00\x00", $central + 16, 4);
+        }
+        file_put_contents($path, $bytes);
+
+        return $path;
+    }
+
     public function testOpenSourceWithoutExtZipRejectsAnArchiveWithTooManyEntries(): void
     {
         $entries = [];
