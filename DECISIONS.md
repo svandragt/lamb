@@ -170,6 +170,15 @@ A deprecation must therefore name the version it is removed in rather than "a fu
 
 ---
 
+## 2026-10-27 — Allow Composer as a fallback installer for self-hosters
+
+**Status:** Accepted
+**Context:** The 2026-09-13 record made `bin/upgrade` refuse to run without viv. Self-hosters often have Composer and not viv, so the refusal added a step to every upgrade for no gain on their side. Separately, viv before 0.22.0 wrote `vendor/composer/platform_check.php` and `installed.php` as 0600, so a web server running as another user than the one running `bin/upgrade` answered every request with a 500 (fixed in viv 0.22.0, svandragt/vivace#375).
+**Decision:** This amends the 2026-09-13 record for `bin/upgrade` only. It picks its installer once, before touching the checkout: viv when it is on `PATH` and reports 0.22.0 or later, otherwise Composer (`composer install --no-dev --no-scripts --no-interaction`). A viv older than 0.22.0 is skipped with a one-line note; if Composer is missing too, the script exits 1 naming both. It prints which installer it uses, and both rollback hints print that installer's command. CI, the Docker release build, devbox, Workshop and the contributor docs stay on viv.
+**Consequences:** A self-hoster with Composer has nothing new to install, so the breaking change in the 2026-09-13 record no longer applies to them. `bin/upgrade` now has two paths that must keep installing the same lockfile; `UpgradeScriptTest` covers both with PATH stubs, not a real install. Composer is slower than viv (1.90s against 0.04s with warm caches, per the 2026-09-13 measurement), which is an accepted cost against asking self-hosters to install a second tool. The 0.22.0 floor is a literal in `bin/upgrade`; raise it if a later viv release breaks file modes again.
+
+---
+
 ## 2026-05-29 — `docs/` is end-user documentation only
 
 **Status:** Accepted

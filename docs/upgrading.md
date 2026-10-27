@@ -9,15 +9,17 @@ How you upgrade depends on how you installed Lamb. There is [more information ab
 
 ## Git install
 
-### Prerequisite: viv
+### Prerequisite: Composer or viv
 
-`bin/upgrade` installs dependencies with [viv](https://github.com/svandragt/vivace), a Composer-compatible dependency installer that reads your existing `composer.json`/`composer.lock`. Install it before your first upgrade:
+`bin/upgrade` installs dependencies with [viv](https://github.com/svandragt/vivace) when it is on your `PATH`, and with Composer otherwise. If you already use Composer, you have nothing more to install.
+
+viv is optional and faster. It is a Composer-compatible installer that reads your existing `composer.json`/`composer.lock`. Use version 0.22.0 or later: older versions write vendor files that a web server running as another user can't read, so `bin/upgrade` uses Composer instead. To install viv:
 
 ```
 cargo binstall --git https://github.com/svandragt/vivace vivace
 ```
 
-Or download a release binary from the [releases page](https://github.com/svandragt/vivace/releases) (viv's releases are currently tagged as prereleases, so "latest release" links don't resolve — use the releases page). `bin/upgrade` checks for viv on `PATH` and stops with an error, without touching your checkout, if it isn't installed.
+Or download a release binary from the [releases page](https://github.com/svandragt/vivace/releases) (viv's releases are currently tagged as prereleases, so "latest release" links don't resolve — use the releases page). `bin/upgrade` prints which installer it uses. It stops with an error, without touching your checkout, if it finds neither.
 
 Run the bundled upgrade script:
 
