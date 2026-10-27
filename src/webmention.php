@@ -70,6 +70,12 @@ const WEBMENTION_DISPLAY_LIMIT = 100;
 const WEBMENTION_CONTENT_MAX = 280;
 
 /**
+ * Maximum stored length of a webmention author name, in characters. The author
+ * comes from remote HTML, so it is truncated rather than stored in full.
+ */
+const WEBMENTION_AUTHOR_MAX = 100;
+
+/**
  * Route handler for POST /webmention.
  *
  * Accepts `source` and `target` form parameters per the Webmention spec,
@@ -271,6 +277,10 @@ function extract_meta(string $html): array
         if ($content !== null && mb_strlen($content) > WEBMENTION_CONTENT_MAX) {
             $content = mb_substr($content, 0, WEBMENTION_CONTENT_MAX);
         }
+    }
+
+    if ($author !== null && mb_strlen($author) > WEBMENTION_AUTHOR_MAX) {
+        $author = mb_substr($author, 0, WEBMENTION_AUTHOR_MAX);
     }
 
     return ['author' => $author, 'content' => $content];

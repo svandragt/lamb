@@ -9,6 +9,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Security
+
+- Webmention author names taken from the sending page are now capped at 100 characters, like the content snippet, so a hostile page can't store an unbounded author ([#772](https://github.com/svandragt/lamb/issues/772)).
+
 ### Fixed
 
 - A database whose WAL sidecar files (`lamb.db-wal`, `lamb.db-shm`) the web server can't write now stops with an error that names both files and says to change their owner to the user PHP runs as (not to delete them, since they can hold committed writes), instead of a bare "attempt to write a readonly database" stack trace. An unwritable data directory gets its own message naming the directory ([#874](https://github.com/svandragt/lamb/issues/874)).

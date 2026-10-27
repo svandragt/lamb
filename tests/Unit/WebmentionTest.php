@@ -17,6 +17,7 @@ use function Lamb\Webmention\webmentions_for_post;
 use const Lamb\Webmention\WEBMENTION_FETCH_TIMEOUT;
 use const Lamb\Webmention\WEBMENTION_DISPLAY_LIMIT;
 use const Lamb\Webmention\WEBMENTION_CONTENT_MAX;
+use const Lamb\Webmention\WEBMENTION_AUTHOR_MAX;
 
 class WebmentionTest extends TestCase
 {
@@ -260,6 +261,18 @@ class WebmentionTest extends TestCase
         $meta = extract_meta('<title>' . $title . '</title>');
         $this->assertNotNull($meta['content']);
         $this->assertLessThanOrEqual(WEBMENTION_CONTENT_MAX, mb_strlen($meta['content']));
+    }
+
+    public function testExtractMetaCapsAuthorLength(): void
+    {
+        $author = str_repeat('a', WEBMENTION_AUTHOR_MAX + 500);
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(WEBMENTION_AUTHOR_MAX, mb_strlen($meta['author']));
+
+        // Multibyte: the cap counts characters, not bytes.
+        $author = str_repeat('é', WEBMENTION_AUTHOR_MAX + 50);
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(WEBMENTION_AUTHOR_MAX, mb_strlen($meta['author']));
     }
 
     // is_external_http_url --------------------------------------------------
