@@ -366,15 +366,24 @@ class LambRestoreTest extends TestCase
         $this->assertNull(item_skip_reason($items[1]));
     }
 
-    public function testAnEntryWithABadChecksumReadsAsMissingWithoutExtZip(): void
+    /**
+     * @dataProvider zipReaders
+     */
+    public function testAnEntryWithABadChecksumIsSkippedAndTheRestoreContinues(?bool $has_zip): void
     {
-        // ext-zip hands back the unverified bytes here; PharData checks the
-        // CRC and throws, which the reader turns into "absent".
-        $path = $this->zipWithDamagedFirstEntry(false);
+        // ZipArchive::getFromName() does not check the CRC; both readers must
+        // still treat the entry as unreadable.
+        [, $reader] = open_source($this->zipWithDamagedFirstEntry(false), $has_zip);
 
-        [, $reader] = open_source($path, false);
+        $items = manifest_items([
+            'posts' => [
+                ['id' => 1, 'path' => 'posts/2026/07/bad.md'],
+                ['id' => 2, 'path' => 'posts/2026/07/good.md'],
+            ],
+        ], $reader, 'https://example.test');
 
-        $this->assertNull(read_entry($reader, 'posts/2026/07/bad.md'));
+        $this->assertSame('missing file', item_skip_reason($items[0]));
+        $this->assertNull(item_skip_reason($items[1]));
         $this->assertSame('Good body.', read_entry($reader, 'posts/2026/07/good.md'));
     }
 
