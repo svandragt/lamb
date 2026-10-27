@@ -9,6 +9,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Security
+
+- Webmention author names taken from the sending page are now capped at 100 characters, like the content snippet, so a hostile page can't store an unbounded author ([#772](https://github.com/svandragt/lamb/issues/772)).
+
 ### Fixed
 
 - A database whose WAL sidecar files (`lamb.db-wal`, `lamb.db-shm`) the web server can't write now stops with an error that names both files and says to change their owner to the user PHP runs as (not to delete them, since they can hold committed writes), instead of a bare "attempt to write a readonly database" stack trace. An unwritable data directory gets its own message naming the directory ([#874](https://github.com/svandragt/lamb/issues/874)).
@@ -28,6 +32,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 - XML output strips control characters that XML 1.0 forbids, and the sitemap host is escaped.
 - Webmention reads on the post page are bounded.
 - `bin/lamb import lamb` reads a `.zip` export on a PHP without the zip extension, using the phar extension instead, and says to unzip the archive and pass the directory when neither is available, rather than crashing with `Class "ZipArchive" not found` (#875).
+- Restoring a zip with ext-zip now skips an entry whose stored checksum does not match its content, as the phar reader already did, instead of importing the damaged bytes ([#882](https://github.com/svandragt/lamb/issues/882)).
 
 ### Removed
 

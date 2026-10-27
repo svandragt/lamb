@@ -70,6 +70,12 @@ const WEBMENTION_DISPLAY_LIMIT = 100;
 const WEBMENTION_CONTENT_MAX = 280;
 
 /**
+ * Maximum stored length of a webmention author name, in characters. The author
+ * comes from remote HTML, so it is truncated rather than stored in full.
+ */
+const WEBMENTION_AUTHOR_MAX = 100;
+
+/**
  * Route handler for POST /webmention.
  *
  * Accepts `source` and `target` form parameters per the Webmention spec,
@@ -259,21 +265,34 @@ function extract_meta(string $html): array
 {
     $author = null;
     if (preg_match('/<meta\s+name=["\']author["\']\s+content=["\']([^"\']*)["\']/i', $html, $m)) {
-        $author = trim($m[1]) ?: null;
+        $author = trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5)) ?: null;
     }
     if ($author === null && preg_match('/rel=["\']author["\'][^>]*>([^<]+)</i', $html, $m)) {
-        $author = trim(strip_tags($m[1])) ?: null;
+        $author = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5)) ?: null;
     }
 
     $content = null;
     if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $html, $m)) {
         $content = trim(html_entity_decode(strip_tags($m[1]), ENT_QUOTES | ENT_HTML5)) ?: null;
-        if ($content !== null && mb_strlen($content) > WEBMENTION_CONTENT_MAX) {
-            $content = mb_substr($content, 0, WEBMENTION_CONTENT_MAX);
-        }
+        $content = $content === null ? null : cap_text($content, WEBMENTION_CONTENT_MAX);
     }
 
+    $author = $author === null ? null : cap_text($author, WEBMENTION_AUTHOR_MAX);
+
     return ['author' => $author, 'content' => $content];
+}
+
+/**
+ * Truncate text to a maximum number of characters, then trim the cut edge.
+ *
+ * @param string $text Text to cap.
+ * @param int    $max  Maximum length in characters.
+ *
+ * @return string
+ */
+function cap_text(string $text, int $max): string
+{
+    return trim(mb_substr($text, 0, $max));
 }
 
 /**
