@@ -170,7 +170,7 @@ A deprecation must therefore name the version it is removed in rather than "a fu
 
 ---
 
-## 2026-10-28 — Allow Composer as a fallback installer for self-hosters
+## 2026-10-27 — Allow Composer as a fallback installer for self-hosters
 
 **Status:** Accepted
 **Context:** The 2026-09-13 record made `bin/upgrade` refuse to run without viv. Self-hosters often have Composer and not viv, so the refusal added a step to every upgrade for no gain on their side. Separately, viv before 0.22.0 wrote `vendor/composer/platform_check.php` and `installed.php` as 0600, so a web server running as another user than the one running `bin/upgrade` answered every request with a 500 (fixed in viv 0.22.0, svandragt/vivace#375).
