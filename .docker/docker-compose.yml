@@ -37,7 +37,8 @@ services:
         tar -xzf "${workdir}/${archive}" -C "${workdir}"
         install -m 0755 "${workdir}/vivace-v${VIV_VERSION}-${target}/viv" /usr/local/bin/viv
         rm -rf "${workdir}"
-        viv install --no-scripts
+        # This service only builds vendor/; the app service's image installs these two extensions.
+        viv install --no-scripts --ignore-platform-req=ext-gettext --ignore-platform-req=ext-pdo_mysql
 
   app:
     build:
