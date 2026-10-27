@@ -311,6 +311,72 @@ class LambRestoreTest extends TestCase
         open_source($this->zip($entries, 'huge.zip'));
     }
 
+    public function testOpenSourceReadsAZipWithoutExtZip(): void
+    {
+        $path = $this->zip([
+            'manifest.json'             => '{}',
+            'posts/2026/07/hello.md'    => 'Hello.',
+            'assets/2026/07/photo.webp' => 'bytes',
+        ]);
+        $zip = new ZipArchive();
+        $zip->open($path);
+        $zip->addEmptyDir('posts/2026/08');
+        $zip->close();
+
+        [$names, $reader] = open_source($path, false);
+
+        sort($names);
+        $this->assertSame(
+            ['assets/2026/07/photo.webp', 'manifest.json', 'posts/2026/07/hello.md'],
+            $names
+        );
+        $this->assertSame('Hello.', read_entry($reader, 'posts/2026/07/hello.md'));
+        $this->assertNull(read_entry($reader, 'posts/2026/07/absent.md'));
+        $this->assertNull(read_entry($reader, 'posts/2026/07'));
+    }
+
+    public function testOpenSourceWithoutExtZipRejectsAnArchiveWithTooManyEntries(): void
+    {
+        $entries = [];
+        for ($i = 0; $i <= MAX_ENTRIES; $i++) {
+            $entries["posts/2026/07/post-$i.md"] = '';
+        }
+
+        $this->expectExceptionMessageMatches('/more than ' . MAX_ENTRIES . ' entries/');
+        open_source($this->zip($entries, 'huge.zip'), false);
+    }
+
+    public function testOpenSourceWithoutExtZipRejectsAFileThatIsNotAZip(): void
+    {
+        $path = "$this->tmp_dir/corrupt.zip";
+        file_put_contents($path, 'not a zip at all');
+
+        $this->expectExceptionMessageMatches('/Not a readable zip archive/');
+        open_source($path, false);
+    }
+
+    public function testOpenSourceWithoutExtZipExplainsAZipWithoutAnExtension(): void
+    {
+        $path = $this->zip(['manifest.json' => '{}'], 'export');
+
+        $this->expectExceptionMessageMatches('/needs an extension/');
+        open_source($path, false);
+    }
+
+    public function testOpenSourceWithoutAnyZipReaderAsksForTheUnpackedDirectory(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/cannot read .*archive\.zip.* Unzip the archive and pass the unpacked directory/');
+        open_source($this->zip(['manifest.json' => '{}']), false, false);
+    }
+
+    public function testOpenSourceReadsADirectoryWithoutAnyZipReader(): void
+    {
+        [$names] = open_source($this->tree(['manifest.json' => '{}']), false, false);
+
+        $this->assertSame(['manifest.json'], $names);
+    }
+
     public function testReadManifestReturnsTheDecodedDocument(): void
     {
         [, $reader] = open_source($this->zip([

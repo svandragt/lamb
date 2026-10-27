@@ -36,6 +36,8 @@ An already-unpacked export directory works too. Pass its path instead of the `.z
 sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26/
 ```
 
+Reading a `.zip` uses PHP's `zip` extension, or its `phar` extension when `zip` is missing (the file name then needs an extension, such as `.zip`). If PHP has neither, the importer tells you to unzip the archive yourself and pass the directory.
+
 The importer prints one line per post (`imported:`, `would import:`, `replaced:`, or `would replace:`), plus a final summary with the totals for created, existed, and skipped, and a one-line asset tally of restored, skipped, and rejected.
 
 ### `--site-url=<url>`
