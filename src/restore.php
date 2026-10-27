@@ -136,8 +136,14 @@ function open_zip_archive(string $path): array
         // Silenced like the PharData reader: a damaged entry warns on newer
         // libzip, and the restore reports it as a skip instead.
         $contents = @$zip->getFromName($name);
+        $stat = $zip->statName($name);
+        if ($contents === false || $stat === false) {
+            return null;
+        }
 
-        return $contents === false ? null : $contents;
+        // getFromName() does not verify the CRC, unlike PharData: a mismatch
+        // reads as absent. Masked so a 32-bit PHP compares both as unsigned.
+        return (crc32($contents) & 0xFFFFFFFF) === ($stat['crc'] & 0xFFFFFFFF) ? $contents : null;
     };
 
     return [$names, $reader];
