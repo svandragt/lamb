@@ -2,12 +2,17 @@
 
 namespace Lamb\WordPress;
 
+use DOMDocument;
+use DOMText;
+use DOMXPath;
 use RedBeanPHP\OODBBean;
 use SimpleXMLElement;
 
+use function Lamb\Import\href_has_extension;
 use function Lamb\Import\html_to_markdown as import_html_to_markdown;
 use function Lamb\Import\import_item as shared_import_item;
 use function Lamb\Import\import_uuid;
+use function Lamb\Import\normalize_media_url;
 use function Lamb\Import\parse_rss_file;
 use function Lamb\Import\parse_rss_string;
 use function Lamb\Import\skip_reason as shared_skip_reason;
@@ -20,6 +25,12 @@ const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
 // WordPress's WXR export carries top-level posts and standalone pages — see
 // should_import().
 const ALLOWED_TYPES = ['post', 'page'];
+
+// One `[video …]` tag, self-closing or followed by fallback text and `[/video]`.
+// The attribute run and the fallback text both exclude `[`, so a match can never
+// reach into a neighbouring shortcode; `(?<!\[)` leaves WordPress's
+// `[[video …]]` escape as literal text.
+const VIDEO_SHORTCODE_PATTERN = '/(?<!\[)\[video((?:\s[^\[\]]*?)?)(?:\/\]|\](?:[^\[]*\[\/video\])?)/';
 
 /**
  * Stable dedup key for a WordPress post, stored on the post's `import_uuid`
@@ -184,6 +195,102 @@ function html_to_markdown(string $html): string
 }
 
 /**
+ * Turns classic `[video src|mp4|webm|mov="URL"]` shortcodes in text nodes into
+ * `<video src="URL">` elements, so the shared media rewrite downloads the clip
+ * and the Markdown step renders a player. WordPress stores the shortcode
+ * unrendered in `content:encoded`.
+ *
+ * Attribute values are untrusted: only an http(s) URL with a
+ * VIDEO_UPLOAD_EXTENSIONS extension is used, and it is set through the DOM so
+ * it is escaped. A shortcode without such a URL stays in the text untouched, as
+ * does one shown as an example inside `<code>`, `<pre>`, `<kbd>`, `<samp>` or
+ * `<a>`. A `[/video]` that the shortcode's own text node did not hold (the
+ * editor put it in a later paragraph) is dropped when it is the whole text of a
+ * later node.
+ *
+ * @param DOMDocument $dom Document rewritten in place.
+ * @return void
+ * @throws \DOMException When a node cannot be created or inserted.
+ */
+function convert_video_shortcodes_in_dom(DOMDocument $dom): void
+{
+    $texts = (new DOMXPath($dom))->query(
+        '//text()[(contains(., "[video") or contains(., "[/video]"))'
+        . ' and not(ancestor::code or ancestor::pre or ancestor::kbd or ancestor::samp or ancestor::a)]'
+    ) ?: [];
+    $unclosed = 0;
+    foreach ($texts as $text) {
+        if (!$text instanceof DOMText || $text->parentNode === null) {
+            continue;
+        }
+        $value = $text->data;
+        if ($unclosed > 0 && trim($value) === '[/video]') {
+            $text->parentNode->removeChild($text);
+            $unclosed--;
+            continue;
+        }
+        preg_match_all(VIDEO_SHORTCODE_PATTERN, $value, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
+        $nodes = [];
+        $pos = 0;
+        foreach ($matches as $match) {
+            $url = video_shortcode_url($match[1][0]);
+            if ($url === null) {
+                continue;
+            }
+            $video = $dom->createElement('video');
+            $video->setAttribute('src', $url);
+            $before = substr($value, $pos, $match[0][1] - $pos);
+            if ($before !== '') {
+                $nodes[] = $dom->createTextNode($before);
+            }
+            $nodes[] = $video;
+            $pos = $match[0][1] + strlen($match[0][0]);
+            if (!str_ends_with($match[0][0], '/]') && !str_ends_with($match[0][0], '[/video]')) {
+                $unclosed++;
+            }
+        }
+        if ($nodes === []) {
+            continue;
+        }
+        if ($pos < strlen($value)) {
+            $nodes[] = $dom->createTextNode(substr($value, $pos));
+        }
+        foreach ($nodes as $node) {
+            $text->parentNode->insertBefore($node, $text);
+        }
+        $text->parentNode->removeChild($text);
+    }
+}
+
+/**
+ * Picks the clip URL out of a `[video]` shortcode's attribute run: the first
+ * `src`, `mp4`, `webm` or `mov` attribute whose value is a fetchable URL with a
+ * VIDEO_UPLOAD_EXTENSIONS extension.
+ *
+ * @param string $attributes The text between `[video` and `]`.
+ * @return string|null The URL, or null when the shortcode names no supported clip.
+ */
+function video_shortcode_url(string $attributes): ?string
+{
+    preg_match_all(
+        '/([\w-]+)\s*=\s*(?:"([^"]*)"|\'([^\']*)\'|([^\s"\']+))/',
+        $attributes,
+        $pairs,
+        PREG_SET_ORDER | PREG_UNMATCHED_AS_NULL
+    );
+    foreach ($pairs as $pair) {
+        if (!in_array(strtolower($pair[1]), ['src', 'mp4', 'webm', 'mov'], true)) {
+            continue;
+        }
+        $url = trim($pair[2] ?? $pair[3] ?? $pair[4] ?? '');
+        if (normalize_media_url($url) !== null && href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
+            return $url;
+        }
+    }
+    return null;
+}
+
+/**
  * Runs a single WXR item through the standard post pipeline.
  *
  * Returns null when the item is out of scope (drafts, custom post types). When
@@ -212,7 +319,7 @@ function import_item(array $item, callable $downloader, bool $dry_run = false, ?
             'allowed_types' => ALLOWED_TYPES,
             'title' => static fn(array $item): string => (string) $item['title'],
             'slug' => wordpress_slug(...),
-            'dom_pass' => null,
+            'dom_pass' => convert_video_shortcodes_in_dom(...),
             'markdown' => html_to_markdown(...),
             'tags' => static fn(array $item, string $markdown): array => array_values(
                 array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? []))
