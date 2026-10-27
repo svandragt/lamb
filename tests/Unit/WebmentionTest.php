@@ -17,6 +17,7 @@ use function Lamb\Webmention\webmentions_for_post;
 use const Lamb\Webmention\WEBMENTION_FETCH_TIMEOUT;
 use const Lamb\Webmention\WEBMENTION_DISPLAY_LIMIT;
 use const Lamb\Webmention\WEBMENTION_CONTENT_MAX;
+use const Lamb\Webmention\WEBMENTION_AUTHOR_MAX;
 
 class WebmentionTest extends TestCase
 {
@@ -260,6 +261,42 @@ class WebmentionTest extends TestCase
         $meta = extract_meta('<title>' . $title . '</title>');
         $this->assertNotNull($meta['content']);
         $this->assertLessThanOrEqual(WEBMENTION_CONTENT_MAX, mb_strlen($meta['content']));
+    }
+
+    public function testExtractMetaCapsAuthorLength(): void
+    {
+        $author = str_repeat('a', WEBMENTION_AUTHOR_MAX + 500);
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(WEBMENTION_AUTHOR_MAX, mb_strlen($meta['author']));
+
+        // Multibyte: the cap counts characters, not bytes.
+        $author = str_repeat('é', WEBMENTION_AUTHOR_MAX + 50);
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(WEBMENTION_AUTHOR_MAX, mb_strlen($meta['author']));
+    }
+
+    public function testExtractMetaCapsRelAuthorFallback(): void
+    {
+        $meta = extract_meta('<a rel="author" href="/me">' . str_repeat('b', WEBMENTION_AUTHOR_MAX + 50) . '</a>');
+        $this->assertSame(WEBMENTION_AUTHOR_MAX, mb_strlen($meta['author']));
+    }
+
+    public function testExtractMetaDecodesAuthorEntityBeforeCapping(): void
+    {
+        $author = str_repeat('a', WEBMENTION_AUTHOR_MAX - 2) . '&amp;' . 'zzz';
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(str_repeat('a', WEBMENTION_AUTHOR_MAX - 2) . '&z', $meta['author']);
+    }
+
+    public function testExtractMetaTrimsAfterCapping(): void
+    {
+        $author = str_repeat('a', WEBMENTION_AUTHOR_MAX - 1) . '  b';
+        $meta = extract_meta('<meta name="author" content="' . $author . '">');
+        $this->assertSame(str_repeat('a', WEBMENTION_AUTHOR_MAX - 1), $meta['author']);
+
+        $title = str_repeat('a', WEBMENTION_CONTENT_MAX - 1) . '  b';
+        $meta = extract_meta('<title>' . $title . '</title>');
+        $this->assertSame(str_repeat('a', WEBMENTION_CONTENT_MAX - 1), $meta['content']);
     }
 
     // is_external_http_url --------------------------------------------------
