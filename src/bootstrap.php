@@ -116,16 +116,17 @@ function login_password(): string
  * index.php/bin/lamb do anything else network-shaped, so it wins that race no
  * matter which code ends up resolving a host first later in the process's life.
  *
- * The first query is where an install with unwritable WAL sidecars fails (SQLite
- * error 8, "attempt to write a readonly database", even for reads: readers map
- * -shm read-write too), so that call alone is wrapped to turn the bare stack
- * trace into recovery steps. It stays fatal: a degraded read-only mode is not
- * possible, and schema problems are meant to be loud (#796).
+ * The first query is where an install with unwritable WAL sidecars or data
+ * directory fails (SQLite error 8, "attempt to write a readonly database", even
+ * for reads: readers map -shm read-write too), so that call alone is wrapped to
+ * turn the bare stack trace into recovery steps (see readonly_database_message()).
+ * It stays fatal: a degraded read-only mode is not possible, and schema
+ * problems are meant to be loud (#796).
  *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
  * @throws RuntimeException If the specified directory cannot be created, or the
- *                          database is read-only because of unwritable WAL sidecars.
+ *                          database is read-only (unwritable WAL sidecars or data directory).
  * @throws SQL For any other database error on the first query.
  */
 function bootstrap_db(string $data_dir): void
@@ -148,12 +149,7 @@ function bootstrap_db(string $data_dir): void
         if (($e->getDriverDetails()[1] ?? null) !== 8) {
             throw $e;
         }
-        throw new RuntimeException(sprintf(
-            'SQLite cannot write to the database in "%1$s": its WAL files are probably owned by another user. '
-            . 'Stop the web server, delete "%1$s/lamb.db-wal" and "%1$s/lamb.db-shm", then reload; '
-            . 'SQLite recreates them. Anything those files held that was not yet checkpointed is lost.',
-            $data_dir
-        ), 0, $e);
+        throw new RuntimeException(readonly_database_message($data_dir), 0, $e);
     }
     R::useWriterCache(true);
 
@@ -167,6 +163,37 @@ function bootstrap_db(string $data_dir): void
     // migrate_post_table(), which are themselves schema changes and would be
     // refused too.
     R::freeze(true);
+}
+
+/**
+ * The operator-facing explanation for SQLite's "attempt to write a readonly
+ * database" on a data directory.
+ *
+ * Two causes raise that error and need different fixes, so the message follows
+ * the cause: an existing WAL sidecar this process can't write (left by a
+ * wrong-user run, #831) is cured by deleting it, while an unwritable directory
+ * or lamb.db has no sidecars to delete and needs its permissions fixed.
+ *
+ * @param string $data_dir The directory holding lamb.db.
+ * @return string The message, naming the files or the directory to act on.
+ */
+function readonly_database_message(string $data_dir): string
+{
+    foreach (['lamb.db-wal', 'lamb.db-shm'] as $sidecar) {
+        if (file_exists("$data_dir/$sidecar") && !is_writable("$data_dir/$sidecar")) {
+            return sprintf(
+                'SQLite cannot write to the database in "%1$s": its WAL files are owned by another user. '
+                . 'Stop the web server, delete "%1$s/lamb.db-wal" and "%1$s/lamb.db-shm", then reload; '
+                . 'SQLite recreates them. Anything those files held that was not yet checkpointed is lost.',
+                $data_dir
+            );
+        }
+    }
+
+    return sprintf(
+        'SQLite cannot write to the database in "%s": the directory and lamb.db must be writable by the user PHP runs as.',
+        $data_dir
+    );
 }
 
 /**

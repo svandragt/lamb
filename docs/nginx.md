@@ -42,7 +42,7 @@ This leaves `data/lamb.db` owned by your shell user, not `www-data`. Run `bin/la
 sudo -u www-data bin/lamb import wordpress /path/to/export.xml
 ```
 
-`bin/lamb` refuses to run as any other user and tells you so. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone deletes the sidecars by hand. Lamb stops with an error that names both files. To recover, stop the web server, delete `data/lamb.db-wal` and `data/lamb.db-shm`, then reload; SQLite recreates them. Anything in those files that was not yet checkpointed into `lamb.db` is lost.
+`bin/lamb` refuses to run as any other user and tells you so. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone deletes the sidecars by hand. When that happens, Lamb stops with an error that names both files. To recover, stop the web server, delete `data/lamb.db-wal` and `data/lamb.db-shm`, then reload; SQLite recreates them. Anything in those files that was not yet checkpointed into `lamb.db` is lost. If the error names the data directory instead, there are no sidecars to delete: make `data/` and `data/lamb.db` writable by the web server user.
 
 To allow logins, add the output of `HIDDEN=1 php make-password.php hackme` (don't use hackme) as an
 environment variable

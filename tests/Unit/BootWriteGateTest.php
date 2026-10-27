@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 use Symfony\Component\Process\Process;
 
 use function Lamb\Bootstrap\ensure_schema;
+use function Lamb\Bootstrap\readonly_database_message;
 
 use const Lamb\Bootstrap\SCHEMA;
 
@@ -181,12 +182,14 @@ class BootWriteGateTest extends TestCase
     }
 
     /**
-     * A data dir the web user can't write to reproduces the SQLite error 8
-     * that wrong-owner WAL sidecars cause (#831): an owner-only chmod can't
-     * fake the sidecars themselves, because SQLite repairs the mode of an
-     * empty -shm it owns on open.
+     * A data dir the web user can't write to raises the same SQLite error 8
+     * that wrong-owner WAL sidecars do (#831), but there are no sidecars to
+     * delete, so the message must point at the directory instead. An owner-only
+     * chmod can't fake unwritable sidecars through SQLite (it repairs the mode
+     * of an empty -shm it owns on open); that branch is covered through
+     * readonly_database_message() below.
      */
-    public function testReadonlyDatabaseErrorNamesTheWalSidecarsAndTheRecoveryStep(): void
+    public function testReadonlyDatabaseErrorInAnUnwritableDataDirNamesTheDirectory(): void
     {
         $dir = sys_get_temp_dir() . '/lamb_readonly_wal_test_' . uniqid();
         $this->bootInSubprocess($dir)->mustRun();
@@ -205,10 +208,47 @@ class BootWriteGateTest extends TestCase
 
         [$class, $message, $previous] = explode("\n", $boot->getOutput()) + [null, '', null];
         $this->assertSame('RuntimeException', $class, $boot->getOutput() . $boot->getErrorOutput());
+        $this->assertStringContainsString($dir, $message);
+        $this->assertStringContainsString('writable', $message);
+        $this->assertStringNotContainsString('lamb.db-wal', $message);
+        $this->assertSame(\RedBeanPHP\RedException\SQL::class, $previous);
+    }
+
+    public function testReadonlyMessageNamesBothWalSidecarsAndTheRecoveryStepWhenASidecarIsUnwritable(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_sidecar_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        touch($dir . '/lamb.db-shm');
+        chmod($dir . '/lamb.db-shm', 0444);
+
+        try {
+            if (is_writable($dir . '/lamb.db-shm')) {
+                $this->markTestSkipped('File permissions are not enforced (running as root).');
+            }
+            $message = readonly_database_message($dir);
+        } finally {
+            unlink($dir . '/lamb.db-shm');
+            rmdir($dir);
+        }
+
         $this->assertStringContainsString($dir . '/lamb.db-wal', $message);
         $this->assertStringContainsString($dir . '/lamb.db-shm', $message);
         $this->assertStringContainsString('delete', $message);
-        $this->assertSame(\RedBeanPHP\RedException\SQL::class, $previous);
+        $this->assertStringContainsString('not yet checkpointed', $message);
+    }
+
+    public function testReadonlyMessageIgnoresSidecarsTheProcessCanWrite(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_writable_sidecar_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        touch($dir . '/lamb.db-wal');
+
+        $message = readonly_database_message($dir);
+        unlink($dir . '/lamb.db-wal');
+        rmdir($dir);
+
+        $this->assertStringNotContainsString('delete', $message);
+        $this->assertStringContainsString($dir, $message);
     }
 
     public function testOtherDatabaseErrorsAreNotRewrittenAsAWalRecoveryHint(): void
