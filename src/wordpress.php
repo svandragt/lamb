@@ -26,10 +26,11 @@ const CONTENT_NS = 'http://purl.org/rss/1.0/modules/content/';
 // should_import().
 const ALLOWED_TYPES = ['post', 'page'];
 
-// One `[video …]` tag plus an immediately following `[/video]`. The attribute
-// run excludes `[` and `]`, so a match can never reach into a neighbouring
-// shortcode; `(?<!\[)` leaves WordPress's `[[video …]]` escape as literal text.
-const VIDEO_SHORTCODE_PATTERN = '/(?<!\[)\[video((?:\s[^\[\]]*)?)\](?:\s*\[\/video\])?/';
+// One `[video …]` tag, self-closing or followed by fallback text and `[/video]`.
+// The attribute run and the fallback text both exclude `[`, so a match can never
+// reach into a neighbouring shortcode; `(?<!\[)` leaves WordPress's
+// `[[video …]]` escape as literal text.
+const VIDEO_SHORTCODE_PATTERN = '/(?<!\[)\[video((?:\s[^\[\]]*?)?)(?:\/\]|\](?:[^\[]*\[\/video\])?)/';
 
 /**
  * Stable dedup key for a WordPress post, stored on the post's `import_uuid`
@@ -201,7 +202,11 @@ function html_to_markdown(string $html): string
  *
  * Attribute values are untrusted: only an http(s) URL with a
  * VIDEO_UPLOAD_EXTENSIONS extension is used, and it is set through the DOM so
- * it is escaped. A shortcode without such a URL stays in the text untouched.
+ * it is escaped. A shortcode without such a URL stays in the text untouched, as
+ * does one shown as an example inside `<code>`, `<pre>`, `<kbd>`, `<samp>` or
+ * `<a>`. A `[/video]` that the shortcode's own text node did not hold (the
+ * editor put it in a later paragraph) is dropped when it is the whole text of a
+ * later node.
  *
  * @param DOMDocument $dom Document rewritten in place.
  * @return void
@@ -209,12 +214,21 @@ function html_to_markdown(string $html): string
  */
 function convert_video_shortcodes_in_dom(DOMDocument $dom): void
 {
-    $texts = (new DOMXPath($dom))->query('//text()[contains(., "[video")]') ?: [];
+    $texts = (new DOMXPath($dom))->query(
+        '//text()[(contains(., "[video") or contains(., "[/video]"))'
+        . ' and not(ancestor::code or ancestor::pre or ancestor::kbd or ancestor::samp or ancestor::a)]'
+    ) ?: [];
+    $unclosed = 0;
     foreach ($texts as $text) {
         if (!$text instanceof DOMText || $text->parentNode === null) {
             continue;
         }
         $value = $text->data;
+        if ($unclosed > 0 && trim($value) === '[/video]') {
+            $text->parentNode->removeChild($text);
+            $unclosed--;
+            continue;
+        }
         preg_match_all(VIDEO_SHORTCODE_PATTERN, $value, $matches, PREG_SET_ORDER | PREG_OFFSET_CAPTURE);
         $nodes = [];
         $pos = 0;
@@ -225,14 +239,22 @@ function convert_video_shortcodes_in_dom(DOMDocument $dom): void
             }
             $video = $dom->createElement('video');
             $video->setAttribute('src', $url);
-            $nodes[] = $dom->createTextNode(substr($value, $pos, $match[0][1] - $pos));
+            $before = substr($value, $pos, $match[0][1] - $pos);
+            if ($before !== '') {
+                $nodes[] = $dom->createTextNode($before);
+            }
             $nodes[] = $video;
             $pos = $match[0][1] + strlen($match[0][0]);
+            if (!str_ends_with($match[0][0], '/]') && !str_ends_with($match[0][0], '[/video]')) {
+                $unclosed++;
+            }
         }
         if ($nodes === []) {
             continue;
         }
-        $nodes[] = $dom->createTextNode(substr($value, $pos));
+        if ($pos < strlen($value)) {
+            $nodes[] = $dom->createTextNode(substr($value, $pos));
+        }
         foreach ($nodes as $node) {
             $text->parentNode->insertBefore($node, $text);
         }

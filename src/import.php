@@ -4,6 +4,7 @@ namespace Lamb\Import;
 
 use DOMDocument;
 use DOMElement;
+use DOMText;
 use DOMXPath;
 use League\HTMLToMarkdown\HtmlConverter;
 use RedBeanPHP\OODBBean;
@@ -202,9 +203,12 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
     }
 
     // Lamb renders a video from `![](clip.mp4)`, so a supported clip becomes an
-    // image node for the converter. `poster` is dropped: LambDown has no poster
-    // support. Any other `<video src>` keeps the plain autolink.
-    $videos = $xpath->query('//video[@src or source/@src]') ?: [];
+    // image node for the converter: the `.mp4` source when there is one (widest
+    // playback), else the first supported one. `poster` is dropped: LambDown has
+    // no poster support. A video with no supported clip falls back to an
+    // autolink on its first URL, and one with no URL at all is removed, since
+    // raw `<video>` would reach the safe renderer as escaped text.
+    $videos = $xpath->query('//video') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement || $video->parentNode === null) {
             continue;
@@ -213,21 +217,32 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
         foreach ($video->getElementsByTagName('source') as $source) {
             $urls[] = $source->getAttribute('src');
         }
-        $src = array_find($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS));
-        if ($src !== null) {
+        $urls = array_values(array_filter($urls, static fn(string $url): bool => $url !== ''));
+        $clips = array_values(array_filter($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)));
+        $clip = array_find($clips, static fn(string $url): bool => href_has_extension($url, ['mp4'])) ?? ($clips[0] ?? null);
+        if ($clip !== null) {
             $node = $dom->createElement('img');
-            $node->setAttribute('src', $src);
+            $node->setAttribute('src', $clip);
             $node->setAttribute('alt', '');
-        } elseif ($urls[0] !== '') {
+        } elseif ($urls !== []) {
             $node = $dom->createElement('a');
             $node->setAttribute('href', $urls[0]);
             $node->appendChild($dom->createTextNode($urls[0]));
         } else {
+            $video->parentNode->removeChild($video);
             continue;
         }
-        $p = $dom->createElement('p');
-        $p->appendChild($node);
-        $video->parentNode->replaceChild($p, $video);
+        $inline = $video->parentNode->nodeName === 'p'
+            || array_any(
+                [$video->previousSibling, $video->nextSibling],
+                static fn(?\DOMNode $sibling): bool => $sibling instanceof DOMText && trim($sibling->data) !== ''
+            );
+        if (!$inline) {
+            $p = $dom->createElement('p');
+            $p->appendChild($node);
+            $node = $p;
+        }
+        $video->parentNode->replaceChild($node, $video);
     }
 
     $class_condition = '';
@@ -430,8 +445,8 @@ function asset_dir_for_date(string $created): string
  *    `data-src` for lazy-loaded markup.
  *  - `<video src>` and `<video><source src>` whose URL has a
  *    VIDEO_UPLOAD_EXTENSIONS extension: the old host would otherwise keep
- *    serving the clip until it goes away. A `<video poster>` image is
- *    downloaded through the image path too.
+ *    serving the clip until it goes away. A `<video poster>` is not
+ *    downloaded: normalize_html() drops it, so the file would go unused.
  *  - `<a>` elements whose `href` points at an image or video extension:
  *    thumbnails wrapped in "view full size" links would otherwise leave dead
  *    off-site links in the body once the source site is decommissioned.
@@ -495,24 +510,20 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
-    // `poster` is an image, so it takes the image extensions and the image
-    // download path; `<source>` never carries one, which reads as empty.
-    $videos = $xpath->query('//video[@src or @poster] | //video/source[@src]') ?: [];
+    $videos = $xpath->query('//video[@src] | //video/source[@src]') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement) {
             continue;
         }
-        foreach (['src' => VIDEO_UPLOAD_EXTENSIONS, 'poster' => IMAGE_UPLOAD_EXTENSIONS] as $attr => $extensions) {
-            $url = normalize_media_url($video->getAttribute($attr));
-            if ($url === null || !href_has_extension($url, $extensions)) {
-                continue;
-            }
-            $filename = $downloader($url, $sub_path);
-            if (!is_string($filename) || $filename === '') {
-                continue;
-            }
-            $video->setAttribute($attr, asset_url($sub_path, $filename));
+        $url = normalize_media_url($video->getAttribute('src'));
+        if ($url === null || !href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
+            continue;
         }
+        $filename = $downloader($url, $sub_path);
+        if (!is_string($filename) || $filename === '') {
+            continue;
+        }
+        $video->setAttribute('src', asset_url($sub_path, $filename));
     }
 
     $link_extensions = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
