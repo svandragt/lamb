@@ -7,6 +7,7 @@ use Dotenv\Repository\Adapter\PutenvAdapter;
 use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Http\apply_dns_resolve_timeout;
 
@@ -115,9 +116,18 @@ function login_password(): string
  * index.php/bin/lamb do anything else network-shaped, so it wins that race no
  * matter which code ends up resolving a host first later in the process's life.
  *
+ * The first query is where an install with unwritable WAL sidecars or data
+ * directory fails (SQLite error 8, "attempt to write a readonly database", even
+ * for reads: readers map -shm read-write too), so that call alone is wrapped to
+ * turn the bare stack trace into recovery steps (see readonly_database_message()).
+ * It stays fatal: a degraded read-only mode is not possible, and schema
+ * problems are meant to be loud (#796).
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
- * @throws RuntimeException If the specified directory cannot be created.
+ * @throws RuntimeException If the specified directory cannot be created, or the
+ *                          database is read-only (unwritable WAL sidecars or data directory).
+ * @throws SQL For any other database error on the first query.
  */
 function bootstrap_db(string $data_dir): void
 {
@@ -132,7 +142,14 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
-    ensure_wal_journal_mode();
+    try {
+        ensure_wal_journal_mode();
+    } catch (SQL $e) {
+        if (!is_readonly_database_error($e)) {
+            throw $e;
+        }
+        throw new RuntimeException(readonly_database_message($data_dir), 0, $e);
+    }
     R::useWriterCache(true);
 
     ensure_schema();
@@ -145,6 +162,55 @@ function bootstrap_db(string $data_dir): void
     // migrate_post_table(), which are themselves schema changes and would be
     // refused too.
     R::freeze(true);
+}
+
+/**
+ * Whether a query failure is SQLite's "attempt to write a readonly database".
+ *
+ * RedBeanPHP wraps the PDOException in RedException\SQL and keeps the driver
+ * code in the driver details. The low byte is the primary result code, 8 for
+ * SQLITE_READONLY; the extended variants (READONLY_RECOVERY 264, READONLY_CANTINIT
+ * 1288, READONLY_DIRECTORY 1544) share it, so the code is masked before comparing.
+ *
+ * @param SQL $e The exception thrown by a RedBeanPHP query.
+ * @return bool True for SQLITE_READONLY or one of its extended codes.
+ */
+function is_readonly_database_error(SQL $e): bool
+{
+    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 8;
+}
+
+/**
+ * The operator-facing explanation for SQLite's "attempt to write a readonly
+ * database" on a data directory.
+ *
+ * Two causes raise that error and need different fixes, so the message follows
+ * the cause: an existing WAL sidecar this process can't write (left by a
+ * wrong-user run, #831) needs its owner changed, while an unwritable directory
+ * or lamb.db has no sidecars to fix and needs its permissions corrected. The
+ * sidecars are never to be deleted: a WAL a wrong-user run left can hold
+ * committed writes (a whole import, say) that lamb.db does not have yet.
+ *
+ * @param string $data_dir The directory holding lamb.db.
+ * @return string The message, naming the files or the directory to act on.
+ */
+function readonly_database_message(string $data_dir): string
+{
+    foreach (['lamb.db-wal', 'lamb.db-shm'] as $sidecar) {
+        if (file_exists("$data_dir/$sidecar") && !is_writable("$data_dir/$sidecar")) {
+            return sprintf(
+                'SQLite cannot write to the database in "%1$s": its WAL files are owned by another user. '
+                . 'Change their owner to the user PHP runs as, then reload, for example '
+                . '`chown www-data "%1$s/lamb.db-wal" "%1$s/lamb.db-shm"` (www-data is only an example).',
+                $data_dir
+            );
+        }
+    }
+
+    return sprintf(
+        'SQLite cannot write to the database in "%s": the directory and lamb.db must be writable by the user PHP runs as.',
+        $data_dir
+    );
 }
 
 /**
