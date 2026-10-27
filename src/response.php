@@ -8,10 +8,14 @@ use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\extract_description;
+use function Lamb\front_matter_summary;
 use function Lamb\get_option;
+use function Lamb\highlight_and_link;
 use function Lamb\parse_bean;
 use function Lamb\Post\inject_title_matter;
 use function Lamb\Post\parse_matter;
+use function Lamb\render_body;
 use function Lamb\set_option;
 
 // The built-in dev server (`composer serve`) does not load .env, so read it here
@@ -158,8 +162,7 @@ function build_exclude_slugs_clause(array $slugs): ?array
  * the chronological stream and the feeds.
  *
  * Owned in one place so the homepage and the feeds can't drift apart on what
- * "public" means; both used to assemble the two clauses inline, in opposite
- * orders.
+ * "public" means.
  *
  * @return array{sql: string, params: array<int, mixed>}
  */
@@ -334,6 +337,90 @@ function upgrade_posts(array $posts): void
 }
 
 /**
+ * Refreshes a stale post's `transformed` HTML and `description` in memory
+ * only, for a render that must not carry a data migration (#814).
+ *
+ * A POST_VERSION bump only ever means `transformed` output changed (new
+ * syntax highlighting, image sizing); every other column upgrade_posts()
+ * juggles (title, slug, draft) is already correct as stored and untouched by
+ * the version, so — unlike upgrade_posts() — this skips parse_bean() and its
+ * title/slug/draft restore dance entirely, along with the store. The row
+ * keeps its old version and gets the real, persisted upgrade the next time
+ * `bin/lamb migrate` or `bin/lamb upgrade-posts` runs.
+ *
+ * @param array<int, mixed> $posts The posts about to be rendered.
+ * @return void
+ */
+function render_stale_posts(array $posts): void
+{
+    foreach ($posts as $bean) {
+        if (!$bean instanceof \RedBeanPHP\OODBBean) {
+            continue;
+        }
+        if ((int)$bean->version === POST_VERSION) {
+            continue;
+        }
+        $markdown = render_body((string)$bean->body);
+        $front_matter = parse_matter((string)$bean->body);
+        $bean->description = front_matter_summary($front_matter) ?? extract_description($markdown);
+        $bean->transformed = highlight_and_link($markdown);
+    }
+}
+
+/**
+ * Posts loaded per page by upgrade_all_posts(), so a large archive of
+ * outdated posts is walked a page at a time rather than held in memory whole.
+ */
+const UPGRADE_POSTS_BATCH = 500;
+
+/**
+ * The bounded, explicit counterpart to the lazy upgrade every render triggers:
+ * walks every post whose `version` is below POST_VERSION and upgrades it via
+ * upgrade_posts(), for `bin/lamb upgrade-posts`.
+ *
+ * Pages on id (`id > $after`), not OFFSET: a batch just upgraded moves those
+ * rows' version to POST_VERSION and out of the `version < ?` filter, so an
+ * OFFSET page would skip over rows the next page hasn't seen yet. Paging on
+ * id instead means each page is a fresh, correct query regardless of how many
+ * earlier rows already got upgraded.
+ *
+ * @param bool $dry_run Count and report only; upgrade_posts() is never called
+ *                       and no row is written.
+ * @return array{0: int, 1: int} [$needing_upgrade, $upgraded]. $upgraded stays
+ *                                0 under $dry_run.
+ */
+function upgrade_all_posts(bool $dry_run = false): array
+{
+    $needing = 0;
+    $upgraded = 0;
+    $after = 0;
+
+    while (true) {
+        $rows = R::getAll(
+            'SELECT id FROM post WHERE version < ? AND id > ? ORDER BY id LIMIT ?',
+            [POST_VERSION, $after, UPGRADE_POSTS_BATCH]
+        );
+        if ($rows === []) {
+            break;
+        }
+        $after = (int) $rows[count($rows) - 1]['id'];
+        $needing += count($rows);
+
+        if (!$dry_run) {
+            $beans = R::batch('post', array_map('intval', array_column($rows, 'id')));
+            upgrade_posts($beans);
+            $upgraded += count($beans);
+        }
+
+        if (count($rows) < UPGRADE_POSTS_BATCH) {
+            break;
+        }
+    }
+
+    return [$needing, $upgraded];
+}
+
+/**
  * Paginates an in-memory array of items.
  *
  * @param list<mixed> $values   Flat array of items to paginate.
@@ -380,7 +467,7 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
         $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page);
     }
 
-    upgrade_posts($items);
+    render_stale_posts($items);
     return [
         'items'      => $items,
         'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),

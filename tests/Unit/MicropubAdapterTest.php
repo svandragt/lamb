@@ -661,12 +661,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryReturnsContentForStatusPost(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Source query content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Source query content', '');
 
         $result = $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
@@ -677,12 +672,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryReturnsContentForSluggedPost(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Slugged source content';
-        $bean->slug = 'source-test-slug';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Slugged source content', 'source-test-slug');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/source-test-slug');
@@ -695,12 +685,7 @@ class MicropubAdapterTest extends TestCase
         // A body whose content carries its own `---` (e.g. horizontal rules)
         // must be returned whole — not truncated to the slice after the last
         // `---` (issue: explode-based front-matter split dropped content).
-        $bean = R::dispense('post');
-        $bean->body = "First section\n\n---\n\nSecond section\n\n---\n\nThird section";
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost("First section\n\n---\n\nSecond section\n\n---\n\nThird section", '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
@@ -711,12 +696,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryContentExcludesAppendedCategoryHashtags(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Source content #micropub #test';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Source content #micropub #test', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
@@ -727,12 +707,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryReturnsCategoriesFromHashtags(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Tagged post #micropub #test';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Tagged post #micropub #test', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
@@ -743,12 +718,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryFiltersToRequestedProperties(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Filtered content #tag1';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Filtered content #tag1', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id, ['content']);
@@ -763,17 +733,41 @@ class MicropubAdapterTest extends TestCase
     // content of any draft/scheduled/trashed post, not merely learn it
     // exists (sequential /status/<id> ids make this trivial to enumerate).
 
-    private function makeHiddenPost(array $fields): OODBBean
+    /**
+     * Dispense, populate and store a post bean, folding the dispense/set/store
+     * block copied across dozens of tests into one call (#820).
+     *
+     * @param string $body Post body.
+     * @param string $slug Post slug (defaults to none, i.e. a status post).
+     * @param array<string, mixed> $overrides Extra bean fields (e.g. `title`,
+     *     `deleted`, `draft`, `created`) that override the defaults below.
+     * @return OODBBean The stored bean.
+     * @throws \RedBeanPHP\RedException
+     */
+    private function storedPost(string $body, string $slug = '', array $overrides = []): OODBBean
     {
         $bean = R::dispense('post');
-        $bean->body = $fields['body'] ?? 'Hidden content';
-        $bean->slug = '';
-        $bean->created = $fields['created'] ?? date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        $bean->draft = $fields['draft'] ?? 0;
-        $bean->deleted = $fields['deleted'] ?? 0;
+        $bean->body = $body;
+        $bean->slug = $slug;
+        $bean->created = $overrides['created'] ?? date('Y-m-d H:i:s');
+        $bean->updated = $overrides['updated'] ?? date('Y-m-d H:i:s');
+        foreach ($overrides as $field => $value) {
+            if ($field === 'created' || $field === 'updated') {
+                continue;
+            }
+            $bean->$field = $value;
+        }
         R::store($bean);
         return $bean;
+    }
+
+    private function makeHiddenPost(array $fields): OODBBean
+    {
+        return $this->storedPost($fields['body'] ?? 'Hidden content', '', [
+            'created' => $fields['created'] ?? date('Y-m-d H:i:s'),
+            'draft'   => $fields['draft'] ?? 0,
+            'deleted' => $fields['deleted'] ?? 0,
+        ]);
     }
 
     public function testSourceQueryReturnsFalseForDraftWithoutUpdateScope(): void
@@ -1138,11 +1132,7 @@ class MicropubAdapterTest extends TestCase
     {
         // Unique slug so this test's row can't collide with the other
         // updateCallback tests (this suite does not reset the DB between tests).
-        $post = R::dispense('post');
-        $post->body = "---\ntitle: Timestamp Bump\n---\n\nbody";
-        $post->slug = 'ts-bump-post';
-        $post->created = date('Y-m-d H:i:s');
-        R::store($post);
+        $post = $this->storedPost("---\ntitle: Timestamp Bump\n---\n\nbody", 'ts-bump-post');
 
         // Seed the monotonic mark in the past: a Micropub update is a content
         // change, so it must move the 304 validator forward, or the edit is
@@ -1165,13 +1155,7 @@ class MicropubAdapterTest extends TestCase
         // update-scoped token must not be able to silently rewrite trashed
         // content while it stays hidden, and the response must be
         // indistinguishable from "no such post".
-        $bean = R::dispense('post');
-        $bean->body = 'Trashed content must not change';
-        $bean->slug = '';
-        $bean->deleted = 1;
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Trashed content must not change', '', ['deleted' => 1]);
 
         $adapter = new LambMicropubAdapter();
         $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['update']];
@@ -1186,74 +1170,39 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('Trashed content must not change', $updated->body);
     }
 
-    public function testUpdateCallbackReturnsInvalidRequestForNonArrayReplaceValues(): void
+    /**
+     * @return array<string, array{string, array<string, mixed>}>
+     */
+    public static function nonArrayUpdateValueProvider(): array
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
-
-        $adapter = new LambMicropubAdapter();
-        $result = $adapter->updateCallback(
-            ROOT_URL . '/status/' . $bean->id,
-            ['replace' => ['content' => 'Updated content']]
-        );
-
-        $this->assertSame('invalid_request', $result);
-        $updated = R::load('post', $bean->id);
-        $this->assertSame('Original content', $updated->body);
+        return [
+            'replace' => ['Original content', ['replace' => ['content' => 'Updated content']]],
+            'add'     => ['Original content', ['add' => ['category' => 'not-an-array']]],
+            'delete'  => ['Original content #tag', ['delete' => ['category' => 'not-an-array']]],
+        ];
     }
 
-    public function testUpdateCallbackReturnsInvalidRequestForNonArrayAddValues(): void
+    /**
+     * @dataProvider nonArrayUpdateValueProvider
+     * @param array<string, mixed> $update
+     * @return void
+     * @throws \RedBeanPHP\RedException
+     */
+    public function testUpdateCallbackReturnsInvalidRequestForNonArrayValues(string $body, array $update): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost($body, '');
 
         $adapter = new LambMicropubAdapter();
-        $result = $adapter->updateCallback(
-            ROOT_URL . '/status/' . $bean->id,
-            ['add' => ['category' => 'not-an-array']]
-        );
+        $result = $adapter->updateCallback(ROOT_URL . '/status/' . $bean->id, $update);
 
         $this->assertSame('invalid_request', $result);
         $updated = R::load('post', $bean->id);
-        $this->assertSame('Original content', $updated->body);
-    }
-
-    public function testUpdateCallbackReturnsInvalidRequestForNonArrayDeleteValues(): void
-    {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content #tag';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
-
-        $adapter = new LambMicropubAdapter();
-        $result = $adapter->updateCallback(
-            ROOT_URL . '/status/' . $bean->id,
-            ['delete' => ['category' => 'not-an-array']]
-        );
-
-        $this->assertSame('invalid_request', $result);
-        $updated = R::load('post', $bean->id);
-        $this->assertSame('Original content #tag', $updated->body);
+        $this->assertSame($body, $updated->body);
     }
 
     public function testUpdateCallbackReplaceContentUpdatesBody(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Original content', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1268,13 +1217,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackReplaceContentPreservesTitle(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = "---\ntitle: My Title\n---\nOriginal content";
-        $bean->title = 'My Title';
-        $bean->slug = 'my-title';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost("---\ntitle: My Title\n---\nOriginal content", 'my-title', ['title' => 'My Title']);
 
         $adapter = new LambMicropubAdapter();
         $adapter->updateCallback(
@@ -1293,12 +1236,7 @@ class MicropubAdapterTest extends TestCase
         // createCallback() has always unwrapped, and the one a client that
         // created the post with rich content sends back. Cast with (string),
         // the object became the literal "Array" and overwrote the whole post.
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Original content', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1314,12 +1252,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackReplaceContentAcceptsAValueObject(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Original content', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1337,12 +1270,7 @@ class MicropubAdapterTest extends TestCase
     {
         // An object carrying neither `html` nor `value` has no content to
         // store; reporting success for it reads to the client as "saved".
-        $bean = R::dispense('post');
-        $bean->body = 'Original content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Original content', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1357,12 +1285,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackReplaceContentPreservesHashtags(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Original content #foo #bar';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Original content #foo #bar', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->updateCallback(
@@ -1378,12 +1301,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackAddCategoryAppendsHashtag(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'A categorised post #test1';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('A categorised post #test1', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1399,12 +1317,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackAddCategoryDoesNotDuplicate(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'A post #test1';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('A post #test1', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->updateCallback(
@@ -1418,12 +1331,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackDeleteCategoryValueRemovesHashtag(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'A post #test1 #test2';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('A post #test1 #test2', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1439,12 +1347,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackDeleteCategoryValueLeavesOtherCategoriesIntact(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Content #alpha #beta #gamma';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Content #alpha #beta #gamma', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->updateCallback(
@@ -1460,12 +1363,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackDeletePropertyRemovesAllCategoryHashtags(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'A post with tags #test1 #test2';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('A post with tags #test1 #test2', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(
@@ -1481,12 +1379,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackDeletePropertyPreservesContent(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Keep this content #test1 #test2';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Keep this content #test1 #test2', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->updateCallback(
@@ -1502,12 +1395,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testDeleteCallbackReturnsTrueForExistingPost(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Post to delete';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Post to delete', '');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
@@ -1517,12 +1405,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testDeleteCallbackSetsDeletedFlag(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Post to soft-delete';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Post to soft-delete', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id);
@@ -1570,12 +1453,7 @@ class MicropubAdapterTest extends TestCase
         // Regression: deleteCallback() previously had no scope check at all,
         // so any valid token — regardless of granted scope — could delete
         // arbitrary posts.
-        $bean = R::dispense('post');
-        $bean->body = 'Should survive an unscoped delete attempt';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Should survive an unscoped delete attempt', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
@@ -1595,13 +1473,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUndeleteCallbackClearsDeletedFlag(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Post to restore';
-        $bean->slug = '';
-        $bean->deleted = 1;
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Post to restore', '', ['deleted' => 1]);
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->undeleteCallback(ROOT_URL . '/status/' . $bean->id);
@@ -1620,13 +1492,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUndeleteCallbackReturnsInsufficientScopeWhenTokenLacksDeleteScope(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Should stay deleted against an unscoped undelete attempt';
-        $bean->slug = '';
-        $bean->deleted = 1;
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Should stay deleted against an unscoped undelete attempt', '', ['deleted' => 1]);
 
         $adapter = new LambMicropubAdapter();
         $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['create']];
@@ -1650,13 +1516,7 @@ class MicropubAdapterTest extends TestCase
      */
     private function readOnlyTokenFor(string $body, bool $deleted = false): array
     {
-        $bean = R::dispense('post');
-        $bean->body    = $body;
-        $bean->slug    = '';
-        $bean->deleted = $deleted ? 1 : null;
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost($body, '', ['deleted' => $deleted ? 1 : null]);
 
         $adapter = new LambMicropubAdapter();
         $adapter->user = ['me' => ROOT_URL . '/', 'scope' => ['read']];
@@ -1697,12 +1557,7 @@ class MicropubAdapterTest extends TestCase
     {
         // No token at all (the logged-in web paths): the scope gate must not
         // fire, otherwise every non-Micropub caller would 403.
-        $bean = R::dispense('post');
-        $bean->body    = 'Deletable without a token';
-        $bean->slug    = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Deletable without a token', '');
 
         $adapter = new LambMicropubAdapter();
         $this->assertTrue($adapter->deleteCallback(ROOT_URL . '/status/' . $bean->id));
@@ -1712,13 +1567,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryReturnsNamePropertyForTitledPost(): void
     {
-        $bean = R::dispense('post');
-        $bean->body  = "---\ntitle: My Title\n---\nSome content";
-        $bean->title = 'My Title';
-        $bean->slug  = 'my-title';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost("---\ntitle: My Title\n---\nSome content", 'my-title', ['title' => 'My Title']);
 
         $adapter = new LambMicropubAdapter();
         $result  = $adapter->sourceQueryCallback(ROOT_URL . '/my-title');
@@ -1729,12 +1578,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testSourceQueryNamePropertyAbsentForUntitledPost(): void
     {
-        $bean = R::dispense('post');
-        $bean->body  = 'No front matter here';
-        $bean->slug  = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('No front matter here', '');
 
         $adapter = new LambMicropubAdapter();
         $result  = $adapter->sourceQueryCallback(ROOT_URL . '/status/' . $bean->id);
@@ -1800,12 +1644,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackReturnsInsufficientScopeWhenTokenLacksUpdateScope(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Some content';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Some content', '');
 
         $adapter = new LambMicropubAdapter();
         $adapter->user = [
@@ -2607,11 +2446,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackDropsCategoriesWithNoText(): void
     {
-        $post = R::dispense('post');
-        $post->body = "Tagged post\n";
-        $post->slug = 'tagged-post';
-        $post->created = date('Y-m-d H:i:s');
-        R::store($post);
+        $post = $this->storedPost("Tagged post\n", 'tagged-post');
 
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback('http://localhost/tagged-post', [
@@ -2629,11 +2464,7 @@ class MicropubAdapterTest extends TestCase
         // The old body's tags are carried across a content replace so
         // categories survive it — but a tag the new content already carries
         // must not be appended again, or every update grows the trailing run.
-        $post = R::dispense('post');
-        $post->body = 'hello #php world';
-        $post->slug = 'replace-tags';
-        $post->created = date('Y-m-d H:i:s');
-        R::store($post);
+        $post = $this->storedPost('hello #php world', 'replace-tags');
 
         $adapter = new LambMicropubAdapter();
         $this->assertTrue($adapter->updateCallback(
@@ -2655,17 +2486,9 @@ class MicropubAdapterTest extends TestCase
         // slug used to skip the uniqueness check every other save path
         // applies, so two posts could end up sharing a URL — one of them
         // unreachable at its own permalink.
-        $taken = R::dispense('post');
-        $taken->body = "---\ntitle: Shared Name\nslug: shared-name\n---\n\ntaken";
-        $taken->slug = 'shared-name';
-        $taken->created = date('Y-m-d H:i:s');
-        R::store($taken);
+        $taken = $this->storedPost("---\ntitle: Shared Name\nslug: shared-name\n---\n\ntaken", 'shared-name');
 
-        $post = R::dispense('post');
-        $post->body = 'a status post';
-        $post->slug = '';
-        $post->created = date('Y-m-d H:i:s');
-        R::store($post);
+        $post = $this->storedPost('a status post', '');
 
         $adapter = new LambMicropubAdapter();
         $this->assertTrue($adapter->updateCallback(
@@ -2680,11 +2503,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testRenamingAPostKeepsItsExistingSlug(): void
     {
-        $post = R::dispense('post');
-        $post->body = "---\ntitle: Original\n---\n\nbody";
-        $post->slug = 'original';
-        $post->created = date('Y-m-d H:i:s');
-        R::store($post);
+        $post = $this->storedPost("---\ntitle: Original\n---\n\nbody", 'original');
 
         $adapter = new LambMicropubAdapter();
         $this->assertTrue($adapter->updateCallback(
@@ -2724,12 +2543,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testUpdateCallbackEmitsUpdatedThenPublished(): void
     {
-        $bean = R::dispense('post');
-        $bean->body = 'Event matrix: original';
-        $bean->slug = '';
-        $bean->created = date('Y-m-d H:i:s');
-        $bean->updated = date('Y-m-d H:i:s');
-        R::store($bean);
+        $bean = $this->storedPost('Event matrix: original', '');
 
         reset_subscribers();
         $events = [];

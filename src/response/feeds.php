@@ -418,7 +418,7 @@ function render_json_feed(array $data, array $config): void
  *
  * Shared tail of all four feed responders: merge the feed data into the global
  * view data, emit cache headers (with a conditional-GET 304 short-circuit),
- * upgrade stale posts, render, die.
+ * refresh any stale post's rendered HTML for display, render, die.
  *
  * @param array<string, mixed> $feed_data As built by get_feed_data()/get_tag_feed_data().
  * @param string      $template  Feed template name ('feed' or 'feed_json').
@@ -436,7 +436,7 @@ function emit_feed(array $feed_data, string $template, ?string $feed_url = null)
         $data['feed_url'] = $feed_url;
     }
     feed_cache($data['updated']);
-    upgrade_posts($data['posts']);
+    render_stale_posts($data['posts']);
 
     if ($template === 'feed_json') {
         render_json_feed($data, $config);
@@ -479,8 +479,8 @@ function get_tag_feed_data(string $tag): array
     global $config;
 
     // Twenty newest by `updated`, chosen from ids so the scan can stop as soon
-    // as it has them: this used to load a bean per match and then slice, which
-    // on a tag covering a large archive exhausted memory before it got here.
+    // as it has them. Loading a bean per match and slicing afterwards exhausts
+    // memory on a tag covering a large archive.
     $posts = load_posts_in_order(post_ids_by_tag($tag, true, 20));
 
     return [
@@ -578,7 +578,7 @@ function get_results(array $data, array $posts, array $pagination): array
     $data['posts'] = $posts;
     $data['pagination'] = $pagination;
 
-    upgrade_posts($posts);
+    render_stale_posts($posts);
 
     return $data;
 }

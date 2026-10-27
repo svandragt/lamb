@@ -16,13 +16,13 @@ GitHub Pages publishes the `release` branch's `docs/` folder, so the live site a
 
 ```bash
 # Install dependencies
-composer install
+viv install
 
 # Start dev server (PHP built-in, port 8747)
-composer serve
+viv run serve
 
 # Lint (PSR-2/PSR-12 + PHPCompatibility)
-composer lint
+viv run lint
 
 # Run all tests
 vendor/bin/codecept run
@@ -43,15 +43,15 @@ php make-password.php <your-password>
 LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <your-password>   # for acceptance tests
 
 # Static analysis
-composer analyse
+viv run analyse
 
 # Auto-fix coding standard violations
-composer fix
+viv run fix
 
 # Install pre-commit hook (one-time, after cloning)
-printf '#!/bin/sh\nset -e\ncomposer lint\ncomposer analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
+printf '#!/bin/sh\nset -e\nviv run lint\nviv run analyse\n' > .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit
 
-# Take screenshots at mobile/tablet/desktop (requires composer serve to be running)
+# Take screenshots at mobile/tablet/desktop (requires viv run serve to be running)
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chrome-linux64/chrome \
   pnpm run screenshot [/path] [outdir]
 # Before/after: git stash → screenshot → git stash pop → screenshot
@@ -65,13 +65,13 @@ PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH=$HOME/.cache/ms-playwright/chromium-1208/chr
 
 ### Worktrees
 
-Run `composer install` inside each git worktree. Don't share or symlink one
-checkout's `vendor/` into another: Composer's generated autoloader resolves to
+Run `viv install` inside each git worktree. Don't share or symlink one
+checkout's `vendor/` into another: the generated autoloader resolves to
 the checkout that created it, so a worktree pointed at another checkout's
 `vendor/` silently runs and tests that checkout's `src/`, not the worktree's —
-green tests against the wrong code. A per-worktree `composer install` also
+green tests against the wrong code. A per-worktree `viv install` also
 registers the PHPCompatibility standard for that checkout (handled on install
-by the `phpcodesniffer-composer-installer` plugin), so `composer lint` works
+by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
 ## Dependencies
@@ -79,8 +79,10 @@ without any global phpcs config.
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
 composer, npm, github-actions, docker, devcontainers — and
 `dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
-Vulnerabilities are caught by `composer audit` (quality job) and `pnpm audit`
-(js-test job).
+Dependabot parses `composer.json`/`composer.lock` directly, so the composer
+ecosystem is unaffected by installing dependencies with viv instead of
+Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
+audit` (js-test job).
 
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
@@ -94,8 +96,8 @@ human:
 - **Major bumps never auto-merge.** They arrive as individual PRs and will sit
   until someone reviews them, which is how a project quietly ends up on an
   unsupported branch. Check for outstanding majors when cutting a release —
-  it's a checklist item in `RELEASING.md` step 1. `composer show --locked
-  --outdated --direct` and `pnpm outdated` list them without needing an install.
+  it's a checklist item in `RELEASING.md` step 1. `viv outdated` and `pnpm
+  outdated` list them without needing an install.
 - **Hand-written pins and overrides are invisible to Dependabot.** It does not
   update pnpm `overrides`, so a pin added to dodge an advisory becomes a
   permanent *ceiling* that silently holds a package below what its parent
@@ -108,6 +110,21 @@ New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
 `dependabot.yml`, `min-release-age` in `.npmrc`). To pull something newer by
 hand — e.g. a same-day security patch — use
 `pnpm install --config.minimum-release-age=0`.
+
+### PHP versions
+
+Lamb supports every PHP version in `composer.json`'s `require` (currently
+8.4–8.5) and defaults to the newest. Two kinds of setting, kept apart:
+
+- **Floor (oldest supported):** `composer.json` `require.php` and
+  `config.platform.php` (so the lock never picks a dependency the floor can't
+  run), `phpcs.xml` `php_version`/`testVersion`, `phpstan.neon` `phpVersion`,
+  and the CI `test` matrix's lowest entry.
+- **Default (newest):** Docker images, devbox, devcontainer, DDEV, `.workshop`,
+  `.nginx` snippet, single-version CI jobs, and doc examples.
+
+When a new PHP ships, add it to the CI matrix and `testVersion`, then move the
+defaults. Raise the floor only when that version reaches end of life.
 
 ## Project Structure
 
@@ -200,6 +217,8 @@ Each file declares a namespace; functions are called with the namespace prefix:
 
 `response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
+`known.php` and `wordpress.php` are thin sources over `Lamb\Import\import_item()`, which holds the one shared pipeline body (dedup, HTML prep, markdown conversion, save, redirects). A new importer adds a source array of callables (`uuid`, `allowed_types`, `title`, `slug`, `dom_pass`, `markdown`, `tags`, `finalize_markdown`, `store_redirects`) passed to that shared function — never a copy of `import_item()` itself.
+
 ### Database
 
 RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
@@ -215,7 +234,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 ### Configuration
 
-Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from `config.ini` (if present) or uses built-in defaults. Edit it at `/settings` (login required).
+Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from built-in defaults. Edit it at `/settings` (login required).
 
 Config keys: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`, `[redirections]`.
 
@@ -256,10 +275,10 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 
 ### How themes are selected
 
-`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Config\resolve_theme()`, which falls back to `'base'` when unset and aliases the legacy name `'default'` to `'base'`:
+`index.php` reads `$config['theme']` (set via the INI config at `/settings`) and resolves it through `Theme\resolve_theme()`, which sanitises the value and falls back to `'base'` when it names no directory under `src/themes/` — a missing key, a malformed `[theme]` section, a typo, or a deleted custom theme all resolve the same way:
 
 ```php
-define("THEME",     Config\resolve_theme($config['theme'] ?? null));
+define("THEME",     Theme\resolve_theme($config['theme'] ?? null));
 define("THEME_DIR", ROOT_DIR . '/themes/' . THEME . '/');   // absolute FS path
 define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relative)
 ```
@@ -268,7 +287,7 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
 
-New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. Existing installs without an explicit theme are migrated to `theme = base` on first read (`Config\ensure_explicit_theme()` in `get_ini_text()`), so the `'base'` fallback and the `default`→`base` alias can be removed once all installs carry an explicit theme.
+New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. An install with no `theme` key set falls back to `theme = base` via `Theme\resolve_theme()` at read time — nothing is rewritten in storage.
 
 ### Part resolution (`Theme\part`)
 
@@ -505,7 +524,12 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests
-- Run `composer lint` before committing
+- Every user-visible change adds a bullet under `## [Unreleased]` in
+  `CHANGELOG.md` in the same commit as the code. Say what the user sees, in
+  plain language, with the issue as `([#N](url))`. Use the Keep a Changelog
+  types: Added, Changed, Deprecated, Removed, Fixed, Security. Internal-only changes
+  (tests, tooling, refactors) don't get a bullet.
+- Run `viv run lint` before committing
 
 ### Comments
 
@@ -613,31 +637,26 @@ php make-password.php mysecretpassword
 
 The app reads `LAMB_LOGIN_PASSWORD` via `getenv()` at runtime. Production deployments
 (FrankenPHP, nginx+php-fpm, Docker) set it as a real environment variable. The PHP
-built-in dev server (`composer serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
+built-in dev server (`viv run serve`) does not load `.env`, so `Bootstrap\load_dotenv()`
 reads it in — but **only under the `cli-server` SAPI** and **non-overriding** (a real
 env var always wins), so production is unaffected. `phpdotenv` is a dev dependency, so
 this no-ops on a `--no-dev` install.
 
 ### Claude Code on the web
 
-`.claude/hooks/session-start.sh` provisions the toolchain (composer, pnpm, `.env`,
-phpcs's `installed_paths`) at session start, so `composer lint`, `composer analyse`
+`.claude/hooks/session-start.sh` provisions the toolchain (viv, pnpm, `.env`,
+phpcs's `installed_paths`) at session start, so `viv run lint`, `viv run analyse`
 and `vendor/bin/codecept run` work without any manual setup. It exits immediately
 unless `CLAUDE_CODE_REMOTE=true`, so devbox, the devcontainer and Workshop keep
 their own setup paths.
 
-Two remote-only quirks it papers over:
-
-- **Composer scripts refuse to run as root.** The container is root, so every
-  `composer <script>` aborts ("Aborting as no plugin should be loaded…") while
-  `vendor/bin/*` still works. The hook exports `COMPOSER_ALLOW_SUPERUSER=1`.
-- **`api.github.com`/`codeload.github.com` may be blocked** by the environment's
-  network policy, which 403s every dist download. The hook falls back to
-  `--prefer-source` (composer clones through the session's git proxy instead) and
-  clones `phpstan/phpstan` — the one dist-only dependency — at its locked version.
-  Allowing those two hosts in the environment's network policy makes the plain
-  `--prefer-dist` path work and is noticeably faster; see
-  <https://code.claude.com/docs/en/claude-code-on-the-web>.
+One remote-only quirk it cannot paper over: **`api.github.com`/`codeload.github.com`
+may be blocked** by the environment's network policy, which 403s every dist
+download. viv is dist-only — unlike Composer it has no `--prefer-source` fallback
+to retry with — so a blocked network here leaves `vendor/` incomplete and the hook
+logs a warning rather than working around it. Allowing those two hosts in the
+environment's network policy is the only fix; see
+<https://code.claude.com/docs/en/claude-code-on-the-web>.
 
 ## Branching
 
@@ -653,6 +672,8 @@ For contributors: always branch from `main` for new features. Open an issue firs
 When a task's work is complete and pushed, open a pull request for it by default — you do not need to be asked first. This overrides the default "do not open a pull request unless explicitly asked" behaviour.
 
 After opening a pull request, watch its activity and automatically fix failing CI checks — diagnose the failure, push a fix, and repeat until the checks pass — without waiting to be asked. Address clear-cut review feedback the same way; check in before acting only when a fix is ambiguous or architecturally significant.
+
+Keep the PR body short enough to read in a minute, about 200 words. Lead with the symptom and the fix in one or two sentences. In **Why this shape**, give the option you rejected and why, in one to three plain sentences: "Considered streaming to disk; dropped it, 50 MB fits in memory." Leave out function names, line numbers and mechanism there; the diff carries those. List evidence as the command and its result, and keep **Not checked** to one bullet per gap.
 
 Before any bulk PR operation — merging, rebasing, or force-pushing across several PRs — check whether the branches are stacked. Branches can be built on each other even when every PR targets `main`, so a diff or a squash can carry a lower branch's content, and a PR's real base may be another feature branch (check `baseRefName`). Merge stacked PRs bottom-up, re-check each remaining PR's mergeable state after every merge (earlier merges turn later ones `DIRTY`), and never force-push a shared branch without confirming the remote tip is what you expect — another session or GitHub's base-retargeting may have moved it. Prefer merging `main` into the branch over rebasing, so the push stays a fast-forward. When resolving the merge, keep the content the stacked branch legitimately owns rather than blindly taking `main`'s side, and run the tests locally before pushing.
 

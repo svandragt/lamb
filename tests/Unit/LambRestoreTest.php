@@ -311,6 +311,160 @@ class LambRestoreTest extends TestCase
         open_source($this->zip($entries, 'huge.zip'));
     }
 
+    public function testOpenSourceReadsAZipWithoutExtZip(): void
+    {
+        $path = $this->zip([
+            'manifest.json'             => '{}',
+            'posts/2026/07/hello.md'    => 'Hello.',
+            'assets/2026/07/photo.webp' => 'bytes',
+        ]);
+        $zip = new ZipArchive();
+        $zip->open($path);
+        $zip->addEmptyDir('posts/2026/08');
+        $zip->close();
+
+        [$names, $reader] = open_source($path, false);
+
+        sort($names);
+        $this->assertSame(
+            ['assets/2026/07/photo.webp', 'manifest.json', 'posts/2026/07/hello.md'],
+            $names
+        );
+        $this->assertSame('Hello.', read_entry($reader, 'posts/2026/07/hello.md'));
+        $this->assertNull(read_entry($reader, 'posts/2026/07/absent.md'));
+        $this->assertNull(read_entry($reader, 'posts/2026/07'));
+    }
+
+    /**
+     * @return array<string, array{0: ?bool}>
+     */
+    public static function zipReaders(): array
+    {
+        return [
+            'ext-zip'  => [null],
+            'ext-phar' => [false],
+        ];
+    }
+
+    /**
+     * @dataProvider zipReaders
+     */
+    public function testAnEntryThatCannotBeInflatedIsSkippedAndTheRestoreContinues(?bool $has_zip): void
+    {
+        [, $reader] = open_source($this->zipWithDamagedFirstEntry(true), $has_zip);
+
+        // ext-zip reads a garbled entry as '' or false depending on the damage,
+        // so compare what the restore does with it, not the raw read.
+        $items = manifest_items([
+            'posts' => [
+                ['id' => 1, 'path' => 'posts/2026/07/bad.md'],
+                ['id' => 2, 'path' => 'posts/2026/07/good.md'],
+            ],
+        ], $reader, 'https://example.test');
+
+        $this->assertNotNull(item_skip_reason($items[0]));
+        $this->assertNull(item_skip_reason($items[1]));
+    }
+
+    /**
+     * @dataProvider zipReaders
+     */
+    public function testAnEntryWithABadChecksumIsSkippedAndTheRestoreContinues(?bool $has_zip): void
+    {
+        // ZipArchive::getFromName() does not check the CRC; both readers must
+        // still treat the entry as unreadable.
+        [, $reader] = open_source($this->zipWithDamagedFirstEntry(false), $has_zip);
+
+        $items = manifest_items([
+            'posts' => [
+                ['id' => 1, 'path' => 'posts/2026/07/bad.md'],
+                ['id' => 2, 'path' => 'posts/2026/07/good.md'],
+            ],
+        ], $reader, 'https://example.test');
+
+        $this->assertSame('missing file', item_skip_reason($items[0]));
+        $this->assertNull(item_skip_reason($items[1]));
+        $this->assertSame('Good body.', read_entry($reader, 'posts/2026/07/good.md'));
+    }
+
+    /**
+     * Writes a zip whose first entry, posts/2026/07/bad.md, is deflated and
+     * then damaged: its compressed stream is garbled, or only the CRC the
+     * archive recorded for it is wrong. The second entry is intact.
+     */
+    private function zipWithDamagedFirstEntry(bool $garble_stream): string
+    {
+        $path = $this->zip([
+            'posts/2026/07/bad.md'  => str_repeat('Deflate me again and again. ', 40),
+            'posts/2026/07/good.md' => 'Good body.',
+        ]);
+        $zip = new ZipArchive();
+        $zip->open($path);
+        $zip->setCompressionName('posts/2026/07/bad.md', ZipArchive::CM_DEFLATE);
+        $zip->close();
+
+        // The first entry's local header is at offset 0 and its central
+        // directory record is the first "PK\x01\x02".
+        $bytes = (string) file_get_contents($path);
+        $this->assertSame("PK\x03\x04", substr($bytes, 0, 4));
+        if ($garble_stream) {
+            $lengths = unpack('vname/vextra', substr($bytes, 26, 4));
+            $this->assertIsArray($lengths);
+            $start = 30 + $lengths['name'] + $lengths['extra'];
+            $bytes = substr_replace($bytes, str_repeat("\xFF", 6), $start, 6);
+        } else {
+            $central = strpos($bytes, "PK\x01\x02");
+            $this->assertIsInt($central);
+            $bytes = substr_replace($bytes, "\x00\x00\x00\x00", 14, 4);
+            $bytes = substr_replace($bytes, "\x00\x00\x00\x00", $central + 16, 4);
+        }
+        file_put_contents($path, $bytes);
+
+        return $path;
+    }
+
+    public function testOpenSourceWithoutExtZipRejectsAnArchiveWithTooManyEntries(): void
+    {
+        $entries = [];
+        for ($i = 0; $i <= MAX_ENTRIES; $i++) {
+            $entries["posts/2026/07/post-$i.md"] = '';
+        }
+
+        $this->expectExceptionMessageMatches('/more than ' . MAX_ENTRIES . ' entries/');
+        open_source($this->zip($entries, 'huge.zip'), false);
+    }
+
+    public function testOpenSourceWithoutExtZipRejectsAFileThatIsNotAZip(): void
+    {
+        $path = "$this->tmp_dir/corrupt.zip";
+        file_put_contents($path, 'not a zip at all');
+
+        $this->expectExceptionMessageMatches('/Not a readable zip archive/');
+        open_source($path, false);
+    }
+
+    public function testOpenSourceWithoutExtZipExplainsAZipWithoutAnExtension(): void
+    {
+        $path = $this->zip(['manifest.json' => '{}'], 'export');
+
+        $this->expectExceptionMessageMatches('/needs an extension/');
+        open_source($path, false);
+    }
+
+    public function testOpenSourceWithoutAnyZipReaderAsksForTheUnpackedDirectory(): void
+    {
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessageMatches('/cannot read .*archive\.zip.* Unzip the archive and pass the unpacked directory/');
+        open_source($this->zip(['manifest.json' => '{}']), false, false);
+    }
+
+    public function testOpenSourceReadsADirectoryWithoutAnyZipReader(): void
+    {
+        [$names] = open_source($this->tree(['manifest.json' => '{}']), false, false);
+
+        $this->assertSame(['manifest.json'], $names);
+    }
+
     public function testReadManifestReturnsTheDecodedDocument(): void
     {
         [, $reader] = open_source($this->zip([

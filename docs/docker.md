@@ -15,7 +15,7 @@ You need a working Docker setup and a checkout of the repository.
 
 ```shell
 # Generate a password hash on any machine with PHP, or inside a throwaway container:
-$ docker run --rm php:8.4-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
+$ docker run --rm php:8.5-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
 
 # Build the image (run from the repository root)
 $ docker build -f .docker/Dockerfile.release -t lamb .

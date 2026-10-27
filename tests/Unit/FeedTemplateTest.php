@@ -376,9 +376,14 @@ class FeedTemplateTest extends TestCase
         }
 
         // ROOT_DIR is a constant defined once per process (Codeception does not
-        // isolate test methods), so the web-root path is fixed and convention-file
-        // presence is controlled per render by writing/removing the files on disk.
-        $webRoot = sys_get_temp_dir() . '/lamb_feed_test_' . getmypid();
+        // isolate test methods) and other unit tests may have already pointed
+        // it at their own temp dir, so operate on wherever it actually points
+        // rather than assume our define() wins; convention-file presence is
+        // then controlled per render by writing/removing the files on disk.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_feed_test_' . getmypid());
+        }
+        $webRoot = ROOT_DIR;
         if (!is_dir($webRoot)) {
             mkdir($webRoot, 0777, true);
         }
@@ -387,9 +392,6 @@ class FeedTemplateTest extends TestCase
         }
         foreach ($conventionFiles as $file) {
             file_put_contents($webRoot . '/' . $file, 'x');
-        }
-        if (!defined('ROOT_DIR')) {
-            define('ROOT_DIR', $webRoot);
         }
 
         $bean = R::dispense('post');

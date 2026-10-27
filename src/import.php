@@ -4,14 +4,18 @@ namespace Lamb\Import;
 
 use DOMDocument;
 use DOMElement;
+use DOMText;
 use DOMXPath;
 use League\HTMLToMarkdown\HtmlConverter;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
 use SimpleXMLElement;
 
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Post\build_matter;
+use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 use function Lamb\Response\asset_url;
 
 /**
@@ -198,18 +202,47 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
         }
     }
 
-    $videos = $xpath->query('//video[@src]') ?: [];
+    // Lamb renders a video from `![](clip.mp4)`, so a supported clip becomes an
+    // image node for the converter: the `.mp4` source when there is one (widest
+    // playback), else the first supported one. `poster` is dropped: LambDown has
+    // no poster support. A video with no supported clip falls back to an
+    // autolink on its first URL, and one with no URL at all is removed, since
+    // raw `<video>` would reach the safe renderer as escaped text.
+    $videos = $xpath->query('//video') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement || $video->parentNode === null) {
             continue;
         }
-        $src = $video->getAttribute('src');
-        $link = $dom->createElement('a');
-        $link->setAttribute('href', $src);
-        $link->appendChild($dom->createTextNode($src));
-        $p = $dom->createElement('p');
-        $p->appendChild($link);
-        $video->parentNode->replaceChild($p, $video);
+        $urls = [$video->getAttribute('src')];
+        foreach ($video->getElementsByTagName('source') as $source) {
+            $urls[] = $source->getAttribute('src');
+        }
+        $urls = array_values(array_filter($urls, static fn(string $url): bool => $url !== ''));
+        $clips = array_values(array_filter($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)));
+        $clip = array_find($clips, static fn(string $url): bool => href_has_extension($url, ['mp4'])) ?? ($clips[0] ?? null);
+        if ($clip !== null) {
+            $node = $dom->createElement('img');
+            $node->setAttribute('src', $clip);
+            $node->setAttribute('alt', '');
+        } elseif ($urls !== []) {
+            $node = $dom->createElement('a');
+            $node->setAttribute('href', $urls[0]);
+            $node->appendChild($dom->createTextNode($urls[0]));
+        } else {
+            $video->parentNode->removeChild($video);
+            continue;
+        }
+        $inline = $video->parentNode->nodeName === 'p'
+            || array_any(
+                [$video->previousSibling, $video->nextSibling],
+                static fn(?\DOMNode $sibling): bool => $sibling instanceof DOMText && trim($sibling->data) !== ''
+            );
+        if (!$inline) {
+            $p = $dom->createElement('p');
+            $p->appendChild($node);
+            $node = $p;
+        }
+        $video->parentNode->replaceChild($node, $video);
     }
 
     $class_condition = '';
@@ -404,15 +437,19 @@ function asset_dir_for_date(string $created): string
 }
 
 /**
- * Walks an HTML fragment and downloads every referenced image:
+ * Walks an HTML fragment and downloads every referenced image or video:
  *  - `<img>` elements: prefers `data-full-url` (WordPress gallery blocks put
  *    the original full-resolution URL there and a smaller `…-473x1024.jpg`
  *    variant in `src`; pulling the full original lets convert_to_webp() do the
  *    1600px resize from a higher-quality source). Falls back to `src`, then to
  *    `data-src` for lazy-loaded markup.
- *  - `<a>` elements whose `href` points at an image extension: thumbnails
- *    wrapped in "view full size" links would otherwise leave dead off-site
- *    links in the body once the source site is decommissioned.
+ *  - `<video src>` and `<video><source src>` whose URL has a
+ *    VIDEO_UPLOAD_EXTENSIONS extension: the old host would otherwise keep
+ *    serving the clip until it goes away. A `<video poster>` is not
+ *    downloaded: normalize_html() drops it, so the file would go unused.
+ *  - `<a>` elements whose `href` points at an image or video extension:
+ *    thumbnails wrapped in "view full size" links would otherwise leave dead
+ *    off-site links in the body once the source site is decommissioned.
  *
  * Protocol-relative URLs (`//host/path.jpg`) are treated as `https://`.
  * Multi-resolution `srcset`/`sizes` attributes are stripped once we have a
@@ -421,26 +458,32 @@ function asset_dir_for_date(string $created): string
  * pointing at the old host don't leak back in. Failed downloads, data: URIs
  * and relative URLs are left untouched.
  *
+ * @param string                          $html        HTML fragment to rewrite.
+ * @param string                          $created     The post's creation date (picks the assets subdirectory).
  * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
+ * @return string The HTML with every successfully downloaded reference pointing at its local copy.
  */
-function rewrite_image_links(string $html, string $created, callable $downloader): string
+function rewrite_media_links(string $html, string $created, callable $downloader): string
 {
     if (trim($html) === '') {
         return '';
     }
     $dom = load_html_fragment($html);
-    rewrite_image_links_in_dom($dom, $created, $downloader);
+    rewrite_media_links_in_dom($dom, $created, $downloader);
     return dump_html_fragment($dom);
 }
 
 /**
- * In-place version of {@see rewrite_image_links}, chained on the same DOM as
+ * In-place version of {@see rewrite_media_links}, chained on the same DOM as
  * {@see sanitize_html_in_dom} from {@see prepare_imported_html} so the two
  * passes don't each parse and serialise the body separately.
  *
+ * @param DOMDocument                     $dom         Document rewritten in place.
+ * @param string                          $created     The post's creation date (picks the assets subdirectory).
  * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
+ * @return void
  */
-function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable $downloader): void
+function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable $downloader): void
 {
     $xpath = new DOMXPath($dom);
     $sub_path = asset_dir_for_date($created);
@@ -453,7 +496,7 @@ function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable 
             continue;
         }
         $src = pick_image_url($img);
-        $url = normalize_image_url($src);
+        $url = normalize_media_url($src);
         if ($url === null) {
             continue;
         }
@@ -467,16 +510,33 @@ function rewrite_image_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
+    $videos = $xpath->query('//video[@src] | //video/source[@src]') ?: [];
+    foreach ($videos as $video) {
+        if (!$video instanceof DOMElement) {
+            continue;
+        }
+        $url = normalize_media_url($video->getAttribute('src'));
+        if ($url === null || !href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
+            continue;
+        }
+        $filename = $downloader($url, $sub_path);
+        if (!is_string($filename) || $filename === '') {
+            continue;
+        }
+        $video->setAttribute('src', asset_url($sub_path, $filename));
+    }
+
+    $link_extensions = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
     $anchors = $xpath->query('//a[@href]') ?: [];
     foreach ($anchors as $a) {
         if (!$a instanceof DOMElement) {
             continue;
         }
         $href = $a->getAttribute('href');
-        if (!href_looks_like_image($href)) {
+        if (!href_has_extension($href, $link_extensions)) {
             continue;
         }
-        $url = normalize_image_url($href);
+        $url = normalize_media_url($href);
         if ($url === null) {
             continue;
         }
@@ -587,11 +647,14 @@ function pick_image_url(DOMElement $img): string
 }
 
 /**
- * Normalises a candidate image URL to an absolute http(s) form, or returns
- * null when it isn't fetchable (data: URI, relative path, empty, etc.).
+ * Normalises a candidate image or video URL to an absolute http(s) form, or
+ * returns null when it isn't fetchable (data: URI, relative path, empty, etc.).
  * Protocol-relative `//host/path` URLs are promoted to https.
+ *
+ * @param string $url The raw attribute value.
+ * @return string|null The absolute http(s) URL, or null when it can't be fetched.
  */
-function normalize_image_url(string $url): ?string
+function normalize_media_url(string $url): ?string
 {
     $url = trim($url);
     if ($url === '') {
@@ -608,19 +671,23 @@ function normalize_image_url(string $url): ?string
 }
 
 /**
- * Whether an anchor href appears to point at an image — used to decide if a
- * "view full size" link should also be downloaded. Conservative: only known
- * upload-pipeline extensions are accepted, query strings and fragments are
- * tolerated.
+ * Whether a URL's path ends in one of the given extensions — used to decide
+ * if an anchor (a "view full size" link, a linked clip) or a video source
+ * should be downloaded. Conservative: only known upload-pipeline extensions
+ * are accepted, query strings and fragments are tolerated.
+ *
+ * @param string       $href       The raw `href` or `src` value.
+ * @param list<string> $extensions Accepted lower-case extensions, e.g. VIDEO_UPLOAD_EXTENSIONS.
+ * @return bool
  */
-function href_looks_like_image(string $href): bool
+function href_has_extension(string $href, array $extensions): bool
 {
     $path = parse_url($href, PHP_URL_PATH);
     if (!is_string($path) || $path === '') {
         return false;
     }
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    return $ext !== '' && in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true);
+    return $ext !== '' && in_array($ext, $extensions, true);
 }
 
 /**
@@ -644,24 +711,48 @@ const IMAGE_DOWNLOAD_MAX_BYTES = 20_000_000;
 const IMAGE_DOWNLOAD_TIMEOUT = 30;
 
 /**
+ * Cap for a single video download. A larger video stays remote, like any
+ * other failed download.
+ *
+ * Lamb has no cap of its own on uploaded video: only PHP's upload_max_filesize
+ * and the web server's body limit apply (100M in the shipped Docker images),
+ * and neither reaches an importer run from the CLI. fetch_guarded() buffers
+ * the whole body in memory, and a 100 MB body already exhausts PHP's default
+ * 128M memory_limit, so the cap sits well below that.
+ */
+const VIDEO_DOWNLOAD_MAX_BYTES = 50_000_000;
+
+/**
+ * Time limit for a single video download — the same reasoning as
+ * IMAGE_DOWNLOAD_TIMEOUT, scaled for the larger byte cap.
+ */
+const VIDEO_DOWNLOAD_TIMEOUT = 120;
+
+/**
  * Default downloader used by the CLI scripts: fetches $url over HTTP and
  * writes it under ROOT_DIR/assets/$sub_path with a content-hash filename.
- * JPEG/PNG are re-encoded to WebP via the shared persistence helper. Returns
+ * JPEG/PNG are re-encoded to WebP via the shared persistence helper; video
+ * (VIDEO_UPLOAD_EXTENSIONS) is stored exactly as downloaded. Returns
  * the filename relative to the subdirectory, or null on any failure.
  *
  * Idempotent: when the destination file already exists from an earlier post in
  * the same month — or from a previous interrupted run — the existing filename
  * is returned without re-fetching. The seed is sha1($url), so the same URL
  * always maps to the same on-disk name.
+ *
+ * @param string $url      Absolute http(s) URL of the image or video.
+ * @param string $sub_path The `YYYY/MM` subdirectory under ROOT_DIR/assets.
+ * @return string|null The saved filename relative to the subdirectory, or null on any failure.
  */
-function default_image_downloader(string $url, string $sub_path): ?string
+function default_media_downloader(string $url, string $sub_path): ?string
 {
     if (!defined('ROOT_DIR')) {
         return null;
     }
     $path = parse_url($url, PHP_URL_PATH) ?: '';
     $ext = strtolower(pathinfo($path, PATHINFO_EXTENSION));
-    if ($ext === '' || !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true)) {
+    $is_video = in_array($ext, VIDEO_UPLOAD_EXTENSIONS, true);
+    if ($ext === '' || (!$is_video && !in_array($ext, IMAGE_UPLOAD_EXTENSIONS, true))) {
         return null;
     }
     $dest_dir = ROOT_DIR . '/assets/' . $sub_path;
@@ -693,8 +784,8 @@ function default_image_downloader(string $url, string $sub_path): ?string
     // reason, and this URL is no less attacker-influenced than a webmention
     // source.
     $response = fetch_guarded($url, [
-        'max_bytes' => IMAGE_DOWNLOAD_MAX_BYTES,
-        'timeout' => IMAGE_DOWNLOAD_TIMEOUT,
+        'max_bytes' => $is_video ? VIDEO_DOWNLOAD_MAX_BYTES : IMAGE_DOWNLOAD_MAX_BYTES,
+        'timeout' => $is_video ? VIDEO_DOWNLOAD_TIMEOUT : IMAGE_DOWNLOAD_TIMEOUT,
     ]);
     if ($response === null || $response['body'] === '') {
         return null;
@@ -702,7 +793,7 @@ function default_image_downloader(string $url, string $sub_path): ?string
     if ($response['status'] < 200 || $response['status'] >= 300) {
         return null;
     }
-    if (!response_is_image($response['headers'])) {
+    if (!response_is_media($response['headers'], $is_video ? 'video' : 'image')) {
         return null;
     }
     // Trust the bytes over the URL's extension: a WordPress media file renamed
@@ -710,22 +801,40 @@ function default_image_downloader(string $url, string $sub_path): ?string
     // rejected by persist_image_bytes()'s content-vs-extension gate and left
     // remote. Fall back to the URL extension when the bytes don't sniff as a
     // known image — persist_image_bytes() then rejects the mismatch as before.
-    $ext = \Lamb\Response\image_ext_for_bytes($response['body']) ?? $ext;
+    // Video keeps its URL extension: persist_image_bytes() sniffs its container
+    // against that extension and skips the WebP re-encode.
+    if (!$is_video) {
+        $ext = \Lamb\Response\image_ext_for_bytes($response['body']) ?? $ext;
+    }
     return \Lamb\Response\persist_image_bytes($response['body'], $ext, $dest_dir, $seed);
 }
 
 /**
- * Scans raw HTTP response headers (as returned by Lamb\Http\fetch_guarded) for an
- * image/* Content-Type. Lets the downloader reject 200-OK HTML error pages,
- * CDN block pages, or login-required HTML returned for unauthenticated asset
- * URLs — situations the URL extension and status code alone don't catch.
+ * Scans raw HTTP response headers (as returned by Lamb\Http\fetch_guarded) for a
+ * Content-Type of the given family (`image` or `video`). Lets the downloader
+ * reject 200-OK HTML error pages, CDN block pages, or login-required HTML
+ * returned for unauthenticated asset URLs — situations the URL extension and
+ * status code alone don't catch.
+ *
+ * Video also accepts the generic `application/octet-stream` and
+ * `binary/octet-stream`: S3 and some CDNs serve mp4/webm that way. The caller
+ * has already matched the URL against VIDEO_UPLOAD_EXTENSIONS, and
+ * persist_image_bytes() sniffs the container, so the header only has to rule
+ * out an HTML page. upload_content_types() is keyed by extension and lacks
+ * `binary/octet-stream`, so it can't stand in for this check.
  *
  * @param string[] $headers Raw response header lines.
+ * @param string   $family  The media type prefix to require: `image` or `video`.
+ * @return bool
  */
-function response_is_image(array $headers): bool
+function response_is_media(array $headers, string $family): bool
 {
+    $accepted = preg_quote($family, '/') . '\/';
+    if ($family === 'video') {
+        $accepted .= '|(?:application|binary)\/octet-stream';
+    }
     foreach ($headers as $header) {
-        if (preg_match('/^content-type\s*:\s*image\//i', $header)) {
+        if (preg_match('/^content-type\s*:\s*(?:' . $accepted . ')/i', $header)) {
             return true;
         }
     }
@@ -754,7 +863,7 @@ function prepare_imported_html(string $html, string $created, callable $download
     if ($dom_pass !== null) {
         $dom_pass($dom);
     }
-    rewrite_image_links_in_dom($dom, $created, $downloader);
+    rewrite_media_links_in_dom($dom, $created, $downloader);
     return dump_html_fragment($dom);
 }
 
@@ -785,6 +894,126 @@ function store_redirect(string $from, string $to): void
     $redirect->from_slug = $from;
     $redirect->to_url = $to;
     R::store($redirect);
+}
+
+/**
+ * Explains why an item falls outside import scope, or null when it should be
+ * imported. Single source of truth for should_import(); the importer uses the
+ * reason string to break down its skipped tally. $allowed_types is the one
+ * thing that varies per CMS (Known: `['post']`; WordPress: `['post', 'page']`).
+ *
+ * @param array<string, mixed> $item
+ * @param list<string>         $allowed_types
+ * @return ?string
+ */
+function skip_reason(array $item, array $allowed_types): ?string
+{
+    $type   = (string) ($item['post_type'] ?? '');
+    $status = (string) ($item['status'] ?? '');
+    if (!in_array($type, $allowed_types, true)) {
+        return "unsupported post_type '" . ($type === '' ? '(none)' : $type) . "'";
+    }
+    if ($status !== 'publish') {
+        return "non-published status '" . ($status === '' ? '(none)' : $status) . "'";
+    }
+    return null;
+}
+
+/**
+ * @param array<string, mixed> $item
+ * @param list<string>         $allowed_types
+ * @return bool
+ */
+function should_import(array $item, array $allowed_types): bool
+{
+    return skip_reason($item, $allowed_types) === null;
+}
+
+/**
+ * Runs a single extracted item through the standard post pipeline, shared by
+ * every importer ({@see \Lamb\Known\import_item}, {@see
+ * \Lamb\WordPress\import_item}). $source supplies every piece that differs
+ * per CMS — dedup uuid, allowed post types, and how to read the title, slug
+ * and markdown body (plus its tags and any last-minute rewrite, e.g. Known's
+ * bookmark-link prefix) off the item — so this body runs unchanged for both.
+ *
+ * Returns null when the item is out of scope ({@see skip_reason}). When an
+ * item with the same uuid already exists the existing bean is returned
+ * untouched, before any $source hook runs — re-running an import is
+ * therefore safe, idempotent and side-effect-free on a repeat.
+ *
+ * Passing $bean (run_import() does so under `--replace`) re-imports into that
+ * row instead: everything the item describes is written over it, in place,
+ * so the row keeps its id and its import_uuid and any local edit since the
+ * original import is lost.
+ *
+ * No outbound webmentions or WebSub pings are emitted: the call path stops at
+ * save() without `notify`, so no post.published event fires.
+ *
+ * @param array<string, mixed> $item Item from the source's extract_items().
+ * @param array{
+ *     uuid: callable(string): string,
+ *     allowed_types: list<string>,
+ *     title: callable(array<string, mixed>): string,
+ *     slug: callable(array<string, mixed>): string,
+ *     dom_pass: ?callable(DOMDocument): void,
+ *     markdown: callable(string): string,
+ *     tags: callable(array<string, mixed>, string): list<string>,
+ *     finalize_markdown: callable(array<string, mixed>, string): string,
+ *     store_redirects: callable(array<string, mixed>, OODBBean): void,
+ * } $source
+ * @param callable(string,string):?string $downloader Image downloader.
+ * @param OODBBean|null $bean Existing row to overwrite.
+ * @return OODBBean|null
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ */
+function import_item(array $item, array $source, callable $downloader, bool $dry_run = false, ?OODBBean $bean = null): ?OODBBean
+{
+    if (!should_import($item, $source['allowed_types'])) {
+        return null;
+    }
+
+    $uuid = ($source['uuid'])((string) $item['guid']);
+    if ($bean === null) {
+        $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
+        if ($existing) {
+            return $existing;
+        }
+    }
+
+    // Sanitize and image-rewrite share one DOM so the body is parsed and
+    // serialised once for these two passes. A third parse happens inside the
+    // markdown conversion for normalize_html, which has to stay on its own DOM
+    // because of its placeholder-string substitution dance.
+    $body_html = (string) ($item['content'] ?? '');
+    $prepared = $body_html === ''
+        ? ''
+        : prepare_imported_html($body_html, (string) $item['created'], $downloader, $source['dom_pass']);
+    $markdown = ($source['markdown'])($prepared);
+
+    $tags = ($source['tags'])($item, $markdown);
+    $title = ($source['title'])($item);
+    $slug = ($source['slug'])($item);
+    $markdown = ($source['finalize_markdown'])($item, $markdown);
+
+    $body = build_post_body($title, $markdown, $tags, $slug);
+
+    $bean = populate_bean($body, null, null, $bean);
+    if (!empty($item['created'])) {
+        $bean->created = (string) $item['created'];
+    }
+    if (!empty($item['updated'])) {
+        $bean->updated = (string) $item['updated'];
+    }
+    $bean->import_uuid = $uuid;
+
+    if ($dry_run) {
+        return $bean;
+    }
+
+    save($bean, ['finalize_slug' => true]);
+    ($source['store_redirects'])($item, $bean);
+    return $bean;
 }
 
 /**
@@ -857,7 +1086,7 @@ function run_import(
 ): void {
     $downloader = $dry_run
         ? static fn(): ?string => null
-        : 'Lamb\\Import\\default_image_downloader';
+        : 'Lamb\\Import\\default_media_downloader';
 
     $created = 0;
     $existed = 0;

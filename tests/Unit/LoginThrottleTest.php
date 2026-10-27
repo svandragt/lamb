@@ -274,4 +274,11 @@ class LoginThrottleTest extends TestCase
         $this->assertStringContainsString('2 minutes', throttle_message(61));
         $this->assertStringContainsString('15 minutes', throttle_message(15 * 60));
     }
+
+    public function testThrottleMessageStatesSubMinuteWaitsInSeconds(): void
+    {
+        $this->assertStringContainsString('1 second', throttle_message(1));
+        $this->assertStringContainsString('45 seconds', throttle_message(45));
+        $this->assertStringContainsString('59 seconds', throttle_message(59));
+    }
 }

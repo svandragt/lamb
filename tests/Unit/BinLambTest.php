@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
@@ -146,5 +147,243 @@ XML;
 
         $this->assertSame(1, $process->getExitCode());
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
+    }
+
+    /**
+    /**
+     * #831: a CLI run against a database owned by someone else leaves WAL
+     * sidecars that a read-only connection can never checkpoint away, so
+     * every later web request dies in ensure_schema(). The predicate takes
+     * the uid as a parameter, so these cases need no second real account
+     * and no test-only override inside bin/lamb.
+     *
+     * @return void
+     */
+    public function testDbOwnedByAnotherUserDetectsAMismatchedOwner(): void
+    {
+        $db = "$this->tmp_dir/lamb.db";
+        touch($db);
+        $owner = fileowner($db);
+        $this->assertIsInt($owner);
+
+        $this->assertTrue(
+            db_owned_by_another_user($db, $owner + 1),
+            'a different uid must be refused',
+        );
+        $this->assertFalse(
+            db_owned_by_another_user($db, $owner),
+            'the owning uid must be allowed through',
+        );
+    }
+
+    /**
+     * A database that isn't there yet is the normal first run, and an
+     * undeterminable uid (no posix extension) must not block a legitimate
+     * run — an unnecessary refusal costs an import, a missed one costs a
+     * 500 the operator can recover from by deleting two files.
+     *
+     * @return void
+     */
+    public function testDbOwnedByAnotherUserAllowsMissingFileAndUnknownUid(): void
+    {
+        $db = "$this->tmp_dir/absent.db";
+        $this->assertFalse(db_owned_by_another_user($db, 12345));
+
+        touch($db);
+        $this->assertFalse(db_owned_by_another_user($db, null));
+    }
+
+    /**
+     * Whether this environment can chown a file to another real user without
+     * a password prompt, which is what simulating the #831 mismatch for real
+     * (rather than via db_owned_by_another_user()'s injectable uid) needs.
+     * True on GitHub Actions' ubuntu runners (see .github/workflows/release-verify.yml
+     * for the existing precedent) and on this dev sandbox; not guaranteed
+     * everywhere, so the test that needs it skips rather than fails when absent.
+     */
+    private static function canChownToAnotherUser(): bool
+    {
+        return (new Process(['sudo', '-n', 'true']))->run() === 0;
+    }
+
+    /**
+     * #811: bin/upgrade must tell "bin/lamb refused before touching the
+     * database" apart from "a migration genuinely failed" to decide whether
+     * to fail the upgrade or just warn and continue. That distinction is
+     * carried entirely by open_data_dir()'s $refusal_exit_code parameter —
+     * this pins that migrate is wired to 3 while every other command stays
+     * on the original 1, against a real ownership mismatch rather than the
+     * injectable-uid unit tests above, so the shared seam can't regress
+     * silently for one command without the others noticing.
+     */
+    public function testMigrateExitsThreeOnOwnershipRefusalWhileOtherCommandsExitOne(): void
+    {
+        if (!self::canChownToAnotherUser()) {
+            $this->markTestSkipped('Requires passwordless sudo to chown a file to another real user.');
+        }
+
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+        $db = "$data_dir/lamb.db";
+        touch($db);
+        (new Process(['sudo', '-n', 'chown', 'nobody:nogroup', $db]))->mustRun();
+
+        $migrate = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $migrate->run();
+        $this->assertSame(3, $migrate->getExitCode(), $migrate->getErrorOutput());
+
+        $upgradePosts = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $upgradePosts->run();
+        $this->assertSame(1, $upgradePosts->getExitCode(), $upgradePosts->getErrorOutput());
+    }
+
+    /**
+     * Dispenses and stores a post bean directly in $data_dir's lamb.db, in a
+     * subprocess: the version and body a bin/lamb upgrade-posts test needs to
+     * seed are set before this test process's own bootstrap runs, so a
+     * separate connection (this file-backed db) never crosses the in-memory
+     * one other tests in this suite use.
+     */
+    private function seedPost(string $data_dir, int $version, string $body): int
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                . '$bean = \RedBeanPHP\R::dispense("post"); '
+                . '$bean->body = getenv("SEED_BODY"); '
+                . '$bean->version = (int) getenv("SEED_VERSION"); '
+                . 'echo \RedBeanPHP\R::store($bean);',
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir, 'SEED_BODY' => $body, 'SEED_VERSION' => (string) $version] + getenv(),
+        );
+        $process->mustRun();
+
+        return (int) trim($process->getOutput());
+    }
+
+    /**
+     * Reads back a stored post's `version` column, in its own subprocess for
+     * the same connection-isolation reason as seedPost().
+     */
+    private function storedPostVersion(string $data_dir, int $id): int
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                . 'echo (int) \RedBeanPHP\R::load("post", (int) getenv("SEED_ID"))->version;',
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir, 'SEED_ID' => (string) $id] + getenv(),
+        );
+        $process->mustRun();
+
+        return (int) trim($process->getOutput());
+    }
+
+    public function testUpgradePostsCommandUpgradesEveryPostBelowPostVersion(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('needs_upgrade=1 upgraded=1', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testUpgradePostsDryRunChangesNothing(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] Done. needs_upgrade=1 upgraded=0', $process->getOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testUpgradePostsCommandLeavesAnAlreadyCurrentPostAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'upgrade-posts'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('needs_upgrade=0 upgraded=0', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
+    }
+
+    /**
+     * #814: `bin/lamb migrate` now covers the post upgrade too, so an
+     * operator restoring an old backup has one command for every
+     * outstanding data migration instead of two.
+     */
+    public function testMigrateCommandAlsoUpgradesStalePosts(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $process->getOutput());
+        $this->assertSame(POST_VERSION, $this->storedPostVersion($data_dir, $id));
+    }
+
+    public function testMigrateDryRunDoesNotUpgradeStalePosts(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $process->getOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
     }
 }

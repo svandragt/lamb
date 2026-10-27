@@ -1,0 +1,299 @@
+<?php
+
+namespace Tests\Unit;
+
+use PHPUnit\Framework\TestCase;
+use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
+use Symfony\Component\Process\Process;
+
+use function Lamb\Bootstrap\ensure_schema;
+use function Lamb\Bootstrap\is_readonly_database_error;
+use function Lamb\Bootstrap\readonly_database_message;
+
+use const Lamb\Bootstrap\SCHEMA;
+
+/**
+ * Covers the write-lock gates added for issue #831: a database whose schema
+ * (and journal mode) are already current must boot as a pure reader, because
+ * SQLite's WAL mode fails writes when the -shm sidecar is not writable by the
+ * current user, and a boot that always takes a write lock always hits that.
+ *
+ * ensure_post_indexes() and the backfill_*() probes already establish the
+ * pattern (read sqlite_master/PRAGMA first, only issue DDL when it would
+ * actually change something); these tests cover the two boot-path spots that
+ * still wrote unconditionally: ensure_schema()'s CREATE TABLE, and
+ * bootstrap_db()'s PRAGMA journal_mode=WAL.
+ */
+class BootWriteGateTest extends TestCase
+{
+    protected function setUp(): void
+    {
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        R::freeze(false);
+        R::nuke();
+    }
+
+    /**
+     * The DDL a callable issues, captured via RedBeanPHP's array logger.
+     *
+     * @return list<string>
+     */
+    private function ddlDuring(callable $fn): array
+    {
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        try {
+            $fn();
+            $logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        } finally {
+            R::debug(false);
+        }
+
+        return array_values(array_filter(
+            $logs,
+            fn ($line) => is_string($line) && preg_match('/^\s*(CREATE|ALTER)\b/i', $line) === 1
+        ));
+    }
+
+    public function testEnsureSchemaIssuesNoDdlOnASecondCallAgainstACurrentDatabase(): void
+    {
+        ensure_schema();
+
+        $this->assertSame([], $this->ddlDuring(fn () => ensure_schema()));
+    }
+
+    public function testEnsureSchemaStillCreatesATableThatIsGenuinelyMissing(): void
+    {
+        ensure_schema();
+        R::exec('DROP TABLE redirect');
+
+        $ddl = $this->ddlDuring(fn () => ensure_schema());
+
+        $this->assertNotSame([], $ddl);
+        $this->assertNotNull(R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name='redirect'"));
+    }
+
+    public function testEnsureSchemaCreatesEveryDeclaredTableFromScratch(): void
+    {
+        ensure_schema();
+
+        foreach (array_keys(SCHEMA) as $table) {
+            $this->assertNotNull(
+                R::getCell("SELECT name FROM sqlite_master WHERE type='table' AND name=?", [$table]),
+                "Missing table: $table"
+            );
+        }
+    }
+
+    /**
+     * ensure_wal_journal_mode() needs a real file-backed connection (SQLite's
+     * :memory: databases always report journal_mode "memory", never "wal",
+     * so the shared in-process connection the rest of this file uses can't
+     * exercise it) and R::setup() throws if called twice in one process, so
+     * this runs in a subprocess that sets up its own file-backed connection
+     * (mirrors SchemaFreezeTest / LoginThrottleTest's WAL check).
+     */
+    public function testEnsureWalJournalModeSetsItOnceAndLeavesItWalOnASecondCall(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_boot_write_gate_test_' . uniqid();
+        mkdir($dir, 0750, true);
+
+        $script = <<<'PHP'
+        use RedBeanPHP\R;
+
+        require "vendor/autoload.php";
+
+        R::setup('sqlite:' . $argv[1] . '/lamb.db');
+
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        \Lamb\Bootstrap\ensure_wal_journal_mode();
+        $first_logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        R::debug(false);
+
+        // The read-only probe ("PRAGMA journal_mode") runs on every call;
+        // only the assignment form ("PRAGMA journal_mode=WAL") is the write
+        // a second, already-current call must not repeat.
+        $is_pragma_write = fn ($line) => is_string($line) && stripos($line, 'journal_mode=') !== false;
+
+        if (array_filter($first_logs, $is_pragma_write) === []) {
+            fwrite(STDERR, "FIRST CALL DID NOT SET THE PRAGMA\n");
+            exit(1);
+        }
+
+        R::debug(true, \RedBeanPHP\Logger\RDefault::C_LOGGER_ARRAY);
+        \Lamb\Bootstrap\ensure_wal_journal_mode();
+        $second_logs = R::getDatabaseAdapter()->getDatabase()->getLogger()->getLogs();
+        R::debug(false);
+
+        if (array_filter($second_logs, $is_pragma_write) !== []) {
+            fwrite(STDERR, "SECOND CALL RE-ISSUED THE PRAGMA\n");
+            exit(1);
+        }
+
+        $mode = (string) R::getCell('PRAGMA journal_mode');
+        if (strtolower($mode) !== 'wal') {
+            fwrite(STDERR, "MODE WAS $mode, NOT wal\n");
+            exit(1);
+        }
+
+        echo "OK\n";
+        PHP;
+
+        $boot = new Process(['php', '-r', $script, $dir]);
+        $boot->run();
+
+        @unlink($dir . '/lamb.db');
+        @unlink($dir . '/lamb.db-wal');
+        @unlink($dir . '/lamb.db-shm');
+        @rmdir($dir);
+
+        $this->assertSame(
+            "OK\n",
+            $boot->getOutput(),
+            "stdout:\n" . $boot->getOutput() . "\nstderr:\n" . $boot->getErrorOutput()
+        );
+    }
+
+    /**
+     * Boots a data dir in a subprocess (bootstrap_db() calls R::setup(), which
+     * would clobber this suite's shared connection) and reports what it threw.
+     *
+     * @param string $dir Data directory handed to bootstrap_db().
+     * @return Process The finished process; stdout is "OK", or the thrown
+     *                 class, its message and its previous exception's class on
+     *                 separate lines.
+     */
+    private function bootInSubprocess(string $dir): Process
+    {
+        $script = <<<'PHP'
+        require "vendor/autoload.php";
+        try {
+            \Lamb\Bootstrap\bootstrap_db($argv[1]);
+            echo "OK";
+        } catch (\Throwable $e) {
+            echo get_class($e), "\n", $e->getMessage(), "\n", get_class($e->getPrevious() ?? $e);
+        }
+        PHP;
+
+        $boot = new Process(['php', '-r', $script, $dir]);
+        $boot->run();
+
+        return $boot;
+    }
+
+    /**
+     * A data dir the web user can't write to raises the same SQLite error 8
+     * that wrong-owner WAL sidecars do (#831), but there are no sidecars to
+     * delete, so the message must point at the directory instead. An owner-only
+     * chmod can't fake unwritable sidecars through SQLite (it repairs the mode
+     * of an empty -shm it owns on open); that branch is covered through
+     * readonly_database_message() below.
+     */
+    public function testReadonlyDatabaseErrorInAnUnwritableDataDirNamesTheDirectory(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_wal_test_' . uniqid();
+        // The subprocess catches Throwable and exits 0, so a failed first boot shows only in its output.
+        $this->assertSame('OK', $this->bootInSubprocess($dir)->getOutput());
+
+        chmod($dir, 0555);
+        try {
+            if (is_writable($dir)) {
+                $this->markTestSkipped('Directory permissions are not enforced (running as root).');
+            }
+            $boot = $this->bootInSubprocess($dir);
+        } finally {
+            chmod($dir, 0750);
+            @unlink($dir . '/lamb.db');
+            @rmdir($dir);
+        }
+
+        [$class, $message, $previous] = explode("\n", $boot->getOutput()) + [null, '', null];
+        $this->assertSame('RuntimeException', $class, $boot->getOutput() . $boot->getErrorOutput());
+        $this->assertStringContainsString($dir, $message);
+        $this->assertStringContainsString('writable', $message);
+        $this->assertStringNotContainsString('lamb.db-wal', $message);
+        $this->assertSame(\RedBeanPHP\RedException\SQL::class, $previous);
+    }
+
+    public function testReadonlyMessageNamesBothWalSidecarsAndTheRecoveryStepWhenASidecarIsUnwritable(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_sidecar_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        touch($dir . '/lamb.db-shm');
+        chmod($dir . '/lamb.db-shm', 0444);
+
+        try {
+            if (is_writable($dir . '/lamb.db-shm')) {
+                $this->markTestSkipped('File permissions are not enforced (running as root).');
+            }
+            $message = readonly_database_message($dir);
+        } finally {
+            unlink($dir . '/lamb.db-shm');
+            rmdir($dir);
+        }
+
+        $this->assertStringContainsString($dir . '/lamb.db-wal', $message);
+        $this->assertStringContainsString($dir . '/lamb.db-shm', $message);
+        $this->assertStringContainsString('chown', $message);
+        // A wrong-user run's WAL can hold committed writes lamb.db doesn't have yet.
+        $this->assertStringNotContainsString('delete', $message);
+    }
+
+    public function testReadonlyMessageIgnoresSidecarsTheProcessCanWrite(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_readonly_writable_sidecar_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        touch($dir . '/lamb.db-wal');
+
+        $message = readonly_database_message($dir);
+        unlink($dir . '/lamb.db-wal');
+        rmdir($dir);
+
+        $this->assertStringNotContainsString('chown', $message);
+        $this->assertStringContainsString($dir, $message);
+    }
+
+    /**
+     * @dataProvider readonlyCodeProvider
+     */
+    public function testIsReadonlyDatabaseErrorMatchesThePrimaryCodeOfExtendedResultCodes(?int $code, bool $expected): void
+    {
+        $e = new SQL('x');
+        $e->setDriverDetails(['HY000', $code, 'x']);
+
+        $this->assertSame($expected, is_readonly_database_error($e));
+    }
+
+    /**
+     * @return array<string, array{?int, bool}>
+     */
+    public static function readonlyCodeProvider(): array
+    {
+        return [
+            'SQLITE_READONLY' => [8, true],
+            'READONLY_RECOVERY' => [264, true],
+            'READONLY_CANTINIT' => [1288, true],
+            'READONLY_DIRECTORY' => [1544, true],
+            'SQLITE_CANTOPEN' => [14, false],
+            'SQLITE_NOTADB' => [26, false],
+            'IOERR_SHORT_READ' => [1034, false],
+            'no driver code' => [null, false],
+        ];
+    }
+
+    public function testOtherDatabaseErrorsAreNotRewrittenAsAWalRecoveryHint(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb_corrupt_db_test_' . uniqid();
+        mkdir($dir, 0750, true);
+        file_put_contents($dir . '/lamb.db', str_repeat('not a database ', 400));
+
+        $boot = $this->bootInSubprocess($dir);
+        @unlink($dir . '/lamb.db');
+        @rmdir($dir);
+
+        $this->assertStringStartsWith(\RedBeanPHP\RedException\SQL::class . "\n", $boot->getOutput());
+        $this->assertStringNotContainsString('lamb.db-wal', $boot->getOutput());
+    }
+}

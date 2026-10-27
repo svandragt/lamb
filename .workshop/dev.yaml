@@ -26,4 +26,4 @@ actions:
     pw="${1:-hackme}"
     export LAMB_LOGIN_PASSWORD="$(php -r 'echo base64_encode(password_hash($argv[1], PASSWORD_DEFAULT));' "$pw")"
     echo "lamb /login password: $pw"
-    composer serve
+    viv run serve

@@ -7,6 +7,7 @@ use Dotenv\Repository\Adapter\PutenvAdapter;
 use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Http\apply_dns_resolve_timeout;
 
@@ -36,6 +37,29 @@ function load_dotenv(string $root): void
         ->make();
 
     Dotenv::create($repository, $root)->safeLoad();
+}
+
+/**
+ * Reports whether the database file exists and belongs to a uid other than
+ * the one running this process.
+ *
+ * WAL sidecars inherit the uid of whoever opens the database, and a
+ * read-only connection cannot checkpoint them away, so a CLI run under the
+ * wrong user leaves files behind that break every later web request. The uid
+ * is a parameter rather than read here so this stays a pure predicate.
+ *
+ * @param string $db_path Absolute path to lamb.db.
+ * @param int|null $current_uid The running process's uid, or null when it
+ *                              cannot be determined.
+ * @return bool True only when the file exists and another uid owns it.
+ */
+function db_owned_by_another_user(string $db_path, ?int $current_uid): bool
+{
+    if ($current_uid === null || !file_exists($db_path)) {
+        return false;
+    }
+    $owner_uid = fileowner($db_path);
+    return $owner_uid !== false && $owner_uid !== $current_uid;
 }
 
 /**
@@ -74,10 +98,7 @@ function data_dir(?string $cli_base = null): string
  * password, read from LAMB_LOGIN_PASSWORD.
  *
  * response.php's LOGIN_PASSWORD constant and should_start_session()'s marker
- * verification used to call getenv('LAMB_LOGIN_PASSWORD') independently —
- * the same "read independently" duplication LAMB_DATA_DIR had before
- * data_dir() converged it (issue #732, building on #691). Both now go
- * through this single resolver.
+ * verification both go through this single resolver.
  *
  * @return string The bcrypt hash (base64-encoded), or '' when unset.
  */
@@ -95,9 +116,18 @@ function login_password(): string
  * index.php/bin/lamb do anything else network-shaped, so it wins that race no
  * matter which code ends up resolving a host first later in the process's life.
  *
+ * The first query is where an install with unwritable WAL sidecars or data
+ * directory fails (SQLite error 8, "attempt to write a readonly database", even
+ * for reads: readers map -shm read-write too), so that call alone is wrapped to
+ * turn the bare stack trace into recovery steps (see readonly_database_message()).
+ * It stays fatal: a degraded read-only mode is not possible, and schema
+ * problems are meant to be loud (#796).
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
- * @throws RuntimeException If the specified directory cannot be created.
+ * @throws RuntimeException If the specified directory cannot be created, or the
+ *                          database is read-only (unwritable WAL sidecars or data directory).
+ * @throws SQL For any other database error on the first query.
  */
 function bootstrap_db(string $data_dir): void
 {
@@ -112,15 +142,14 @@ function bootstrap_db(string $data_dir): void
         }
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
-    // WAL lets a writer commit without waiting for concurrent readers. Without
-    // it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
-    // lock that any page-render read holds off, so an ordinary concurrent visitor
-    // could make a correct-password login stall or fail. Under WAL that
-    // reservation only ever contends with another writer, keeping its lock hold
-    // to the microseconds of a counter update.
-    // ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
-    // fall back to the slower rollback journal and lose this guarantee.
-    R::exec('PRAGMA journal_mode=WAL');
+    try {
+        ensure_wal_journal_mode();
+    } catch (SQL $e) {
+        if (!is_readonly_database_error($e)) {
+            throw $e;
+        }
+        throw new RuntimeException(readonly_database_message($data_dir), 0, $e);
+    }
     R::useWriterCache(true);
 
     ensure_schema();
@@ -133,6 +162,83 @@ function bootstrap_db(string $data_dir): void
     // migrate_post_table(), which are themselves schema changes and would be
     // refused too.
     R::freeze(true);
+}
+
+/**
+ * Whether a query failure is SQLite's "attempt to write a readonly database".
+ *
+ * RedBeanPHP wraps the PDOException in RedException\SQL and keeps the driver
+ * code in the driver details. The low byte is the primary result code, 8 for
+ * SQLITE_READONLY; the extended variants (READONLY_RECOVERY 264, READONLY_CANTINIT
+ * 1288, READONLY_DIRECTORY 1544) share it, so the code is masked before comparing.
+ *
+ * @param SQL $e The exception thrown by a RedBeanPHP query.
+ * @return bool True for SQLITE_READONLY or one of its extended codes.
+ */
+function is_readonly_database_error(SQL $e): bool
+{
+    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 8;
+}
+
+/**
+ * The operator-facing explanation for SQLite's "attempt to write a readonly
+ * database" on a data directory.
+ *
+ * Two causes raise that error and need different fixes, so the message follows
+ * the cause: an existing WAL sidecar this process can't write (left by a
+ * wrong-user run, #831) needs its owner changed, while an unwritable directory
+ * or lamb.db has no sidecars to fix and needs its permissions corrected. The
+ * sidecars are never to be deleted: a WAL a wrong-user run left can hold
+ * committed writes (a whole import, say) that lamb.db does not have yet.
+ *
+ * @param string $data_dir The directory holding lamb.db.
+ * @return string The message, naming the files or the directory to act on.
+ */
+function readonly_database_message(string $data_dir): string
+{
+    foreach (['lamb.db-wal', 'lamb.db-shm'] as $sidecar) {
+        if (file_exists("$data_dir/$sidecar") && !is_writable("$data_dir/$sidecar")) {
+            return sprintf(
+                'SQLite cannot write to the database in "%1$s": its WAL files are owned by another user. '
+                . 'Change their owner to the user PHP runs as, then reload, for example '
+                . '`chown www-data "%1$s/lamb.db-wal" "%1$s/lamb.db-shm"` (www-data is only an example).',
+                $data_dir
+            );
+        }
+    }
+
+    return sprintf(
+        'SQLite cannot write to the database in "%s": the directory and lamb.db must be writable by the user PHP runs as.',
+        $data_dir
+    );
+}
+
+/**
+ * Switches the connection to WAL journal mode, unless it is already there.
+ *
+ * WAL lets a writer commit without waiting for concurrent readers. Without
+ * it, the login throttle's reserve_login_attempt() COMMIT takes an EXCLUSIVE
+ * lock that any page-render read holds off, so an ordinary concurrent visitor
+ * could make a correct-password login stall or fail. Under WAL that
+ * reservation only ever contends with another writer, keeping its lock hold
+ * to the microseconds of a counter update.
+ * ponytail: WAL needs a local filesystem; self-hosted installs on NFS would
+ * fall back to the slower rollback journal and lose this guarantee.
+ *
+ * Gated on a read first, same reasoning as ensure_post_indexes(): setting the
+ * journal mode is a write even when it changes nothing, and this runs on
+ * every boot, so an unconditional PRAGMA journal_mode=WAL made every
+ * anonymous page view a writer forever after the first boot (issue #831).
+ * WAL is a persisted property of the file, so once the first boot sets it,
+ * every later boot sees "wal" on this read and skips the write.
+ *
+ * @return void
+ */
+function ensure_wal_journal_mode(): void
+{
+    if (strtolower((string) R::getCell('PRAGMA journal_mode')) !== 'wal') {
+        R::exec('PRAGMA journal_mode=WAL');
+    }
 }
 
 /**
@@ -226,6 +332,14 @@ const SCHEMA = [
  * ALTER and freezing anyway would turn that column's next write into a thrown
  * exception where fluid mode would have quietly added it.
  *
+ * The CREATE is gated on a read of sqlite_master first, same reasoning as
+ * ensure_post_indexes(): DDL takes a write lock even when IF NOT EXISTS makes
+ * it a no-op, and this runs on every boot, so an unconditional CREATE made
+ * every anonymous page view a writer forever after the schema was already
+ * current (issue #831). The read still leaves IF NOT EXISTS on the CREATE so
+ * two requests racing a fresh install both succeed. PRAGMA table_info is
+ * already a read, so the per-table ALTER path needs no equivalent change.
+ *
  * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
  * are themselves schema changes, which a frozen connection also refuses.
  *
@@ -233,16 +347,19 @@ const SCHEMA = [
  */
 function ensure_schema(): void
 {
+    $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
     foreach (SCHEMA as $table => $columns) {
         $definitions = [];
         foreach ($columns as $name => $type) {
             $definitions[] = "$name $type";
         }
-        R::exec(sprintf(
-            'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
-            $table,
-            implode(', ', $definitions)
-        ));
+        if (!in_array($table, $existing_tables, true)) {
+            R::exec(sprintf(
+                'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
+                $table,
+                implode(', ', $definitions)
+            ));
+        }
 
         $existing = array_column(R::getAll("PRAGMA table_info($table)"), 'name');
         foreach ($columns as $name => $type) {
@@ -254,22 +371,20 @@ function ensure_schema(): void
 }
 
 /**
- * Runs the post table's one-time row migrations, then indexes it.
+ * Indexes the post table.
  *
  * Must be called after ensure_schema(), which is what guarantees the table and
- * every SCHEMA column exist. This used to add `deleted`, `draft` and
- * `import_uuid` itself, back when it was bootstrap_db()'s only schema step;
- * ensure_schema() now ALTER-adds every declared column ahead of it, so those
- * three branches could no longer fire and the columns it reads are already the
- * post-ALTER set.
+ * every SCHEMA column exist. The post table's one-time row migrations
+ * (backfill_post_version(), backfill_imported_post_identity()) used to also
+ * run from here, on every boot; they now run only from `bin/lamb migrate`,
+ * so restoring an old `lamb.db` backup needs that command run once — see
+ * docs/upgrading.md (#811).
  *
  * @return void
  */
 function migrate_post_table(): void
 {
     $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
-    backfill_post_version($columns);
-    backfill_imported_post_identity($columns);
     ensure_post_indexes($columns);
 }
 
@@ -286,14 +401,25 @@ function migrate_post_table(): void
  * - `updated`   — latest_content_timestamp() takes the newest row by it for the
  *                 conditional-GET validator, on every anonymous page view, and
  *                 the feeds order by it.
- * - `version`   — backfill_post_version()'s "is there anything left to migrate"
- *                 probe. Once nothing is, the answer costs a whole scan to find.
- * - `feed_name` — same, for backfill_imported_post_identity().
  * - `draft`,
  *   `deleted`   — the admin toolbar's drafts/trash counts, on every logged-in
  *                 page render.
  *
- * `created` is deliberately absent: it would serve the listings' `ORDER BY
+ * `version` and `feed_name` are deliberately absent, both removed alongside
+ * their backfills moving to `bin/lamb migrate` (#811):
+ *
+ * - `version` existed only to make backfill_post_version()'s probe cheap.
+ *   One other SQL predicate names it — upgrade_all_posts() (response.php)
+ *   pages through `WHERE version < ?` — but that runs from `bin/lamb migrate`
+ *   and `bin/lamb upgrade-posts`, never from a render (#814), so a one-shot
+ *   scan there does not justify an index every write has to maintain.
+ * - `feed_name` has one live SQL consumer, ping_scheduled_publishes()
+ *   (websub.php): `feed_name IS NULL OR feed_name = ''`. That predicate has
+ *   near-zero selectivity (almost every post matches it), so SQLite picked a
+ *   multi-index OR plan that measured ~2x *slower* than the plain table scan
+ *   it replaced (1.775ms → 3.517ms on 20,000 rows) — the index helped nothing.
+ *
+ * `created` is deliberately absent too: it would serve the listings' `ORDER BY
  * created DESC`, but SQLite then also picks it for the search page's `body
  * LIKE` queries, where an index scan plus a row lookup per row is slower than
  * the table scan it replaces. Measured on 30,000 posts, that trade cost the
@@ -302,8 +428,6 @@ function migrate_post_table(): void
 const POST_INDEXES = [
     'idx_post_slug'      => 'slug',
     'idx_post_updated'   => 'updated',
-    'idx_post_version'   => 'version',
-    'idx_post_feed_name' => 'feed_name',
     'idx_post_draft'     => 'draft',
     'idx_post_deleted'   => 'deleted',
 ];
@@ -342,30 +466,50 @@ function ensure_post_indexes(array $columns): void
  * creation/edit time); only the version column needs stamping so
  * upgrade_posts() never writes them again.
  *
- * Probes with a SELECT before writing. SQLite takes a write lock for an UPDATE
- * even when no row matches it, so running this unconditionally made every
- * request — an anonymous page view included — a writer, and writers serialise:
- * with another request or a /_cron run holding the lock, the read blocked
- * behind it (up to PDO's 60-second busy timeout) instead of being served under
- * a shared read lock. The probe is a read, so it does not.
+ * Used to run on every boot, probing with a SELECT before writing because
+ * SQLite takes a write lock for an UPDATE even when no row matches it — an
+ * unconditional UPDATE would have made every anonymous page view a writer.
+ * It now runs only from `bin/lamb migrate` (#811), which pays that COUNT
+ * either way to report how many rows it touched (or would, under
+ * `--dry-run`), so the cheap-probe shape is no longer load-bearing — kept
+ * anyway because backfill_marker_done()/mark_backfill_done() make a repeat
+ * run (e.g. from `bin/upgrade`'s nightly cron) skip the scan once nothing is
+ * left to find. The marker latches: once set, this function returns before
+ * both the count AND the UPDATE, so a database that somehow gains `version
+ * IS NULL` rows afterwards — a restored old backup, a direct write — will
+ * not be migrated. Delete the marker row from `option` to arm it again.
  *
  * Skipped when the column is absent, so the function is safe to call against a
  * `post` table predating it: naming a missing column in an UPDATE is an error
  * rather than a no-op. ensure_schema() declares `version`, so the guard never
- * fires under bootstrap_db() — it is what keeps this callable in isolation.
+ * fires when called from `bin/lamb migrate` — it is what keeps this callable
+ * in isolation (see the tests).
  *
  * @param list<string> $columns Column names of the post table.
+ * @param bool $dry_run When true, report the row count but write nothing.
+ * @return int Number of rows stamped (or that dry-run would stamp).
  */
-function backfill_post_version(array $columns): void
+function backfill_post_version(array $columns, bool $dry_run = false): int
 {
     if (!in_array('version', $columns, true)) {
-        return;
+        return 0;
     }
-    if (!R::getCell('SELECT 1 FROM post WHERE version IS NULL LIMIT 1')) {
-        return;
+    if (backfill_marker_done('backfill_post_version')) {
+        return 0;
+    }
+    $count = (int) R::getCell('SELECT COUNT(*) FROM post WHERE version IS NULL');
+    if ($count === 0) {
+        if (!$dry_run) {
+            mark_backfill_done('backfill_post_version');
+        }
+        return 0;
+    }
+    if ($dry_run) {
+        return $count;
     }
 
     R::exec('UPDATE post SET version = 1 WHERE version IS NULL');
+    return $count;
 }
 
 /**
@@ -380,30 +524,93 @@ function backfill_post_version(array $columns): void
  * are not available here — the guard is the only discriminator there is.
  *
  * Rows whose uuid is already claimed by another post's import_uuid are left
- * alone rather than duplicated. Idempotent, so running it every boot is
- * correct — but it probes with a SELECT first, because an UPDATE that matches
- * nothing still takes a write lock (see backfill_post_version()).
+ * alone rather than duplicated. Idempotent, so running it more than once is
+ * correct. Now runs only from `bin/lamb migrate` (#811), same as
+ * backfill_post_version() — see that function's docblock for why the count
+ * is still probed before writing, and what the completion marker buys once
+ * this has nothing left to migrate.
  *
  * @param list<string> $columns Column names of the post table.
+ * @param bool $dry_run When true, report the row count but write nothing.
+ * @return int Number of rows moved onto import_uuid (or that dry-run would move).
  */
-function backfill_imported_post_identity(array $columns): void
+function backfill_imported_post_identity(array $columns, bool $dry_run = false): int
 {
     if (!in_array('feed_name', $columns, true) || !in_array('feeditem_uuid', $columns, true)) {
-        return;
+        return 0;
+    }
+    if (backfill_marker_done('backfill_imported_post_identity')) {
+        return 0;
     }
     $source_url = in_array('source_url', $columns, true) ? ' AND source_url IS NULL' : '';
-    // One predicate, used by the probe and the update, so the two cannot
+    // One predicate, used by the count and the update, so the two cannot
     // disagree about which rows this migration is for.
     $where = "feed_name IN ('wordpress', 'known') AND feeditem_uuid IS NOT NULL" . $source_url
         . ' AND NOT EXISTS (SELECT 1 FROM post other WHERE other.import_uuid = post.feeditem_uuid)';
 
-    // Probe first: see backfill_post_version() for why an unconditional UPDATE
-    // makes every request a writer even once there is nothing left to migrate.
-    if (!R::getCell('SELECT 1 FROM post WHERE ' . $where . ' LIMIT 1')) {
-        return;
+    $count = (int) R::getCell('SELECT COUNT(*) FROM post WHERE ' . $where);
+    if ($count === 0) {
+        if (!$dry_run) {
+            mark_backfill_done('backfill_imported_post_identity');
+        }
+        return 0;
+    }
+    if ($dry_run) {
+        return $count;
     }
 
     R::exec('UPDATE post SET import_uuid = feeditem_uuid, feeditem_uuid = NULL, feed_name = NULL WHERE ' . $where);
+    return $count;
+}
+
+/**
+ * Whether a one-time backfill has already recorded its probe as empty, via a
+ * hidden row in the `option` table — the same mechanic EXPERIMENTAL_GATE_VERSION
+ * uses to persist one-off state across boots (see config.php), reused here
+ * rather than a new table or file.
+ *
+ * Any failure to read — most notably a fresh install, or an upgrade from
+ * before this marker existed, where the row (or the whole `option` table)
+ * does not exist yet — is treated as "not done": the caller falls back to
+ * probing, exactly as every boot did before this existed.
+ *
+ * @param string $name Marker key, e.g. "backfill_post_version".
+ * @return bool
+ */
+function backfill_marker_done(string $name): bool
+{
+    try {
+        return (bool) R::getCell('SELECT 1 FROM option WHERE name = ? AND value = ?', [$name, '1']);
+    } catch (\Throwable $e) {
+        return false;
+    }
+}
+
+/**
+ * Records that a backfill's probe came back empty, so later boots can skip it
+ * via backfill_marker_done() instead of running a SELECT against `post`
+ * forever.
+ *
+ * Never called before the probe has run and found nothing — a failed write
+ * here must not be mistaken for the migration itself having failed. Any
+ * exception (a read-only database, most plausibly, since bootstrap_db() runs
+ * on every request including anonymous ones) is swallowed rather than
+ * surfaced: worst case, the next boot probes again, which is what happened on
+ * every boot before this existed.
+ *
+ * @param string $name Marker key, matching backfill_marker_done()'s argument.
+ * @return void
+ */
+function mark_backfill_done(string $name): void
+{
+    try {
+        $bean = R::findOneOrDispense('option', ' name = ? ', [$name]);
+        $bean->name = $name;
+        $bean->value = '1';
+        R::store($bean);
+    } catch (\Throwable $e) {
+        // See docblock: a boot that cannot write here just probes again.
+    }
 }
 
 /**

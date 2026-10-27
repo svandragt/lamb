@@ -197,8 +197,9 @@ class ResponsePostsTest extends TestCase
 
         redirect_edited();
 
-        // Reached here without calling die()
-        $this->assertTrue(true);
+        // Reached here without calling die(), and without falling through to
+        // the save/catch block that would have set a flash message.
+        $this->assertArrayNotHasKey('flash', $_SESSION);
     }
 
     public function testRedirectEditedReturnsEarlyWhenContentsIsEmpty(): void
@@ -211,7 +212,7 @@ class ResponsePostsTest extends TestCase
 
         redirect_edited();
 
-        $this->assertTrue(true);
+        $this->assertArrayNotHasKey('flash', $_SESSION);
     }
 
     public function testRedirectEditedReturnsEarlyWhenContentsIsWhitespaceOnly(): void
@@ -224,7 +225,7 @@ class ResponsePostsTest extends TestCase
 
         redirect_edited();
 
-        $this->assertTrue(true);
+        $this->assertArrayNotHasKey('flash', $_SESSION);
     }
 
     // -------------------------------------------------------------------------

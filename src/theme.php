@@ -287,9 +287,7 @@ function get_posts_by_tags(array $tags, int $exclude_id = 0, int $limit = 10): a
     foreach ($tags as $tag) {
         $conditions = get_tag_search_conditions($tag);
         // public_posts_clause(), not visible_clause(): related posts appear on
-        // public permalinks and must also exclude menu pages. The two
-        // _related.php templates used to attempt this filter themselves, on a
-        // non-existent $bean->is_menu_item property, so it never fired (#101).
+        // public permalinks and must also exclude menu pages.
         $visible = public_posts_clause();
         $sql = '(' . $conditions['sql'] . ') AND' . $visible['sql'];
         $params = array_merge($conditions['params'], $visible['params']);
@@ -609,6 +607,32 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Resolves the configured theme to a name that actually has a directory under `src/themes/`.
+ *
+ * Falls back to $fallback for anything that doesn't resolve to a real theme
+ * directory: no `theme` key (null), a `[theme]` section header (which
+ * normalize_config() drops before this is ever called), a typo saved at
+ * /settings, or a custom theme whose directory was since deleted. This is a
+ * live check rather than a stored migration, so it also covers the historical
+ * pre-#289 name (`default`, before `src/themes/default` was renamed to
+ * `src/themes/base`) without needing to know that name specifically.
+ *
+ * sanitize_filename() runs first and is what closes the path-traversal and
+ * stored-XSS surface (see src/index.php) — this function only adds the
+ * existence check on top of it.
+ *
+ * @param mixed $configured The raw `theme` config value.
+ * @param string $fallback The theme to use when $configured names no existing directory.
+ * @return string The sanitized name of an existing theme directory.
+ */
+function resolve_theme(mixed $configured, string $fallback = 'base'): string
+{
+    $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
+
+    return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
+}
+
+/**
  * Returns the markup for a file-picker control that hands picked files to
  * upload-image.js, which uploads them the same way as a drag-and-drop or
  * paste.
@@ -681,6 +705,7 @@ function admin_toolbar_html(): string
         . $scheduledLink
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
+        . '<a href="https://svandragt.github.io/lamb" target="_blank">Help</a>'
         . '<a href="/logout">Logout</a>'
         . '</div>'
         . '<style>'
@@ -692,6 +717,6 @@ function admin_toolbar_html(): string
         . '}'
         . '#admin-toolbar a{color:#ccc;text-decoration:none;}'
         . '#admin-toolbar a:hover{color:#fff;}'
-        . '#admin-toolbar a:last-child{margin-left:auto;}'
+        . '#admin-toolbar a:nth-last-child(2){margin-left:auto;}'
         . '</style>';
 }

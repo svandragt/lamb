@@ -42,24 +42,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
+
+      - uses: ./.github/actions/setup-viv
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: viv install --no-progress
 
-      - name: Validate Composer
-        run: composer validate
+      - name: Validate manifest
+        run: viv validate
 
       - name: Security audit
-        run: composer audit
+        run: viv audit
 
       - name: Run PHPCS
-        run: composer run lint
+        run: viv run lint
 
       - name: Run PHPStan
-        run: composer run analyse
+        run: viv run analyse
 
   test:
     runs-on: ubuntu-latest
@@ -71,13 +73,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
           php-version: ${{ matrix.php-version }}
-          coverage: ${{ matrix.php-version == '8.4' && 'pcov' || 'none' }}
+          coverage: ${{ matrix.php-version == '8.5' && 'pcov' || 'none' }}
+
+      - uses: ./.github/actions/setup-viv
 
       - name: Install dependencies
-        run: composer install --prefer-dist --no-progress
+        run: viv install --no-progress
 
       # GITHUB_REF is quoted, and reached through env: rather than interpolated
       # into the script. git allows `'`, `;`, `&`, `|` and `$( )` in a ref name
@@ -94,8 +98,12 @@ jobs:
           vendor/bin/codecept run --steps
 
       - name: Check code coverage
-        if: matrix.php-version == '8.4'
-        run: composer coverage
+        if: matrix.php-version == '8.5'
+        # Not `viv run coverage`: viv runs scripts on the static PHP that
+        # config.platform.php pins, which has no coverage driver.
+        run: |
+          vendor/bin/codecept run Unit --coverage-xml
+          php check-coverage.php tests/_output/coverage.xml 70
 
   # Client-side JavaScript unit tests (node:test + jsdom). Fast and
   # dependency-light, so it always runs and feeds the aggregate `ci` gate.
@@ -103,8 +111,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: lts/*
       - name: Cache pnpm store
@@ -115,10 +123,10 @@ jobs:
           restore-keys: pnpm-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      # Mirrors `composer audit` in the quality job for the JS side. Every JS
+      # Mirrors `viv audit` in the quality job for the JS side. Every JS
       # dependency here is a devDependency, so an advisory affects CI runners
       # and dev machines rather than a deployed site — hence the `high`
-      # threshold instead of composer audit's fail-on-anything. Dependabot
+      # threshold instead of viv audit's fail-on-anything. Dependabot
       # alerts still surface the lower-severity ones.
       - name: Security audit
         run: pnpm audit --audit-level=high
@@ -136,19 +144,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Setup PHP
-        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2
+        uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # v2
         with:
-          php-version: '8.4'
+          php-version: '8.5'
           extensions: sqlite3, gettext, simplexml
-      - name: Cache Composer dependencies
+      - uses: ./.github/actions/setup-viv
+      - name: Cache viv dependencies
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
           path: vendor
-          key: composer-${{ hashFiles('composer.lock') }}
-      - name: Install Composer dependencies
-        run: composer install --no-dev --no-interaction --no-scripts
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+          key: viv-${{ hashFiles('composer.lock') }}
+      - name: Install viv dependencies
+        run: viv install --no-dev --no-scripts
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: lts/*
       - name: Cache pnpm store
@@ -174,7 +183,7 @@ jobs:
         run: pnpm exec playwright install-deps chromium
       - name: Run Playwright tests
         run: pnpm exec playwright test
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ !cancelled() }}
         with:
           name: playwright-report

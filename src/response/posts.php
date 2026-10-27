@@ -308,8 +308,8 @@ function redirect_edited(): void
 
     parse_bean($bean);
     \Lamb\ensure_preview_token($bean);
-    // Must match the format parse_bean() above just rendered, or upgrade_posts()
-    // re-parses and re-stores the post on the next read.
+    // Must match the format parse_bean() above just rendered, or the next
+    // `bin/lamb migrate`/`upgrade-posts` run re-parses and re-stores the post.
     $bean->version = POST_VERSION;
     $bean->updated = \Lamb\now();
 
@@ -465,7 +465,7 @@ function respond_status(array $args): array
     $posts = [$bean];
     $data['posts'] = $posts;
 
-    upgrade_posts($data['posts']);
+    render_stale_posts($data['posts']);
 
     $data['title'] = $data['posts'][0]->title;
 
@@ -507,7 +507,7 @@ function respond_post(array $args): array
     }
     $data['posts'] = [$post];
 
-    upgrade_posts($data['posts']);
+    render_stale_posts($data['posts']);
 
     $data['title'] = $data['posts'][0]->title;
 

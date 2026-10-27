@@ -6,19 +6,17 @@ use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use RedBeanPHP\OODBBean;
-use RedBeanPHP\R;
 use SimpleXMLElement;
 
-use function Lamb\Import\build_post_body;
 use function Lamb\Import\html_to_markdown;
+use function Lamb\Import\import_item as shared_import_item;
 use function Lamb\Import\import_uuid;
 use function Lamb\Import\local_datetime_from_rfc822;
-use function Lamb\Import\prepare_imported_html;
+use function Lamb\Import\skip_reason as shared_skip_reason;
+use function Lamb\Import\should_import as shared_should_import;
 use function Lamb\Import\store_redirect;
 use function Lamb\Import\unwrap_element;
 use function Lamb\Post\body_has_tag;
-use function Lamb\Post\populate_bean;
-use function Lamb\Post\save;
 
 // Known's RSS export borrows two fields from the WordPress WXR namespace
 // (wp:post_type, wp:status) without adopting the rest of WXR. Known has its
@@ -30,6 +28,10 @@ const WP_NS = 'http://wordpress.org/export/1.2/';
 // post without a title, not a tag) and 'uncategorized' means no category at
 // all.
 const STRUCTURAL_TAGS = ['status', 'uncategorized'];
+
+// Known's RSS export carries only top-level published posts — see
+// should_import().
+const ALLOWED_TYPES = ['post'];
 
 /**
  * Whether a tag is one of Known's structural tags ({@see STRUCTURAL_TAGS}).
@@ -180,10 +182,11 @@ function extract_items(SimpleXMLElement $rss): array
  * with the WordPress importer) should a future export carry drafts.
  *
  * @param array<string, mixed> $item
+ * @return bool
  */
 function should_import(array $item): bool
 {
-    return skip_reason($item) === null;
+    return shared_should_import($item, ALLOWED_TYPES);
 }
 
 /**
@@ -192,18 +195,11 @@ function should_import(array $item): bool
  * reason string to break down its skipped tally.
  *
  * @param array<string, mixed> $item
+ * @return ?string
  */
 function skip_reason(array $item): ?string
 {
-    $type   = (string) ($item['post_type'] ?? '');
-    $status = (string) ($item['status'] ?? '');
-    if ($type !== 'post') {
-        return "unsupported post_type '" . ($type === '' ? '(none)' : $type) . "'";
-    }
-    if ($status !== 'publish') {
-        return "non-published status '" . ($status === '' ? '(none)' : $status) . "'";
-    }
-    return null;
+    return shared_skip_reason($item, ALLOWED_TYPES);
 }
 
 /**
@@ -309,68 +305,73 @@ function normalize_known_html_in_dom(DOMDocument $dom): void
  * @param array<string, mixed>            $item       Item from extract_items().
  * @param callable(string,string):?string $downloader Image downloader.
  * @param OODBBean|null                   $bean       Existing row to overwrite.
+ * @throws \RedBeanPHP\RedException\SQL When the store fails.
  */
 function import_item(array $item, callable $downloader, bool $dry_run = false, ?OODBBean $bean = null): ?OODBBean
 {
-    if (!should_import($item)) {
-        return null;
-    }
+    return shared_import_item(
+        $item,
+        [
+            'uuid' => known_uuid(...),
+            'allowed_types' => ALLOWED_TYPES,
+            'title' => known_title(...),
+            'slug' => static fn(array $item): string => (string) ($item['slug'] ?? ''),
+            'dom_pass' => normalize_known_html_in_dom(...),
+            'markdown' => static fn(string $html): string => strip_structural_hashtags(html_to_markdown($html)),
+            'tags' => known_tags(...),
+            'finalize_markdown' => known_finalize_markdown(...),
+            'store_redirects' => store_source_redirects(...),
+        ],
+        $downloader,
+        $dry_run,
+        $bean,
+    );
+}
 
-    $uuid = known_uuid((string) $item['guid']);
-    if ($bean === null) {
-        $existing = R::findOne('post', ' import_uuid = ? ', [$uuid]);
-        if ($existing) {
-            return $existing;
-        }
-    }
+/**
+ * A synthetic title is Known's own truncation of the body, so it isn't worth
+ * importing — but the slug from the same permalink is a real, readable URL.
+ * Keeping it preserves the original link instead of minting /status/<id>.
+ *
+ * @param array<string, mixed> $item
+ * @return string
+ */
+function known_title(array $item): string
+{
+    $title_is_synthetic = (bool) ($item['title_is_synthetic'] ?? false);
+    return $title_is_synthetic ? '' : (string) ($item['title'] ?? '');
+}
 
-    $body_html = (string) ($item['content'] ?? '');
-    $prepared = $body_html === ''
-        ? ''
-        : prepare_imported_html(
-            $body_html,
-            (string) $item['created'],
-            $downloader,
-            normalize_known_html_in_dom(...),
-        );
-    $markdown = strip_structural_hashtags(html_to_markdown($prepared));
-
+/**
+ * Drops extracted `<category>` tags already present as inline hashtags in the
+ * converted body (case-insensitively), so they aren't duplicated.
+ *
+ * @param array<string, mixed> $item
+ * @return list<string>
+ */
+function known_tags(array $item, string $markdown): array
+{
     $extracted_tags = array_values(array_map(static fn($t): string => (string) $t, (array) ($item['tags'] ?? [])));
-    $tags = array_values(array_filter(
+    return array_values(array_filter(
         $extracted_tags,
         static fn(string $tag): bool => !body_has_tag($tag, $markdown)
     ));
+}
 
-    // A synthetic title is Known's own truncation of the body, so it isn't worth
-    // importing — but the slug from the same permalink is a real, readable URL.
-    // Keeping it preserves the original link instead of minting /status/<id>.
-    $title_is_synthetic = (bool) ($item['title_is_synthetic'] ?? false);
-    $title = $title_is_synthetic ? '' : (string) ($item['title'] ?? '');
-    $slug = (string) ($item['slug'] ?? '');
-
+/**
+ * Bookmark items (an offsite `<link>`) get a `[title](url)` markdown line
+ * prepended to the body, mirroring how Known rendered them.
+ *
+ * @param array<string, mixed> $item
+ * @return string
+ */
+function known_finalize_markdown(array $item, string $markdown): string
+{
     $bookmark_url = trim((string) ($item['bookmark_url'] ?? ''));
-    if ($bookmark_url !== '') {
-        $markdown = '[' . (string) $item['title'] . '](' . $bookmark_url . ')' . "\n\n" . $markdown;
+    if ($bookmark_url === '') {
+        return $markdown;
     }
-
-    $body = build_post_body($title, $markdown, $tags, $slug);
-
-    $bean = populate_bean($body, null, null, $bean);
-    if (!empty($item['created'])) {
-        $bean->created = (string) $item['created'];
-    }
-    if (!empty($item['updated'])) {
-        $bean->updated = (string) $item['updated'];
-    }
-    $bean->import_uuid = $uuid;
-
-    if ($dry_run) {
-        return $bean;
-    }
-
-    save($bean, ['finalize_slug' => true]);
-    store_source_redirects($item, $bean);
-    return $bean;
+    return '[' . (string) $item['title'] . '](' . $bookmark_url . ')' . "\n\n" . $markdown;
 }
 
 /**

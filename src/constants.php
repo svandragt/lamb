@@ -30,7 +30,9 @@ define('MINUTE_IN_SECONDS', 60);
 // other crawl read a stale copy of the feed while still counting as a success.
 define('FEED_FETCH_INTERVAL', 30 * MINUTE_IN_SECONDS);
 // Current post render-format version. Bump when `transformed` output changes
-// (e.g. new syntax highlighting); older posts are re-parsed on read by upgrade_posts().
+// (e.g. new syntax highlighting); older posts are re-rendered on read
+// (Response\render_stale_posts()) without writing back, and only get their
+// stored version bumped by `bin/lamb migrate`/`upgrade-posts`.
 define('POST_VERSION', 4);
 // How long a login is remembered. The session cookie and the server-side session
 // both persist this long, so logins survive a browser restart and idle time.

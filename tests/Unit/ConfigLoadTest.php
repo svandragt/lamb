@@ -23,6 +23,16 @@ class ConfigLoadTest extends TestCase
         // Remove any cached config option so each test starts fresh
         R::exec("DELETE FROM option WHERE name = 'site_config_ini'");
         R::exec("DELETE FROM option WHERE name = 'experimental_gate_version'");
+        // get_ini_text()'s bootstrap path reads from ROOT_DIR. It's a
+        // process-wide constant that other unit tests may have already
+        // pointed at their own temp dir, so operate on wherever it actually
+        // points rather than assume our define() wins.
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_test_config_' . getmypid());
+        }
+        if (!is_dir(ROOT_DIR)) {
+            mkdir(ROOT_DIR, 0777, true);
+        }
     }
 
     // parse_ini_safe
@@ -62,26 +72,11 @@ class ConfigLoadTest extends TestCase
 
     public function testGetIniTextReturnsSavedTextOnSubsequentCall(): void
     {
-        // Includes an explicit theme so the themeless-migration is a no-op and
-        // this stays a pure round-trip assertion (migration is covered below).
         $custom = "theme = 2024\n[menu_items]\nAbout = about\n";
         save_ini_text($custom);
 
         $text = get_ini_text();
         $this->assertSame($custom, $text);
-    }
-
-    public function testGetIniTextMigratesThemelessStoredConfigToExplicitTheme(): void
-    {
-        save_ini_text("site_title = Legacy Blog\n");
-
-        $text = get_ini_text();
-        $parsed = parse_ini_string($text, true, INI_SCANNER_RAW);
-
-        // Themeless stored config gains an explicit theme on read...
-        $this->assertSame('base', $parsed['theme']);
-        // ...and the migration is persisted, so a second read is stable.
-        $this->assertSame($text, get_ini_text());
     }
 
     public function testGetIniTextResetsStaleExperimentalFlagOnRead(): void
@@ -137,7 +132,6 @@ class ConfigLoadTest extends TestCase
 
     public function testSaveIniTextPersistsText(): void
     {
-        // Explicit theme keeps get_ini_text()'s migration a no-op for this round-trip.
         $ini = "theme = 2024\nsite_title = Test Blog\n";
         save_ini_text($ini);
 

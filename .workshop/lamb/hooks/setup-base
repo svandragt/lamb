@@ -2,7 +2,7 @@
 # Runs once as root against the base image (cwd /).
 # Installs lamb's OS-level toolchain, mirroring devbox.json packages.
 # Ubuntu 24.04 ships PHP 8.3 via apt (lamb requires >=8.4), so add the
-# ondrej/php PPA to get php8.4-*.
+# ondrej/php PPA to get php8.5-*.
 set -euo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
@@ -11,20 +11,40 @@ apt-get install -y --no-install-recommends software-properties-common
 add-apt-repository -y ppa:ondrej/php
 apt-get update
 apt-get install -y --no-install-recommends \
-  php8.4-cli \
-  php8.4-sqlite3 \
-  php8.4-mysql \
-  php8.4-xml \
-  php8.4-mbstring \
-  php8.4-curl \
-  php8.4-zip \
-  php8.4-gd \
-  php8.4-xdebug \
-  composer \
+  php8.5-cli \
+  php8.5-sqlite3 \
+  php8.5-mysql \
+  php8.5-xml \
+  php8.5-mbstring \
+  php8.5-curl \
+  php8.5-zip \
+  php8.5-gd \
+  php8.5-xdebug \
   ruby-full \
   openssl \
   pkg-config \
   git \
   unzip \
-  ca-certificates
+  ca-certificates \
+  curl
 rm -rf /var/lib/apt/lists/*
+
+# viv (composer-compatible dependency installer) has no apt package; fetch and
+# verify the release binary the same way .github/actions/setup-viv does.
+viv_version=0.22.0
+case "$(uname -m)" in
+  x86_64) viv_target=x86_64-unknown-linux-musl ;;
+  aarch64 | arm64) viv_target=aarch64-unknown-linux-musl ;;
+  *) echo "viv publishes no binary for $(uname -m)" >&2; exit 1 ;;
+esac
+
+viv_base="https://github.com/svandragt/vivace/releases/download/v${viv_version}"
+viv_archive="vivace-v${viv_version}-${viv_target}.tar.gz"
+viv_workdir="$(mktemp -d)"
+
+curl -fsSL -o "${viv_workdir}/${viv_archive}" "${viv_base}/${viv_archive}"
+curl -fsSL -o "${viv_workdir}/SHA256SUMS" "${viv_base}/SHA256SUMS"
+( cd "${viv_workdir}" && grep " ${viv_archive}\$" SHA256SUMS | sha256sum --check --strict - )
+tar -xzf "${viv_workdir}/${viv_archive}" -C "${viv_workdir}"
+install -m 0755 "${viv_workdir}/vivace-v${viv_version}-${viv_target}/viv" /usr/local/bin/viv
+rm -rf "${viv_workdir}"

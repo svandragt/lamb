@@ -2,9 +2,11 @@
 <?php
 
 /**
- * Lamb's operator CLI. Currently one subcommand:
+ * Lamb's operator CLI. Three subcommands:
  *
  *   bin/lamb import <source> <path> [--dry-run] [--replace]
+ *   bin/lamb upgrade-posts [--dry-run]
+ *   bin/lamb migrate [--dry-run]
  *
  * <source> is one of the registered importers (wordpress, known, lamb — see
  * the registrations below). Each parses its own file format into items, then
@@ -17,6 +19,19 @@
  *               are lost. For re-running an export after a conversion fix.
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
+ *
+ * upgrade-posts walks every post whose `version` is below POST_VERSION and
+ * upgrades it through Response\upgrade_all_posts(), so an archive of stale
+ * posts is brought current in one pass instead of stamping the version, one
+ * at a time, as each post gets viewed (see docs/upgrade-posts.md).
+ *
+ * migrate runs the one-time data migrations that used to run implicitly on
+ * every boot (backfill_post_version(), backfill_imported_post_identity(),
+ * migrate_feed_watermarks()), plus the same post upgrade as upgrade-posts
+ * (#814, reusing Response\upgrade_all_posts() rather than duplicating its
+ * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
+ * automatically; restoring an old `lamb.db` backup by hand needs it run
+ * explicitly.
  *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
@@ -32,6 +47,8 @@ use Lamb\WordPress;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
+
+use function Lamb\Response\upgrade_all_posts;
 
 if (PHP_SAPI !== 'cli') {
     fwrite(STDERR, "bin/lamb must be run from the command line.\n");
@@ -84,8 +101,126 @@ Import\register_source([
     },
 ]);
 
-if (($argv[1] ?? null) !== 'import') {
+/**
+ * Resolves the data directory, refuses a database owned by another user, and
+ * opens it.
+ *
+ * Every bin/lamb path that touches the database goes through here on purpose.
+ * The #831 ownership check only protects the call it sits in front of, so a
+ * command calling bootstrap_db() itself would open the database unguarded and
+ * leave exactly the WAL sidecars that check exists to prevent.
+ *
+ * @param int $refusal_exit_code Exit code when the ownership guard refuses.
+ *                               Every command but `migrate` keeps the
+ *                               original 1 ("something failed"); `migrate`
+ *                               passes 3 so `bin/upgrade` can tell "refused,
+ *                               never touched the database" apart from "ran
+ *                               and a migration genuinely failed" (#811).
+ * @param string $example Command shown in the "run as the web server user"
+ *                         hint, so it matches whichever command refused.
+ * @return string Absolute path to the data directory.
+ */
+function open_data_dir(int $refusal_exit_code = 1, string $example = 'import ...'): string
+{
+    $data_dir = Bootstrap\data_dir(dirname(__DIR__));
+
+    // #831: WAL mode (#780) leaves lamb.db-wal/-shm sidecars owned by whoever
+    // opens the database. A read-only connection can never checkpoint them away,
+    // so once lamb.db and its invoker's uid disagree, every later web request
+    // dies in ensure_schema() with "attempt to write a readonly database" until
+    // someone removes the sidecars by hand. Refuse before bootstrap_db() opens
+    // the database, so this process never creates one of those sidecars itself.
+    //
+    // posix_geteuid() is unavailable when the posix extension isn't built in.
+    // When the uid can't be determined we proceed rather than block a legitimate
+    // run: an unnecessary refusal costs someone their import, a missed one costs
+    // them a 500 they can recover from by deleting two files.
+    $current_uid = function_exists('posix_geteuid') ? posix_geteuid() : null;
+
+    if (Bootstrap\db_owned_by_another_user("$data_dir/lamb.db", $current_uid)) {
+        fwrite(STDERR, "bin/lamb: $data_dir/lamb.db is owned by a different user than the one running this command.\n");
+        fwrite(STDERR, "A read-only connection can't checkpoint away the WAL sidecar files it would leave behind, and every later web request would then fail with \"attempt to write a readonly database\" until someone removes them by hand.\n");
+        fwrite(STDERR, "Run bin/lamb as the web server user instead, for example:\n");
+        fwrite(STDERR, "    sudo -u www-data bin/lamb $example\n");
+        exit($refusal_exit_code);
+    }
+
+    Bootstrap\bootstrap_db($data_dir);
+
+    return $data_dir;
+}
+
+$command = $argv[1] ?? null;
+
+if ($command === 'upgrade-posts') {
+    $rest = array_slice($argv, 2);
+    $dry_run = in_array('--dry-run', $rest, true);
+    if (array_diff($rest, ['--dry-run']) !== []) {
+        fwrite(STDERR, "Usage: bin/lamb upgrade-posts [--dry-run]\n");
+        exit(1);
+    }
+
+    $data_dir = open_data_dir(example: 'upgrade-posts');
+
+    global $config;
+    $config = Config\load();
+    Config\apply_timezone($config);
+
+    [$needing, $upgraded] = upgrade_all_posts($dry_run);
+    $prefix = $dry_run ? '[dry-run] ' : '';
+    echo "{$prefix}Done. needs_upgrade=$needing upgraded=$upgraded\n";
+    exit(0);
+}
+
+if ($command === 'migrate') {
+    $rest = array_slice($argv, 2);
+    $dry_run = in_array('--dry-run', $rest, true);
+    if (array_diff($rest, ['--dry-run']) !== []) {
+        fwrite(STDERR, "Usage: bin/lamb migrate [--dry-run]\n");
+        exit(1);
+    }
+
+    // Refuses with exit 3, not the usual 1, when the #831 ownership guard
+    // fires: bin/upgrade runs this automatically, and it must be able to
+    // tell "never touched the database" apart from "a migration genuinely
+    // failed" so it can warn and finish the upgrade instead of failing it.
+    $data_dir = open_data_dir(refusal_exit_code: 3, example: 'migrate');
+
+    global $config;
+    $config = Config\load();
+    Config\apply_timezone($config);
+
+    $prefix = $dry_run ? '[dry-run] ' : '';
+    $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
+    $verb = $dry_run ? 'would stamp' : 'stamped';
+    $version_count = Bootstrap\backfill_post_version($columns, $dry_run);
+    echo "{$prefix}backfill_post_version: $verb version=1 on $version_count post(s)\n";
+
+    $verb = $dry_run ? 'would move' : 'moved';
+    $identity_count = Bootstrap\backfill_imported_post_identity($columns, $dry_run);
+    echo "{$prefix}backfill_imported_post_identity: $verb $identity_count post(s) onto import_uuid\n";
+
+    $verb = $dry_run ? 'would seed' : 'seeded';
+    $watermark_count = Network\migrate_feed_watermarks(Network\get_feeds(), $dry_run);
+    echo "{$prefix}migrate_feed_watermarks: $verb $watermark_count feed(s) from their legacy watermark\n";
+
+    // Must run after backfill_post_version() above: that's what gives a
+    // pre-versioning post a `version` at all, so upgrade_all_posts()'s
+    // `WHERE version < ?` sees it in the same pass instead of on a second
+    // `bin/lamb migrate` run.
+    $verb = $dry_run ? 'would upgrade' : 'upgraded';
+    [$needing_upgrade, $upgraded_count] = upgrade_all_posts($dry_run);
+    $post_count = $dry_run ? $needing_upgrade : $upgraded_count;
+    echo "{$prefix}upgrade_all_posts: $verb $post_count post(s) to version " . POST_VERSION . "\n";
+
+    echo "{$prefix}Done.\n";
+    exit(0);
+}
+
+if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace]\n");
+    fwrite(STDERR, "       bin/lamb upgrade-posts [--dry-run]\n");
+    fwrite(STDERR, "       bin/lamb migrate [--dry-run]\n");
     fwrite(STDERR, 'Sources: ' . implode(', ', Import\source_names()) . "\n");
     exit(1);
 }
@@ -111,8 +246,7 @@ if ($path === null) {
     exit(1);
 }
 
-$data_dir = Bootstrap\data_dir(dirname(__DIR__));
-Bootstrap\bootstrap_db($data_dir);
+$data_dir = open_data_dir();
 
 global $config;
 $config = Config\load();

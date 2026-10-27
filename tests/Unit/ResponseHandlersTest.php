@@ -295,6 +295,32 @@ class ResponseHandlersTest extends TestCase
         $this->assertSame('404', $result['action']);
     }
 
+    /**
+     * #814: viewing a stale, legacy post (title stored only on the column,
+     * never in front matter) must render its real title/slug and must not
+     * write the version-bump upgrade back to the row.
+     */
+    public function testRespondPostRendersAStaleLegacyPostWithoutStoringTheUpgrade(): void
+    {
+        $post = R::dispense('post');
+        $post->body = 'Legacy feed item body';
+        $post->title = 'Legacy Title';
+        $post->slug = 'legacy-slug';
+        $post->version = 1;
+        $post->draft = null;
+        $post->created = date('Y-m-d H:i:s');
+        R::store($post);
+
+        $result = respond_post(['legacy-slug']);
+
+        $this->assertSame('Legacy Title', $result['posts'][0]->title);
+        $this->assertSame('legacy-slug', $result['posts'][0]->slug);
+        $this->assertStringContainsString('Legacy feed item body', $result['posts'][0]->transformed);
+
+        $stored = R::getRow('SELECT version FROM post WHERE id = ?', [$post->id]);
+        $this->assertSame(1, (int) $stored['version']);
+    }
+
     // respond_search
 
     public function testRespondSearchReturnsEmptyArrayWhenNoQuery(): void

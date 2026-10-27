@@ -90,6 +90,34 @@ function page_path(string $path, int $page): string
 }
 
 /**
+ * Determines the canonical (no trailing slash) target for a request URI.
+ *
+ * A path with a trailing slash is a duplicate of the same path without one —
+ * {@see page_path} never generates one, so every link on the site already
+ * points at the no-slash form. Redirecting here makes that form the single
+ * canonical address instead of silently serving both as 200.
+ *
+ * @param string $request_uri The raw REQUEST_URI, e.g. `/about/?utm=1`.
+ * @return string|null The canonical URL to redirect to, or null when the
+ *                      path is already canonical.
+ */
+function canonical_redirect(string $request_uri): ?string
+{
+    $path = (string) strtok($request_uri, '?');
+    $query = (string) (strtok('') ?: '');
+    $canonical_path = rtrim($path, '/');
+    if ($canonical_path === '') {
+        $canonical_path = '/';
+    }
+
+    if ($canonical_path === $path) {
+        return null;
+    }
+
+    return $canonical_path . ($query !== '' ? '?' . $query : '');
+}
+
+/**
  * Builds the request's own root URL (`scheme://host[:port]`) from the Host header.
  *
  * The Host header is client-supplied and a front-end catch-all vhost (the bundled

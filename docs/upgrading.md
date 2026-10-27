@@ -9,6 +9,18 @@ How you upgrade depends on how you installed Lamb. There is [more information ab
 
 ## Git install
 
+### Prerequisite: Composer or viv
+
+`bin/upgrade` installs dependencies with [viv](https://github.com/svandragt/vivace) when it is on your `PATH`, and with Composer otherwise. If you already use Composer, you have nothing more to install.
+
+viv is optional and faster. It is a Composer-compatible installer that reads your existing `composer.json`/`composer.lock`. Use version 0.22.0 or later: older versions write vendor files that a web server running as another user can't read, so `bin/upgrade` uses Composer instead. To install viv:
+
+```
+cargo binstall --git https://github.com/svandragt/vivace vivace
+```
+
+Or download a release binary from the [releases page](https://github.com/svandragt/vivace/releases) (viv's releases are currently tagged as prereleases, so "latest release" links don't resolve — use the releases page). `bin/upgrade` prints which installer it uses. It stops with an error, without touching your checkout, if it finds neither.
+
 Run the bundled upgrade script:
 
 ```
@@ -51,6 +63,36 @@ Run that command as the user the cron job runs as, not as root — `--global` wr
 
 Watch for this after moving to a new server, where ownership often differs from the old one. Nothing else reports it: the upgrade simply stops running, and the site keeps serving the version it already has.
 
+## Data migrations
+
+A few one-off changes to stored data — the kind that ship once and never run again — live behind `bin/lamb migrate`:
+
+```bash
+# See what would run, without changing anything
+bin/lamb migrate --dry-run
+
+# Run it
+bin/lamb migrate
+```
+
+It's safe to run at any time: each migration checks whether it still has anything to do and does nothing on a database that's already current.
+
+`bin/lamb migrate` also brings every stored post up to date, the same upgrade `bin/lamb upgrade-posts` runs on its own. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
+
+`bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
+
+### What `bin/upgrade` does with the result
+
+`bin/lamb migrate` reports one of three outcomes, and `bin/upgrade` reacts differently to each:
+
+- **Ran successfully.** The upgrade continues straight to the health check, as normal.
+- **Refused to run.** `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the [ownership guard](#the-deploying-user-must-own-the-checkout) that protects against leaving unwritable WAL sidecar files behind. This is the *normal* shape of a cron deploy: the checkout and database owned by the webserver user, cron running as a human. `bin/upgrade` prints a loud warning naming the exact command to run by hand (`sudo -u <owner> bin/lamb migrate`), then carries on to the health check and finishes the upgrade successfully — the code and dependencies are fine, only the migration is outstanding.
+- **Genuinely failed.** Something else went wrong running a migration. `bin/upgrade` prints a rollback command and stops before the health check, the same as a failed dependency install.
+
+If you see the ownership warning in cron mail, run the command it prints as the user it names, once, and you're caught up.
+
+**Upgrade floor:** these migrations shipped in 0.14.0. Restoring a `lamb.db` backup older than 0.14.0, or upgrading a checkout that has been stuck before it, needs a stop at 0.14.0 first — run `bin/lamb migrate` there — before continuing on to a later version.
+
 ## Tarball install
 
 Download the latest `lamb-<version>.tar.gz` from the [releases page](https://github.com/svandragt/lamb/releases) and extract it over your existing installation:
@@ -82,3 +124,6 @@ The database and uploads live in the named volumes and survive the recreate.
 - [Installation options]({{ site.baseurl }}{% link index.md %})
 - [Docker]({{ site.baseurl }}{% link docker.md %})
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
+- [Upgrading stored posts]({{ site.baseurl }}{% link upgrade-posts.md %}): Bring every post's stored data up to date in one pass after upgrading Lamb.
+
+`bin/lamb migrate` and `bin/lamb upgrade-posts` overlap on purpose: `migrate` runs every outstanding one-off data change, including the post upgrade, in one command; `upgrade-posts` runs only the post upgrade, for when that's all you need.

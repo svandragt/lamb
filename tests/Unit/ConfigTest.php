@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Config\compose_config;
-use function Lamb\Config\ensure_explicit_theme;
 use function Lamb\Config\experimental_features_enabled;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
@@ -119,125 +118,6 @@ class ConfigTest extends TestCase
         $this->assertSame('2026', $parsed['theme']);
     }
 
-    public function testEnsureExplicitThemeAddsBaseWhenThemeMissing(): void
-    {
-        $ini = "site_title = Example\n\n[menu_items]\nAbout = about\n";
-
-        $migrated = ensure_explicit_theme($ini);
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('base', $parsed['theme']);
-        // Existing content is preserved.
-        $this->assertSame('Example', $parsed['site_title']);
-        $this->assertSame('about', $parsed['menu_items']['About']);
-    }
-
-    public function testEnsureExplicitThemeLeavesExistingThemeUntouched(): void
-    {
-        $ini = "theme = 2024\nsite_title = Example\n";
-
-        $this->assertSame($ini, ensure_explicit_theme($ini));
-    }
-
-    public function testEnsureExplicitThemeIsIdempotent(): void
-    {
-        $ini = "site_title = Example\n";
-
-        $once = ensure_explicit_theme($ini);
-        $twice = ensure_explicit_theme($once);
-
-        $this->assertSame($once, $twice);
-    }
-
-    /**
-     * INI that parse_ini_string() refuses outright. parse_ini_safe() answers []
-     * for these exactly as it does for a themeless file, which is what made the
-     * migration mistake them for one.
-     *
-     * @return array<string, array{0: string}>
-     */
-    public static function unparseableIniProvider(): array
-    {
-        return [
-            'unclosed section header' => ["[unclosed\nsite_title = Example\n"],
-            'stray closing bracket'   => ["]\nsite_title = Example\n"],
-            'key with no name'        => ["=\n"],
-            'stray brace'             => ["{\n"],
-            'reserved word as key'    => ["yes = 1\n"],
-            'bare quote'              => ["\"\n"],
-        ];
-    }
-
-    /**
-     * @dataProvider unparseableIniProvider
-     */
-    public function testEnsureExplicitThemeLeavesUnparseableIniAlone(string $ini): void
-    {
-        // Prepending a theme line to a file with a syntax error leaves it just
-        // as unparseable, so the migration fired again on every request:
-        // get_ini_text() saves whenever the text changed, so the stored config
-        // grew a line per request and save_ini_text() advanced the config
-        // timestamp each time, defeating every anonymous cache validator.
-        $this->assertSame($ini, ensure_explicit_theme($ini));
-    }
-
-    /**
-     * @dataProvider unparseableIniProvider
-     */
-    public function testEnsureExplicitThemeIsIdempotentForUnparseableIni(string $ini): void
-    {
-        // The property the valid-input test above already asserts, on the input
-        // that broke it. Repeated application must reach a fixed point.
-        $once = ensure_explicit_theme($ini);
-        $twice = ensure_explicit_theme($once);
-        $thrice = ensure_explicit_theme($twice);
-
-        $this->assertSame($once, $twice);
-        $this->assertSame($twice, $thrice);
-    }
-
-    public function testEnsureExplicitThemeStillMigratesAThemelessFile(): void
-    {
-        // The guard must not cost the migration its actual job.
-        $migrated = ensure_explicit_theme("site_title = Example\n");
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('base', $parsed['theme']);
-        $this->assertSame('Example', $parsed['site_title']);
-    }
-
-    public function testEnsureExplicitThemeMigratesLegacyDefaultToBase(): void
-    {
-        $ini = "theme = default\nsite_title = Example\n";
-
-        $migrated = ensure_explicit_theme($ini);
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('base', $parsed['theme']);
-        // Existing content is preserved.
-        $this->assertSame('Example', $parsed['site_title']);
-    }
-
-    public function testEnsureExplicitThemeReplacesEmptyThemeWithBase(): void
-    {
-        $ini = "theme =\nsite_title = Example\n";
-
-        $migrated = ensure_explicit_theme($ini);
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('base', $parsed['theme']);
-        $this->assertSame('Example', $parsed['site_title']);
-    }
-
-    public function testEnsureExplicitThemeLeavesCustomThemeUntouched(): void
-    {
-        $this->assertSame('my-custom', parse_ini_string(
-            ensure_explicit_theme("theme = my-custom\n"),
-            true,
-            INI_SCANNER_RAW
-        )['theme']);
-    }
-
     public function testDefaultIniSetsSiteTitleForNewInstalls(): void
     {
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
@@ -303,7 +183,8 @@ class ConfigTest extends TestCase
     public function testComposeConfigNeverInheritsThemeFromDefaults(): void
     {
         // A stored config without a theme must not be silently re-themed by the
-        // seeded default (theme is resolved/migrated per-install instead).
+        // seeded default (Theme\resolve_theme() falls back to the base theme
+        // for a missing theme instead).
         $config = compose_config("site_title = Mine\n", "theme = 2026\nposts_per_page = 10\n");
 
         $this->assertArrayNotHasKey('theme', $config);

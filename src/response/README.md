@@ -15,7 +15,7 @@ namespaces — callers don't care which file a function lives in):
 
 | File | Responsibility |
 |------|----------------|
-| `../response.php` | Namespace entry: cookie options, pagination core, conditional-GET/304, 404/redirect helpers, `upgrade_posts()` |
+| `../response.php` | Namespace entry: cookie options, pagination core, conditional-GET/304, 404/redirect helpers, `render_stale_posts()` (render-time, no write), `upgrade_posts()`/`upgrade_all_posts()` (the `bin/lamb migrate`/`upgrade-posts` write path) |
 | `auth.php` | `/login`, `/logout`, `/settings`: the sessionless login page, its CSRF model, and the brute-force throttle |
 | `discovery.php` | `/sitemap.xml`, `/robots.txt`, and the noindex marker they share with the theme |
 | `export.php` | `/export` download (login required) |

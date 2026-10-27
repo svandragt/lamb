@@ -11,7 +11,6 @@
 /data/*.log
 /src/assets/
 /vendor/
-/src/config.ini
 /todos.md
 
 # Ignore user-installed themes; the repo ships 'base', '2024', and '2026'.

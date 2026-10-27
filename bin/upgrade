@@ -10,6 +10,32 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Pick the dependency installer once. viv is faster, but before 0.22.0 it
+# wrote vendor/composer/platform_check.php and installed.php as 0600, so a
+# web server running as another user got a 500. Such a viv is skipped in favour
+# of Composer, and having neither stops here, before the checkout is touched,
+# rather than failing later with a bare "command not found".
+install_cmd=()
+if command -v viv > /dev/null; then
+    read -r _ viv_version _ < <(viv --version 2>/dev/null) || true
+    # sort -V puts 0.9.0 before 0.22.0, which a plain string compare would not.
+    if [ "$(printf '%s\n' 0.22.0 "${viv_version:-}" | sort -V | head -n1)" = "0.22.0" ]; then
+        install_cmd=(viv install --no-dev --no-scripts)
+    else
+        echo "bin/upgrade: viv ${viv_version:-} writes vendor files the web server can't read; upgrade to viv 0.22.0 or later to use it"
+    fi
+fi
+if [ ${#install_cmd[@]} -eq 0 ] && command -v composer > /dev/null; then
+    install_cmd=(composer install --no-dev --no-scripts --no-interaction)
+fi
+if [ ${#install_cmd[@]} -eq 0 ]; then
+    echo "bin/upgrade: no dependency installer found" >&2
+    echo "Lamb installs dependencies with Composer (https://getcomposer.org) or viv 0.22.0 or later" >&2
+    echo "(https://github.com/svandragt/vivace). Install one and re-run this script." >&2
+    exit 1
+fi
+echo "bin/upgrade: installing dependencies with ${install_cmd[0]}"
+
 # git refuses to work in a repository owned by another user ("detected dubious
 # ownership"), which is the normal shape of a deploy: the checkout owned by the
 # webserver user, the cron job running as a human. Every git command below then
@@ -47,7 +73,41 @@ prev=$(git rev-parse HEAD)
 branch=$(git rev-parse --abbrev-ref HEAD)
 
 git reset --hard '@{u}'
-composer install --no-dev --no-interaction --prefer-dist --no-scripts
+"${install_cmd[@]}"
+
+# Runs the one-time data migrations (#811) against the new code, before the
+# health check declares the site healthy. A failure here must not be masked
+# by a later health check that only asks "does the site respond?" — a stale
+# migration can leave that true while the data itself is still wrong.
+#
+# exit 3 is distinct from every other failure: it means bin/lamb refused
+# before touching the database (the #831 ownership guard — data/lamb.db is
+# owned by the webserver user, this script by whoever runs cron, exactly the
+# deploy this script's own header calls normal). That is not a broken
+# upgrade — the checkout and dependencies are fine — so it must not fail the
+# whole run the way a genuine migration failure (any other nonzero) does.
+migrate_status=0
+bin/lamb migrate || migrate_status=$?
+
+if [ "$migrate_status" -ne 0 ] && [ "$migrate_status" -ne 3 ]; then
+    echo "Data migration failed after upgrading to $(git rev-parse --short HEAD)" >&2
+    echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
+    exit 1
+fi
+
+# Printed right before the summary line, not buried above the install
+# output, so it survives being skimmed in cron mail.
+if [ "$migrate_status" -eq 3 ]; then
+    owner=$(stat -c '%U' data/lamb.db 2>/dev/null || stat -f '%Su' data/lamb.db 2>/dev/null || echo 'the web server user')
+    cat >&2 <<EOF
+
+WARNING: bin/lamb migrate could not run — data/lamb.db is owned by ${owner}, not $(id -un).
+The upgrade itself succeeded, but the data migrations are still outstanding. Run them by hand:
+
+    sudo -u ${owner} bin/lamb migrate
+
+EOF
+fi
 
 echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
 
@@ -56,7 +116,7 @@ site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr 
 if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
     if ! curl -fsS -o /dev/null --max-time 15 "$site_url"; then
         echo "Health check failed for ${site_url}" >&2
-        echo "Roll back with: git reset --hard ${prev} && composer install --no-dev --no-interaction --prefer-dist --no-scripts" >&2
+        echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
         exit 1
     fi
 fi

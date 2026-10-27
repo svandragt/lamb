@@ -11,8 +11,8 @@ if (!empty($pagination)) :
     }
 
     // Pagination links are clean paths: derive the list path from the current
-    // request (dropping any /page/N suffix and the legacy ?page= query) and let
-    // Http\page_path() build each page's URL.
+    // request (dropping any /page/N suffix; a ?page= query string is inert and
+    // never reaches here) and let Http\page_path() build each page's URL.
     $uri = $_SERVER['REQUEST_URI'] ?? '/';
     $path = parse_url($uri, PHP_URL_PATH) ?: '/';
 

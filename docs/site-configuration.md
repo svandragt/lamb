@@ -7,6 +7,15 @@ parent: Site customisation
 
 Lamb does not need a configuration file, it will run happily without it. It does provide a settings page after logging in where the instance can be configured.
 
+## `/settings` is the normal path
+
+Edit configuration at `/settings` (login required) once the site is running.
+Every setting on that page is stored as INI text in the database, and that
+stored copy is what Lamb reads on every request after the first.
+
+On the very first request, before anything is stored in the database, Lamb
+uses the built-in defaults shown below as the initial configuration.
+
 The default configuration. Real defaults ship as active lines so you can edit
 one value rather than write it from scratch; personal details stay commented:
 

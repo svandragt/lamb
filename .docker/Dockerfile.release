@@ -2,14 +2,42 @@
 # Self-contained: app + vendor baked in, FrankenPHP (Caddy + PHP) serves it.
 # Build from the repository root: docker build -f .docker/Dockerfile.release .
 
-FROM composer:2 AS vendor
+FROM php:8.5-cli AS vendor
+ARG VIV_VERSION=0.22.0
 WORKDIR /app
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-autoloader --ignore-platform-reqs
-COPY src/ src/
-RUN composer dump-autoload --no-dev --optimize --ignore-platform-reqs
 
-FROM dunglas/frankenphp:php8.4
+# viv is a drop-in Composer-compatible dependency installer reading the same
+# composer.json/composer.lock. There is no published viv container image, so
+# fetch the verified binary release into a stock PHP image instead.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && case "$(uname -m)" in \
+        x86_64) target=x86_64-unknown-linux-musl ;; \
+        aarch64 | arm64) target=aarch64-unknown-linux-musl ;; \
+        *) echo "viv publishes no binary for $(uname -m)" >&2 && exit 1 ;; \
+       esac \
+    && base="https://github.com/svandragt/vivace/releases/download/v${VIV_VERSION}" \
+    && archive="vivace-v${VIV_VERSION}-${target}.tar.gz" \
+    && workdir="$(mktemp -d)" \
+    && curl -fsSL -o "${workdir}/${archive}" "${base}/${archive}" \
+    && curl -fsSL -o "${workdir}/SHA256SUMS" "${base}/SHA256SUMS" \
+    && ( cd "${workdir}" && grep " ${archive}\$" SHA256SUMS | sha256sum --check --strict - ) \
+    && tar -xzf "${workdir}/${archive}" -C "${workdir}" \
+    && install -m 0755 "${workdir}/vivace-v${VIV_VERSION}-${target}/viv" /usr/local/bin/viv \
+    && rm -rf "${workdir}"
+
+# Install dependencies before src/ arrives, so editing source doesn't
+# invalidate this layer and refetch every package. The optimised classmap
+# needs src/ present, so it's deferred to dump-autoload, which is cheap.
+COPY composer.json composer.lock ./
+# This stage only produces vendor/; the runtime stage installs these two extensions.
+RUN viv install --no-dev --no-scripts --ignore-platform-req=ext-gettext --ignore-platform-req=ext-pdo_mysql
+
+COPY src/ src/
+RUN viv dump-autoload --no-dev -o
+
+FROM dunglas/frankenphp:php8.5
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 LABEL org.opencontainers.image.source="https://github.com/svandragt/lamb"
 

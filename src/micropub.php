@@ -602,9 +602,8 @@ class LambMicropubAdapter extends MicropubAdapter
             }
             // A post may record several reply targets (#583): `add` appends every
             // value the client sent to whatever is already stored (deduplicated),
-            // rather than refusing a second target outright as it used to (#582)
-            // or silently keeping only the first. A value carrying no URL is an
-            // add that cannot be honoured — refuse it, as applyReplace() does,
+            // rather than silently keeping only the first. A value carrying no URL
+            // is an add that cannot be honoured — refuse it, as applyReplace() does,
             // rather than report a success the storage did not have.
             $targets = $this->currentReplyToList($bean);
             foreach ($values as $value) {

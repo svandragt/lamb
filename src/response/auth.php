@@ -465,6 +465,16 @@ function prune_login_throttle(int $now): int
  */
 function throttle_message(int $seconds): string
 {
+    if ($seconds < MINUTE_IN_SECONDS) {
+        $wait = max(1, $seconds);
+
+        return sprintf(
+            'Too many failed attempts. Try again in %d %s.',
+            $wait,
+            $wait === 1 ? 'second' : 'seconds'
+        );
+    }
+
     $minutes = max(1, (int) ceil($seconds / MINUTE_IN_SECONDS));
 
     return sprintf(
