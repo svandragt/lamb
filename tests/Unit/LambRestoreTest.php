@@ -384,6 +384,7 @@ class LambRestoreTest extends TestCase
 
         $this->assertSame('missing file', item_skip_reason($items[0]));
         $this->assertNull(item_skip_reason($items[1]));
+        $this->assertSame('Good body.', read_entry($reader, 'posts/2026/07/good.md'));
     }
 
     /**
