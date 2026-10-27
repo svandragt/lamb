@@ -133,7 +133,9 @@ function open_zip_archive(string $path): array
     // $zip stays referenced by the closure, so the handle lives as long as the
     // reader does.
     $reader = static function (string $name) use ($zip): ?string {
-        $contents = $zip->getFromName($name);
+        // Silenced like the PharData reader: a damaged entry warns on newer
+        // libzip, and the restore reports it as a skip instead.
+        $contents = @$zip->getFromName($name);
 
         return $contents === false ? null : $contents;
     };
