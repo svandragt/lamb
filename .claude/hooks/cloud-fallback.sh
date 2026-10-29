@@ -22,6 +22,7 @@ set -uo pipefail
 cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}" || exit 1
 
 log() { printf '[cloud-fallback] %s\n' "$1"; }
+failed=0
 cache="$HOME/.cache/lamb-cloud"
 mkdir -p "$cache" "$HOME/.local/bin"
 
@@ -81,6 +82,7 @@ else
     log "composer install complete"
   else
     log "ERROR: composer install failed, see $cache/composer.log"
+    failed=1
   fi
   rm -f .composer-cloud.json .composer-cloud.lock
   trap - EXIT
@@ -107,6 +109,7 @@ elif [ -d vendor/bin ]; then
     log "phpstan $version shimmed into vendor/bin/phpstan"
   else
     log "ERROR: could not fetch phpstan $version"
+    failed=1
   fi
 fi
 
@@ -118,4 +121,8 @@ if [ -x vendor/bin/phpcs ]; then
   "$PHP" vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility >/dev/null 2>&1 || true
 fi
 
+if [ "$failed" -ne 0 ]; then
+  log "finished with errors (see above)"
+  exit 1
+fi
 log "done. MakePasswordTest (container run) and MicropubMediaEndpointTest (store failure) fail in this environment regardless of the code."
