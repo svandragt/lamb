@@ -287,7 +287,8 @@ function well_known_document(string $name, array $config, string $root_url, stri
  * 304 when the client's validators are current.
  *
  * @param array<int, string> $args Route arguments; the first is the file name.
- * @return array View data for the 404 page when the file isn't published.
+ * @return array{title: string, intro: string, action: string, requested: string} View data
+ *         for the 404 page when the file isn't published.
  */
 function respond_well_known(array $args): array
 {
