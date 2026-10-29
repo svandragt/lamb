@@ -78,7 +78,10 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
 
     $root = rtrim($root_url, '/') . '/';
     // Inline `](/x)` targets, and reference definitions `[label]: /x`.
-    $content = (string) preg_replace('~(\]\()/(?!/)~', '$1' . $root, trim($content));
+    // Only blank lines are trimmed at the start: leading spaces can make an
+    // indented code block.
+    $content = rtrim((string) preg_replace('~\A(?:[ \t]*\R)+~', '', $content));
+    $content = (string) preg_replace('~(\]\()/(?!/)~', '$1' . $root, $content);
     $content = (string) preg_replace('~^( {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)~m', '$1' . $root, $content);
     return $out . $content . "\n";
 }

@@ -126,6 +126,12 @@ class SocialSpecTest extends TestCase
         );
     }
 
+    public function testAboutMarkdownKeepsALeadingIndentedCodeBlock(): void
+    {
+        $post = $this->post("---\ntitle: About\n---\n\n    $ make\n\nText  \nmore\n\n", 'about');
+        $this->assertSame("# About\n\n    $ make\n\nText  \nmore\n", about_markdown($post, [], 'https://example.com'));
+    }
+
     // --- contact.vcf ------------------------------------------------------
 
     public function testContactVcardIsNullWithoutAnAuthorEmail(): void
