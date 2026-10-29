@@ -69,6 +69,11 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Separate multiple hubs with commas.
 ;websub_hubs = https://hub.example.com/
 
+;; A public OPML list of the feeds you follow, e.g. the one your feed reader publishes.
+;; Lamb copies it during scheduled tasks (/_cron) and serves the copy at
+;; /.well-known/following.opml for SocialSpec apps (https://followspec.org/).
+;following_url = https://reader.example/following/your-token.opml
+
 ;; Gates features still gathering real-world testing before general release
 ;; (currently: the WordPress, Known, and Lamb-export import CLI scripts).
 ;; Off by default, and reset to false automatically whenever an upgrade

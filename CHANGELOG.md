@@ -44,6 +44,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Added
 
+- [SocialSpec](https://socialspec.org/) profile files: `/.well-known/about.md` (your page slugged `about`), `/.well-known/contact.vcf` (from `author_email`, `author_name` and `[me]`) and `/.well-known/following.opml` (a copy of the OPML at the new `following_url` setting, refreshed by `/_cron`). Each is a 404 until its data is set. See `docs/socialspec.md`.
 - The admin toolbar has a "Help" link, next to "Logout", that opens the Lamb documentation in a new tab ([#890](https://github.com/svandragt/lamb/issues/890)).
 - The new-entry editor autosaves your draft in the browser, so a reload or accidental navigation doesn't lose the post. The edit form offers a "Restore unsaved changes" link when a saved draft differs from the stored post.
 - An attach-photo button on the entry and edit forms opens the phone's camera or photo library.

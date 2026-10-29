@@ -66,6 +66,7 @@
             "src/response/posts.php",
             "src/response/upload.php",
             "src/security.php",
+            "src/socialspec.php",
             "src/theme.php",
             "src/theme/assets.php",
             "src/theme/formatting.php",
