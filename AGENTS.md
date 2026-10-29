@@ -74,33 +74,10 @@ registers the PHPCompatibility standard for that checkout (handled on install
 by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
-### Cloud sessions (restricted network)
+### Cloud sessions
 
-Claude Code cloud containers may ship PHP 8.3, no `viv`, and an outbound
-proxy that blocks GitHub API zipball downloads while allowing git clones.
-What works there:
-
-- **PHP 8.4:** `nix build nixpkgs#php84 --no-link --print-out-paths`, then put a
-  `php` wrapper first on `PATH` that runs that binary with `-c` pointing at an
-  ini containing `error_reporting=E_ALL & ~E_DEPRECATED` and
-  `display_errors=stderr`. Several tests spawn `php` themselves, so a symlink
-  elsewhere on `PATH` is not enough, and vendor deprecation notices on stdout
-  break tests that parse output.
-- **Dependencies:** with `GITHUB_TOKEN` unset, run
-  `composer install --prefer-source --ignore-platform-req=php`. Everything installs
-  from git except `phpstan/phpstan`, which is dist-only: remove it from a temporary
-  copy of `composer.json` and `composer.lock`, install, then
-  `git checkout composer.json composer.lock`.
-- **Lint:** Composer disables plugins as root, so PHPCompatibility isn't
-  registered. Run
-  `vendor/bin/phpcs --runtime-set installed_paths vendor/phpcompatibility/php-compatibility .`
-- **PHPStan:** the release tag ships the phar:
-  `git clone --depth 1 --branch <version from composer.lock> https://github.com/phpstan/phpstan.git`,
-  then `php phpstan/phpstan.phar analyse --memory-limit=512M` from the repo root.
-  Clone it outside the checkout.
-
-Expect `MakePasswordTest` (container run) and `MicropubMediaEndpointTest`
-(store failure) to fail there; they depend on the environment, not the code.
+If the SessionStart hook warns that `viv install` is incomplete (a network that
+blocks GitHub downloads but allows git), run `bash .claude/hooks/cloud-fallback.sh`.
 
 ## Dependencies
 
