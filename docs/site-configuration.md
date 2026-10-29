@@ -61,6 +61,11 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Separate multiple hubs with commas.
 ;websub_hubs = https://hub.example.com/
 
+;; A public OPML list of the feeds you follow, e.g. the one your feed reader publishes.
+;; Lamb copies it during scheduled tasks (/_cron) and serves the copy at
+;; /.well-known/following.opml for SocialSpec apps (https://followspec.org/).
+;following_url = https://reader.example/following/your-token.opml
+
 ;; Gates features still gathering real-world testing before general release
 ;; (currently: the WordPress, Known, and Lamb-export import CLI scripts — see
 ;; wordpress-import.md, known-import.md, lamb-import.md). Off by default, and
@@ -188,5 +193,6 @@ point `site_url` at that.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
 * [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
+* [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): `author_email`, `author_name`, `following_url` and `[me]` feed the `/.well-known/` profile files.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
 * [Themes]({{ site.baseurl }}{% link themes.md %}): The `theme` key selects the active theme.

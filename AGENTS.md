@@ -74,6 +74,11 @@ registers the PHPCompatibility standard for that checkout (handled on install
 by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
+### Cloud sessions
+
+If the SessionStart hook warns that `viv install` is incomplete (a network that
+blocks GitHub downloads but allows git), run `bash .claude/hooks/cloud-fallback.sh`.
+
 ## Dependencies
 
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —

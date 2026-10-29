@@ -99,6 +99,7 @@ function register_app_routes(
     register_route('feed.json', 'Lamb\\Response\\respond_feed_json');
     register_route('sitemap.xml', 'Lamb\\Response\\respond_sitemap');
     register_route('robots.txt', 'Lamb\\Response\\respond_robots');
+    register_route('.well-known', 'Lamb\\SocialSpec\\respond_well_known', $lookup);
     if ($action === 'home' && $lookup === 'feed') {
         register_route('home', 'Lamb\\Response\\respond_feed');
     } elseif ($action === 'home' && $lookup === 'feed.json') {

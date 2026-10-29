@@ -61,6 +61,14 @@ class RouteVisibilityTest extends TestCase
         return str_contains($body, 'require_login(');
     }
 
+    public function testWellKnownIsAPublicRouteToTheSocialSpecResponder(): void
+    {
+        $routes = $this->registerRoutes();
+
+        $this->assertSame('Lamb\\SocialSpec\\respond_well_known', $routes['.well-known'][0] ?? null);
+        $this->assertNotContains('.well-known', private_routes());
+    }
+
     public function testEveryLoginGatedRouteIsPrivate(): void
     {
         $routes = $this->registerRoutes();
