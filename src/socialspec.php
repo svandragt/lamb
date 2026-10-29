@@ -25,6 +25,8 @@ use function Lamb\Network\feed_fetch_due;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\split_frontmatter;
 
+use const Lamb\Config\IDENTITY_FALLBACK;
+
 /** Slug of the post served as /.well-known/about.md. */
 const ABOUT_SLUG = 'about';
 
@@ -74,7 +76,10 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
         $out .= '# ' . trim($title) . "\n\n";
     }
 
-    $content = (string) preg_replace('~(\]\()/(?!/)~', '$1' . rtrim($root_url, '/') . '/', trim($content));
+    $root = rtrim($root_url, '/') . '/';
+    // Inline `](/x)` targets, and reference definitions `[label]: /x`.
+    $content = (string) preg_replace('~(\]\()/(?!/)~', '$1' . $root, trim($content));
+    $content = (string) preg_replace('~^( {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)~m', '$1' . $root, $content);
     return $out . $content . "\n";
 }
 
@@ -109,7 +114,8 @@ function vcard_fold(string $line): string
 /**
  * Builds the ContactSpec vCard, or null when no valid author_email is set.
  *
- * The email is the opt-in: without one there is nothing to contact.
+ * The email is the opt-in: without one there is nothing to contact. The
+ * placeholder identity a fresh install falls back to counts as unset.
  *
  * @param array<string, mixed> $config
  * @param string               $root_url Site root without trailing slash.
@@ -118,11 +124,11 @@ function vcard_fold(string $line): string
 function contact_vcard(array $config, string $root_url): ?string
 {
     $email = trim((string) ($config['author_email'] ?? ''));
-    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || $email === IDENTITY_FALLBACK['author_email']) {
         return null;
     }
     $name = trim((string) ($config['author_name'] ?? ''));
-    if ($name === '') {
+    if ($name === '' || $name === IDENTITY_FALLBACK['author_name']) {
         $name = trim((string) ($config['site_title'] ?? ''));
     }
 
@@ -193,7 +199,7 @@ function refresh_following(?string $url, string $path, ?callable $fetcher = null
     $now ??= time();
     $fetcher ??= static fn(string $u, array $o): ?array => fetch_guarded($u, $o);
 
-    $meta = is_file($meta_path) ? (json_decode((string) file_get_contents($meta_path), true) ?: []) : [];
+    $meta = following_meta($path);
     if (($meta['url'] ?? null) !== $url) {
         // A new source: the old list is no longer the author's.
         @unlink($path);
@@ -210,7 +216,9 @@ function refresh_following(?string $url, string $path, ?callable $fetcher = null
     $result = $fetcher($url, ['headers' => $headers, 'timeout' => FEED_FETCH_TIMEOUT, 'max_bytes' => FOLLOWING_MAX_BYTES]);
 
     $meta = ['url' => $url, 'attempt' => $now] + $meta;
-    $line = 'Following list: failed to fetch ' . $url . '.' . PHP_EOL;
+    // /_cron is unauthenticated, so its output never names the URL: a
+    // reader's public-list address usually carries a secret token.
+    $line = 'Following list: fetch failed.' . PHP_EOL;
     if ($result !== null && $result['status'] === 304 && is_file($path)) {
         $line = 'Following list: unchanged.' . PHP_EOL;
     } elseif ($result !== null && $result['status'] === 200 && is_valid_opml($result['body'])) {
@@ -223,6 +231,18 @@ function refresh_following(?string $url, string $path, ?callable $fetcher = null
     file_put_contents($meta_path, json_encode(array_filter($meta, static fn($v) => $v !== null)));
 
     return $line;
+}
+
+/**
+ * The bookkeeping sidecar of a following-list copy: its source `url`, last
+ * `attempt` and `etag`. Empty when missing or unreadable.
+ *
+ * @return array<string, mixed>
+ */
+function following_meta(string $path): array
+{
+    $meta = is_file($path . '.json') ? json_decode((string) file_get_contents($path . '.json'), true) : null;
+    return is_array($meta) ? $meta : [];
 }
 
 /**
@@ -267,8 +287,10 @@ function well_known_document(string $name, array $config, string $root_url, stri
             $vcf = contact_vcard($config, $root_url);
             return $vcf === null ? null : ['body' => $vcf, 'type' => 'text/vcard; charset=utf-8', 'modified' => 0];
         case 'following.opml':
-            $url = (string) ($config['following_url'] ?? '');
-            if (trim($url) === '' || !is_file($following_path)) {
+            // Only a copy of the URL configured now: after an edit, the old
+            // list stays hidden until /_cron fetches the new one.
+            $url = trim((string) ($config['following_url'] ?? ''));
+            if ($url === '' || !is_file($following_path) || (following_meta($following_path)['url'] ?? null) !== $url) {
                 return null;
             }
             return [

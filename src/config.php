@@ -180,13 +180,18 @@ function compose_config(string $stored_ini, string $default_ini): array
     // Personal-identity values are kept commented in the seeded INI, so supply
     // them as a last-resort fallback for consumers without an inline default
     // (e.g. Response\render_atom_feed() reads author_name directly).
-    $fallback = [
-        'author_email' => 'joe.sheeple@example.com',
-        'author_name'  => 'Joe Sheeple',
-    ];
-
-    return array_merge($fallback, $defaults, $config);
+    return array_merge(IDENTITY_FALLBACK, $defaults, $config);
 }
+
+/**
+ * Placeholder identity compose_config() supplies while author_email and
+ * author_name are unset. Readers that must not publish a placeholder as if it
+ * were the author's (SocialSpec\contact_vcard()) compare against it.
+ */
+const IDENTITY_FALLBACK = [
+    'author_email' => 'joe.sheeple@example.com',
+    'author_name'  => 'Joe Sheeple',
+];
 
 /**
  * The config keys written as `[section]` blocks of `label = value` entries.

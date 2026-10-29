@@ -5,6 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Config\compose_config;
+use function Lamb\Config\get_default_ini_text;
 use function Lamb\SocialSpec\about_markdown;
 use function Lamb\SocialSpec\about_post;
 use function Lamb\SocialSpec\contact_vcard;
@@ -115,12 +117,30 @@ class SocialSpecTest extends TestCase
         );
     }
 
+    public function testAboutMarkdownMakesRootRelativeReferenceDefinitionsAbsolute(): void
+    {
+        $post = $this->post("See [home].\n\n[home]: /home\n  [ext]: https://a.b/\n[proto]: //cdn.x/y", 'about');
+        $this->assertSame(
+            "See [home].\n\n[home]: https://example.com/home\n  [ext]: https://a.b/\n[proto]: //cdn.x/y\n",
+            about_markdown($post, [], 'https://example.com')
+        );
+    }
+
     // --- contact.vcf ------------------------------------------------------
 
     public function testContactVcardIsNullWithoutAnAuthorEmail(): void
     {
         $this->assertNull(contact_vcard(['author_name' => 'Jo'], 'https://example.com'));
         $this->assertNull(contact_vcard(['author_email' => 'not-an-email'], 'https://example.com'));
+    }
+
+    public function testContactVcardIgnoresThePlaceholderIdentityAFreshInstallGets(): void
+    {
+        $fresh = compose_config('', get_default_ini_text());
+        $this->assertNull(contact_vcard($fresh, 'https://example.com'));
+
+        $emailOnly = compose_config("author_email = jo@example.com\nsite_title = Jo's notes", get_default_ini_text());
+        $this->assertStringContainsString("\r\nFN:Jo's notes\r\n", (string) contact_vcard($emailOnly, 'https://example.com'));
     }
 
     public function testContactVcardCarriesNameEmailSiteAndMeLinks(): void
@@ -248,6 +268,15 @@ class SocialSpecTest extends TestCase
         $this->assertStringContainsString('updated', $line);
     }
 
+    public function testRefreshFollowingFailureLineDoesNotLeakTheUrl(): void
+    {
+        $calls = [];
+        $path = $this->dir . '/following.opml';
+        $line = refresh_following('https://reader.example/following/s3cret.opml', $path, $this->fetcher($calls, null), self::T0);
+        $this->assertStringContainsString('failed', $line);
+        $this->assertStringNotContainsString('s3cret', $line);
+    }
+
     public function testRefreshFollowingRemovesTheCopyWhenUnconfigured(): void
     {
         $path = $this->dir . '/following.opml';
@@ -264,7 +293,8 @@ class SocialSpecTest extends TestCase
     {
         $this->post('Hi', 'about');
         $path = $this->dir . '/following.opml';
-        file_put_contents($path, self::OPML);
+        $calls = [];
+        refresh_following('https://reader.example/f.opml', $path, $this->fetcher($calls, ['status' => 200, 'headers' => [], 'body' => self::OPML]), self::T0);
         $config = ['author_email' => 'jo@example.com', 'following_url' => 'https://reader.example/f.opml'];
 
         $about = well_known_document('about.md', $config, 'https://example.com', $path);
@@ -276,6 +306,16 @@ class SocialSpecTest extends TestCase
         $opml = well_known_document('following.opml', $config, 'https://example.com', $path);
         $this->assertSame('text/x-opml; charset=utf-8', $opml['type']);
         $this->assertSame(self::OPML, $opml['body']);
+    }
+
+    public function testWellKnownDocumentHidesACopyFetchedFromAnotherUrl(): void
+    {
+        $calls = [];
+        $path = $this->dir . '/following.opml';
+        refresh_following('https://old.example/f.opml', $path, $this->fetcher($calls, ['status' => 200, 'headers' => [], 'body' => self::OPML]), self::T0);
+
+        $this->assertNotNull(well_known_document('following.opml', ['following_url' => 'https://old.example/f.opml'], 'https://example.com', $path));
+        $this->assertNull(well_known_document('following.opml', ['following_url' => 'https://new.example/f.opml'], 'https://example.com', $path));
     }
 
     public function testWellKnownDocumentIsNullForMissingDataOrUnknownNames(): void
