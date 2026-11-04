@@ -229,19 +229,104 @@ function the_meta_description(): void
 }
 
 /**
- * Emits <link rel="preconnect"> and <link rel="dns-prefetch"> tags for origins in $config['preconnect'].
- * Does nothing when no preconnect origins are configured.
+ * Most origins the_preconnect() hints at: each hint opens a connection, and more than a few
+ * compete with the page's own resources for bandwidth.
+ */
+const MAX_PRECONNECT_ORIGINS = 3;
+
+/**
+ * Emits <link rel="preconnect"> and <link rel="dns-prefetch"> tags for the remote origins the
+ * page's posts load media from, in order of first appearance, after any origins in the
+ * deprecated $config['preconnect'] setting (removed in 0.17). Emits at most
+ * MAX_PRECONNECT_ORIGINS tags of each kind.
  *
  * @return void
  */
 function the_preconnect(): void
 {
     global $config;
-    if (empty($config['preconnect'])) {
-        return;
-    }
-    foreach ($config['preconnect'] as $origin) {
+    $origins = array_unique(array_merge(array_values($config['preconnect'] ?? []), media_origins()));
+    foreach (array_slice($origins, 0, MAX_PRECONNECT_ORIGINS) as $origin) {
         printf('<link rel="preconnect" href="%s">' . PHP_EOL, escape($origin));
         printf('<link rel="dns-prefetch" href="%s">' . PHP_EOL, escape($origin));
     }
+}
+
+/**
+ * Lists the remote origins that the posts on the current page load media from.
+ *
+ * Reads $data['posts'], the same list the page's templates render, so listings, tag and search
+ * pages and single posts are covered. Own-origin and relative URLs are left out.
+ *
+ * @return list<string> Origins ("https://host[:port]"), in order of first appearance.
+ */
+function media_origins(): array
+{
+    global $data, $template;
+    if (empty($data['posts'])) {
+        return [];
+    }
+
+    $own_origin = url_origin(ROOT_URL);
+    $origins = [];
+    foreach ($data['posts'] as $bean) {
+        // Menu pages are skipped from listings, so their media never loads there.
+        if (is_hidden_menu_item($template, $bean)) {
+            continue;
+        }
+        foreach (media_urls((string) $bean->transformed) as $url) {
+            $origin = url_origin($url);
+            if ($origin !== null && $origin !== $own_origin) {
+                $origins[$origin] = true;
+            }
+        }
+    }
+
+    return array_keys($origins);
+}
+
+/**
+ * Returns the URLs in the src, poster and srcset attributes of the <img>, <video> and <source>
+ * elements of the given HTML, in document order.
+ *
+ * @param string $html Rendered post HTML.
+ * @return list<string>
+ */
+function media_urls(string $html): array
+{
+    $urls = [];
+    preg_match_all('/<(?:img|video|source)\b[^>]*>/i', $html, $tags);
+    foreach ($tags[0] as $tag) {
+        preg_match_all('/(?<![\w-])(src|poster|srcset)\s*=\s*("|\')(.*?)\2/is', $tag, $attributes, PREG_SET_ORDER);
+        foreach ($attributes as [, $name, , $value]) {
+            if (strtolower($name) !== 'srcset') {
+                $urls[] = trim($value);
+                continue;
+            }
+            // "url 480w, url 960w": the URL is the first word of each comma-separated candidate.
+            foreach (explode(',', $value) as $candidate) {
+                $urls[] = (string) strtok(trim($candidate), " \t\r\n");
+            }
+        }
+    }
+
+    return $urls;
+}
+
+/**
+ * Returns the origin ("scheme://host[:port]") of an absolute http(s) URL, or null for a relative
+ * URL, another scheme, or a host that is not made of plain hostname characters.
+ *
+ * @param string $url The URL.
+ * @return string|null
+ */
+function url_origin(string $url): ?string
+{
+    $host = (string) parse_url($url, PHP_URL_HOST);
+    if (!\Lamb\Http\is_valid_http_url($url) || !preg_match('/^[\w.-]+$/', $host)) {
+        return null;
+    }
+    $port = parse_url($url, PHP_URL_PORT);
+
+    return strtolower(parse_url($url, PHP_URL_SCHEME) . '://' . $host) . ($port === null ? '' : ':' . $port);
 }
