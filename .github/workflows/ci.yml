@@ -35,6 +35,36 @@ jobs:
               - 'package.json'
               - 'pnpm-lock.yaml'
 
+  # A PR into main that changes shipped code needs a changelog fragment (see
+  # changelog.d/README.md) unless it carries the `no-changelog` label. Labels
+  # and files come from the API, not the event payload, so adding the label and
+  # re-running the failed jobs takes effect. PRs into other branches (the
+  # main -> release promotion) are skipped: their diff spans a whole release.
+  changelog:
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a changelog fragment
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_API: repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}
+        run: |
+          labels=$(gh api "$PR_API" --jq '.labels[].name')
+          if grep -qx 'no-changelog' <<<"$labels"; then
+            echo "Labelled no-changelog; nothing to check."
+            exit 0
+          fi
+          files=$(gh api "$PR_API/files" --paginate --jq '.[] | "\(.status) \(.filename)"')
+          if ! grep -qE '^[a-z]+ (src|bin)/' <<<"$files"; then
+            echo "No changes under src/ or bin/; nothing to check."
+            exit 0
+          fi
+          if ! grep -qE '^(added|modified|renamed|copied|changed) changelog\.d/[^/]+\.(added|changed|deprecated|removed|fixed|security)\.md$' <<<"$files"; then
+            echo "::error::This PR changes src/ or bin/ without a changelog fragment. Add changelog.d/<name>.<type>.md (see changelog.d/README.md), or add the no-changelog label and re-run the failed jobs."
+            exit 1
+          fi
+          echo "Changelog fragment found."
+
   quality:
     runs-on: ubuntu-latest
 
@@ -198,7 +228,7 @@ jobs:
   # passing — which would let a red PR merge.
   ci:
     runs-on: ubuntu-latest
-    needs: [quality, test, js-test, playwright]
+    needs: [quality, test, js-test, playwright, changelog]
     if: always()
     steps:
       - name: Verify required jobs succeeded
@@ -207,6 +237,7 @@ jobs:
           echo "test:       ${{ needs.test.result }}"
           echo "js-test:    ${{ needs.js-test.result }}"
           echo "playwright: ${{ needs.playwright.result }}"
+          echo "changelog:  ${{ needs.changelog.result }}"
           if [ "${{ needs.quality.result }}" != "success" ] || [ "${{ needs.test.result }}" != "success" ] || [ "${{ needs.js-test.result }}" != "success" ]; then
             echo "::error::quality, test or js-test did not succeed"
             exit 1
@@ -215,6 +246,11 @@ jobs:
           # only a real failure (or cancellation) should block the merge.
           if [ "${{ needs.playwright.result }}" != "success" ] && [ "${{ needs.playwright.result }}" != "skipped" ]; then
             echo "::error::playwright did not succeed"
+            exit 1
+          fi
+          # changelog only runs on PRs into main; skipped elsewhere.
+          if [ "${{ needs.changelog.result }}" != "success" ] && [ "${{ needs.changelog.result }}" != "skipped" ]; then
+            echo "::error::changelog did not succeed"
             exit 1
           fi
           echo "All checks passed"

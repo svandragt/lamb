@@ -4,24 +4,13 @@ All notable changes to Lamb are recorded here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and Lamb uses
 [SemVer](https://semver.org/) with `0.y` as the compatibility boundary until 1.0.
 
-Every user-visible change adds a bullet under Unreleased in the same commit as
-the code. At release, that block becomes the version block (see `RELEASING.md`).
+Every user-visible change adds a fragment file to `changelog.d/` in the same
+commit as the code. At release, the fragments become the version block (see
+`RELEASING.md`).
 
 ## [Unreleased]
 
-### Deprecated
-
-Saving the settings now tells you which of these keys your configuration still uses. Each one stops working in 0.17.
-
-- `posts_per_page`: Lamb will use 10 posts per page.
-- `404_fallback`: add a `[redirections]` entry for each old address you still want to forward.
-- `[preconnect]`: Lamb will add preconnect hints for the sites your pages load from.
-- `micropub_debug`: set the `LAMB_MICROPUB_DEBUG` environment variable instead.
-- `experimental_features`: pass `--experimental` to `bin/lamb import` instead.
-
-### Fixed
-
-- A feed post saved as a draft no longer goes live when the feed updates it ([#921](https://github.com/svandragt/lamb/issues/921)).
+Changes for the next release are in `changelog.d/` until the release assembles them here.
 
 ## [0.15.1] - 2026-11-04
 

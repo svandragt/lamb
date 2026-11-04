@@ -1,0 +1,5 @@
+- `posts_per_page`: Lamb will use 10 posts per page.
+- `404_fallback`: add a `[redirections]` entry for each old address you still want to forward.
+- `[preconnect]`: Lamb will add preconnect hints for the sites your pages load from.
+- `micropub_debug`: set the `LAMB_MICROPUB_DEBUG` environment variable instead.
+- `experimental_features`: pass `--experimental` to `bin/lamb import` instead.

@@ -20,11 +20,12 @@ no version string in the code — **the Git tag is the source of truth**.
       its own server, so don't have another server on the test port.
 - [ ] Static checks pass: `viv run lint` && `viv run analyse`.
 - [ ] Docs are accurate for any user-facing change (`docs/`, `README.md`).
-- [ ] `CHANGELOG.md` has a bullet under `## [Unreleased]` for every user-visible
-      change. Catch anything missed from the milestone's closed issues:
-      `scripts/changelog.sh '<milestone>' <version>` prints a generated section
-      to compare against; hand-written bullets beat generated titles, so add
-      what's missing rather than replacing the block.
+- [ ] `changelog.d/` has a fragment for every user-visible change (see
+      `changelog.d/README.md`). Catch anything missed from the milestone's
+      closed issues: `scripts/changelog.sh '<milestone>' <version>` prints a
+      generated section to compare against; hand-written bullets beat generated
+      titles, so add a fragment for what's missing rather than replacing the
+      block.
 - [ ] Outstanding **major** dependency updates reviewed. Patch/minor bumps
       auto-merge, so majors are the only ones that accumulate — and a stale
       major is how you end up on a branch that no longer gets security fixes.
@@ -56,13 +57,16 @@ no version string in the code — **the Git tag is the source of truth**.
 ## 3. Generate end-user release notes
 
 Notes are for **people running a Lamb blog**, not contributors. Start from the
-`Unreleased` block in `CHANGELOG.md`, then curate.
+fragments in `changelog.d/`, then curate.
 
-- [ ] Promote the changelog block: rename `## [Unreleased]` to
-      `## [<version>] - <date>`, add a fresh empty `## [Unreleased]` above it,
-      and update the link lines at the bottom (`[Unreleased]` compares
-      `<version>...HEAD`; add `[<version>]` comparing `<previous>...<version>`).
-      This lands in the release PR (step 4).
+- [ ] Promote the changelog: run
+      `scripts/changelog-assemble.sh <version> [<date>]` from the repository
+      root (add `--dry-run` to preview the section first). It inserts
+      `## [<version>] - <date>` below `## [Unreleased]`, updates the link lines
+      at the bottom and deletes the fragments it used. A fragment can't hold
+      prose, so add any intro sentence a section needs (such as the release
+      that removes the deprecated keys) by hand afterwards. This lands in the
+      release PR (step 4).
 - [ ] Cross-check against the commit list for anything the changelog missed:
 
 ```sh
