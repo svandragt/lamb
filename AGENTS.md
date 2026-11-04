@@ -339,7 +339,7 @@ index.php
 
 | Template | Keys always present | Keys sometimes present |
 |----------|--------------------|-----------------------|
-| `home` | `posts`, `pagination`, `title` | — |
+| `home` | `posts`, `pagination`, `title` | `home_post` (the published post slugged `home`, first page only; excluded from `posts`; the base theme renders it above the timeline, so a custom `parts/home.php` must render it itself) |
 | `status` / slugged post | `posts` (single-item array), `title` | — |
 | `tag` | `posts`, `pagination`, `title`, `intro`, `feed_url` | — |
 | `search` | `posts`, `pagination`, `title`, `intro` | — |

@@ -157,9 +157,9 @@ function build_exclude_slugs_clause(array $slugs): ?array
 
 /**
  * The WHERE clause selecting posts that belong in a public listing: publicly
- * visible (published, not trashed, not future-dated) and not pinned as a menu
- * item — menu posts are pages reachable from the nav, so they are kept out of
- * the chronological stream and the feeds.
+ * visible (published, not trashed, not future-dated) and neither pinned as a
+ * menu item nor the home post. Those are pages, reachable from the nav or shown
+ * at `/`, so they are kept out of the chronological stream and the feeds.
  *
  * Owned in one place so the homepage and the feeds can't drift apart on what
  * "public" means.
@@ -169,7 +169,8 @@ function build_exclude_slugs_clause(array $slugs): ?array
 function public_posts_clause(): array
 {
     $visible = \Lamb\visible_clause();
-    $sql     = $visible['sql'];
+    // The home post is a page shown above the timeline, never an entry in it.
+    $sql     = $visible['sql'] . ' AND' . \Lamb\SQL_NOT_HOME;
     $params  = $visible['params'];
 
     $exclude = build_exclude_slugs_clause(\Lamb\Config\get_menu_slugs());

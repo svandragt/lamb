@@ -404,6 +404,7 @@ class PostTest extends TestCase
         $schema = R::dispense('post');
         $schema->draft   = null;
         $schema->deleted = null;
+        $schema->slug    = null;
         R::store($schema);
         R::exec('DELETE FROM post');
     }

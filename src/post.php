@@ -13,6 +13,8 @@ use function Lamb\Http\is_valid_http_url;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
 
+use const Lamb\HOME_SLUG;
+
 /**
  * Populates and returns an OODBBean instance with the given text and optional feed information.
  *
@@ -725,7 +727,9 @@ function finalize_slug(OODBBean $bean): bool
         return false;
     }
 
-    if (is_reserved_route($slug)) {
+    // `home` is the one reserved name that means a page: the post slugged `home`
+    // is shown at the root, so it keeps its slug.
+    if ($slug !== HOME_SLUG && is_reserved_route($slug)) {
         $slug .= '-' . $bean->id;
     }
     while (R::findOne('post', ' slug = ? AND id != ? ', [$slug, $bean->id])) {
