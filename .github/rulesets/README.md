@@ -14,7 +14,8 @@ aggregate gate job in `.github/workflows/ci.yml`; it only succeeds when
 succeed. (`playwright` is skipped — and treated as a pass — on PRs that
 don't touch e2e-relevant paths like `src/**`; see the `changes` job. The
 `changelog` job, which requires a fragment in `changelog.d/` for PRs that
-change `src/` or `bin/`, is skipped the same way outside PRs into `main`.)
+change `src/` or `bin/` unless they have the `no-changelog` label, is skipped
+the same way outside PRs into `main`.)
 
 Why this matters: without a required status check, a PR can be merged the
 instant it opens — before CI has finished, or even when it has failed.

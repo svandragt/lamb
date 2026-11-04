@@ -40,10 +40,18 @@ jobs:
   # and files come from the API, not the event payload, so adding the label and
   # re-running the failed jobs takes effect. PRs into other branches (the
   # main -> release promotion) are skipped: their diff spans a whole release.
+  # The first step runs the release assembly in dry-run mode, so an empty or
+  # malformed fragment fails here and not at release time.
   changelog:
     if: github.event_name == 'pull_request' && github.base_ref == 'main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Validate fragments
+        run: |
+          if [ -n "$(find changelog.d -name '*.md' ! -name README.md)" ]; then
+            scripts/changelog-assemble.sh 0.0.0 --dry-run >/dev/null
+          fi
       - name: Require a changelog fragment
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,7 +62,8 @@ jobs:
             echo "Labelled no-changelog; nothing to check."
             exit 0
           fi
-          files=$(gh api "$PR_API/files" --paginate --jq '.[] | "\(.status) \(.filename)"')
+          # A rename lists its old path as removed, so moving code out of src/ still counts.
+          files=$(gh api "$PR_API/files" --paginate --jq '.[] | "\(.status) \(.filename)", (select(.previous_filename) | "removed \(.previous_filename)")')
           if ! grep -qE '^[a-z]+ (src|bin)/' <<<"$files"; then
             echo "No changes under src/ or bin/; nothing to check."
             exit 0

@@ -32,10 +32,11 @@ itself.
 
 ## Check a pull request
 
-The `changelog` job in `.github/workflows/ci.yml` fails a pull request that
-changes `src/` or `bin/` without adding or changing a fragment. Add the
-`no-changelog` label to the pull request when it needs none, then re-run the
-failed jobs.
+The `changelog` job in `.github/workflows/ci.yml` checks pull requests into
+`main`. It fails a pull request that changes `src/` or `bin/` without adding or
+changing a fragment. Add the `no-changelog` label to the pull request when it
+needs none, then re-run the failed jobs. The job also fails on an empty or
+malformed fragment, whatever the label.
 
 ## Assemble at release
 

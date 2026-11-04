@@ -533,11 +533,11 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
   commit as the code, named `<issue>.<type>.md` (or `<issue>-<slug>.<type>.md`,
   or `<slug>.<type>.md` with no issue). Don't edit `CHANGELOG.md`: the release
   assembles the fragments into it. Each fragment holds bullets that say what
-  the user sees, in plain language, with the issue as `([#N](url))`. Use the
-  Keep a Changelog types: added, changed, deprecated, removed, fixed, security.
-  Internal-only changes (tests, tooling, refactors) don't get a fragment. A PR
-  that changes `src/` or `bin/` without one fails CI unless it has the
-  `no-changelog` label. See `changelog.d/README.md`.
+  the user sees, in plain language, and link the issue as `([#N](url))` when
+  there is one. Use the Keep a Changelog types: added, changed, deprecated,
+  removed, fixed, security. Internal-only changes (tests, tooling, refactors)
+  don't get a fragment. A PR that changes `src/` or `bin/` without one fails CI
+  unless it has the `no-changelog` label. See `changelog.d/README.md`.
 - Run `viv run lint` before committing
 
 ### Comments
