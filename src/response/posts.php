@@ -89,7 +89,7 @@ function warn_if_manual_redirect(string $slug): void
     // Plain text: the themes escape a flash before printing it, so markup here
     // reaches the author as literal tags.
     $_SESSION['flash'][] = 'A manual redirect for "' . $slug
-        . '" still exists in Settings → [redirections]. You may want to remove it.';
+        . '" still exists in Settings → Redirections. You may want to remove it.';
 }
 
 /**

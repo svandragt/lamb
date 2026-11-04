@@ -1,0 +1,2 @@
+- The `LAMB_MICROPUB_DEBUG` environment variable turns on Micropub diagnostic logging in place of the deprecated `micropub_debug` setting. ([#917](https://github.com/svandragt/lamb/issues/917))
+- `bin/lamb import --experimental` enables the experimental importers for one run, in place of the deprecated `experimental_features` setting. ([#917](https://github.com/svandragt/lamb/issues/917))

@@ -7,7 +7,7 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [Known CMS](https://withknown.com) RSS export and feeds each published item through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Enable it by setting `experimental_features = true` in [Settings](site-configuration.md) before running the script — it refuses to run otherwise.
+**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it — it refuses to run otherwise.
 
 ## What you get
 
@@ -30,10 +30,10 @@ From the project root:
 
 ```bash
 # Preview what would be imported without writing anything
-bin/lamb import known /path/to/export.rss --dry-run
+bin/lamb import known /path/to/export.rss --dry-run --experimental
 
 # Run it for real
-bin/lamb import known /path/to/export.rss
+bin/lamb import known /path/to/export.rss --experimental
 ```
 
 The importer prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'known-' + guid`) and left alone.

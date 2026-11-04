@@ -36,10 +36,9 @@ so a value like `https://example.com/blog` cannot work — see
 
 ### 2. Add `rel="me"` identity links
 
-IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add a `[me]` section to your site configuration at `/settings`:
+IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add each profile to the **Profile links** box at `/settings`:
 
 ```ini
-[me]
 Github = https://github.com/yourusername
 Email = mailto:you@example.com
 ```
@@ -83,15 +82,17 @@ The first thing to check is that `site_url` is set (see [Set your site URL](#1-s
 
 The second is that your site is served from the root of a domain. Lamb does not support an install under a subdirectory such as `https://example.com/blog`: it reads `site_url` as the domain alone, while your IndieAuth identity is the whole address including the path, so no token can ever match and every request is refused with a `me_mismatch` reason. The settings page warns you if you save a `site_url` with a path in it. Serve the site from its own domain or subdomain instead.
 
-Add this to your site configuration at `/settings`:
+Set the `LAMB_MICROPUB_DEBUG` environment variable to `true` (`1`, `yes` and `on` also work) and reload PHP:
 
-```ini
-micropub_debug = true
 ```
+LAMB_MICROPUB_DEBUG=true
+```
+
+The deprecated `micropub_debug = true` setting still works until 0.17. When the environment variable is set, it wins, even when set to `false`.
 
 Reproduce the problem with your client, then read `data/micropub.log` (next to your `lamb.db`). Each line is one event: the incoming request (method, client `User-Agent`, whether a token was supplied), the token-verification outcome (including a `me_mismatch` reason when the token's identity doesn't match your site URL), and the response status. The bearer token itself is never written — only a non-reversible fingerprint.
 
-Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (`micropub_debug = false`) when you're done** so the log stops growing.
+Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (set `LAMB_MICROPUB_DEBUG=false`) when you're done** so the log stops growing.
 
 ## POSSE syndication
 
@@ -99,15 +100,14 @@ Lamb supports advertising syndication targets to Micropub clients so you can pub
 
 ### Configure targets
 
-Add a `[syndicate_to]` section to your site configuration at `/settings`:
+Add each target to the **Syndication targets** box at `/settings`:
 
 ```ini
-[syndicate_to]
 https://bsky.app/profile/yourusername = Bluesky
 https://mastodon.social/@yourusername = Mastodon
 ```
 
-Each entry is a `uid = name` pair. The `uid` is the profile URL of the syndication target; the `name` is the human-readable label shown in Micropub clients (e.g. Quill). Clients discover the list from `GET /micropub?q=config`.
+Each entry is a `profile URL = name` pair. The profile URL is the profile URL of the syndication target; the `name` is the human-readable label shown in Micropub clients (e.g. Quill). Clients discover the list from `GET /micropub?q=config`.
 
 ### Syndicating a post
 

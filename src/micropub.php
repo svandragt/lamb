@@ -1284,14 +1284,16 @@ function mp_adapter_logger(): \Psr\Log\LoggerInterface
 }
 
 /**
- * Whether opt-in Micropub diagnostic logging is enabled (config key `micropub_debug`).
- * Off by default and for any non-truthy value, so no token/PII is ever written unless
- * the operator explicitly turns it on at /settings to debug a client.
+ * Whether opt-in Micropub diagnostic logging is enabled: the LAMB_MICROPUB_DEBUG
+ * environment variable, or the deprecated config key `micropub_debug`. The variable
+ * wins whenever it is set, even to a falsy value. Off by default and for any
+ * non-truthy value, so no token/PII is ever written unless the operator turns it on.
  */
 function mp_debug_enabled(): bool
 {
     global $config;
-    $value = $config['micropub_debug'] ?? false;
+    $env = getenv('LAMB_MICROPUB_DEBUG');
+    $value = $env !== false ? $env : ($config['micropub_debug'] ?? false);
     if (is_bool($value)) {
         return $value;
     }

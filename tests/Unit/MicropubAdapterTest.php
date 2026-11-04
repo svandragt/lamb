@@ -14,8 +14,12 @@ use function Lamb\Post\reset_subscribers;
 
 class MicropubAdapterTest extends TestCase
 {
+    private string|false $previous_debug_env = false;
+
     protected function setUp(): void
     {
+        $this->previous_debug_env = getenv('LAMB_MICROPUB_DEBUG');
+        putenv('LAMB_MICROPUB_DEBUG');
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
@@ -52,6 +56,7 @@ class MicropubAdapterTest extends TestCase
     {
         global $config;
         unset($config['micropub_debug'], $config['site_url']);
+        putenv($this->previous_debug_env === false ? 'LAMB_MICROPUB_DEBUG' : 'LAMB_MICROPUB_DEBUG=' . $this->previous_debug_env);
         if (isset($GLOBALS['lamb_mp_log_path'])) {
             @unlink($GLOBALS['lamb_mp_log_path']);
             unset($GLOBALS['lamb_mp_log_path']);
@@ -115,6 +120,39 @@ class MicropubAdapterTest extends TestCase
         $contents = (string) file_get_contents($path);
         $this->assertStringContainsString('unit_test_event', $contents);
         $this->assertStringContainsString('bar', $contents);
+    }
+
+    /**
+     * @dataProvider debugEnvProvider
+     */
+    public function testMicropubDebugEnvVarOverridesTheConfigKey(string $env, bool $config_value, bool $expected): void
+    {
+        global $config;
+        $config['micropub_debug'] = $config_value;
+        putenv("LAMB_MICROPUB_DEBUG=$env");
+
+        $this->assertSame($expected, \Lamb\Micropub\mp_debug_enabled());
+    }
+
+    /**
+     * @return array<string, array{string, bool, bool}>
+     */
+    public function debugEnvProvider(): array
+    {
+        return [
+            'on enables with config off' => ['1', false, true],
+            'yes enables with config off' => ['yes', false, true],
+            'false wins over config on' => ['false', true, false],
+            'empty wins over config on' => ['', true, false],
+        ];
+    }
+
+    public function testMicropubDebugFallsBackToTheConfigKeyWhenTheEnvVarIsUnset(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        $this->assertTrue(\Lamb\Micropub\mp_debug_enabled());
     }
 
     public function testMpLogWritesNothingWhenDebugDisabled(): void
