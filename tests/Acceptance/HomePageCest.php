@@ -37,8 +37,7 @@ class HomePageCest
     private function setIni(AcceptanceTester $I, string $ini): void
     {
         $I->amOnPage('/settings');
-        $I->fillField('ini_text', $ini);
-        $I->click('Save settings');
+        $I->haveStoredSettings($ini);
     }
 
     private function createPost(AcceptanceTester $I, string $contents): void
