@@ -1,0 +1,53 @@
+# The branch rulesets require every review thread to be resolved before merge.
+# Patch and minor Dependabot updates are trusted to auto-merge, so cubic's
+# threads on those PRs are resolved here. Majors are left for a person.
+name: Dependabot resolve bot threads
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  resolve-threads:
+    runs-on: ubuntu-latest
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.review.user.login == 'cubic-dev-ai[bot]'
+
+    steps:
+      - name: Resolve cubic threads when auto-merge is enabled
+        run: |
+          set -euo pipefail
+          # shellcheck disable=SC2016 # $vars are GraphQL variables, not shell
+          query='query($owner: String!, $name: String!, $number: Int!) {
+            repository(owner: $owner, name: $name) {
+              pullRequest(number: $number) {
+                autoMergeRequest { enabledAt }
+                reviewThreads(first: 100) {
+                  nodes { id isResolved comments(first: 1) { nodes { author { login } } } }
+                }
+              }
+            }
+          }'
+          pr=$(gh api graphql -f query="$query" -F owner="$OWNER" -F name="$REPO" -F number="$PR_NUMBER")
+          if [ "$(jq '.data.repository.pullRequest.autoMergeRequest == null' <<<"$pr")" = true ]; then
+            echo "Auto-merge is not enabled (major update); leaving threads for a person."
+            exit 0
+          fi
+          ids=$(jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
+            | select(.isResolved == false and .comments.nodes[0].author.login == "cubic-dev-ai")
+            | .id' <<<"$pr")
+          for id in $ids; do
+            # shellcheck disable=SC2016
+            gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { id } } }' -F id="$id" >/dev/null
+            echo "Resolved thread $id"
+          done
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
