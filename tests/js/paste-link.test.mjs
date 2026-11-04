@@ -85,6 +85,15 @@ test('uses text/uri-list when text/plain is empty (iOS "copy link")', () => {
   assert.equal(ta.value, 'see [this](https://example.com/a) site')
 })
 
+test('uses text/uri-list when text/plain is a non-URL label', () => {
+  const { window, document } = setup()
+  const ta = document.querySelector('textarea')
+  ta.value = 'see this site'
+  ta.setSelectionRange(4, 8)
+  ta.dispatchEvent(pasteEvent(window, { 'text/plain': 'Example page', 'text/uri-list': 'https://example.com/a' }))
+  assert.equal(ta.value, 'see [this](https://example.com/a) site')
+})
+
 test('skips comment lines in text/uri-list', () => {
   const { window, document } = setup()
   const ta = document.querySelector('textarea')
