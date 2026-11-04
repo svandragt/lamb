@@ -15,13 +15,9 @@ I'm not a designer.
 
 Existing sites keep whatever theme they already use; only fresh installs start on `2026`.
 
-To switch between themes, set the `theme` key in the site configuration at `/settings`:
+To switch between themes, choose it in the **Theme** field at `/settings`.
 
-```ini
-theme = 2024
-```
-
-Lamb also supports user themes in the same way. Simply create your own theme directory and assign it to the `theme` key.
+The field lists every theme directory Lamb finds, including your own. To add a theme of your own, create its directory and select it here.
 It's recommended to version control your theme as it's own git repo. This allows you to update Lamb and your theme
 separately using git.
 

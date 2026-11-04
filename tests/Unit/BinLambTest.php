@@ -133,6 +133,22 @@ XML;
         $this->assertStringContainsString('lamb', $process->getErrorOutput());
     }
 
+    public function testTheExperimentalFlagEnablesTheImporterWithTheConfigKeyOff(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run', '--experimental'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
+    }
+
     public function testTheDriverRefusesWhenExperimentalFeaturesDisabled(): void
     {
         $wxr = "$this->tmp_dir/export.xml";

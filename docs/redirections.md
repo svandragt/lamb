@@ -16,10 +16,9 @@ When a URL is requested, Lamb checks in this order:
 
 ## Manual redirects
 
-Add a `[redirections]` section to your site configuration at `/settings`:
+Add one entry per line to the **Redirections** box at `/settings`:
 
 ```
-[redirections]
 ;; Format: <old-path-segment> = <destination>
 ;; Destination can be:
 ;;   - A root-relative URL
@@ -60,7 +59,7 @@ A live post is always served directly, regardless of any redirect (manual or aut
 
 If you create a post whose slug matches an entry in `[redirections]`, Lamb will show a notice:
 
-> A manual redirect for `old-slug` still exists in Settings → \[redirections\]. You may want to remove it.
+> A manual redirect for `old-slug` still exists in Settings → Redirections. You may want to remove it.
 
 Once the post exists, the config entry has no effect and can be safely deleted from `/settings`.
 

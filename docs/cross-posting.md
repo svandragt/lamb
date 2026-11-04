@@ -19,11 +19,10 @@ and shown with a citation back to the original.
 
 ## Setup
 
-To set up feeds, add a `[feeds]` section to your site configuration at `/settings`, with one or more entries
+To set up feeds, add one entry per line to the **Feeds to publish** box at `/settings`,
 in the format of `name = feed url`:
 
 ```ini
-[feeds]
 Test Feed = https://vandragt.com/feed
 ```
 
