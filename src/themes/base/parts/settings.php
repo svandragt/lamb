@@ -225,7 +225,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
                 <legend>Author</legend>
                 <?php
                 $text_field('author_name', 'Author name', 'Shown in feeds and in the page metadata.', '', true);
-                $text_field('author_email', 'Author email', 'Optional. Shown in feeds.', 'email');
+                $text_field('author_email', 'Author email', 'Optional. Used for the contact card at /.well-known/contact.vcf, when it is a valid address.', 'email');
                 ?>
             </fieldset>
 
@@ -316,7 +316,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
             <input type="hidden" name="<?= HIDDEN_CSRF_NAME ?>" value="<?= csrf_token() ?>"/>
             <div style="margin-top: 1rem;">
                 <button type="submit" name="action" value="save">Save settings</button>
-                <button type="submit" name="action" value="reset" onclick="return confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')">Reset to defaults</button>
+                <button type="submit" name="action" value="reset" formnovalidate onclick="return confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')">Reset to defaults</button>
             </div>
         </form>
     </section>

@@ -82,6 +82,23 @@ class SettingsFormCest
         $I->seeInField('site_url', '');
     }
 
+    public function resetToDefaultsStaysUsableWhileRequiredFieldsAreEmpty(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $I->amOnPage('/settings');
+
+        // A browser checks `required` fields before any submit button posts the
+        // form. Reset is the way out of unreadable settings, where the fields are empty.
+        $I->seeElement('button[value=reset][formnovalidate]');
+
+        $I->haveStoredSettings("[unclosed\n=== not ini ===\n");
+        $I->amOnPage('/settings');
+        $I->click('Reset to defaults');
+        $I->see('Settings reset to defaults.');
+        $I->amOnPage('/settings');
+        $I->seeInField('site_title', 'My Microblog');
+    }
+
     public function savingTheFormKeepsUnknownAndDeprecatedSettings(AcceptanceTester $I): void
     {
         $this->login($I);

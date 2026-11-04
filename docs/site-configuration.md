@@ -10,9 +10,13 @@ Lamb does not need a configuration file, it will run happily without it. It does
 ## `/settings` is the normal path
 
 Edit configuration at `/settings` (login required) once the site is running.
-The Configuration tab is a form with a labelled field for each setting. Site
-title, site URL and author name are required. Menu, footer, feed, profile,
-syndication and redirection links go in a box each, one `label = URL` per line.
+The Configuration tab is a form with a labelled field for each current setting.
+Settings being phased out, such as `posts_per_page`, have no field: saving the
+form keeps them as they are. Site title, site URL and author name are required.
+Menu, footer, feed, profile, syndication and redirection links go in a box
+each, one entry per line. The help under each box shows its format: for example
+`label = URL` for menu links, `profile URL = name` for syndication targets and
+`old-slug = destination` for redirections.
 
 Lamb stores the settings as INI text in the database, and that stored copy is
 what Lamb reads on every request after the first. Saving the form rewrites that
