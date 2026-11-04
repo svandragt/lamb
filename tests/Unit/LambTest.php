@@ -205,7 +205,7 @@ class LambTest extends TestCase
     public function testParseTagsConvertsHashtagToLink()
     {
         $result = parse_tags('<p>Hello #world</p>');
-        $this->assertStringContainsString('<a href="/tag/world">#world</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/world" rel="tag">#world</a>', $result);
     }
 
     public function testParseTagsLowercasesTagInHref()
@@ -223,14 +223,14 @@ class LambTest extends TestCase
     public function testParseTagsConvertsMultipleTags()
     {
         $result = parse_tags('<p>Hello #foo and #bar</p>');
-        $this->assertStringContainsString('<a href="/tag/foo">#foo</a>', $result);
-        $this->assertStringContainsString('<a href="/tag/bar">#bar</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/foo" rel="tag">#foo</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/bar" rel="tag">#bar</a>', $result);
     }
 
     public function testParseTagsSupportsEmojiTags()
     {
         $result = parse_tags('<p>Hello #🐑</p>');
-        $this->assertStringContainsString('<a href="/tag/🐑">#🐑</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/🐑" rel="tag">#🐑</a>', $result);
     }
 
     public function testParseTagsLinksATagContainingAPlus()
@@ -240,7 +240,7 @@ class LambTest extends TestCase
         // rawurldecode(), which leaves it alone. urldecode() turned it into a
         // space, so a post's own tag link 404ed.
         $result = parse_tags('<p>Learning #c++ today</p>');
-        $this->assertStringContainsString('<a href="/tag/c++">#c++</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/c++" rel="tag">#c++</a>', $result);
     }
 
     public function testParseTagsDoesNotAlterTextWithNoTags()
@@ -286,7 +286,7 @@ class LambTest extends TestCase
         // The anchor-text guard must not swallow ordinary hashtags that merely
         // follow a link in the same paragraph.
         $result = parse_tags('<p>See <a href="/x">a link</a> about #php.</p>');
-        $this->assertStringContainsString('<a href="/tag/php">#php</a>', $result);
+        $this->assertStringContainsString('<a href="/tag/php" rel="tag">#php</a>', $result);
     }
     private function connect(): void
     {

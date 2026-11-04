@@ -541,8 +541,7 @@ article header h2 a.title-link:focus-visible {
 }
 
 /* Hashtag chips inside post bodies */
-article a[href^="/tag/"],
-article a[href*="/tag/"] {
+article a[rel~="tag"] {
     font-family: var(--font-mono);
     font-size: 0.85em;
     color: var(--ink-soft);
@@ -554,7 +553,7 @@ article a[href*="/tag/"] {
                 background-color var(--t-fast) var(--ease-out-quart);
 }
 
-article a[href*="/tag/"]:hover {
+article a[rel~="tag"]:hover {
     color: var(--accent-link);
     background: var(--accent-tint);
 }
@@ -941,8 +940,7 @@ footer a:hover { color: var(--accent-link); }
     }
 
     /* Touch targets — bump hashtag chips and post-action links to ≥44px. */
-    article a[href^="/tag/"],
-    article a[href*="/tag/"] {
+    article a[rel~="tag"] {
         display: inline-block;
         padding: 0.45em 0.6em;
         line-height: 1.2;

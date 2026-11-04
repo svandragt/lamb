@@ -79,7 +79,7 @@ class FrontMatterFieldsTest extends TestCase
     public function testOrdinaryHashtagsStillLink(): void
     {
         $this->assertStringContainsString(
-            '<a href="/tag/php">#PHP</a>',
+            '<a href="/tag/php" rel="tag">#PHP</a>',
             parse_tags('learning #PHP today')
         );
     }
