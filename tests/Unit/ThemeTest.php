@@ -19,6 +19,13 @@ use function Lamb\Theme\the_preconnect;
 
 class ThemeTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+    }
+
     // the_preconnect
 
     public function testPreconnectOutputsNothingWhenNotConfigured()
@@ -80,6 +87,196 @@ class ThemeTest extends TestCase
 
         $this->assertStringNotContainsString('<script>', $output);
         $config = $original;
+    }
+
+    // the_preconnect: origins derived from the posts on the page
+
+    /**
+     * Renders the_preconnect() for a page showing the given post bodies.
+     *
+     * @param list<string> $bodies Rendered post HTML, one entry per post on the page; `{ROOT_URL}` stands for the site's own URL.
+     * @param array<string, string> $configured The deprecated [preconnect] setting.
+     * @return string The emitted <link> tags.
+     */
+    private function preconnectFor(array $bodies, array $configured = []): string
+    {
+        global $config, $data, $template;
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $original = [$config, $data, $template];
+        $config = ['preconnect' => $configured];
+        $template = 'home';
+        $data = ['posts' => array_map(static function (string $html) {
+            $bean = R::dispense('post');
+            $bean->transformed = str_replace('{ROOT_URL}', ROOT_URL, $html);
+            return $bean;
+        }, $bodies)];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        [$config, $data, $template] = $original;
+        return $output;
+    }
+
+    /**
+     * Lists the preconnect hrefs in the order they were emitted.
+     *
+     * @param string $output The emitted <link> tags.
+     * @return list<string>
+     */
+    private function preconnectHrefs(string $output): array
+    {
+        preg_match_all('/<link rel="preconnect" href="([^"]*)">/', $output, $m);
+        return $m[1];
+    }
+
+    public function testPreconnectDerivesOriginFromRemoteImage()
+    {
+        $output = $this->preconnectFor(['<p><img src="https://img.example.net/a.jpg" alt=""></p>']);
+
+        $this->assertStringContainsString('<link rel="preconnect" href="https://img.example.net">', $output);
+        $this->assertStringContainsString('<link rel="dns-prefetch" href="https://img.example.net">', $output);
+    }
+
+    /**
+     * @dataProvider provideBodiesWithoutRemoteMedia
+     */
+    public function testPreconnectIgnoresLocalMedia(string $html)
+    {
+        $this->assertSame('', $this->preconnectFor([$html]));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function provideBodiesWithoutRemoteMedia(): array
+    {
+        return [
+            'no media' => ['<p>Hello</p>'],
+            'root-relative image' => ['<img src="/assets/2026/01/a.webp">'],
+            'same-origin absolute image' => ['<img src="{ROOT_URL}/assets/a.webp">'],
+            'non-http scheme' => ['<img src="data:image/gif;base64,R0lGOD">'],
+            'protocol-less relative path' => ['<img src="assets/a.webp">'],
+            'remote link is not media' => ['<a href="https://example.net/page">x</a>'],
+        ];
+    }
+
+    public function testPreconnectSkipsOwnOriginSpelledWithItsDefaultPort()
+    {
+        $default_port = parse_url(ROOT_URL, PHP_URL_SCHEME) === 'https' ? 443 : 80;
+
+        $this->assertSame('', $this->preconnectFor(['<img src="{ROOT_URL}:' . $default_port . '/a.webp">']));
+    }
+
+    public function testPreconnectResolvesProtocolRelativeUrlWithTheSitesScheme()
+    {
+        $output = $this->preconnectFor(['<img src="//img.example.net/a.webp">']);
+
+        $scheme = parse_url(ROOT_URL, PHP_URL_SCHEME);
+        $this->assertSame([$scheme . '://img.example.net'], $this->preconnectHrefs($output));
+    }
+
+    public function testPreconnectSkipsProtocolRelativeUrlOnTheSitesOwnHost()
+    {
+        $own_host_url = preg_replace('#^https?:#', '', ROOT_URL) . '/a.webp';
+
+        $this->assertSame('', $this->preconnectFor(['<img src="' . $own_host_url . '">']));
+    }
+
+    public function testPreconnectDerivesOriginFromSrcsetPosterAndSource()
+    {
+        $output = $this->preconnectFor([
+            '<img src="/a.jpg" srcset="/a-480.jpg 480w, https://set.example.net/a-960.jpg 960w">'
+            . '<video poster="https://poster.example.net/p.jpg"><source src="https://video.example.net/v.mp4"></video>',
+        ]);
+
+        $this->assertSame(
+            ['https://set.example.net', 'https://poster.example.net', 'https://video.example.net'],
+            $this->preconnectHrefs($output)
+        );
+    }
+
+    public function testPreconnectKeepsPortAndRepeatsOriginOnce()
+    {
+        $output = $this->preconnectFor([
+            '<img src="https://img.example.net:8443/a.jpg">',
+            '<img src="https://IMG.example.net:8443/b.jpg"><img src="https://img.example.net/c.jpg">',
+        ]);
+
+        $this->assertSame(['https://img.example.net:8443', 'https://img.example.net'], $this->preconnectHrefs($output));
+    }
+
+    public function testPreconnectEmitsAtMostThreeOriginsInOrderOfFirstAppearance()
+    {
+        $output = $this->preconnectFor([
+            '<img src="https://a.example.net/1.jpg">',
+            '<img src="https://b.example.net/1.jpg"><img src="https://a.example.net/2.jpg">',
+            '<img src="https://c.example.net/1.jpg"><img src="https://d.example.net/1.jpg">',
+        ]);
+
+        $this->assertSame(
+            ['https://a.example.net', 'https://b.example.net', 'https://c.example.net'],
+            $this->preconnectHrefs($output)
+        );
+        $this->assertSame(3, substr_count($output, 'rel="dns-prefetch"'));
+    }
+
+    public function testPreconnectPutsConfiguredOriginsFirstWithoutDuplicates()
+    {
+        $output = $this->preconnectFor(
+            ['<img src="https://a.example.net/1.jpg"><img src="https://fonts.example.net/1.jpg">'],
+            ['fonts' => 'https://fonts.example.net']
+        );
+
+        $this->assertSame(
+            ['https://fonts.example.net', 'https://a.example.net'],
+            $this->preconnectHrefs($output)
+        );
+    }
+
+    public function testPreconnectCapsConfiguredAndDerivedTogether()
+    {
+        $output = $this->preconnectFor(
+            ['<img src="https://c.example.net/1.jpg">'],
+            ['a' => 'https://a.example.net', 'b' => 'https://b.example.net', 'x' => 'https://x.example.net']
+        );
+
+        $this->assertSame(
+            ['https://a.example.net', 'https://b.example.net', 'https://x.example.net'],
+            $this->preconnectHrefs($output)
+        );
+    }
+
+    public function testPreconnectSkipsPostsHiddenFromTheListing()
+    {
+        global $config;
+        $original = $config;
+        $config['menu_items'] = ['About' => '/about'];
+        $config['preconnect'] = [];
+        global $data, $template;
+        $template = 'home';
+        $about = R::dispense('post');
+        $about->slug = 'about';
+        $about->transformed = '<img src="https://hidden.example.net/a.jpg">';
+        $data = ['posts' => [$about]];
+
+        ob_start();
+        the_preconnect();
+        $output = ob_get_clean();
+
+        $config = $original;
+        $data = [];
+        $this->assertSame('', $output);
+    }
+
+    public function testPreconnectIgnoresHostsThatAreNotHostnames()
+    {
+        $output = $this->preconnectFor(['<img src="https://a.example.net&quot;&gt;&lt;script&gt;/x.jpg">']);
+
+        $this->assertSame('', $output);
     }
 
     // escape
