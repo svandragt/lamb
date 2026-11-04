@@ -14,8 +14,12 @@ use function Lamb\Post\reset_subscribers;
 
 class MicropubAdapterTest extends TestCase
 {
+    private string|false $previous_debug_env = false;
+
     protected function setUp(): void
     {
+        $this->previous_debug_env = getenv('LAMB_MICROPUB_DEBUG');
+        putenv('LAMB_MICROPUB_DEBUG');
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
@@ -52,7 +56,7 @@ class MicropubAdapterTest extends TestCase
     {
         global $config;
         unset($config['micropub_debug'], $config['site_url']);
-        putenv('LAMB_MICROPUB_DEBUG');
+        putenv($this->previous_debug_env === false ? 'LAMB_MICROPUB_DEBUG' : 'LAMB_MICROPUB_DEBUG=' . $this->previous_debug_env);
         if (isset($GLOBALS['lamb_mp_log_path'])) {
             @unlink($GLOBALS['lamb_mp_log_path']);
             unset($GLOBALS['lamb_mp_log_path']);

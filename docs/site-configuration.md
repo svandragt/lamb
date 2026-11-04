@@ -51,9 +51,9 @@ These settings stop working in Lamb 0.17. Saving the form lists the ones your co
 |---|---|
 | `posts_per_page` | None. Lamb uses 10 posts per page. |
 | `404_fallback` | Add a `[redirections]` entry for each old address you still want to forward. |
-| `[preconnect]` | None. Lamb adds preconnect hints for the sites your pages load from. |
+| `[preconnect]` | None. Origins already configured keep working until 0.17. |
 | `micropub_debug` | Set the `LAMB_MICROPUB_DEBUG` environment variable. |
-| `experimental_features` | Pass `--experimental` to `bin/lamb import`. |
+| `experimental_features` | Pass `--experimental` to `bin/lamb import <source> <path>`. |
 
 ## Site URL
 

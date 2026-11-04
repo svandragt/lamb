@@ -30,10 +30,10 @@ From the project root:
 
 ```bash
 # Preview what would be imported without writing anything
-bin/lamb import known /path/to/export.rss --dry-run
+bin/lamb import known /path/to/export.rss --dry-run --experimental
 
 # Run it for real
-bin/lamb import known /path/to/export.rss
+bin/lamb import known /path/to/export.rss --experimental
 ```
 
 The importer prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'known-' + guid`) and left alone.

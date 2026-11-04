@@ -10,7 +10,7 @@ parent: Site customisation
 When a URL is requested, Lamb checks in this order:
 
 1.  Is there a live post with this slug? → Serve it.
-2.  Is there a manual redirect in `[redirections]` config? → 301 redirect.
+2.  Is there a manual redirect in the Redirections box? → 301 redirect.
 3.  Is there an automatic redirect stored from a previous slug change? → 301 redirect.
 4.  → 404.
 
@@ -57,11 +57,11 @@ Reslugging the same post more than once would otherwise leave a chain of redirec
 
 A live post is always served directly, regardless of any redirect (manual or automatic) pointing to the same slug. A redirect only fires when no published post has that slug.
 
-If you create a post whose slug matches an entry in `[redirections]`, Lamb will show a notice:
+If you create a post whose slug matches an entry in the redirections box, Lamb will show a notice:
 
 > A manual redirect for `old-slug` still exists in Settings → Redirections. You may want to remove it.
 
-Once the post exists, the config entry has no effect and can be safely deleted from `/settings`.
+Once the post exists, the entry has no effect. You can delete it from the **Redirections** box under Configuration at `/settings`.
 
 ## Related
 

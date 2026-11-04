@@ -31,10 +31,10 @@ From the project root, as the web server user rather than your own shell user (s
 
 ```bash
 # Preview what would be imported without writing anything
-sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dry-run
+sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dry-run --experimental
 
 # Run it for real
-sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml
+sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --experimental
 ```
 
 `data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone changes the sidecars' owner (see [NGINX configuration](nginx.md)). `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.

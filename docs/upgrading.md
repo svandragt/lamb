@@ -124,7 +124,7 @@ The database and uploads live in the named volumes and survive the recreate.
 ## Upgrading to 0.16
 
 * The settings page is now a form. Site title, site URL and author name must be filled in the first time you save it.
-* Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#deprecated-settings).
+* Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import <source> <path> --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#deprecated-settings).
 
 ## Related
 

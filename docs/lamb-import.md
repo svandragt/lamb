@@ -22,10 +22,10 @@ From the project root, as the web server user rather than your own shell user (s
 
 ```bash
 # Preview what the importer would restore, without writing anything
-sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-run
+sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-run --experimental
 
 # Run it for real
-sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip
+sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --experimental
 ```
 
 `data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone changes the sidecars' owner (see [NGINX configuration](nginx.md)). `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.
@@ -33,7 +33,7 @@ sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip
 An already-unpacked export directory works too. Pass its path instead of the `.zip`:
 
 ```bash
-sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26/
+sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26/ --experimental
 ```
 
 Reading a `.zip` uses PHP's `zip` extension, or its `phar` extension when `zip` is missing (the file name then needs an extension, such as `.zip`). If PHP has neither, the importer tells you to unzip the archive yourself and pass the directory.

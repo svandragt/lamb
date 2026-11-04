@@ -74,7 +74,7 @@ class ResponsePostsTest extends TestCase
 
         $this->assertCount(1, $_SESSION['flash'] ?? []);
         $this->assertStringContainsString('about', $_SESSION['flash'][0]);
-        $this->assertStringContainsString('[redirections]', $_SESSION['flash'][0]);
+        $this->assertStringContainsString('Settings → Redirections', $_SESSION['flash'][0]);
     }
 
     public function testWarnIfManualRedirectStaysQuietForAnUnrelatedSlug(): void

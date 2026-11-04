@@ -21,10 +21,9 @@ Links can also point to external resources.
 
 ## Footer items
 
-The 2026 theme also supports a `[footer_items]` section for secondary navigation links rendered in the page footer. It uses the same format as `[menu_items]`, but footer links do **not** hide matching posts from the timeline.
+The 2026 theme also supports footer links for secondary navigation, rendered in the page footer. Add them to the **Footer links** box in the same format as menu links, but footer links do **not** hide matching posts from the timeline.
 
 ```
-[footer_items]
 Privacy = /privacy
 Source = https://github.com/svandragt/lamb
 ```
