@@ -19,6 +19,10 @@ Saving the settings now tells you which of these keys your configuration still u
 - `micropub_debug`: set the `LAMB_MICROPUB_DEBUG` environment variable instead.
 - `experimental_features`: pass `--experimental` to `bin/lamb import` instead.
 
+### Fixed
+
+- A feed post saved as a draft no longer goes live when the feed updates it ([#921](https://github.com/svandragt/lamb/issues/921)).
+
 ## [0.15.1] - 2026-11-04
 
 ### Fixed
