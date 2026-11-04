@@ -80,32 +80,74 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
     // Only blank lines are trimmed at the start: leading spaces can make an
     // indented code block.
     $content = rtrim((string) preg_replace('~\A(?:[ \t]*\R)+~', '', $content));
-    // Inline `](/x)` targets, and reference definitions `[label]: /x`. Code
-    // (fenced and indented blocks, backtick spans) is matched first and kept as
-    // is, so a link written inside it stays as typed.
-    // shortcut: an indented list continuation counts as code and is not rewritten.
-    // shortcut: a fence closer's quote prefix must match its opener's character
-    // for character (`> >` is not `>>`), else the fence runs on; quoted indented
-    // code straight after a non-blank, non-quote line is not recognised.
+    // Inline `](/x)` targets, and reference definitions `[label]: /x`. Backtick
+    // spans are matched first and kept as is, so a link written inside one stays
+    // as typed.
     $pattern = '#'
-        . '(?<fence>^(?<fq>(?: {0,3}>)*) {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*'
-        . '(?:\n[\s\S]*?^\k<fq> {0,3}\k<f>(?:(?<=`)`*+|(?<=~)~*+)[ \t]*\r?$|[\s\S]*))'
-        . '|(?<block>(?:\A|\R[ \t]*\R|\R(?: {0,3}>)++[ \t]*\R)(?<q>(?: {0,3}> ?+)*+)(?: {4}|\t)[^\n]*+'
-        . '(?:\n(?:(?: {0,3}>)*+[ \t]*\r?\n)*+\k<q>(?: {4}|\t)[^\n]*+)*+)'
-        . '|(?<span>(?<ticks>`++)(?:(?!\R[ \t]*\R)[\s\S])+?(?<!`)\k<ticks>(?!`))'
+        . '(?<span>(?<ticks>`++)(?:(?!\R[ \t]*\R)[\s\S])+?(?<!`)\k<ticks>(?!`))'
         . '|(?<link>\]\()/(?!/)'
         . '|(?<ref>^ {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)'
         . '#m';
-    $content = preg_replace_callback(
+    $rewrite = static fn(string $text): string => preg_replace_callback(
         $pattern,
         static fn(array $m): string => match (true) {
             ($m['link'] ?? '') !== '' => $m['link'] . $root,
             ($m['ref'] ?? '') !== '' => $m['ref'] . $root,
             default => $m[0],
         },
-        $content
-    ) ?? $content;
-    return $out . $content . "\n";
+        $text
+    ) ?? $text;
+    // Code lines are kept as typed; the text between them is rewritten.
+    $lines = preg_split('~(?<=\n)~', $content) ?: [$content];
+    $code_lines = about_code_lines($lines);
+    $content = '';
+    $text = '';
+    foreach ($lines as $i => $line) {
+        if ($code_lines[$i]) {
+            $content .= $rewrite($text) . $line;
+            $text = '';
+        } else {
+            $text .= $line;
+        }
+    }
+    return $out . $content . $rewrite($text) . "\n";
+}
+
+/**
+ * Flags the lines of a Markdown document that are code: fenced and indented
+ * blocks, inside a blockquote or not.
+ *
+ * A fenced block ends at a closing fence with the same quote depth as its
+ * opener, however the `>` markers are spaced. An indented line is code unless
+ * it continues a paragraph at the same or a deeper quote depth.
+ *
+ * @param list<string> $lines Lines with their line endings.
+ * @return list<bool> Whether each line is code.
+ */
+function about_code_lines(array $lines): array
+{
+    $flags = [];
+    $fence = null; // [quote depth, marker] while a fenced block is open
+    $text_depth = -1; // quote depth of the previous line if it was text, else -1
+    foreach ($lines as $line) {
+        $prefix = preg_match('~^(?: {0,3}> ?+)*+~', $line, $quote) === 1 ? $quote[0] : '';
+        $depth = substr_count($prefix, '>');
+        $rest = (string) substr($line, strlen($prefix));
+        $is_marker = preg_match('#^ {0,3}(`{3,}(?!.*`)|~{3,})(.*)#', $rest, $marker) === 1;
+        // shortcut: an indented list continuation counts as code and is not rewritten.
+        $indented = preg_match('~^(?: {4}|\t)~', $rest) === 1 && $text_depth < $depth;
+        $is_code = $fence !== null || $is_marker || $indented;
+        $flags[] = $is_code;
+        $closes = $fence !== null && $is_marker && $depth === $fence[0]
+            && trim($marker[2]) === '' && str_starts_with($marker[1], $fence[1]);
+        if ($closes) {
+            $fence = null;
+        } elseif ($fence === null && $is_marker) {
+            $fence = [$depth, $marker[1]];
+        }
+        $text_depth = $is_code || trim($rest) === '' ? -1 : $depth;
+    }
+    return $flags;
 }
 
 /**

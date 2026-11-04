@@ -159,6 +159,10 @@ class SocialSpecTest extends TestCase
             'quote fence, bare closer'  => ["> ```\n> [a](/path)\n```\n> [b](/path)\n> ```", "> ```\n> [a](/path)\n```\n> [b](/path)\n> ```\n"],
             'bare fence, quote closer'  => ["```\n[a](/path)\n> ```\n[b](/path)\n```\n\n[c](/path)", "```\n[a](/path)\n> ```\n[b](/path)\n```\n\n[c]($abs)\n"],
             'quote fence, deeper closer' => ["> ```\n> [a](/path)\n> > ```\n> [b](/path)\n> ```\n\n[c](/path)", "> ```\n> [a](/path)\n> > ```\n> [b](/path)\n> ```\n\n[c]($abs)\n"],
+            'quote spacing, opener'  => ["> > ```\n> > [a](/path)\n>> ```\n\n[c](/path)", "> > ```\n> > [a](/path)\n>> ```\n\n[c]($abs)\n"],
+            'quote spacing, closer'  => [">> ```\n>> [a](/path)\n> > ```\n\n[c](/path)", ">> ```\n>> [a](/path)\n> > ```\n\n[c]($abs)\n"],
+            'quote spacing, indent'  => ["> >     [a](/path)\n>>     [b](/path)\n\n[c](/path)", "> >     [a](/path)\n>>     [b](/path)\n\n[c]($abs)\n"],
+            'quote after text'       => ["Intro\n>     [home](/path)\n\n[home](/path)", "Intro\n>     [home](/path)\n\n[home]($abs)\n"],
         ];
     }
 
