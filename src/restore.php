@@ -28,6 +28,15 @@ const MAX_ENTRIES = 20000;
 const MAX_UNCOMPRESSED_BYTES = 2147483648; // 2 GiB
 
 /**
+ * An archive entry that is present but cannot be read intact: a CRC mismatch or
+ * a bad deflate stream. Distinct from an absent entry, which readers return as
+ * null, so the restore can tell the user the file is there but damaged.
+ */
+class DamagedEntry extends RuntimeException
+{
+}
+
+/**
  * Parses argv into [path, dry_run, replace, site_url].
  *
  * The path and the two flags every importer shares come from
@@ -99,6 +108,9 @@ function open_source(string $path, ?bool $has_zip = null, ?bool $has_phar = null
 /**
  * Reads a zip with ext-zip.
  *
+ * The reader returns null for an absent entry and throws {@see DamagedEntry}
+ * for one that is present but damaged.
+ *
  * @param string $path The `.zip` archive.
  * @return array{0: list<string>, 1: callable(string):?string}
  * @throws RuntimeException When the archive is unreadable or exceeds the caps.
@@ -132,6 +144,11 @@ function open_zip_archive(string $path): array
 
     // $zip stays referenced by the closure, so the handle lives as long as the
     // reader does.
+    /**
+     * @param string $name The entry to read.
+     * @return ?string The entry's bytes, or null when it is absent.
+     * @throws DamagedEntry When the entry is present but cannot be read intact.
+     */
     $reader = static function (string $name) use ($zip): ?string {
         // Stat first: a missing name costs no decompression.
         $stat = $zip->statName($name);
@@ -143,12 +160,16 @@ function open_zip_archive(string $path): array
         // libzip, and the restore reports it as a skip instead.
         $contents = @$zip->getFromName($name);
         if ($contents === false) {
-            return null;
+            throw new DamagedEntry("Damaged archive entry: $name");
         }
 
-        // getFromName() does not verify the CRC, unlike PharData: a mismatch
-        // reads as absent. Masked so a 32-bit PHP compares both as unsigned.
-        return (crc32($contents) & 0xFFFFFFFF) === ($stat['crc'] & 0xFFFFFFFF) ? $contents : null;
+        // getFromName() does not verify the CRC, unlike PharData, so check it
+        // here. Masked so a 32-bit PHP compares both as unsigned.
+        if ((crc32($contents) & 0xFFFFFFFF) !== ($stat['crc'] & 0xFFFFFFFF)) {
+            throw new DamagedEntry("Damaged archive entry: $name");
+        }
+
+        return $contents;
     };
 
     return [$names, $reader];
@@ -160,6 +181,8 @@ function open_zip_archive(string $path): array
  * Same caps and the same no-extraction rule as {@see open_zip_archive}: PharData
  * only looks entries up inside the archive, it never writes one to disk.
  * PharData refuses a file name with no extension, which ZipArchive does not.
+ * The reader returns null for an absent entry and throws {@see DamagedEntry}
+ * for one that is present but damaged.
  *
  * @param string $path The `.zip` archive.
  * @return array{0: list<string>, 1: callable(string):?string}
@@ -191,18 +214,23 @@ function open_phar_archive(string $path): array
         throw new RuntimeException("Archive unpacks to more than " . MAX_UNCOMPRESSED_BYTES . " bytes: $path");
     }
 
+    /**
+     * @param string $name The entry to read.
+     * @return ?string The entry's bytes, or null when it is absent.
+     * @throws DamagedEntry When the entry is present but cannot be read intact.
+     */
     $reader = static function (string $name) use ($phar): ?string {
         if (!isset($phar[$name]) || $phar[$name]->isDir()) {
             return null;
         }
 
         // A damaged entry throws (a CRC mismatch) and raises a notice (a bad
-        // deflate stream). ZipArchive reads those as false, so both become null:
-        // an entry that cannot be read is absent, and the restore carries on.
+        // deflate stream); the notice is silenced and the restore reports the
+        // entry as damaged.
         try {
             return @$phar[$name]->getContent();
-        } catch (BadMethodCallException | UnexpectedValueException) {
-            return null;
+        } catch (BadMethodCallException | UnexpectedValueException $e) {
+            throw new DamagedEntry("Damaged archive entry: $name", 0, $e);
         }
     };
 
@@ -248,13 +276,24 @@ function open_directory(string $root): array
 }
 
 /**
- * Reads one entry's bytes, or null when it is absent.
+ * Reads one entry's bytes, or null when it is absent or damaged.
  *
  * @param callable(string):?string $reader
+ * @param string                   $name
+ * @param bool                     $damaged Set to true when the entry is present
+ *                                          but damaged, false otherwise.
+ * @return ?string
  */
-function read_entry(callable $reader, string $name): ?string
+function read_entry(callable $reader, string $name, bool &$damaged = false): ?string
 {
-    return $reader($name);
+    $damaged = false;
+    try {
+        return $reader($name);
+    } catch (DamagedEntry) {
+        $damaged = true;
+
+        return null;
+    }
 }
 
 /**
@@ -369,10 +408,11 @@ function restore_uuid(string $origin, int $id): string
  * Turns the manifest's post entries into the items run_import() walks.
  *
  * Each item carries the manifest's own fields, the body read out of the
- * archive (null when the entry is absent) and the dedup uuid, namespaced by
- * $origin — or, when that is empty, by namespaced_origin()'s stand-in. `title` is the
- * in-archive path: it is only ever used for the progress line, and the path is
- * what identifies a post to someone watching a restore.
+ * archive (null when the entry is absent or damaged; `damaged` says which) and
+ * the dedup uuid, namespaced by $origin — or, when that is empty, by
+ * namespaced_origin()'s stand-in. `title` is the in-archive path: it is only
+ * ever used for the progress line, and the path is what identifies a post to
+ * someone watching a restore.
  *
  * The manifest is part of the untrusted archive, so a `path` it names is
  * validated before anything is read and cross-checked against what the archive
@@ -398,12 +438,15 @@ function manifest_items(array $manifest, callable $reader, string $origin): arra
         }
         $path = (string) ($post['path'] ?? '');
         $safe = safe_entry_path($path);
+        $damaged = false;
+        $body = $safe === null ? null : read_entry($reader, $safe, $damaged);
         // array_merge(), not `+`: the manifest is untrusted, so its own
         // `import_uuid` or `body` must never win over the computed ones.
         $items[] = array_merge($post, [
             'title'       => $path,
             'path'        => $path,
-            'body'        => $safe === null ? null : read_entry($reader, $safe),
+            'body'        => $body,
+            'damaged'     => $damaged,
             'import_uuid' => restore_uuid($origin, (int) ($post['id'] ?? 0)),
         ]);
     }
@@ -423,7 +466,7 @@ function item_skip_reason(array $item): ?string
     }
     $body = $item['body'] ?? null;
     if ($body === null) {
-        return 'missing file';
+        return ($item['damaged'] ?? false) ? 'damaged entry' : 'missing file';
     }
     if (trim((string) $body) === '') {
         return 'empty body';
