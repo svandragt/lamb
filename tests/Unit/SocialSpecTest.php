@@ -150,6 +150,15 @@ class SocialSpecTest extends TestCase
             'mixed closer'     => ["```\n[a](/path)\n```~\n[b](/path)\n```\n\n[c](/path)", "```\n[a](/path)\n```~\n[b](/path)\n```\n\n[c]($abs)\n"],
             'double-tick span' => ["``a`b [home](/path)`` [home](/path)", "``a`b [home](/path)`` [home]($abs)\n"],
             'lone tick'        => ["A ` tick.\n\n[home](/path) and `x`", "A ` tick.\n\n[home]($abs) and `x`\n"],
+            'quote indented block'   => ["> Intro\n>\n>     [home](/path)\n\n[home](/path)", "> Intro\n>\n>     [home](/path)\n\n[home]($abs)\n"],
+            'quote starts indented'  => [">     [a](/path)\n>\n>     [b](/path)\n\n[c](/path)", ">     [a](/path)\n>\n>     [b](/path)\n\n[c]($abs)\n"],
+            'nested quote indented'  => ["> > Intro\n> >\n> >     [home](/path)\n\n[home](/path)", "> > Intro\n> >\n> >     [home](/path)\n\n[home]($abs)\n"],
+            'quote paragraph'        => ["> See [a](/path)\n>\n> And [b](/path)", "> See [a]($abs)\n>\n> And [b]($abs)\n"],
+            'quote paragraph indent' => ["> See\n>     [home](/path)", "> See\n>     [home]($abs)\n"],
+            'quote three spaces'     => [">    [home](/path)", ">    [home]($abs)\n"],
+            'quote fence, bare closer'  => ["> ```\n> [a](/path)\n```\n> [b](/path)\n> ```", "> ```\n> [a](/path)\n```\n> [b](/path)\n> ```\n"],
+            'bare fence, quote closer'  => ["```\n[a](/path)\n> ```\n[b](/path)\n```\n\n[c](/path)", "```\n[a](/path)\n> ```\n[b](/path)\n```\n\n[c]($abs)\n"],
+            'quote fence, deeper closer' => ["> ```\n> [a](/path)\n> > ```\n> [b](/path)\n> ```\n\n[c](/path)", "> ```\n> [a](/path)\n> > ```\n> [b](/path)\n> ```\n\n[c]($abs)\n"],
         ];
     }
 

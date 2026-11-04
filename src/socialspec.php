@@ -84,10 +84,14 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
     // (fenced and indented blocks, backtick spans) is matched first and kept as
     // is, so a link written inside it stays as typed.
     // shortcut: an indented list continuation counts as code and is not rewritten.
+    // shortcut: a fence closer's quote prefix must match its opener's character
+    // for character (`> >` is not `>>`), else the fence runs on; quoted indented
+    // code straight after a non-blank, non-quote line is not recognised.
     $pattern = '#'
-        . '(?<fence>^(?: {0,3}>)* {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*'
-        . '(?:\n[\s\S]*?^(?: {0,3}>)* {0,3}\k<f>(?:(?<=`)`*+|(?<=~)~*+)[ \t]*\r?$|[\s\S]*))'
-        . '|(?<block>(?:\A|\R[ \t]*\R)(?: {4}|\t)[^\n]*+(?:\n(?:[ \t]*\r?\n)*+(?: {4}|\t)[^\n]*+)*+)'
+        . '(?<fence>^(?<fq>(?: {0,3}>)*) {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*'
+        . '(?:\n[\s\S]*?^\k<fq> {0,3}\k<f>(?:(?<=`)`*+|(?<=~)~*+)[ \t]*\r?$|[\s\S]*))'
+        . '|(?<block>(?:\A|\R[ \t]*\R|\R(?: {0,3}>)++[ \t]*\R)(?<q>(?: {0,3}> ?+)*+)(?: {4}|\t)[^\n]*+'
+        . '(?:\n(?:(?: {0,3}>)*+[ \t]*\r?\n)*+\k<q>(?: {4}|\t)[^\n]*+)*+)'
         . '|(?<span>(?<ticks>`++)(?:(?!\R[ \t]*\R)[\s\S])+?(?<!`)\k<ticks>(?!`))'
         . '|(?<link>\]\()/(?!/)'
         . '|(?<ref>^ {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)'
