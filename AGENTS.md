@@ -119,7 +119,7 @@ hand — e.g. a same-day security patch — use
 ### PHP versions
 
 Lamb supports every PHP version in `composer.json`'s `require` (currently
-8.4–8.5) and defaults to the newest. Two kinds of setting, kept apart:
+8.4.1–8.5) and defaults to the newest. Two kinds of setting, kept apart:
 
 - **Floor (oldest supported):** `composer.json` `require.php` and
   `config.platform.php` (so the lock never picks a dependency the floor can't

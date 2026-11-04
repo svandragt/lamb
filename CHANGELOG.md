@@ -9,6 +9,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Changed
+
+- Lamb now requires PHP 8.4.1 or later, because a dependency (symfony/yaml 8.1) needs it; on 8.4.0 the release would fail Composer's platform check.
+
 ### Security
 
 - Webmention author names taken from the sending page are now capped at 100 characters, like the content snippet, so a hostile page can't store an unbounded author ([#772](https://github.com/svandragt/lamb/issues/772)).
