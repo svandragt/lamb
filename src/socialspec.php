@@ -145,7 +145,9 @@ function about_code_lines(array $lines): array
         } elseif ($fence === null && $is_marker) {
             $fence = [$depth, $marker[1]];
         }
-        $text_depth = $is_code || trim($rest) === '' ? -1 : $depth;
+        // A heading or rule is not a paragraph, so indented code can follow it.
+        $is_heading_or_rule = preg_match('~^ {0,3}(?:#{1,6}(?:\s|$)|(?:([-*_])(?:[ \t]*\1){2,}|=+)\s*$)~', $rest) === 1;
+        $text_depth = $is_code || $is_heading_or_rule || trim($rest) === '' ? -1 : $depth;
     }
     return $flags;
 }

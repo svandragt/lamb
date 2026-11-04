@@ -163,6 +163,10 @@ class SocialSpecTest extends TestCase
             'quote spacing, closer'  => [">> ```\n>> [a](/path)\n> > ```\n\n[c](/path)", ">> ```\n>> [a](/path)\n> > ```\n\n[c]($abs)\n"],
             'quote spacing, indent'  => ["> >     [a](/path)\n>>     [b](/path)\n\n[c](/path)", "> >     [a](/path)\n>>     [b](/path)\n\n[c]($abs)\n"],
             'quote after text'       => ["Intro\n>     [home](/path)\n\n[home](/path)", "Intro\n>     [home](/path)\n\n[home]($abs)\n"],
+            'quote after heading'    => ["> # Title\n>     [home](/path)\n\n[home](/path)", "> # Title\n>     [home](/path)\n\n[home]($abs)\n"],
+            'indent after heading'   => ["# Title\n    [home](/path)\n\n[home](/path)", "# Title\n    [home](/path)\n\n[home]($abs)\n"],
+            'indent after underline' => ["Title\n=====\n    [home](/path)\n\n[home](/path)", "Title\n=====\n    [home](/path)\n\n[home]($abs)\n"],
+            'indent after rule'      => ["***\n    [home](/path)\n\n[home](/path)", "***\n    [home](/path)\n\n[home]($abs)\n"],
         ];
     }
 
