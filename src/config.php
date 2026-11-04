@@ -778,12 +778,23 @@ function form_to_ini(array $post, string $current_ini): string
  * canonical_site_url() applies. A section line that cannot be read, or a value
  * that would not survive the INI file, is reported with the section and line.
  *
- * @param array<string, mixed> $post The submitted form fields.
+ * The stored INI is checked too: form_to_ini() carries over what it holds, and
+ * INI that does not parse has nothing to carry, so saving over it would silently
+ * drop every setting the form does not show. Comments-only or empty INI parses
+ * fine and is not refused.
+ *
+ * @param array<string, mixed> $post        The submitted form fields.
+ * @param string               $current_ini The INI text currently stored.
  * @return list<string> Human-readable errors, empty when the form can be saved.
  */
-function settings_form_errors(array $post): array
+function settings_form_errors(array $post, string $current_ini = ''): array
 {
     $errors = [];
+
+    if (@parse_ini_string($current_ini, true, INI_SCANNER_RAW) === false) {
+        $errors[] = "The settings stored on this site can't be read, so saving this form would lose them. "
+            . 'Fix the stored settings first, or reset them to the defaults.';
+    }
 
     $required = ['site_title' => 'Site title', 'site_url' => 'Site URL', 'author_name' => 'Author name'];
     foreach ($required as $key => $label) {

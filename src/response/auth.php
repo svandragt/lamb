@@ -607,7 +607,8 @@ function respond_settings(): array
         }
 
         if (isset($_POST['settings_form'])) {
-            $form_errors = Config\settings_form_errors($_POST);
+            $stored_ini = Config\get_ini_text();
+            $form_errors = Config\settings_form_errors($_POST, $stored_ini);
             if ($form_errors !== []) {
                 $_SESSION['flash'][] = 'Settings not saved. Fix the following and save again.';
                 foreach ($form_errors as $form_error) {
@@ -621,7 +622,7 @@ function respond_settings(): array
 
                 return $data;
             }
-            $submitted_ini = Config\form_to_ini($_POST, Config\get_ini_text());
+            $submitted_ini = Config\form_to_ini($_POST, $stored_ini);
         } else {
             // A submission carrying no configuration text at all is not an author
             // clearing the box (that posts an empty string) — it is a malformed

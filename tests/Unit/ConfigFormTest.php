@@ -334,6 +334,36 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('line 2', $errors[1]);
     }
 
+    public function testSettingsFormErrorsRefusesWhenTheStoredIniCannotBeRead(): void
+    {
+        // A form save carries over what is stored. Unreadable INI has nothing
+        // to carry, so saving would silently drop every setting the form lacks.
+        $errors = settings_form_errors($this->post(), "[unclosed\n=== not ini ===");
+
+        $this->assertCount(1, $errors);
+        $this->assertStringContainsString("can't be read", $errors[0]);
+    }
+
+    /**
+     * @dataProvider nothingToCarryOverProvider
+     */
+    public function testSettingsFormErrorsAcceptsAStoredIniWithNothingToLose(string $stored): void
+    {
+        $this->assertSame([], settings_form_errors($this->post(), $stored));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nothingToCarryOverProvider(): array
+    {
+        return [
+            'empty' => [''],
+            'whitespace only' => ["  \n\t\n"],
+            'comments only' => ["; just a note\n;; another\n"],
+        ];
+    }
+
     public function testSettingsFormErrorsCountsLinesFromTheTopOfTheTextarea(): void
     {
         $errors = settings_form_errors($this->post(['menu_items' => "\r\n\r\nAbout"]));
@@ -537,6 +567,17 @@ class ConfigFormTest extends TestCase
         $this->assertSame('kept', $parsed['mystery']);
         $this->assertContains('Settings saved successfully.', $result['flash']);
         $this->assertStringContainsString('posts_per_page', implode("\n", $result['flash']));
+    }
+
+    public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void
+    {
+        $broken = "[unclosed\n=== not ini ===\nposts_per_page = 5\n";
+
+        $result = $this->runSettingsPost($this->post(['menu_items' => 'Home = /']), $broken);
+
+        $this->assertSame($broken, $result['ini']);
+        $this->assertStringContainsString("can't be read", implode("\n", $result['flash']));
+        $this->assertNotContains('Settings saved successfully.', $result['flash']);
     }
 
     /**
