@@ -31,6 +31,20 @@ class SettingsFormCest
         $I->seeInField('site_title', 'My Microblog');
     }
 
+    public function exportTabOffersTheDownloadAsAButton(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $I->amOnPage('/settings');
+
+        $I->seeElement('#settings-panel-export a.button[href="/export"]');
+        $I->see('Download export', '#settings-panel-export a.button');
+
+        // The class is only a button if the active theme's stylesheet styles it.
+        $href = $I->grabAttributeFrom('link[rel=stylesheet]', 'href');
+        $I->amOnPage(strtok($href, '?'));
+        $I->seeInSource('a.button');
+    }
+
     public function savedValuesAreShownAgainOnReload(AcceptanceTester $I): void
     {
         $this->login($I);
