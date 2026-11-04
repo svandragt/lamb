@@ -172,6 +172,16 @@ Interpolation let the feed choose the YAML *type* of its own title — `[a, b]`
 arrived as a list, `2024-01-02` as a date object — and the run died on the first
 such item. Dumping always quotes the scalar back to text.
 
+## Feed drafts carry `draft: true`
+
+A draft is stored twice: in the `draft` column and as `draft: true` in the
+body's front matter. The edit form posts the body back and `parse_bean()` reads
+the draft state from that front matter, so a feed draft whose body lacked the
+line was published by its first edit (#924). `populate_bean()` therefore writes
+the line whenever a feed item ends up a draft, new or re-synced, through
+`set_frontmatter_key()` (a YAML bool, not the quoted string `'true'`). Drafts
+stored before that get it from `migrate_feed_drafts()`, run by `bin/lamb migrate`.
+
 ## `feedstatus` bean
 
 Config is the source of truth for *which* feeds exist; `feedstatus` records only

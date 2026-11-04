@@ -27,8 +27,9 @@
  *
  * migrate runs the one-time data migrations that used to run implicitly on
  * every boot (backfill_post_version(), backfill_imported_post_identity(),
- * migrate_feed_watermarks()), plus the same post upgrade as upgrade-posts
- * (#814, reusing Response\upgrade_all_posts() rather than duplicating its
+ * migrate_feed_watermarks()), the one-time migrate_feed_drafts() (#924), plus
+ * the same post upgrade as upgrade-posts (#814, reusing
+ * Response\upgrade_all_posts() rather than duplicating its
  * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
  * automatically; restoring an old `lamb.db` backup by hand needs it run
  * explicitly.
@@ -203,6 +204,10 @@ if ($command === 'migrate') {
     $verb = $dry_run ? 'would seed' : 'seeded';
     $watermark_count = Network\migrate_feed_watermarks(Network\get_feeds(), $dry_run);
     echo "{$prefix}migrate_feed_watermarks: $verb $watermark_count feed(s) from their legacy watermark\n";
+
+    $verb = $dry_run ? 'would add' : 'added';
+    $draft_count = Network\migrate_feed_drafts($dry_run);
+    echo "{$prefix}migrate_feed_drafts: $verb draft: true to $draft_count feed draft(s)\n";
 
     // Must run after backfill_post_version() above: that's what gives a
     // pre-versioning post a `version` at all, so upgrade_all_posts()'s
