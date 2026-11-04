@@ -51,7 +51,7 @@ These settings stop working in Lamb 0.17. Saving the form lists the ones your co
 |---|---|
 | `posts_per_page` | None. Lamb uses 10 posts per page. |
 | `404_fallback` | Add a `[redirections]` entry for each old address you still want to forward. |
-| `[preconnect]` | None. Origins already configured keep working until 0.17. |
+| `[preconnect]` | None. Lamb adds preconnect hints for the sites your posts load images and video from. Sites you listed keep working until 0.17. |
 | `micropub_debug` | Set the `LAMB_MICROPUB_DEBUG` environment variable. |
 | `experimental_features` | Pass `--experimental` to `bin/lamb import <source> <path>`. |
 
@@ -93,7 +93,7 @@ point `site_url` at that.
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
-* [Preconnect]({{ site.baseurl }}{% link preconnect.md %}): Deprecated; goes in 0.17.
+* [Preconnect]({{ site.baseurl }}{% link preconnect.md %}): Lamb adds the hints itself; the `[preconnect]` setting is deprecated.
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): `author_email`, `author_name`, `following_url` and `[me]` feed the `/.well-known/` profile files.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
