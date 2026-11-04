@@ -19,6 +19,13 @@ use function Lamb\Theme\the_preconnect;
 
 class ThemeTest extends TestCase
 {
+    protected function setUp(): void
+    {
+        if (!defined('ROOT_URL')) {
+            define('ROOT_URL', 'http://localhost');
+        }
+    }
+
     // the_preconnect
 
     public function testPreconnectOutputsNothingWhenNotConfigured()
@@ -94,9 +101,6 @@ class ThemeTest extends TestCase
     private function preconnectFor(array $bodies, array $configured = []): string
     {
         global $config, $data, $template;
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
@@ -156,8 +160,16 @@ class ThemeTest extends TestCase
             'same-origin absolute image' => ['<img src="{ROOT_URL}/assets/a.webp">'],
             'non-http scheme' => ['<img src="data:image/gif;base64,R0lGOD">'],
             'protocol-less relative path' => ['<img src="assets/a.webp">'],
+            'protocol-relative URL' => ['<img src="//img.example.net/a.webp">'],
             'remote link is not media' => ['<a href="https://example.net/page">x</a>'],
         ];
+    }
+
+    public function testPreconnectSkipsOwnOriginSpelledWithItsDefaultPort()
+    {
+        $default_port = parse_url(ROOT_URL, PHP_URL_SCHEME) === 'https' ? 443 : 80;
+
+        $this->assertSame('', $this->preconnectFor(['<img src="{ROOT_URL}:' . $default_port . '/a.webp">']));
     }
 
     public function testPreconnectDerivesOriginFromSrcsetPosterAndSource()
@@ -236,9 +248,6 @@ class ThemeTest extends TestCase
         $about->slug = 'about';
         $about->transformed = '<img src="https://hidden.example.net/a.jpg">';
         $data = ['posts' => [$about]];
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         ob_start();
         the_preconnect();

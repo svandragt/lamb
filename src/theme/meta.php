@@ -326,7 +326,10 @@ function url_origin(string $url): ?string
     if (!\Lamb\Http\is_valid_http_url($url) || !preg_match('/^[\w.-]+$/', $host)) {
         return null;
     }
+    $scheme = strtolower((string) parse_url($url, PHP_URL_SCHEME));
     $port = parse_url($url, PHP_URL_PORT);
+    // The default port names the same origin, so it is dropped to let "https://host:443" match "https://host".
+    $is_default_port = $port === ($scheme === 'https' ? 443 : 80);
 
-    return strtolower(parse_url($url, PHP_URL_SCHEME) . '://' . $host) . ($port === null ? '' : ':' . $port);
+    return strtolower($scheme . '://' . $host) . ($port === null || $is_default_port ? '' : ':' . $port);
 }

@@ -11,7 +11,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Changed
 
-- Lamb now adds `preconnect` and `dns-prefetch` hints itself for the sites a page's posts load images and video from (at most three per page, in order of first appearance, never your own site), so the `[preconnect]` setting is no longer needed. Origins listed there still come first until 0.17.
+- Lamb now adds `preconnect` and `dns-prefetch` hints itself for the sites a page's posts load images and video from (your own site excluded; at most three per page, in order of first appearance), so the `[preconnect]` setting is no longer needed. Origins listed there still come first and count towards the three until 0.17.
 
 ### Deprecated
 
