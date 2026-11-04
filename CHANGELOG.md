@@ -9,6 +9,8 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.15.1] - 2026-11-04
+
 ### Fixed
 
 - A webmention source page that is already UTF-8 is no longer re-decoded as another encoding, so a stale `charset` declaration, or `charset=` text inside a `<meta>` description, no longer turns "Café" into "CafÃ©".
@@ -742,7 +744,8 @@ New in this release:
 Initial release!
 
 
-[Unreleased]: https://github.com/svandragt/lamb/compare/0.15.0...HEAD
+[Unreleased]: https://github.com/svandragt/lamb/compare/0.15.1...HEAD
+[0.15.1]: https://github.com/svandragt/lamb/compare/0.15.0...0.15.1
 [0.15.0]: https://github.com/svandragt/lamb/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/svandragt/lamb/compare/0.13.0...0.14.0
 [0.13.0]: https://github.com/svandragt/lamb/compare/0.12.0...0.13.0
