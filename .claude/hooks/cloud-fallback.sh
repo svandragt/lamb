@@ -30,12 +30,12 @@ mkdir -p "$cache" "$HOME/.local/bin"
 # 1. PHP 8.4
 # ---------------------------------------------------------------------------
 
-if php -r 'exit(PHP_VERSION_ID >= 80400 ? 0 : 1);' 2>/dev/null; then
+if php -r 'exit(PHP_VERSION_ID >= 80401 ? 0 : 1);' 2>/dev/null; then
   log "PHP $(php -r 'echo PHP_VERSION;') already present"
 elif command -v nix >/dev/null 2>&1; then
   log "building PHP 8.4 with nix"
   php84=$(nix --extra-experimental-features 'nix-command flakes' build nixpkgs#php84 --no-link --print-out-paths 2>/dev/null | tail -1)
-  if [ -x "$php84/bin/php" ]; then
+  if [ -n "$php84" ] && [ -x "$php84/bin/php" ]; then
     printf 'display_errors=stderr\nerror_reporting=E_ALL & ~E_DEPRECATED\nmemory_limit=512M\n' > "$cache/php.ini"
     printf '#!/bin/sh\nexec %s -c %s "$@"\n' "$php84/bin/php" "$cache/php.ini" > "$HOME/.local/bin/php"
     chmod +x "$HOME/.local/bin/php"
@@ -100,6 +100,7 @@ elif [ -d vendor/bin ]; then
       if ($p["name"] === "phpstan/phpstan") { echo $p["version"]; }
     }')
   if [ ! -f "$cache/phpstan-$version/phpstan.phar" ]; then
+    rm -rf "$cache/phpstan-$version"
     git clone -q --depth 1 --branch "$version" https://github.com/phpstan/phpstan.git "$cache/phpstan-$version" 2>/dev/null
   fi
   if [ -f "$cache/phpstan-$version/phpstan.phar" ]; then
