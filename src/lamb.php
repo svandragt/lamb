@@ -122,7 +122,7 @@ function parse_tags(string $html): string
             $escape = fn(string $value): string
                 => htmlspecialchars($value, ENT_QUOTES | ENT_HTML5 | ENT_SUBSTITUTE);
 
-            return $matches[1] . '<a href="/tag/' . $escape(strtolower($matches[2])) . '">#'
+            return $matches[1] . '<a href="/tag/' . $escape(strtolower($matches[2])) . '" rel="tag">#'
                 . $escape($matches[2]) . '</a>';
         }, $part) ?? $part;
     }

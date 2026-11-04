@@ -106,7 +106,7 @@ class HighlightTest extends TestCase
 
         parse_bean($bean);
 
-        $this->assertStringContainsString('<a href="/tag/world">#world</a>', $bean->transformed);
+        $this->assertStringContainsString('<a href="/tag/world" rel="tag">#world</a>', $bean->transformed);
     }
 
     public function testParseBeanDoesNotLinkifyInsideCodeBlocks(): void
@@ -140,6 +140,6 @@ class HighlightTest extends TestCase
         parse_bean($bean);
 
         $this->assertStringNotContainsString('phiki', $bean->transformed);
-        $this->assertStringContainsString('<a href="/tag/tag">#tag</a>', $bean->transformed);
+        $this->assertStringContainsString('<a href="/tag/tag" rel="tag">#tag</a>', $bean->transformed);
     }
 }
