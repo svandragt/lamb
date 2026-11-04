@@ -91,7 +91,7 @@ logged in.
 | `the_styles()` | `void` | Emits the stylesheet. It always loads `styles/styles.css` from the active theme — small stylesheets are inlined, larger ones linked with a cache-busting hash. |
 | `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`; logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
 | `the_opengraph()` | `void` | Emits OpenGraph/Twitter `<meta>` tags (status pages only). |
-| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` tags for the origins in `$config['preconnect']`. |
+| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `<link rel="dns-prefetch">` tags for up to three origins in total: origins in the deprecated `$config['preconnect']` first (removed in 0.17), then the remote origins that the posts in `$data['posts']` load images and video from. |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` on admin pages and `?preview=` links; nothing on public pages. Call it in your theme's `<head>` so previews stay out of search results. |
 | `the_reply_context($bean)` | `string` | See "Posts and content" above. |
 

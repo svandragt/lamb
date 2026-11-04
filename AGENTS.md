@@ -399,7 +399,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` when the response is marked noindex (private routes, `?preview=` links); nothing otherwise |
-| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` for `$config['preconnect']` origins |
+| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `dns-prefetch` for up to 3 distinct origins in total: deprecated `$config['preconnect']` origins first, then the remote origins in the `src`/`srcset`/`poster` URLs of `$data['posts']` bodies |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
 | `csrf_token()` | `string` | Returns (and creates if needed) the current session CSRF token |
 | `related_posts($body)` | `array` | Posts sharing hashtags with `$body`; returns `['posts' => OODBBean[]]` |
