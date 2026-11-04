@@ -43,6 +43,7 @@ class SettingsFormCest
         $href = $I->grabAttributeFrom('link[rel=stylesheet]', 'href');
         $I->amOnPage(strtok($href, '?'));
         $I->seeInSource('a.button');
+        $I->seeInSource('text-decoration: none');
     }
 
     public function savedValuesAreShownAgainOnReload(AcceptanceTester $I): void
