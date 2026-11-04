@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use Lamb\Restore\DamagedEntry;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use RuntimeException;
@@ -509,6 +510,16 @@ class LambRestoreTest extends TestCase
         [, $reader] = open_source($this->zip(['posts/2026/07/hello.md' => 'Hello.']));
 
         $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('Archive has no manifest.json');
+        read_manifest($reader);
+    }
+
+    public function testReadManifestReportsADamagedManifestAsDamagedNotAbsent(): void
+    {
+        $reader = static fn(string $name): ?string => throw new DamagedEntry("Damaged archive entry: $name");
+
+        $this->expectException(RuntimeException::class);
+        $this->expectExceptionMessage('manifest.json in the archive is damaged');
         read_manifest($reader);
     }
 
