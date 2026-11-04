@@ -76,6 +76,33 @@ test('pasting a non-URL leaves the textarea untouched', () => {
   assert.equal(ta.value, 'see this site')
 })
 
+test('uses text/uri-list when text/plain is empty (iOS "copy link")', () => {
+  const { window, document } = setup()
+  const ta = document.querySelector('textarea')
+  ta.value = 'see this site'
+  ta.setSelectionRange(4, 8)
+  ta.dispatchEvent(pasteEvent(window, { 'text/plain': '', 'text/uri-list': 'https://example.com/a' }))
+  assert.equal(ta.value, 'see [this](https://example.com/a) site')
+})
+
+test('skips comment lines in text/uri-list', () => {
+  const { window, document } = setup()
+  const ta = document.querySelector('textarea')
+  ta.value = 'see this site'
+  ta.setSelectionRange(4, 8)
+  ta.dispatchEvent(pasteEvent(window, { 'text/uri-list': '# a comment\r\n\r\nhttps://example.com/a\r\n' }))
+  assert.equal(ta.value, 'see [this](https://example.com/a) site')
+})
+
+test('ignores a non-http text/uri-list entry', () => {
+  const { window, document } = setup()
+  const ta = document.querySelector('textarea')
+  ta.value = 'see this site'
+  ta.setSelectionRange(4, 8)
+  ta.dispatchEvent(pasteEvent(window, { 'text/uri-list': 'ftp://example.com/a' }))
+  assert.equal(ta.value, 'see this site')
+})
+
 test('pasting with no selection does nothing', () => {
   const { window, document } = setup()
   const ta = document.querySelector('textarea')
