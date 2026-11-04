@@ -325,7 +325,8 @@ function html_to_utf8(string $html): string
  */
 function declared_charset(string $html): ?string
 {
-    preg_match_all('/<meta\s(?:"[^"]*"|\'[^\']*\'|[^>"\'])*+>/i', $html, $tags);
+    $markup = preg_replace('/<!--.*?-->/s', '', $html) ?? $html;
+    preg_match_all('/<meta\s(?:"[^"]*"|\'[^\']*\'|[^>"\'])*+>/i', $markup, $tags);
     foreach ($tags[0] as $tag) {
         preg_match_all('/([^\s"\'=\/>]+)\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/', $tag, $pairs, PREG_SET_ORDER);
         $attrs = [];

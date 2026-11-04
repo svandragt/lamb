@@ -146,6 +146,10 @@ class SocialSpecTest extends TestCase
             'fence with CRLF'  => ["```\r\n[home](/path)\r\n```\r\n\r\n[home](/path)", "```\r\n[home](/path)\r\n```\r\n\r\n[home]($abs)\n"],
             'unclosed fence'   => ["[home](/path)\n\n```\n[home](/path)", "[home]($abs)\n\n```\n[home](/path)\n"],
             'indented block'   => ["Intro\n\n    [home](/path)\n\n[home](/path)", "Intro\n\n    [home](/path)\n\n[home]($abs)\n"],
+            'fence in a quote' => ["> ~~~\n> [home](/path)\n> ~~~\n\n[home](/path)", "> ~~~\n> [home](/path)\n> ~~~\n\n[home]($abs)\n"],
+            'mixed closer'     => ["```\n[a](/path)\n```~\n[b](/path)\n```\n\n[c](/path)", "```\n[a](/path)\n```~\n[b](/path)\n```\n\n[c]($abs)\n"],
+            'double-tick span' => ["``a`b [home](/path)`` [home](/path)", "``a`b [home](/path)`` [home]($abs)\n"],
+            'lone tick'        => ["A ` tick.\n\n[home](/path) and `x`", "A ` tick.\n\n[home]($abs) and `x`\n"],
         ];
     }
 

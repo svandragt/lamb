@@ -409,6 +409,12 @@ class WebmentionTest extends TestCase
         $this->assertSame('Café', extract_meta($html)['content']);
     }
 
+    public function testExtractMetaIgnoresAMetaTagInsideAnHtmlComment(): void
+    {
+        $html = '<!-- <meta charset="shift_jis"> --><meta charset="iso-8859-1"><title>Caf' . "\xE9" . '</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
     // discover_endpoint -----------------------------------------------------
 
     public function testDiscoverEndpointPrefersLinkHeader(): void

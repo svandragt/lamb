@@ -85,9 +85,10 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
     // is, so a link written inside it stays as typed.
     // shortcut: an indented list continuation counts as code and is not rewritten.
     $pattern = '#'
-        . '(?<fence>^ {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\k<f>[`~]*[ \t]*\r?$|[\s\S]*))'
+        . '(?<fence>^(?: {0,3}>)* {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*'
+        . '(?:\n[\s\S]*?^(?: {0,3}>)* {0,3}\k<f>(?:(?<=`)`*+|(?<=~)~*+)[ \t]*\r?$|[\s\S]*))'
         . '|(?<block>(?:\A|\R[ \t]*\R)(?: {4}|\t)[^\n]*+(?:\n(?:[ \t]*\r?\n)*+(?: {4}|\t)[^\n]*+)*+)'
-        . '|(?<span>(?<ticks>`+)[^`]+?\k<ticks>)'
+        . '|(?<span>(?<ticks>`++)(?:(?!\R[ \t]*\R)[\s\S])+?(?<!`)\k<ticks>(?!`))'
         . '|(?<link>\]\()/(?!/)'
         . '|(?<ref>^ {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)'
         . '#m';
