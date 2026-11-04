@@ -49,8 +49,18 @@ img {
     height: auto;
 }
 
-input[type='submit'], button {
+input[type='submit'], button, a.button {
     cursor: pointer;
+}
+
+/* A link that looks like the browser's default button. */
+a.button {
+    display: inline-block;
+    padding: 1px 6px;
+    border: 2px outset ButtonBorder;
+    background: ButtonFace;
+    color: ButtonText;
+    text-decoration: none;
 }
 
 main {

@@ -221,7 +221,7 @@ a:focus-visible {
     border-radius: var(--radius-sm);
 }
 
-button, input[type='submit'] { cursor: pointer; }
+button, input[type='submit'], a.button { cursor: pointer; }
 
 /* Typography */
 
@@ -796,7 +796,9 @@ input[type="password"]:focus-visible {
     background: var(--paper);
 }
 
-input[type="submit"], button {
+input[type="submit"], button, a.button {
+    display: inline-block;
+    text-decoration: none;
     font: 500 var(--text-sm)/1 var(--font-mono);
     color: var(--paper);
     background: var(--ink);
@@ -807,7 +809,8 @@ input[type="submit"], button {
     transition: background-color var(--t-fast) var(--ease-out-quart);
 }
 
-input[type="submit"]:hover, button:hover {
+input[type="submit"]:hover, button:hover, a.button:hover {
+    color: var(--paper);
     background: var(--accent-hover);
 }
 

@@ -2,6 +2,7 @@
 
 namespace Tests\Acceptance;
 
+use PHPUnit\Framework\Assert;
 use Tests\Support\AcceptanceTester;
 
 /**
@@ -29,6 +30,21 @@ class SettingsFormCest
         $I->seeInField('author_name', '');
         $I->seeInField('author_email', '');
         $I->seeInField('site_title', 'My Microblog');
+    }
+
+    public function exportTabOffersTheDownloadAsAButton(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $I->amOnPage('/settings');
+
+        $I->seeElement('#settings-panel-export a.button[href="/export"]');
+        $I->see('Download export', '#settings-panel-export a.button');
+
+        // The class is only a button if the active theme's stylesheet styles it.
+        $href = $I->grabAttributeFrom('link[rel=stylesheet]', 'href');
+        $I->amOnPage(strtok($href, '?'));
+        $css = $I->grabPageSource();
+        Assert::assertMatchesRegularExpression('/a\.button[^{]*\{[^}]*text-decoration: none/', $css);
     }
 
     public function savedValuesAreShownAgainOnReload(AcceptanceTester $I): void
