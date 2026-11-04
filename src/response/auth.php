@@ -579,7 +579,11 @@ function redirect_logout(): void
 /**
  * Handles the settings page logic, including displaying, validating, and saving settings.
  *
+ * A POST carrying the hidden `settings_form` field saves the form fields (see
+ * Config\form_to_ini()); one carrying `ini_text` saves that INI text as is.
+ *
  * @return array<string, mixed> An array containing the page title and the current or updated INI configuration text.
+ *     A refused form post also returns its typed fields as `form_values`.
  */
 function respond_settings(): array
 {
@@ -602,10 +606,29 @@ function respond_settings(): array
             redirect_uri('/settings');
         }
 
-        // A submission carrying no configuration text at all is not an author
-        // clearing the box (that posts an empty string) — it is a malformed
-        // request, and saving '' for it would wipe every setting.
-        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null);
+        if (isset($_POST['settings_form'])) {
+            $stored_ini = Config\get_ini_text();
+            $form_errors = Config\settings_form_errors($_POST, $stored_ini);
+            if ($form_errors !== []) {
+                $_SESSION['flash'][] = 'Settings not saved. Fix the following and save again.';
+                foreach ($form_errors as $form_error) {
+                    $_SESSION['flash'][] = $form_error;
+                }
+                // Preserve typed content, as the invalid-INI path does.
+                $data['form_values'] = array_intersect_key(
+                    $_POST,
+                    array_flip([...Config\SETTINGS_FORM_FIELDS, 'feeds_draft', ...Config\SETTINGS_FORM_SECTIONS])
+                );
+
+                return $data;
+            }
+            $submitted_ini = Config\form_to_ini($_POST, $stored_ini);
+        } else {
+            // A submission carrying no configuration text at all is not an author
+            // clearing the box (that posts an empty string) — it is a malformed
+            // request, and saving '' for it would wipe every setting.
+            $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null);
+        }
         if ($submitted_ini === null) {
             $_SESSION['flash'][] = 'Settings not saved: the form did not include the configuration text.';
             redirect_uri('/settings');
