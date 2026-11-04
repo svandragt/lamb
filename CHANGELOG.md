@@ -9,9 +9,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
-### Changed
-
-- Lamb now requires PHP 8.4.1 or later, because a dependency (symfony/yaml 8.1) needs it; on 8.4.0 the release would fail Composer's platform check.
+## [0.15.0] - 2026-11-04
 
 ### Security
 
@@ -64,6 +62,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 ### Changed
 
 - PHP 8.5 is now the default in the Docker images, devbox, devcontainer, DDEV and the docs; PHP 8.4 remains supported. The sample nginx snippet is renamed `php-84.conf` → `php-85.conf`.
+- Lamb now requires PHP 8.4.1 or later, because a dependency (symfony/yaml 8.1) needs it. On PHP 8.4.0 the release fails Composer's platform check.
 - Viewing a post whose stored version is behind the current one no longer re-saves it; a listing, feed or search render shows the up-to-date HTML without writing anything. `bin/lamb migrate` now covers this upgrade too, alongside the other one-time data migrations, so it's the one command to run after restoring an old backup ([#814](https://github.com/svandragt/lamb/issues/814)).
 - An unknown or missing theme now falls back to the default theme instead of producing a broken page.
 - `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
@@ -77,6 +76,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Upgrade notes
 
+- Check that your server runs PHP 8.4.1 or later (`php -v`) before you upgrade.
 - Replace any cron or script calling the `import-*.php` shims with `bin/lamb import`.
 - If you deploy with Docker, switch from pulling `ghcr.io/svandragt/lamb` to building the image locally; see `docs/docker.md`.
 - Nothing to install if you already use Composer: `bin/upgrade` uses it. [viv](https://github.com/svandragt/vivace) 0.22.0 or later is an optional, faster alternative that `bin/upgrade` prefers when it finds one. See `docs/upgrading.md`.
@@ -736,7 +736,8 @@ New in this release:
 Initial release!
 
 
-[Unreleased]: https://github.com/svandragt/lamb/compare/0.14.0...HEAD
+[Unreleased]: https://github.com/svandragt/lamb/compare/0.15.0...HEAD
+[0.15.0]: https://github.com/svandragt/lamb/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/svandragt/lamb/compare/0.13.0...0.14.0
 [0.13.0]: https://github.com/svandragt/lamb/compare/0.12.0...0.13.0
 [0.12.0]: https://github.com/svandragt/lamb/compare/0.11.0...0.12.0
