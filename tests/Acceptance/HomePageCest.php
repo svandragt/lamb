@@ -71,10 +71,12 @@ class HomePageCest
         // The home post is a page, not a timeline entry.
         $I->seeNumberOfElements('article', 1);
         $I->dontSeeElement('//article[contains(., "' . self::HOME_BODY . '")]');
-        // It carries the id that task-list toggles read, and the microformats of a permalink.
+        // It carries the id that task-list toggles read, and the microformats of a
+        // permalink. The author and permalink links are hidden, not clipped, so they
+        // are not invisible tab stops.
         $I->seeElement('.home-post.h-entry[data-post-id]');
         $I->seeElement('.home-post .e-content');
-        $I->seeElement('.home-post .u-url[href="/"]');
+        $I->seeElement('.home-post [hidden] .u-url[href="/"]');
     }
 
     public function homeUrlRedirectsToTheRoot(AcceptanceTester $I): void
