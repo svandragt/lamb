@@ -166,8 +166,9 @@ entry in it, so keep them all at the top of the file.
 
 ## Site URL
 
-`site_url` is the canonical address of your site, e.g. `https://example.com`. It is
-optional for a plain blog, but worth setting:
+`site_url` is the canonical address of your site, e.g. `https://example.com`. The
+settings form requires it before it saves, and a site that never saved the form
+runs without it. Setting it matters because:
 
 * **Micropub needs it.** IndieAuth tokens are issued for an identity, and Lamb has
   to know its own identity to tell whether a token belongs to you. Without
