@@ -353,6 +353,43 @@ class WebmentionTest extends TestCase
         $this->assertSame('Tom & Jerry', $meta['content']);
     }
 
+    public function testExtractMetaConvertsDeclaredLatin1ToUtf8(): void
+    {
+        $html = '<html><head><meta charset="iso-8859-1"><meta name="author" content="Ren' . "\xE9" . '">'
+            . '<title>Caf' . "\xE9" . '</title></head></html>';
+        $meta = extract_meta($html);
+        $this->assertSame('René', $meta['author']);
+        $this->assertSame('Café', $meta['content']);
+    }
+
+    public function testExtractMetaConvertsLatin1DeclaredInHttpEquiv(): void
+    {
+        $html = '<meta http-equiv="Content-Type" content="text/html; charset=ISO-8859-1">'
+            . '<title>Caf' . "\xE9" . '</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
+    public function testExtractMetaScrubsInvalidUtf8WithoutDeclaration(): void
+    {
+        $meta = extract_meta('<meta name="author" content="Ren' . "\xE9" . '"><title>Caf' . "\xE9" . '</title>');
+        $this->assertTrue(mb_check_encoding($meta['author'], 'UTF-8'));
+        $this->assertTrue(mb_check_encoding($meta['content'], 'UTF-8'));
+    }
+
+    public function testExtractMetaScrubsUnknownDeclaredCharset(): void
+    {
+        $meta = extract_meta('<meta charset="no-such-charset"><title>Caf' . "\xE9" . '</title>');
+        $this->assertTrue(mb_check_encoding($meta['content'], 'UTF-8'));
+    }
+
+    public function testExtractMetaLeavesUtf8PageUnchanged(): void
+    {
+        $html = '<meta charset="utf-8"><meta name="author" content="René"><title>Café</title>';
+        $meta = extract_meta($html);
+        $this->assertSame('René', $meta['author']);
+        $this->assertSame('Café', $meta['content']);
+    }
+
     // discover_endpoint -----------------------------------------------------
 
     public function testDiscoverEndpointPrefersLinkHeader(): void
