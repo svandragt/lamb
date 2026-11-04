@@ -63,6 +63,9 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
         $bean->source_url = is_valid_http_url($permalink) ? $permalink : null;
     }
 
+    // parse_bean() derives draft from the body's front matter, which a feed body
+    // never carries, so a re-sync would publish a stored draft. Keep what is stored.
+    $stored_draft = $bean->draft;
     parse_bean($bean);
     // Prefix a title-derived feed-item slug with the feed name so same-titled
     // posts from different feeds don't collide. Applied after parse_bean(),
@@ -76,9 +79,12 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
     }
     $bean->version = POST_VERSION;
 
-    // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
-    // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
-    if ($feed_item && !$bean->id && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
+    // Applied after parse_bean so frontmatter-driven draft:false cannot
+    // inadvertently publish a feed item. A new item is drafted when feeds_draft
+    // is enabled; a re-synced one keeps the draft value it had.
+    if ($feed_item && !$is_new) {
+        $bean->draft = (int) $stored_draft;
+    } elseif ($feed_item && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
         $bean->draft = 1;
     }
 

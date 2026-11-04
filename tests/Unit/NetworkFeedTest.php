@@ -440,4 +440,41 @@ class NetworkFeedTest extends TestCase
         $this->assertSame('Author edited body', $reloaded->body);
         $this->assertSame('2024-01-01 10:00:00', $reloaded->updated);
     }
+
+    public function testIngestItemKeepsAFeedDraftAsADraftWhenTheFeedUpdatesIt(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 1', 'Notes', 'https://example.com/r1', 'draft-resync-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        $this->assertTrue(ingest_item($item, 'TestBlog', 0));
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'draft-resync-id')]);
+        $this->assertSame(1, (int) $stored->draft);
+
+        $newer = $this->makeItem('Release 1', 'Notes and artefact', 'https://example.com/r1', 'draft-resync-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $this->assertTrue(ingest_item($newer, 'TestBlog', 0));
+
+        $resynced = R::load('post', $stored->id);
+        $this->assertSame('2024-06-01 15:00:00', $resynced->updated);
+        $this->assertSame(1, (int) $resynced->draft);
+    }
+
+    public function testIngestItemKeepsAFeedPostTheOwnerPublishedPublishedWhenTheFeedUpdatesIt(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 2', 'Notes', 'https://example.com/r2', 'published-resync-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        ingest_item($item, 'TestBlog', 0);
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'published-resync-id')]);
+        $stored->draft = 0;
+        R::store($stored);
+
+        $newer = $this->makeItem('Release 2', 'Notes and artefact', 'https://example.com/r2', 'published-resync-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $this->assertTrue(ingest_item($newer, 'TestBlog', 0));
+
+        $resynced = R::load('post', $stored->id);
+        $this->assertSame('2024-06-01 15:00:00', $resynced->updated);
+        $this->assertSame(0, (int) $resynced->draft);
+    }
 }

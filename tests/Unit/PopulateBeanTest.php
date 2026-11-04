@@ -182,6 +182,18 @@ class PopulateBeanTest extends TestCase
         $this->assertNotSame(1, $bean->draft);
     }
 
+    public function testRemovingDraftFromFrontMatterOfAStoredPostPublishesIt(): void
+    {
+        $bean = \RedBeanPHP\R::dispense('post');
+        $bean->body = "---\ndraft: true\n---\nContent.";
+        $bean->draft = 1;
+        \RedBeanPHP\R::store($bean);
+
+        $bean = populate_bean("---\ntitle: Now live\n---\nContent.", null, null, $bean);
+
+        $this->assertSame(0, $bean->draft);
+    }
+
     public function testPopulateBeanSetsCurrentVersion(): void
     {
         $bean = populate_bean('Hello world');
