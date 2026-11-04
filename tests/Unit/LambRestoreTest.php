@@ -353,8 +353,6 @@ class LambRestoreTest extends TestCase
     {
         [, $reader] = open_source($this->zipWithDamagedFirstEntry(true), $has_zip);
 
-        // ext-zip reads a garbled entry as '' or false depending on the damage,
-        // so compare what the restore does with it, not the raw read.
         $items = manifest_items([
             'posts' => [
                 ['id' => 1, 'path' => 'posts/2026/07/bad.md'],
@@ -362,8 +360,22 @@ class LambRestoreTest extends TestCase
             ],
         ], $reader, 'https://example.test');
 
-        $this->assertNotNull(item_skip_reason($items[0]));
+        $this->assertSame('damaged entry', item_skip_reason($items[0]));
         $this->assertNull(item_skip_reason($items[1]));
+    }
+
+    /**
+     * @dataProvider zipReaders
+     */
+    public function testAnAbsentEntryIsStillReportedAsMissing(?bool $has_zip): void
+    {
+        [, $reader] = open_source($this->zipWithDamagedFirstEntry(true), $has_zip);
+
+        $items = manifest_items([
+            'posts' => [['id' => 1, 'path' => 'posts/2026/07/absent.md']],
+        ], $reader, 'https://example.test');
+
+        $this->assertSame('missing file', item_skip_reason($items[0]));
     }
 
     /**
@@ -382,7 +394,7 @@ class LambRestoreTest extends TestCase
             ],
         ], $reader, 'https://example.test');
 
-        $this->assertSame('missing file', item_skip_reason($items[0]));
+        $this->assertSame('damaged entry', item_skip_reason($items[0]));
         $this->assertNull(item_skip_reason($items[1]));
         $this->assertSame('Good body.', read_entry($reader, 'posts/2026/07/good.md'));
     }
