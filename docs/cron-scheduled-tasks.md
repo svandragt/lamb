@@ -33,5 +33,6 @@ For example the linux cron system can be setup as follows:
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
 * [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged after 30 days by the cron.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions are sent during the cron run.
+* [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): The following list at `following_url` is refreshed during the cron run.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Feed-ingested posts are saved as drafts by default.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Publishing a post at a future date (a different feature, despite the similar name).

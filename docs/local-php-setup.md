@@ -13,7 +13,7 @@ Make sure everything is installed:
 # Install required system packages, for example on Debian Linux derivatives like Ubuntu
 sudo apt update
 sudo apt install php8.5 php8.5-gettext php8.5-mbstring php8.5-sqlite3 php8.5-mysql php8.5-xml php8.5-gd
-# PHP 8.4–8.5 are supported; replace 8.5 with your preferred version
+# PHP 8.4.1–8.5 are supported; replace 8.5 with your preferred version
 # php8.5-sqlite3 ships pdo_sqlite, the driver Lamb actually connects through
 # php8.5-mysql ships pdo_mysql, required because RedBeanPHP references a MySQL PDO constant at load time and fatals without it (Lamb never connects to MySQL)
 # php8.5-gd converts image uploads to WebP; without it originals are stored as-is

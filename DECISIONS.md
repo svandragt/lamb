@@ -6,6 +6,17 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-10-29 — SocialSpec files are derived, and the following list is a copy
+
+**Status:** Accepted
+**Context:** [SocialSpec](https://socialspec.org/) adds three single-file APIs beside a site's feed: `/.well-known/about.md`, `contact.vcf` and `following.opml`. Lamb already holds most of that data, but not who the author follows. A `[following]` INI section was considered and rejected: it is a second, hand-kept copy of the list the author's feed reader already owns, so it drifts, and Lamb itself would do nothing with it.
+
+**Decision:** No new settings for about and contact. `about.md` is the published post slugged `about` (the slug the default `[menu_items]` already suggests), with Lamb's front matter replaced by a `summary`. `contact.vcf` exists only when `author_email` is set, so nothing personal is published by default. `following.opml` is a copy of the OPML at one new setting, `following_url`, fetched by `/_cron` through `fetch_guarded()` (SSRF-safe), at most every 30 minutes, as a conditional GET. The copy is served from the author's own domain rather than redirecting to the reader, because the spec expects the file on that domain with CORS, and redirect-following by consumers is unspecified. A failed or non-OPML fetch keeps the last good copy; removing `following_url` removes it. The refresh runs after the webmention and WebSub drains so a slow source cannot delay them.
+
+**Consequences:** The source of the following list must publish a public OPML (Dailyfeed: svandragt/dailyfeed#142, #143). Each file is a 404 until its data exists, so the feature ships on by default with nothing to gate. The spec is a v1 draft; each file is small and independent, so a spec change touches one function.
+
+---
+
 ## 2026-07-26 — Export format is front-matter Markdown plus a JSON manifest
 
 **Status:** Accepted

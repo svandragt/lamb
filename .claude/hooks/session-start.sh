@@ -22,14 +22,14 @@ log() { printf '[session-start] %s\n' "$1"; }
 
 # viv is dist-only — unlike composer it has no --prefer-source fallback, so a
 # network policy blocking the dist hosts (api.github.com/codeload.github.com)
-# leaves vendor/ incomplete with nothing to retry with. Hence a warning rather
-# than a fallback path.
+# leaves vendor/ incomplete. cloud-fallback.sh installs everything from git
+# instead; it takes minutes, so the hook only points at it.
 if [ -x vendor/bin/codecept ] && [ -x vendor/bin/phpcs ] && [ -e vendor/bin/phpstan ]; then
   log "dependencies already present"
 elif viv install; then
   log "viv install complete"
 else
-  log "WARNING: viv install incomplete — dependencies are missing and, viv being dist-only, a restricted network here has no workaround"
+  log "WARNING: viv install incomplete — run: bash .claude/hooks/cloud-fallback.sh (installs PHP 8.4 and dependencies from git, a few minutes)"
 fi
 
 # composer.json's post-install-cmd does this, but set it either way in case

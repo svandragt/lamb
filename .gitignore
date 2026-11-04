@@ -53,3 +53,4 @@ node_modules/
 /.calibrate/
 /.workshop.lock
 /tmp/
+/.composer-cloud.*

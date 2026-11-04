@@ -9,12 +9,16 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-04
+
 ### Security
 
 - Webmention author names taken from the sending page are now capped at 100 characters, like the content snippet, so a hostile page can't store an unbounded author ([#772](https://github.com/svandragt/lamb/issues/772)).
 
 ### Fixed
 
+- A webmention from a page in a non-UTF-8 encoding (such as ISO-8859-1) now stores the author and title correctly instead of invalid text.
+- Restore reports a post whose file in the archive is damaged as "damaged entry" instead of "missing file", so you no longer look for a file that is there.
 - A database whose WAL sidecar files (`lamb.db-wal`, `lamb.db-shm`) the web server can't write now stops with an error that names both files and says to change their owner to the user PHP runs as (not to delete them, since they can hold committed writes), instead of a bare "attempt to write a readonly database" stack trace. An unwritable data directory gets its own message naming the directory ([#874](https://github.com/svandragt/lamb/issues/874)).
 - WordPress and Known import: `<video>` elements (including `<source>`) and links to `.mp4`, `.webm` and `.mov` files are now downloaded into the assets directory and rewritten to the local copy, instead of staying on the source host. Video is stored unchanged and capped at 50 MB; a video that fails to download stays remote ([#876](https://github.com/svandragt/lamb/issues/876)).
 - WordPress and Known import: a `<video>` (or a `<video><source>`) with an `.mp4`, `.webm` or `.mov` file is now imported as an embedded video player, not a bare link or escaped HTML. An `.mp4` `<source>` is preferred, otherwise the first supported one is used. A `poster` image is neither downloaded nor shown, because Lamb's player has none. A `<video>` with no supported file becomes a plain link to its first URL, or is dropped when it has none ([#877](https://github.com/svandragt/lamb/issues/877)).
@@ -44,6 +48,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Added
 
+- [SocialSpec](https://socialspec.org/) profile files: `/.well-known/about.md` (your page slugged `about`), `/.well-known/contact.vcf` (from `author_email`, `author_name` and `[me]`) and `/.well-known/following.opml` (a copy of the OPML at the new `following_url` setting, refreshed by `/_cron`). Each is a 404 until its data is set. See `docs/socialspec.md`.
 - The admin toolbar has a "Help" link, next to "Logout", that opens the Lamb documentation in a new tab ([#890](https://github.com/svandragt/lamb/issues/890)).
 - The new-entry editor autosaves your draft in the browser, so a reload or accidental navigation doesn't lose the post. The edit form offers a "Restore unsaved changes" link when a saved draft differs from the stored post.
 - An attach-photo button on the entry and edit forms opens the phone's camera or photo library.
@@ -57,6 +62,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 ### Changed
 
 - PHP 8.5 is now the default in the Docker images, devbox, devcontainer, DDEV and the docs; PHP 8.4 remains supported. The sample nginx snippet is renamed `php-84.conf` → `php-85.conf`.
+- Lamb now requires PHP 8.4.1 or later, because a dependency (symfony/yaml 8.1) needs it. On PHP 8.4.0 the release fails Composer's platform check.
 - Viewing a post whose stored version is behind the current one no longer re-saves it; a listing, feed or search render shows the up-to-date HTML without writing anything. `bin/lamb migrate` now covers this upgrade too, alongside the other one-time data migrations, so it's the one command to run after restoring an old backup ([#814](https://github.com/svandragt/lamb/issues/814)).
 - An unknown or missing theme now falls back to the default theme instead of producing a broken page.
 - `bin/lamb` refuses to run against a `data/lamb.db` owned by another user, before opening it, instead of leaving behind WAL sidecar files that make every subsequent web request fail with "attempt to write a readonly database" (#831).
@@ -70,6 +76,7 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ### Upgrade notes
 
+- Check that your server runs PHP 8.4.1 or later (`php -v`) before you upgrade.
 - Replace any cron or script calling the `import-*.php` shims with `bin/lamb import`.
 - If you deploy with Docker, switch from pulling `ghcr.io/svandragt/lamb` to building the image locally; see `docs/docker.md`.
 - Nothing to install if you already use Composer: `bin/upgrade` uses it. [viv](https://github.com/svandragt/vivace) 0.22.0 or later is an optional, faster alternative that `bin/upgrade` prefers when it finds one. See `docs/upgrading.md`.
@@ -729,7 +736,8 @@ New in this release:
 Initial release!
 
 
-[Unreleased]: https://github.com/svandragt/lamb/compare/0.14.0...HEAD
+[Unreleased]: https://github.com/svandragt/lamb/compare/0.15.0...HEAD
+[0.15.0]: https://github.com/svandragt/lamb/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/svandragt/lamb/compare/0.13.0...0.14.0
 [0.13.0]: https://github.com/svandragt/lamb/compare/0.12.0...0.13.0
 [0.12.0]: https://github.com/svandragt/lamb/compare/0.11.0...0.12.0

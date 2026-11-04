@@ -65,6 +65,7 @@ run after it goes live — keep `/_cron` on a schedule for timely real-time push
 
 ## Related
 
+* [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}) — profile, contact and following files that apps read alongside these feeds
 * [Search Engines]({{ site.baseurl }}{% link search-engines.md %}) — `sitemap.xml` / `robots.txt`; webmaster tools can ingest these feeds too
 * [Cross-posting From Feeds]({{ site.baseurl }}{% link cross-posting.md %}) — consuming external feeds into Lamb
 * [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}) — the `websub_hubs` setting

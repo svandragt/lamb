@@ -223,6 +223,11 @@ function run_feed_cycle(
         },
     );
 
+    // After the drains, so a slow following_url never delays webmention or
+    // WebSub delivery. See src/socialspec.php.
+    global $config;
+    echo \Lamb\SocialSpec\refresh_following($config['following_url'] ?? null, \Lamb\SocialSpec\following_cache_path());
+
     exit('Done');
 }
 
