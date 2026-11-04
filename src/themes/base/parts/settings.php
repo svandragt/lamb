@@ -330,6 +330,11 @@ $list_field = static function (string $name, string $label, string $help, int $r
         <?php if (empty($redirects)) : ?>
             <p>No automatic redirects stored yet.</p>
         <?php else : ?>
+            <p id="redirects-filter" hidden>
+                <label for="redirects-filter-input">Filter redirects</label>
+                <input type="search" id="redirects-filter-input" autocomplete="off">
+            </p>
+            <p id="redirects-filter-status" aria-live="polite"></p>
             <table style="width:100%;border-collapse:collapse;">
                 <thead>
                     <tr>

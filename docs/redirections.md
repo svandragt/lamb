@@ -46,6 +46,10 @@ When you edit a page post and change its `slug:` front-matter:
 *   `/old-slug` → 301 → `/new-slug`
 *   `/new-slug` serves the post directly.
 
+### Find an automatic redirect
+
+The **Redirections** tab at `/settings` lists every automatic redirect. To find one, type part of the old or the new path into the **Filter redirects** box. The list narrows as you type, and a line under the box says how many redirects match. The box needs JavaScript; without it, the tab shows the full list.
+
 ### Removal of an automatic redirect
 
 Publishing a new post whose slug matches an existing redirect's source automatically removes the redirect — the new post takes over that URL.
