@@ -263,6 +263,8 @@ function webmentions_for_post(int $post_id): array
  */
 function extract_meta(string $html): array
 {
+    $html = html_to_utf8($html);
+
     $author = null;
     if (preg_match('/<meta\s+name=["\']author["\']\s+content=["\']([^"\']*)["\']/i', $html, $m)) {
         $author = trim(html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5)) ?: null;
@@ -280,6 +282,31 @@ function extract_meta(string $html): array
     $author = $author === null ? null : cap_text($author, WEBMENTION_AUTHOR_MAX);
 
     return ['author' => $author, 'content' => $content];
+}
+
+/**
+ * Convert a source page to valid UTF-8.
+ *
+ * Honours a charset declared in a `<meta>` tag, because a page that declares
+ * ISO-8859-1 would otherwise be stored as invalid UTF-8. The HTTP headers are
+ * not consulted. A charset mbstring does not know is ignored, and the final
+ * scrub makes the result valid UTF-8 even when the declaration is missing or wrong.
+ *
+ * @param string $html Page markup in any encoding.
+ *
+ * @return string Valid UTF-8 markup.
+ */
+function html_to_utf8(string $html): string
+{
+    if (preg_match('/<meta[^>]+charset\s*=\s*["\']?([\w:.-]+)/i', $html, $m) && strcasecmp($m[1], 'utf-8') !== 0) {
+        try {
+            $html = mb_convert_encoding($html, 'UTF-8', $m[1]) ?: $html;
+        } catch (\ValueError) {
+            // Unknown charset name: fall through to the scrub.
+        }
+    }
+
+    return mb_scrub($html, 'UTF-8');
 }
 
 /**
