@@ -90,6 +90,13 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
         $bean->draft = 1;
     }
 
+    // The edit form posts the body back, and parse_bean() reads the draft state
+    // from its front matter, so a feed draft without the line is published by its
+    // first edit (#924).
+    if ($feed_item && $bean->draft) {
+        $bean->body = set_frontmatter_key($bean->body, 'draft', true);
+    }
+
     return $bean;
 }
 
@@ -503,7 +510,7 @@ function slugify(string $text): string
  * the single place that assembles a fresh front-matter block from scratch
  * (used by Micropub create/update).
  *
- * @param array<string, string|list<string>> $matter Ordered front-matter key/value pairs.
+ * @param array<string, string|bool|list<string>> $matter Ordered front-matter key/value pairs.
  *        A list value (e.g. a multi-target `in-reply-to`, #583) dumps as a YAML list.
  * @param string $content The post content to place after the fence.
  * @return string The assembled body.
@@ -605,12 +612,15 @@ function set_matter(string $body, string $key, string $value, bool $append = tru
  * existing single-target caller is unaffected; two or more entries are
  * written as a YAML list, the same shape parse_matter() already accepts.
  *
+ * A bool is dumped as a YAML bool (`draft: true`); as a string it would be quoted
+ * (`draft: 'true'`).
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set, in its hyphenated spelling.
- * @param string|list<string> $value The value(s) to write, or '' / [] to remove the key.
+ * @param string|bool|list<string> $value The value(s) to write, or '' / [] to remove the key.
  * @return string The body with its front-matter key set.
  */
-function set_frontmatter_key(string $body, string $key, string|array $value): string
+function set_frontmatter_key(string $body, string $key, string|bool|array $value): string
 {
     $body = normalize_frontmatter_fence($body);
 
@@ -625,11 +635,11 @@ function set_frontmatter_key(string $body, string $key, string|array $value): st
         if (count($value) <= 1) {
             $value = $value[0] ?? '';
         }
-    } else {
+    } elseif (is_string($value)) {
         $value = trim($value);
     }
     // The array branch above always collapses to a string when 0 or 1 entries
-    // survive filtering, so $value here is either a string or a non-empty list.
+    // survive filtering, so $value here is a string, a bool or a non-empty list.
     $is_empty = $value === '';
     [$yaml, $content] = split_frontmatter($body);
 

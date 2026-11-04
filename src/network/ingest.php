@@ -9,8 +9,10 @@ use SimplePie\Item as SimplePieItem;
 
 use function Lamb\Post\build_matter;
 use function Lamb\Post\finalize_slug;
+use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\save;
+use function Lamb\Post\set_frontmatter_key;
 
 /**
  * Decides whether a single feed item is created, updated, or skipped, keyed on
@@ -149,6 +151,40 @@ function create_item(SimplePieItem|JsonFeedItem $item, string $name): bool
     }
 
     return true;
+}
+
+/**
+ * One-time migration: adds `draft: true` to the front matter of feed drafts
+ * stored before ingestion wrote it there (#924). Without the line the edit form
+ * shows a body with no draft state, and saving it publishes the post.
+ *
+ * Idempotent: a feed draft whose front matter already says `draft: true` is
+ * skipped, so a second run finds nothing. Runs only from `bin/lamb migrate`.
+ * `updated` is left alone, because ingest_item() compares it with the feed's
+ * date to decide whether to re-sync.
+ *
+ * @param bool $dry_run When true, report the count but write nothing.
+ * @return int Number of feed drafts updated (or that dry-run would update).
+ * @throws SQL When a write fails.
+ */
+function migrate_feed_drafts(bool $dry_run = false): int
+{
+    $count = 0;
+    foreach (R::find('post', " feed_name IS NOT NULL AND feed_name != '' AND draft = 1 ") as $post) {
+        $body = (string) $post->body;
+        if (!empty(parse_matter($body)['draft'])) {
+            continue;
+        }
+
+        $count++;
+        if ($dry_run) {
+            continue;
+        }
+        $post->body = set_frontmatter_key($body, 'draft', true);
+        R::store($post);
+    }
+
+    return $count;
 }
 
 /**
