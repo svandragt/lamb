@@ -47,6 +47,7 @@ class FeedDraftEditTest extends TestCase
     {
         $result = $this->submitEdit($this->ingestedDraftBody(), static fn(string $body): string => $body . "\n\nTidied.");
 
+        $this->assertStringContainsString('Tidied.', $result['body']);
         $this->assertSame(1, $result['draft']);
         $this->assertStringContainsString('draft: true', $result['body']);
         $this->assertSame(0, $result['outbox']);
@@ -60,6 +61,7 @@ class FeedDraftEditTest extends TestCase
         );
 
         $this->assertSame(0, $result['draft']);
+        $this->assertStringNotContainsString('draft:', $result['body']);
     }
 
     /**
