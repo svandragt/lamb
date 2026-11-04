@@ -1014,15 +1014,23 @@ function post_has_slug(string $lookup): string|null
 
 /**
  * The published post slugged `home`, which `/` shows above the timeline, or
- * null when there is none. A draft, scheduled or trashed one does not count.
+ * null when there is none. A draft, scheduled or trashed one does not count,
+ * unless the request carries its valid preview token (like any permalink).
  *
+ * @param string|null $preview_token The supplied preview token (e.g. $_GET['preview']).
  * @return OODBBean|null The home post bean.
  */
-function find_home_post(): ?OODBBean
+function find_home_post(?string $preview_token = null): ?OODBBean
 {
     $visible = visible_clause();
+    $home    = R::findOne('post', ' slug = ? AND ' . $visible['sql'], array_merge([HOME_SLUG], $visible['params']));
+    if ($home !== null || $preview_token === null) {
+        return $home;
+    }
 
-    return R::findOne('post', ' slug = ? AND ' . $visible['sql'], array_merge([HOME_SLUG], $visible['params']));
+    $unpublished = R::findOne('post', ' slug = ? ', [HOME_SLUG]);
+
+    return $unpublished !== null && preview_token_valid($unpublished, $preview_token) ? $unpublished : null;
 }
 
 /**

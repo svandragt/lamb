@@ -71,6 +71,10 @@ class HomePageCest
         // The home post is a page, not a timeline entry.
         $I->seeNumberOfElements('article', 1);
         $I->dontSeeElement('//article[contains(., "' . self::HOME_BODY . '")]');
+        // It carries the id that task-list toggles read, and the microformats of a permalink.
+        $I->seeElement('.home-post.h-entry[data-post-id]');
+        $I->seeElement('.home-post .e-content');
+        $I->seeElement('.home-post .u-url[href="/"]');
     }
 
     public function homeUrlRedirectsToTheRoot(AcceptanceTester $I): void
@@ -104,6 +108,23 @@ class HomePageCest
         // Nothing sits at the root to redirect to, so /home still shows the timeline.
         $I->amOnPage('/home');
         $I->seeCurrentUrlEquals('/home');
+        $I->see(self::TIMELINE_BODY);
+    }
+
+    public function previewLinkShowsADraftHomePost(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $this->createPost($I, self::TIMELINE_BODY);
+        $this->createHomePost($I, self::HOME_BODY, "draft: true\n");
+        $I->amOnPage('/drafts');
+        $href = $I->grabAttributeFrom('//article[contains(., "' . self::HOME_BODY . '")]//a[contains(@href, "?preview=")]', 'href');
+        $I->amOnPage('/logout');
+
+        $I->amOnPage('/');
+        $I->dontSee(self::HOME_BODY);
+
+        $I->amOnUrl($href);
+        $I->see(self::HOME_BODY, '.home-post');
         $I->see(self::TIMELINE_BODY);
     }
 

@@ -138,6 +138,21 @@ class SitemapTest extends TestCase
         $this->assertNotContains(ROOT_URL . '/home', $locs);
     }
 
+    public function testHomePostTakesNoPlaceInThePostCountOrThePages(): void
+    {
+        // The root entry stands for the home post, so a site with one post and a
+        // home post has two entries (root + post) and still fits a cap of 2.
+        $this->makePost(['slug' => 'home', 'updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'a', 'updated' => '2026-06-02 09:00:00']);
+
+        $this->assertSame(1, count_visible_posts());
+        $this->assertSame(1, sitemap_page_count(count_visible_posts() + 1, 2));
+        $this->assertSame(
+            [ROOT_URL . '/', ROOT_URL . '/a'],
+            array_column(sitemap_urls(ROOT_URL, 1, 2), 'loc')
+        );
+    }
+
     public function testRootEntryLastmodFollowsAHomePostThatIsNewest(): void
     {
         $this->makePost(['updated' => '2026-06-01 09:00:00']);

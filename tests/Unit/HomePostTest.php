@@ -216,6 +216,30 @@ class HomePostTest extends TestCase
         $this->assertArrayNotHasKey('home_post', respond_home());
     }
 
+    public function testRespondHomeShowsAnUnpublishedHomePostForItsPreviewToken(): void
+    {
+        $home = $this->makePost(['body' => 'Welcome', 'slug' => 'home', 'draft' => 1]);
+        $home->preview_token         = 'preview-secret';
+        $home->preview_token_expires = date('Y-m-d H:i:s', time() + 3600);
+        R::store($home);
+
+        $_GET['preview'] = 'preview-secret';
+
+        $this->assertSame($home->id, respond_home()['home_post']->id);
+    }
+
+    public function testRespondHomeIgnoresAWrongPreviewToken(): void
+    {
+        $home = $this->makePost(['body' => 'Welcome', 'slug' => 'home', 'draft' => 1]);
+        $home->preview_token         = 'preview-secret';
+        $home->preview_token_expires = date('Y-m-d H:i:s', time() + 3600);
+        R::store($home);
+
+        $_GET['preview'] = 'wrong';
+
+        $this->assertArrayNotHasKey('home_post', respond_home());
+    }
+
     // find_post_by_path and permalink
 
     public function testFindPostByPathResolvesTheRootToTheHomePost(): void

@@ -39,7 +39,7 @@ function respond_home(): array
         redirect_created();
     }
 
-    $home = find_home_post();
+    $home = find_home_post(request_string($_GET['preview'] ?? null));
     if ($home !== null && requested_path() === HOME_SLUG) {
         header('Location: /', true, 301);
         die();

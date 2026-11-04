@@ -71,7 +71,9 @@ function sitemap_date(?string $datetime): ?string
 function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP_MAX_URLS): array
 {
     $visible = \Lamb\visible_clause();
-    $sql = 'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'ORDER BY updated DESC';
+    // The home entry added below stands for the home post, which has no row of its own.
+    $sql = 'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'AND' . \Lamb\SQL_NOT_HOME
+        . 'ORDER BY updated DESC';
     $params = $visible['params'];
 
     if ($page >= 1) {
@@ -91,8 +93,7 @@ function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP
     $rows = R::getAll($sql, $params);
 
     $entries = [];
-    // The home entry added below owns the root, which is also the home post's URL.
-    $seen = [$root . '/' => true];
+    $seen = [];
     foreach ($rows as $row) {
         $loc = $root . \Lamb\post_path((string) $row['slug'], (int) $row['id']);
         if (isset($seen[$loc])) {
@@ -105,14 +106,13 @@ function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP
         ];
     }
 
-    // Home page first; its lastmod tracks the freshest post (null when empty).
-    // Only pages 0 (everything) and 1 (the first slice) carry it — its rows
-    // start at offset 0, so rows[0] is still the newest post overall, including
-    // a home post, which has no entry of its own.
+    // Home page first; its lastmod tracks the freshest post, the home post
+    // included (null when empty). Only pages 0 (everything) and 1 (the first
+    // slice) carry it.
     if ($page <= 1) {
         array_unshift($entries, [
             'loc'     => $root . '/',
-            'lastmod' => sitemap_date((string) ($rows[0]['updated'] ?? '')),
+            'lastmod' => sitemap_date(newest_visible_update()),
         ]);
     }
 
@@ -121,8 +121,9 @@ function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP
 
 /**
  * Counts the publicly visible posts a sitemap would list (excluding the home
- * page entry sitemap_urls() prepends) — the same visible_clause() allow-list,
- * read as one row instead of the whole list.
+ * page entry sitemap_urls() prepends, which also stands for the home post) —
+ * the same visible_clause() allow-list, read as one row instead of the whole
+ * list.
  *
  * @return int
  */
@@ -130,7 +131,7 @@ function count_visible_posts(): int
 {
     $visible = \Lamb\visible_clause();
     return (int) R::getCell(
-        'SELECT COUNT(*) FROM post WHERE ' . $visible['sql'],
+        'SELECT COUNT(*) FROM post WHERE ' . $visible['sql'] . 'AND' . \Lamb\SQL_NOT_HOME,
         $visible['params']
     );
 }
