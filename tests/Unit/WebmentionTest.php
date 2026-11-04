@@ -390,6 +390,31 @@ class WebmentionTest extends TestCase
         $this->assertSame('Café', $meta['content']);
     }
 
+    public function testExtractMetaIgnoresCharsetTextInsideAnotherMetaAttribute(): void
+    {
+        $html = '<meta name="description" content="set charset=windows-1252"><title>Café</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
+    public function testExtractMetaKeepsValidUtf8DespiteAWrongCharsetDeclaration(): void
+    {
+        $html = '<meta charset="iso-8859-1"><title>Café</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
+    public function testExtractMetaIgnoresCharsetInsideAnAttributeValueWhenPageIsLatin1(): void
+    {
+        $html = '<meta name="description" content="charset=utf-8"><meta charset="iso-8859-1">'
+            . '<title>Caf' . "\xE9" . '</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
+    public function testExtractMetaIgnoresAMetaTagInsideAnHtmlComment(): void
+    {
+        $html = '<!-- <meta charset="shift_jis"> --><meta charset="iso-8859-1"><title>Caf' . "\xE9" . '</title>';
+        $this->assertSame('Café', extract_meta($html)['content']);
+    }
+
     // discover_endpoint -----------------------------------------------------
 
     public function testDiscoverEndpointPrefersLinkHeader(): void

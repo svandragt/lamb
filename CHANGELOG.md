@@ -9,6 +9,12 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Fixed
+
+- A webmention source page that is already UTF-8 is no longer re-decoded as another encoding, so a stale `charset` declaration, or `charset=` text inside a `<meta>` description, no longer turns "Café" into "CafÃ©".
+- Restore reports a damaged `manifest.json` as damaged instead of "Archive has no manifest.json".
+- The `/.well-known/about.md` AboutSpec file no longer turns root-relative links inside code spans, fenced code blocks or indented code blocks into absolute URLs, so code samples stay as written.
+
 ## [0.15.0] - 2026-11-04
 
 ### Security

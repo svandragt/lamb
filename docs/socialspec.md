@@ -35,7 +35,7 @@ I write short notes about…
 
 `about.md` serves the page's Markdown with its title as a heading. The
 `summary` comes from the page's `summary` (or `description`), and falls back to
-`site_description`. Links and images that start with `/` are made absolute.
+`site_description`. Links and images that start with `/` are made absolute, except inside code.
 Adding the page as a [menu item]({{ site.baseurl }}{% link menu-items.md %})
 (`About = about`) keeps it out of your timeline.
 

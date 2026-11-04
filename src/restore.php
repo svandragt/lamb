@@ -330,11 +330,15 @@ function safe_entry_path(string $name): ?string
  *
  * @param callable(string):?string $reader
  * @return array<string, mixed>
- * @throws RuntimeException When it is missing, unparseable, or a format this importer does not read.
+ * @throws RuntimeException When it is missing, damaged, unparseable, or a format this importer does not read.
  */
 function read_manifest(callable $reader): array
 {
-    $json = read_entry($reader, 'manifest.json');
+    $damaged = false;
+    $json = read_entry($reader, 'manifest.json', $damaged);
+    if ($damaged) {
+        throw new RuntimeException('manifest.json in the archive is damaged and cannot be read.');
+    }
     if ($json === null) {
         throw new RuntimeException('Archive has no manifest.json — is this a Lamb export?');
     }
