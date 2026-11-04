@@ -9,11 +9,14 @@ use Lamb\Config;
 use Lamb\Security;
 use RedBeanPHP\R;
 
+use function Lamb\find_home_post;
 use function Lamb\Http\request_string;
+use function Lamb\Http\requested_path;
 use function Lamb\Post\load_posts_in_order;
 use function Lamb\Post\post_ids_by_tag;
 use function Lamb\Post\split_reply_targets;
 
+use const Lamb\HOME_SLUG;
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
 use const Lamb\SQL_IS_SCHEDULED;
@@ -22,7 +25,12 @@ use const ROOT_URL;
 /**
  * Retrieves and prepares the homepage data, including paginated posts and site title.
  *
- * @return array<string, mixed> The prepared homepage data, including posts, pagination details, and the site title.
+ * A published post slugged `home` is the page at `/`: its URL is `/`, so `/home`
+ * redirects there, and the first page of the timeline carries it as `home_post`.
+ * Later pages (/page/N) are plain timeline.
+ *
+ * @return array<string, mixed> The prepared homepage data, including posts, pagination details, the site title and,
+ *                              on the first page, the `home_post` bean when one is published.
  */
 function respond_home(): array
 {
@@ -31,9 +39,21 @@ function respond_home(): array
         redirect_created();
     }
 
-    $public = public_posts_clause();
+    $home = find_home_post();
+    if ($home !== null && requested_path() === HOME_SLUG) {
+        header('Location: /', true, 301);
+        die();
+    }
 
-    return listing_data($config['site_title'] ?? '', 'created DESC', $public['sql'], $public['params']);
+    $public = public_posts_clause();
+    $data   = listing_data($config['site_title'] ?? '', 'created DESC', $public['sql'], $public['params']);
+
+    if ($home !== null && (int) ($_GET['page'] ?? 1) < 2) {
+        render_stale_posts([$home]);
+        $data['home_post'] = $home;
+    }
+
+    return $data;
 }
 
 /**

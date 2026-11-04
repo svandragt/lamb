@@ -452,6 +452,13 @@ main > ul {
 
 main > ul > li { margin: 0; padding: 0; }
 
+/* The home post is a page above the timeline, set apart from it by a rule. */
+.home-post {
+    margin: 0 0 var(--s-7);
+    padding-bottom: var(--s-6);
+    border-bottom: 1px solid var(--rule);
+}
+
 /* Post — the typographic signature.
    Timestamp hangs in the left margin, body wraps around it.
    Equal balance whether or not a title is present. */

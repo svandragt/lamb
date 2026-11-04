@@ -128,6 +128,24 @@ class SitemapTest extends TestCase
         $this->assertSame(date('c', strtotime('2026-06-02 09:00:00')), $entry['lastmod']);
     }
 
+    public function testHomePostIsListedOnceAsTheRoot(): void
+    {
+        // A post slugged `home` lives at `/`, which the home entry already lists.
+        $this->makePost(['slug' => 'home']);
+
+        $locs = $this->locs();
+        $this->assertCount(1, array_keys($locs, ROOT_URL . '/', true));
+        $this->assertNotContains(ROOT_URL . '/home', $locs);
+    }
+
+    public function testRootEntryLastmodFollowsAHomePostThatIsNewest(): void
+    {
+        $this->makePost(['updated' => '2026-06-01 09:00:00']);
+        $this->makePost(['slug' => 'home', 'updated' => '2026-06-05 09:00:00']);
+
+        $this->assertSame(date('c', strtotime('2026-06-05 09:00:00')), sitemap_urls()[0]['lastmod']);
+    }
+
     public function testEntryCarriesIso8601Lastmod(): void
     {
         $this->makePost(['updated' => '2026-06-01 09:30:00']);

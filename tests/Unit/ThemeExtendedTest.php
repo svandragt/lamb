@@ -24,6 +24,7 @@ class ThemeExtendedTest extends TestCase
         $seed = R::dispense('post');
         $seed->draft = 0;
         $seed->deleted = 0;
+        $seed->slug = null;
         $seed->created = date('Y-m-d H:i:s');
         R::store($seed);
         R::exec("DELETE FROM post");

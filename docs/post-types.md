@@ -83,6 +83,24 @@ Front-matter keys are forgiving: they are matched case-insensitively, and unders
 
 > **iOS note:** iOS "Smart Punctuation" rewrites a typed `---` into em/en dashes (for example `—-`). Lamb recognises a mangled opening and closing fence and restores it to `---` automatically — whether you add the front-matter when first writing the post or by editing it later — so front-matter still works from an iPhone or iPad. If you'd rather type plain dashes everywhere, turn the feature off under _Settings → General → Keyboard → Smart Punctuation_.
 
+### Home page
+
+To show a page at the top of your home page, publish a page post with the slug `home`:
+
+```markdown
+---
+slug: home
+---
+
+# Hello, I'm John
+
+I write about small web tools. The latest posts are below.
+```
+
+Lamb shows this post above your timeline at `/`. The post is a page, so it does not appear in the timeline, the feeds or search results. Its permalink is `/`, and a visit to `/home` redirects there. Only the first page of the timeline shows it, not `/page/2` onwards.
+
+Unlike other built-in route names, `home` keeps its slug, so the post is not renamed. A draft, scheduled or deleted `home` post is not shown, and `/` shows the timeline on its own. To remove the home page, unpublish or delete the post.
+
 # System types
 
 The following sections of the site are special:

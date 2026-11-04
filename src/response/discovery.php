@@ -91,7 +91,8 @@ function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP
     $rows = R::getAll($sql, $params);
 
     $entries = [];
-    $seen = [];
+    // The home entry added below owns the root, which is also the home post's URL.
+    $seen = [$root . '/' => true];
     foreach ($rows as $row) {
         $loc = $root . \Lamb\post_path((string) $row['slug'], (int) $row['id']);
         if (isset($seen[$loc])) {
@@ -106,11 +107,12 @@ function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP
 
     // Home page first; its lastmod tracks the freshest post (null when empty).
     // Only pages 0 (everything) and 1 (the first slice) carry it — its rows
-    // start at offset 0, so entries[0] is still the newest post overall.
+    // start at offset 0, so rows[0] is still the newest post overall, including
+    // a home post, which has no entry of its own.
     if ($page <= 1) {
         array_unshift($entries, [
             'loc'     => $root . '/',
-            'lastmod' => $entries[0]['lastmod'] ?? null,
+            'lastmod' => sitemap_date((string) ($rows[0]['updated'] ?? '')),
         ]);
     }
 

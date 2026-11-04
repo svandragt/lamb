@@ -15,6 +15,10 @@ const SQL_IS_DRAFT   = ' draft = 1 AND ' . SQL_NOT_DELETED;
 const SQL_IS_DELETED = ' deleted = 1 ';
 // SQL fragment selecting posts that are scheduled for the future (and not draft/deleted).
 const SQL_IS_SCHEDULED = ' created > ? AND ' . SQL_NOT_DRAFT . ' AND ' . SQL_NOT_DELETED;
+// The slug of the post shown above the timeline at `/`. Its SQL fragment keeps
+// slug-less rows, which `slug != 'home'` alone would drop (NULL compares as unknown).
+const HOME_SLUG = 'home';
+const SQL_NOT_HOME = " (slug IS NULL OR slug != '" . HOME_SLUG . "') ";
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
@@ -330,6 +334,9 @@ function permalink_path(OODBBean $bean): string
  */
 function post_path(string $slug, int $id): string
 {
+    if ($slug === HOME_SLUG) {
+        return '/';
+    }
     if ($slug) {
         return '/' . encode_path_segment($slug);
     }
@@ -1006,12 +1013,26 @@ function post_has_slug(string $lookup): string|null
 }
 
 /**
+ * The published post slugged `home`, which `/` shows above the timeline, or
+ * null when there is none. A draft, scheduled or trashed one does not count.
+ *
+ * @return OODBBean|null The home post bean.
+ */
+function find_home_post(): ?OODBBean
+{
+    $visible = visible_clause();
+
+    return R::findOne('post', ' slug = ? AND ' . $visible['sql'], array_merge([HOME_SLUG], $visible['params']));
+}
+
+/**
  * Resolves a permalink path to the post it points at.
  *
- * Recognises the two permalink shapes the app mints: `/status/<id>` for
- * status posts and `/<slug>` for page-like posts. Shared by the Micropub and
- * Webmention endpoints, which both map externally supplied URLs back to posts
- * (each applies its own host policy before/after calling this).
+ * Recognises the permalink shapes the app mints: `/status/<id>` for status
+ * posts, `/<slug>` for page-like posts and `/` for the home post. Shared by
+ * the Micropub and Webmention endpoints, which both map externally supplied
+ * URLs back to posts (each applies its own host policy before/after calling
+ * this).
  *
  * @param string $path The URL path (e.g. from parse_url(..., PHP_URL_PATH)).
  * @return OODBBean|null The matching post bean, or null when none exists.
@@ -1026,11 +1047,9 @@ function find_post_by_path(string $path): ?OODBBean
     // The path comes from a URL, so its slug is percent-encoded (permalink_path()
     // encodes it); the column holds the decoded text.
     $slug = rawurldecode(trim($path, '/'));
-    if ($slug !== '') {
-        return R::findOne('post', ' slug = ? ', [$slug]);
-    }
 
-    return null;
+    // The root has no slug of its own: it is the home post's permalink.
+    return R::findOne('post', ' slug = ? ', [$slug === '' ? HOME_SLUG : $slug]);
 }
 
 /**
