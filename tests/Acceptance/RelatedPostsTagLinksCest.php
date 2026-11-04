@@ -28,9 +28,7 @@ class RelatedPostsTagLinksCest
 
     private function setTheme(AcceptanceTester $I, string $theme): void
     {
-        $I->amOnPage('/settings');
-        $I->fillField('ini_text', "theme = $theme\n");
-        $I->click('Save settings');
+        $I->haveStoredSettings("theme = $theme\n");
     }
 
     private function createPost(AcceptanceTester $I, string $contents): void

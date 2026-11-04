@@ -290,7 +290,7 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 `ROOT_DIR` is `src/`. So `THEME_DIR` for a theme named `news` resolves to `src/themes/news/`.
 
-To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
+To activate a theme, pick it in the Theme field at `/settings` (the list is the directories under `src/themes/`), or set `theme = news` in the stored INI.
 
 New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. An install with no `theme` key set falls back to `theme = base` via `Theme\resolve_theme()` at read time — nothing is rewritten in storage.
 
@@ -344,7 +344,7 @@ index.php
 | `tag` | `posts`, `pagination`, `title`, `intro`, `feed_url` | — |
 | `search` | `posts`, `pagination`, `title`, `intro` | — |
 | `drafts` | `posts`, `pagination`, `title` | — |
-| `settings` | — | `ini_text` (on failed save) |
+| `settings` | `title`, `ini_text` (the stored INI, which the form is prefilled from via `Config\settings_form_prefill()`), `feed_statuses`, `redirects` | `form_values` (the typed fields, on a refused save) |
 | `404` | `action` | — |
 
 **`$data['posts']`** is an array of RedBeanPHP `OODBBean` objects. Each bean exposes:

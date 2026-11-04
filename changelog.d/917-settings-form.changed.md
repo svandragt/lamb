@@ -1,0 +1,1 @@
+- `/settings` is a form with labelled fields instead of an INI text box. Site title, site URL and author name are required. Comments in the stored settings are not kept after the first save.

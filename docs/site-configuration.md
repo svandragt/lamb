@@ -10,8 +10,18 @@ Lamb does not need a configuration file, it will run happily without it. It does
 ## `/settings` is the normal path
 
 Edit configuration at `/settings` (login required) once the site is running.
-Every setting on that page is stored as INI text in the database, and that
-stored copy is what Lamb reads on every request after the first.
+The Configuration tab is a form with a labelled field for each current setting.
+Settings being phased out, such as `posts_per_page`, have no field: saving the
+form keeps them as they are. Site title, site URL and author name are required.
+Menu, footer, feed, profile, syndication and redirection links go in a box
+each, one entry per line. The help under each box shows its format: for example
+`label = URL` for menu links, `profile URL = name` for syndication targets and
+`old-slug = destination` for redirections.
+
+Lamb stores the settings as INI text in the database, and that stored copy is
+what Lamb reads on every request after the first. Saving the form rewrites that
+text: settings the form does not show stay as they are, but comments in the
+stored text are not kept. The sections below describe the stored text.
 
 On the very first request, before anything is stored in the database, Lamb
 uses the built-in defaults shown below as the initial configuration.
@@ -156,8 +166,9 @@ entry in it, so keep them all at the top of the file.
 
 ## Site URL
 
-`site_url` is the canonical address of your site, e.g. `https://example.com`. It is
-optional for a plain blog, but worth setting:
+`site_url` is the canonical address of your site, e.g. `https://example.com`. The
+settings form requires it before it saves, and a site that never saved the form
+runs without it. Setting it matters because:
 
 * **Micropub needs it.** IndieAuth tokens are issued for an identity, and Lamb has
   to know its own identity to tell whether a token belongs to you. Without
