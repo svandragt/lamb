@@ -836,8 +836,9 @@ function settings_form_value(array $post, string $key, bool $trim = true): strin
  * Blank lines and `;` comment lines are skipped, and the line splits at its
  * first `=`, so a value may contain more of them (`/search?q=a`). A line is
  * reported, and left out of the entries, when it has no `=`, no label, a label
- * already used above it, or a label the INI file cannot hold (a `[`, `"`, `&`
- * and so on, which would fail to parse or turn the entry into a list).
+ * already used above it, a label the INI file cannot hold (a `[`, `"`, `&`
+ * and so on, which would fail to parse or turn the entry into a list), or a
+ * NUL byte.
  *
  * @param string $text The textarea content.
  * @return array{entries: array<string, string>, errors: list<string>} The entries in order, and one
@@ -855,6 +856,11 @@ function parse_section_text(string $text): array
         }
 
         $number = $index + 1;
+        if (str_contains($line, "\0")) {
+            $errors[] = "line {$number}: it contains a NUL byte, which cannot be saved.";
+            continue;
+        }
+
         $split = strpos($line, '=');
         if ($split === false) {
             $errors[] = "line {$number}: `{$line}` needs a label, an `=` and a value, like `label = value`.";

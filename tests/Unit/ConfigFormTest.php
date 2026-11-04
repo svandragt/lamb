@@ -342,6 +342,19 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('line 3', $errors[0]);
     }
 
+    public function testSettingsFormErrorsRejectsANulByteInASectionLine(): void
+    {
+        $post = $this->post(['menu_items' => "Home = /\0evil\nAb\0out = about"]);
+
+        $errors = settings_form_errors($post);
+
+        $this->assertCount(2, $errors);
+        $this->assertStringContainsString('line 1', $errors[0]);
+        $this->assertStringContainsString('line 2', $errors[1]);
+        // The handler never reaches form_to_ini() with these, but it must not throw if it did.
+        $this->assertSame([], parse_ini_safe(form_to_ini($post, ''))['menu_items']);
+    }
+
     public function testSettingsFormErrorsRejectsASingleValueSpanningLines(): void
     {
         $errors = settings_form_errors($this->post(['site_description' => "one\ntwo"]));
