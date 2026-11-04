@@ -45,6 +45,57 @@ class Acceptance extends Module
      */
     public function grabPostColumn(int $id, string $column): mixed
     {
+        return $this->readFromDatabaseCopy(fn (\PDO $pdo) => $this->fetchPostColumn($pdo, $id, $column));
+    }
+
+    /**
+     * Asserts the settings INI the server has stored contains the text, read from a copy of the database.
+     *
+     * A save through the settings form rewrites the INI, so a test that checks what
+     * it kept (an unknown key, a deprecated one) has to look at the stored text itself.
+     */
+    public function seeStoredSettingsContain(string $needle): void
+    {
+        $ini = (string) $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query('SELECT value FROM "option" WHERE name = \'site_config_ini\'')->fetchColumn()
+        );
+        $this->assertStringContainsString($needle, $ini);
+    }
+
+    /**
+     * Replaces the stored settings INI, straight in the SQLite file the test server reads.
+     *
+     * Some settings (posts_per_page, a key the form does not know) have no field
+     * in the /settings form, so a test that needs them seeds them here. Make a
+     * request first, so the server has created the database. The connection is
+     * closed before returning, which checkpoints the WAL and removes the sidecar
+     * files, so the server (which may run as another user) can open the file next.
+     */
+    public function haveStoredSettings(string $ini): void
+    {
+        $db = dirname(__DIR__) . '/Data/lamb.db';
+        $this->assertFileExists($db, 'Expected the acceptance database to exist: make a request before seeding settings');
+
+        $pdo = new \PDO('sqlite:' . $db, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        try {
+            $values = [$ini, date('Y-m-d H:i:s'), 'site_config_ini'];
+            $update = $pdo->prepare('UPDATE "option" SET value = ?, updated = ? WHERE name = ?');
+            $update->execute($values);
+            if ($update->rowCount() === 0) {
+                $pdo->prepare('INSERT INTO "option" (value, updated, name) VALUES (?, ?, ?)')->execute($values);
+            }
+        } finally {
+            $pdo = null;
+        }
+    }
+
+    /**
+     * Runs $read against a throwaway copy of the acceptance database.
+     *
+     * @param callable(\PDO): mixed $read Receives a connection to the copy.
+     */
+    private function readFromDatabaseCopy(callable $read): mixed
+    {
         $db = dirname(__DIR__) . '/Data/lamb.db';
         $this->assertFileExists($db, 'Expected the acceptance database to exist');
 
@@ -54,7 +105,7 @@ class Acceptance extends Module
         $this->assertTrue(copy($db, $copy), 'Expected to copy the acceptance database');
         try {
             $pdo = new \PDO('sqlite:' . $copy, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
-            return $this->fetchPostColumn($pdo, $id, $column);
+            return $read($pdo);
         } finally {
             $pdo = null;
             @unlink($copy);

@@ -84,23 +84,17 @@ class ConditionalRequestCest
         $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
         $I->click('Log in');
         $I->amOnPage('/settings');
-        $originalIni = $I->grabValueFrom('textarea[name=ini_text]');
-        $I->fillField('ini_text', "site_title = Changed Title\n");
+        $I->fillField('site_title', 'Changed Title');
+        // Required on every save, and empty on a fresh install.
+        $I->fillField('site_url', 'http://localhost');
+        $I->fillField('author_name', 'Test Author');
         $I->click('Save settings');
+        $I->see('Settings saved successfully.');
         $I->amOnPage('/logout');
 
         // The validator the client held before the edit must no longer match.
         $I->haveHttpHeader('If-None-Match', $oldEtag);
         $I->amOnPage('/');
         $I->seeResponseCodeIs(200);
-
-        // Restore the original settings so later tests see the default title.
-        $I->amOnPage('/login');
-        $I->fillField('password', $_ENV['LAMB_TEST_PASSWORD']);
-        $I->click('Log in');
-        $I->amOnPage('/settings');
-        $I->fillField('ini_text', $originalIni);
-        $I->click('Save settings');
-        $I->amOnPage('/logout');
     }
 }

@@ -580,6 +580,24 @@ class ConfigFormTest extends TestCase
         $this->assertNotContains('Settings saved successfully.', $result['flash']);
     }
 
+    public function testRespondSettingsRefusesAPostThatCarriesNoFormMarker(): void
+    {
+        $stored = "site_title = Kept\nposts_per_page = 5\n";
+
+        $result = $this->runSettingsPost(['ini_text' => "site_title = Overwritten\n"], $stored);
+
+        $this->assertSame($stored, $result['ini']);
+        $this->assertStringContainsString('Settings not saved', implode("\n", $result['flash']));
+    }
+
+    public function testRespondSettingsResetStillRestoresTheDefaults(): void
+    {
+        $result = $this->runSettingsPost(['action' => 'reset'], "[unclosed\n=== not ini ===\n");
+
+        $this->assertSame(get_default_ini_text(), $result['ini']);
+        $this->assertContains('Settings reset to defaults.', $result['flash']);
+    }
+
     /**
      * Runs respond_settings() with a logged-in POST in a subprocess.
      *

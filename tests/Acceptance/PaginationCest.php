@@ -24,10 +24,9 @@ class PaginationCest
     {
         $this->login($I);
 
-        // Force a small page size so three posts span two pages.
-        $I->amOnPage('/settings');
-        $I->fillField('ini_text', "theme = base\nposts_per_page = 2\n");
-        $I->click('Save settings');
+        // Force a small page size so three posts span two pages. posts_per_page
+        // has no field in the settings form (it is deprecated), so seed it.
+        $I->haveStoredSettings("theme = base\nposts_per_page = 2\n");
 
         foreach (['First post', 'Second post', 'Third post'] as $body) {
             $I->amOnPage('/');

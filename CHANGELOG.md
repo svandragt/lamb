@@ -9,6 +9,10 @@ the code. At release, that block becomes the version block (see `RELEASING.md`).
 
 ## [Unreleased]
 
+### Changed
+
+- `/settings` is a form with labelled fields instead of an INI text box. Site title, site URL and author name are required. Comments in the stored settings are not kept after the first save.
+
 ### Deprecated
 
 Saving the settings now tells you which of these keys your configuration still uses. Each one stops working in 0.17.

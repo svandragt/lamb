@@ -824,6 +824,62 @@ function settings_form_errors(array $post, string $current_ini = ''): array
 }
 
 /**
+ * Returns the values the /settings form shows.
+ *
+ * They come from the stored INI, not from load(): the effective config fills an
+ * unset author with IDENTITY_FALLBACK, and a form prefilled with that
+ * placeholder would save it as the author's own. A field the stored INI lacks is
+ * empty, except `timezone` (UTC, as apply_timezone() falls back to) and the
+ * `feeds_draft` checkbox (on, as its reader defaults to). `theme` is returned as
+ * stored: the template resolves an unset one to the theme in use. Deprecated
+ * keys are not offered.
+ *
+ * Fields in $posted, a refused submission (see respond_settings()), replace the
+ * stored ones, even when posted empty. A submission without `feeds_draft` means
+ * the box was unchecked.
+ *
+ * @param string               $stored_ini The INI text currently stored.
+ * @param array<string, mixed> $posted     The refused submission, or [] to show the stored settings.
+ * @return array{fields: array<string, string>, feeds_draft: bool} The text of every field and
+ *     section textarea (one `label = value` line per entry), and whether the checkbox is checked.
+ */
+function settings_form_prefill(string $stored_ini, array $posted = []): array
+{
+    $stored = parse_ini_safe($stored_ini);
+    $fields = [];
+
+    foreach (SETTINGS_FORM_FIELDS as $key) {
+        $fields[$key] = array_key_exists($key, $posted)
+            ? settings_form_value($posted, $key)
+            : (is_scalar($stored[$key] ?? null) ? trim((string) $stored[$key]) : '');
+    }
+    if (!in_array($fields['timezone'], \DateTimeZone::listIdentifiers(), true)) {
+        $fields['timezone'] = 'UTC';
+    }
+
+    foreach (SETTINGS_FORM_SECTIONS as $name) {
+        if (array_key_exists($name, $posted)) {
+            $fields[$name] = settings_form_value($posted, $name, false);
+            continue;
+        }
+        $lines = [];
+        foreach (normalize_config_section($stored[$name] ?? null) as $label => $value) {
+            $lines[] = "{$label} = {$value}";
+        }
+        $fields[$name] = implode("\n", $lines);
+    }
+
+    $feeds_draft = is_scalar($stored['feeds_draft'] ?? null) ? $stored['feeds_draft'] : true;
+
+    return [
+        'fields' => $fields,
+        'feeds_draft' => $posted === []
+            ? filter_var($feeds_draft, FILTER_VALIDATE_BOOLEAN)
+            : array_key_exists('feeds_draft', $posted),
+    ];
+}
+
+/**
  * Reads a posted form field as text, treating a missing or array value as empty.
  *
  * A section textarea is read untrimmed, so the line numbers in its errors

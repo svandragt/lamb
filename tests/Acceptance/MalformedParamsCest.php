@@ -82,18 +82,28 @@ class MalformedParamsCest
         $I->seeResponseCodeIs(200);
         $I->dontSee('Fatal error');
     }
-    public function aMissingSettingsFieldDoesNotWipeTheConfiguration(AcceptanceTester $I)
+    public function anArraySettingsFieldDoesNotWipeTheConfiguration(AcceptanceTester $I)
     {
         $this->login($I);
         $I->amOnPage('/settings');
         $token = $I->grabAttributeFrom('input[name=csrf]', 'value');
 
-        // An array is not "the author cleared the box" (that posts an empty
-        // string) — saving '' for it would drop every setting.
-        $I->sendAjaxPostRequest('/settings', ['csrf' => $token, 'ini_text' => ['x']]);
+        // An array is not "the author cleared the field": it must neither crash
+        // the form nor replace the stored setting with an empty one.
+        $I->sendAjaxPostRequest('/settings', [
+            'csrf' => $token,
+            'settings_form' => '1',
+            'site_title' => ['x'],
+            'site_url' => ['x'],
+            'author_name' => ['x'],
+            'timezone' => ['x'],
+            'menu_items' => ['x'],
+        ]);
+        $I->seeResponseCodeIs(200);
 
         $I->amOnPage('/settings');
         $I->seeResponseCodeIs(200);
-        $I->see('site_title');
+        $I->seeInField('site_title', 'My Microblog');
+        $I->seeInField('menu_items', "Home = /\nFeed = /feed");
     }
 }
