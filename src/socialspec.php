@@ -77,12 +77,29 @@ function about_markdown(OODBBean $post, array $config, string $root_url): string
     }
 
     $root = rtrim($root_url, '/') . '/';
-    // Inline `](/x)` targets, and reference definitions `[label]: /x`.
     // Only blank lines are trimmed at the start: leading spaces can make an
     // indented code block.
     $content = rtrim((string) preg_replace('~\A(?:[ \t]*\R)+~', '', $content));
-    $content = (string) preg_replace('~(\]\()/(?!/)~', '$1' . $root, $content);
-    $content = (string) preg_replace('~^( {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)~m', '$1' . $root, $content);
+    // Inline `](/x)` targets, and reference definitions `[label]: /x`. Code
+    // (fenced and indented blocks, backtick spans) is matched first and kept as
+    // is, so a link written inside it stays as typed.
+    // shortcut: an indented list continuation counts as code and is not rewritten.
+    $pattern = '#'
+        . '(?<fence>^ {0,3}(?<f>`{3,}(?=[^`\n]*(?:\n|\z))|~{3,})[^\n]*(?:\n[\s\S]*?^ {0,3}\k<f>[`~]*[ \t]*\r?$|[\s\S]*))'
+        . '|(?<block>(?:\A|\R[ \t]*\R)(?: {4}|\t)[^\n]*+(?:\n(?:[ \t]*\r?\n)*+(?: {4}|\t)[^\n]*+)*+)'
+        . '|(?<span>(?<ticks>`+)[^`]+?\k<ticks>)'
+        . '|(?<link>\]\()/(?!/)'
+        . '|(?<ref>^ {0,3}\[[^\]\n]+\]:[ \t]*<?)/(?!/)'
+        . '#m';
+    $content = preg_replace_callback(
+        $pattern,
+        static fn(array $m): string => match (true) {
+            ($m['link'] ?? '') !== '' => $m['link'] . $root,
+            ($m['ref'] ?? '') !== '' => $m['ref'] . $root,
+            default => $m[0],
+        },
+        $content
+    ) ?? $content;
     return $out . $content . "\n";
 }
 

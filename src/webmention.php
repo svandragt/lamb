@@ -287,8 +287,10 @@ function extract_meta(string $html): array
 /**
  * Convert a source page to valid UTF-8.
  *
- * Honours a charset declared in a `<meta>` tag, because a page that declares
- * ISO-8859-1 would otherwise be stored as invalid UTF-8. The HTTP headers are
+ * A page that is already valid UTF-8 is left alone whatever it declares, because
+ * declarations are often stale and re-decoding UTF-8 as another charset corrupts
+ * it. Otherwise this honours a charset declared in a `<meta>` tag, because a page
+ * that declares ISO-8859-1 would be stored as invalid UTF-8. The HTTP headers are
  * not consulted. A charset mbstring does not know is ignored, and the final
  * scrub makes the result valid UTF-8 even when the declaration is missing or wrong.
  *
@@ -298,15 +300,48 @@ function extract_meta(string $html): array
  */
 function html_to_utf8(string $html): string
 {
-    if (preg_match('/<meta[^>]+charset\s*=\s*["\']?([\w:.-]+)/i', $html, $m) && strcasecmp($m[1], 'utf-8') !== 0) {
+    $charset = mb_check_encoding($html, 'UTF-8') ? null : declared_charset($html);
+    if ($charset !== null && strcasecmp($charset, 'utf-8') !== 0) {
         try {
-            $html = mb_convert_encoding($html, 'UTF-8', $m[1]) ?: $html;
+            $html = mb_convert_encoding($html, 'UTF-8', $charset) ?: $html;
         } catch (\ValueError) {
             // Unknown charset name: fall through to the scrub.
         }
     }
 
     return mb_scrub($html, 'UTF-8');
+}
+
+/**
+ * Find the charset a page declares in a `<meta charset>` or
+ * `<meta http-equiv="Content-Type">` tag.
+ *
+ * Attributes are parsed, so `charset=` inside another attribute's value (a
+ * description, say) is not mistaken for a declaration.
+ *
+ * @param string $html Page markup.
+ *
+ * @return string|null The first declared charset name, or null when there is none.
+ */
+function declared_charset(string $html): ?string
+{
+    preg_match_all('/<meta\s(?:"[^"]*"|\'[^\']*\'|[^>"\'])*+>/i', $html, $tags);
+    foreach ($tags[0] as $tag) {
+        preg_match_all('/([^\s"\'=\/>]+)\s*=\s*(?|"([^"]*)"|\'([^\']*)\'|([^\s"\'>]+))/', $tag, $pairs, PREG_SET_ORDER);
+        $attrs = [];
+        foreach ($pairs as $pair) {
+            $attrs[strtolower($pair[1])] ??= $pair[2] ?? '';
+        }
+        if (trim($attrs['charset'] ?? '') !== '') {
+            return trim($attrs['charset']);
+        }
+        $is_content_type = strtolower($attrs['http-equiv'] ?? '') === 'content-type';
+        if ($is_content_type && preg_match('/charset\s*=\s*["\']?([\w:.-]+)/i', $attrs['content'] ?? '', $m)) {
+            return $m[1];
+        }
+    }
+
+    return null;
 }
 
 /**

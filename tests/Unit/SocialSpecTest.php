@@ -132,6 +132,32 @@ class SocialSpecTest extends TestCase
         $this->assertSame("# About\n\n    $ make\n\nText  \nmore\n", about_markdown($post, [], 'https://example.com'));
     }
 
+    /**
+     * @return array<string, array{0: string, 1: string}>
+     */
+    public static function codeWithRootRelativeLinks(): array
+    {
+        $abs = 'https://example.com/path';
+
+        return [
+            'inline span'      => ["Write `[home](/path)` then [home](/path)", "Write `[home](/path)` then [home]($abs)\n"],
+            'backtick fence'   => ["```md\n[home](/path)\n[ref]: /x\n```\n\n[home](/path)", "```md\n[home](/path)\n[ref]: /x\n```\n\n[home]($abs)\n"],
+            'tilde fence'      => ["~~~\n[home](/path)\n~~~\n\n[home](/path)", "~~~\n[home](/path)\n~~~\n\n[home]($abs)\n"],
+            'fence with CRLF'  => ["```\r\n[home](/path)\r\n```\r\n\r\n[home](/path)", "```\r\n[home](/path)\r\n```\r\n\r\n[home]($abs)\n"],
+            'unclosed fence'   => ["[home](/path)\n\n```\n[home](/path)", "[home]($abs)\n\n```\n[home](/path)\n"],
+            'indented block'   => ["Intro\n\n    [home](/path)\n\n[home](/path)", "Intro\n\n    [home](/path)\n\n[home]($abs)\n"],
+        ];
+    }
+
+    /**
+     * @dataProvider codeWithRootRelativeLinks
+     */
+    public function testAboutMarkdownLeavesCodeAloneWhenMakingLinksAbsolute(string $body, string $expected): void
+    {
+        $post = $this->post($body, 'about');
+        $this->assertSame($expected, about_markdown($post, [], 'https://example.com'));
+    }
+
     // --- contact.vcf ------------------------------------------------------
 
     public function testContactVcardIsNullWithoutAnAuthorEmail(): void
