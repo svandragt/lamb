@@ -275,6 +275,10 @@ function media_origins(): array
             continue;
         }
         foreach (media_urls((string) $bean->transformed) as $url) {
+            // A protocol-relative URL loads over the page's own scheme.
+            if (str_starts_with($url, '//')) {
+                $url = parse_url(ROOT_URL, PHP_URL_SCHEME) . ':' . $url;
+            }
             $origin = url_origin($url);
             if ($origin !== null && $origin !== $own_origin) {
                 $origins[$origin] = true;

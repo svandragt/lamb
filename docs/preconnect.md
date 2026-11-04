@@ -9,7 +9,7 @@ Lamb adds preconnect hints to your pages itself. You don't need to configure any
 
 When a post shows an image or video from another website, the browser has to open a connection to that site before it can load the file. A preconnect hint tells the browser to open the connection early, while it is still reading the page, so the file arrives sooner. Lamb also adds a [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) hint for browsers that do not support preconnect.
 
-Lamb looks at the posts on the page it is showing, and adds the hints for the websites those posts load images and video from. This works for addresses that start with `http://` or `https://`. Lamb skips addresses that start with `//`, such as `//images.example.com/photo.jpg`. A page of posts, a tag page, a search page and a single post all work this way. Lamb leaves out your own site and any image or video stored on it.
+Lamb looks at the posts on the page it is showing, and adds the hints for the websites those posts load images and video from. This works for addresses that start with `http://`, `https://` or `//`. An address such as `//images.example.com/photo.jpg` uses the same scheme as your site. A page of posts, a tag page, a search page and a single post all work this way. Lamb leaves out your own site and any image or video stored on it.
 
 Lamb adds at most three sites per page, in the order they first appear. Each hint opens a connection, and more than a few connections compete with the page's own files for bandwidth.
 

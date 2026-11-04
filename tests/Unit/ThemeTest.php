@@ -160,7 +160,6 @@ class ThemeTest extends TestCase
             'same-origin absolute image' => ['<img src="{ROOT_URL}/assets/a.webp">'],
             'non-http scheme' => ['<img src="data:image/gif;base64,R0lGOD">'],
             'protocol-less relative path' => ['<img src="assets/a.webp">'],
-            'protocol-relative URL' => ['<img src="//img.example.net/a.webp">'],
             'remote link is not media' => ['<a href="https://example.net/page">x</a>'],
         ];
     }
@@ -170,6 +169,21 @@ class ThemeTest extends TestCase
         $default_port = parse_url(ROOT_URL, PHP_URL_SCHEME) === 'https' ? 443 : 80;
 
         $this->assertSame('', $this->preconnectFor(['<img src="{ROOT_URL}:' . $default_port . '/a.webp">']));
+    }
+
+    public function testPreconnectResolvesProtocolRelativeUrlWithTheSitesScheme()
+    {
+        $output = $this->preconnectFor(['<img src="//img.example.net/a.webp">']);
+
+        $scheme = parse_url(ROOT_URL, PHP_URL_SCHEME);
+        $this->assertSame([$scheme . '://img.example.net'], $this->preconnectHrefs($output));
+    }
+
+    public function testPreconnectSkipsProtocolRelativeUrlOnTheSitesOwnHost()
+    {
+        $own_host_url = preg_replace('#^https?:#', '', ROOT_URL) . '/a.webp';
+
+        $this->assertSame('', $this->preconnectFor(['<img src="' . $own_host_url . '">']));
     }
 
     public function testPreconnectDerivesOriginFromSrcsetPosterAndSource()
