@@ -803,16 +803,16 @@
         },
         {
             "name": "taproot/micropub-adapter",
-            "version": "v0.1.3",
+            "version": "v0.1.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Taproot/micropub-adapter.git",
-                "reference": "c253f3dab6e3b1e58f791a552ca0b947ed344b3f"
+                "reference": "5e284f105f92b482762c72bfa8eec36833f0412b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Taproot/micropub-adapter/zipball/c253f3dab6e3b1e58f791a552ca0b947ed344b3f",
-                "reference": "c253f3dab6e3b1e58f791a552ca0b947ed344b3f",
+                "url": "https://api.github.com/repos/Taproot/micropub-adapter/zipball/5e284f105f92b482762c72bfa8eec36833f0412b",
+                "reference": "5e284f105f92b482762c72bfa8eec36833f0412b",
                 "shasum": ""
             },
             "require": {
@@ -852,9 +852,9 @@
             "description": "The easiest way to add micropub support to existing or new applications.",
             "support": {
                 "issues": "https://github.com/Taproot/micropub-adapter/issues",
-                "source": "https://github.com/Taproot/micropub-adapter/tree/v0.1.3"
+                "source": "https://github.com/Taproot/micropub-adapter/tree/v0.1.4"
             },
-            "time": "2023-07-24T13:55:02+00:00"
+            "time": "2026-10-29T21:51:21+00:00"
         }
     ],
     "packages-dev": [
@@ -2264,11 +2264,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "2.3.2",
+            "version": "2.3.4",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/18bc23a0682f08591529377d271b5c4dfe9ed1dd",
-                "reference": "18bc23a0682f08591529377d271b5c4dfe9ed1dd",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/f20ce6f3c82556cfcfc086b152445a12d1d64fff",
+                "reference": "f20ce6f3c82556cfcfc086b152445a12d1d64fff",
                 "shasum": ""
             },
             "require": {
@@ -2324,7 +2324,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-24T11:36:00+00:00"
+            "time": "2026-10-28T22:38:53+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -5779,5 +5779,5 @@
     "platform-overrides": {
         "php": "8.4.1"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
