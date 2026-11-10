@@ -74,6 +74,10 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; /.well-known/following.opml for SocialSpec apps (https://followspec.org/).
 ;following_url = https://reader.example/following/your-token.opml
 
+;; Your Micro.blog username. When set, Lamb fetches replies to your posts from
+;; Micro.blog during scheduled tasks (/_cron) and shows them under each post.
+;microblog_username = yourname
+
 ;; Gates features still gathering real-world testing before general release
 ;; (currently: the WordPress, Known, and Lamb-export import CLI scripts).
 ;; Off by default, and reset to false automatically whenever an upgrade
@@ -698,6 +702,7 @@ const SETTINGS_FORM_FIELDS = [
     'author_name',
     'author_email',
     'following_url',
+    'microblog_username',
     'authorization_endpoint',
     'token_endpoint',
     'websub_hubs',
@@ -806,6 +811,11 @@ function settings_form_errors(array $post, string $current_ini = ''): array
     $site_url = settings_form_value($post, 'site_url');
     if ($site_url !== '' && normalize_site_url($site_url) === null) {
         $errors[] = 'Site URL must be a full web address, such as https://example.com.';
+    }
+
+    $microblog_username = settings_form_value($post, 'microblog_username');
+    if ($microblog_username !== '' && \Lamb\Microblog\username(['microblog_username' => $microblog_username]) === null) {
+        $errors[] = 'Micro.blog username may only contain letters, digits and underscores.';
     }
 
     foreach (SETTINGS_FORM_FIELDS as $key) {

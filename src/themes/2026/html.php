@@ -88,6 +88,7 @@ global $template;
         // the call hides them from the author entirely — this one did, and it
         // is the default theme.
         part("_webmentions");
+        part("_microblog_replies");
         ?>
     </main>
 </div>

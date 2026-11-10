@@ -228,6 +228,10 @@ function run_feed_cycle(
     global $config;
     echo \Lamb\SocialSpec\refresh_following($config['following_url'] ?? null, \Lamb\SocialSpec\following_cache_path());
 
+    // Last, for the same reason: micro.blog being slow or down must not hold
+    // up anything above. See src/microblog.php.
+    echo \Lamb\Microblog\sync_replies($config);
+
     exit('Done');
 }
 

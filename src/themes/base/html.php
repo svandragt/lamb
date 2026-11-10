@@ -83,6 +83,7 @@ global $template;
         part("_related");
 
         part("_webmentions");
+        part("_microblog_replies");
         ?>
     </main>
 </div>
