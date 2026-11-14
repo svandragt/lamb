@@ -9,6 +9,10 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - Check whether a docs page exists for the feature and update it if needed.
 - When adding new user-facing behaviour, consider whether a new docs page is warranted.
 - Ensure docs pages that are topically related link to each other via a "Related" section.
+- Describe the behaviour of the release the docs ship in. For a deprecation, write
+  "works until 0.N, then …", not the behaviour after removal.
+- When a sentence claims behaviour, find the code line that produces it and cite
+  `file:line` in the PR body.
 
 GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `make docs` (serves at http://localhost:4000/lamb/).
 
@@ -121,6 +125,10 @@ human:
   resolving undici 7.x after jsdom 30 moved to `^8.7.0`. If you must add one,
   say in a comment why it exists and what would let it go — then remove it as
   soon as the upstream range covers the fix.
+
+The viv release that CI, the Docker release image, `docker compose` and Workshop
+download is pinned in four files, and Dependabot does not update them.
+`VivVersionPinsGuardTest` fails when the pins differ, so change all four together.
 
 New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
 `dependabot.yml`, `min-release-age` in `.npmrc`). To pull something newer by
@@ -611,6 +619,11 @@ Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
 annotation for data providers. Codeception ignores PHPUnit's
 `#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
 no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
+
+A change to a handler behind an HTML form needs an Acceptance test that submits the
+real form through its route. A Unit test that calls the handler with arguments the
+route never passes is not enough. In 0.16 the edit form posted to `/edit` with no id
+in the URL, so a Unit test that passed an id hid a bug that loaded post 0.
 
 ### JavaScript unit tests
 
