@@ -17,6 +17,8 @@ unpublished post shared this way does not turn up in search results — see
 
 Feed ingested posts are saved as drafts by default to prioritize authorship over syndication. Should you prefer, add `feeds_draft = false` to the site settings and they will be published instead. Place it in the top-level section, above any `[section]` headers — inside `[feeds]` it would be read as a feed entry, not a setting.
 
+A feed draft has `draft: true` in its front-matter, like any other draft. The edit form shows it, and saving the post keeps it a draft. To publish the post, remove the `draft: true` line. Feed drafts saved before this behaviour get the line when you run `bin/lamb migrate` — see [Upgrading]({{ site.baseurl }}{% link upgrading.md %}#data-migrations).
+
 ## Related
 
 - [Write your first post]({{ site.baseurl }}{% link first-post.md %}): A ten-minute walkthrough that ends by saving a draft.
@@ -25,5 +27,6 @@ Feed ingested posts are saved as drafts by default to prioritize authorship over
 - [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed ingestion that produces drafts.
 - [Micropub]({{ site.baseurl }}{% link micropub.md %}): Drafts created via Micropub get the same 24-hour preview link.
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}): The cron endpoint triggers feed ingestion.
+- [Upgrading]({{ site.baseurl }}{% link upgrading.md %}): `bin/lamb migrate` adds `draft: true` to existing feed drafts.
 - [Export]({{ site.baseurl }}{% link export.md %}): Drafts are included in an export and flagged in the manifest.
 - [Search Engines]({{ site.baseurl }}{% link search-engines.md %}): Preview links are kept out of search indexes.

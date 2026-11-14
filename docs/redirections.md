@@ -10,16 +10,15 @@ parent: Site customisation
 When a URL is requested, Lamb checks in this order:
 
 1.  Is there a live post with this slug? → Serve it.
-2.  Is there a manual redirect in `[redirections]` config? → 301 redirect.
+2.  Is there a manual redirect in the Redirections box? → 301 redirect.
 3.  Is there an automatic redirect stored from a previous slug change? → 301 redirect.
 4.  → 404.
 
 ## Manual redirects
 
-Add a `[redirections]` section to your site configuration at `/settings`:
+Add one entry per line to the **Redirections** box at `/settings`:
 
 ```
-[redirections]
 ;; Format: <old-path-segment> = <destination>
 ;; Destination can be:
 ;;   - A root-relative URL
@@ -46,6 +45,10 @@ When you edit a page post and change its `slug:` front-matter:
 *   `/old-slug` → 301 → `/new-slug`
 *   `/new-slug` serves the post directly.
 
+### Find an automatic redirect
+
+The **Redirections** tab at `/settings` lists every automatic redirect. To find one, type part of the old or the new path into the **Filter redirects** box. The list narrows as you type, and a line under the box says how many redirects match. The box needs JavaScript; without it, the tab shows the full list.
+
 ### Removal of an automatic redirect
 
 Publishing a new post whose slug matches an existing redirect's source automatically removes the redirect — the new post takes over that URL.
@@ -58,11 +61,11 @@ Reslugging the same post more than once would otherwise leave a chain of redirec
 
 A live post is always served directly, regardless of any redirect (manual or automatic) pointing to the same slug. A redirect only fires when no published post has that slug.
 
-If you create a post whose slug matches an entry in `[redirections]`, Lamb will show a notice:
+If you create a post whose slug matches an entry in the redirections box, Lamb will show a notice:
 
-> A manual redirect for `old-slug` still exists in Settings → \[redirections\]. You may want to remove it.
+> A manual redirect for `old-slug` still exists in Settings → Redirections. You may want to remove it.
 
-Once the post exists, the config entry has no effect and can be safely deleted from `/settings`.
+Once the post exists, the entry has no effect. You can delete it from the **Redirections** box under Configuration at `/settings`.
 
 ## Related
 

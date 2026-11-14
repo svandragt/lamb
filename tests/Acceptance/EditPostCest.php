@@ -104,6 +104,36 @@ class EditPostCest
         $I->seeInField('contents', $this->original);
     }
 
+    public function testRefusedEditShowsTheEditorWithTheTypedTextAndSavesBackToTheOriginPage(AcceptanceTester $I): void
+    {
+        // A refused edit POSTs to /edit with no id in the URL, so the handler
+        // has to find the post from the posted id. It also must not replace
+        // the referrer saved when the editor opened with the /edit page.
+        $this->login($I);
+        $this->createPost($I);
+
+        $id     = (int) $this->editId($I);
+        $broken = "---\ndraft: true\ntitle: a: b\n---\nedit-test-refused-" . uniqid();
+        $fixed  = 'edit-test-fixed-' . uniqid();
+
+        // Not `/`: that is also where a lost referrer falls back to.
+        $I->amOnPage('/drafts');
+        $I->amOnPage('/edit/' . $id);
+        $I->fillField('contents', $broken);
+        $I->click('Update post');
+
+        $I->see('Front matter is not valid YAML');
+        $I->dontSee('Status does not exist');
+        $I->seeInField('contents', $broken);
+        $I->seeInField('id', (string) $id);
+
+        $I->fillField('contents', $fixed);
+        $I->click('Update post');
+
+        $I->seeCurrentUrlEquals('/drafts');
+        $I->seePostColumnEquals($id, 'body', $fixed);
+    }
+
     public function testEditStampsTheCurrentRenderVersion(AcceptanceTester $I): void
     {
         // An edit re-renders `transformed`, so the row must record the current

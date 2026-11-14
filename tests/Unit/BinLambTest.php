@@ -133,6 +133,22 @@ XML;
         $this->assertStringContainsString('lamb', $process->getErrorOutput());
     }
 
+    public function testTheExperimentalFlagEnablesTheImporterWithTheConfigKeyOff(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run', '--experimental'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
+    }
+
     public function testTheDriverRefusesWhenExperimentalFeaturesDisabled(): void
     {
         $wxr = "$this->tmp_dir/export.xml";
@@ -252,7 +268,10 @@ XML;
      * separate connection (this file-backed db) never crosses the in-memory
      * one other tests in this suite use.
      */
-    private function seedPost(string $data_dir, int $version, string $body): int
+    /**
+     * @param array<string, int|string> $columns Extra columns to set on the post.
+     */
+    private function seedPost(string $data_dir, int $version, string $body, array $columns = []): int
     {
         $root = rtrim(codecept_root_dir(), '/');
         $process = new Process(
@@ -264,10 +283,16 @@ XML;
                 . '$bean = \RedBeanPHP\R::dispense("post"); '
                 . '$bean->body = getenv("SEED_BODY"); '
                 . '$bean->version = (int) getenv("SEED_VERSION"); '
+                . 'foreach (json_decode(getenv("SEED_COLUMNS"), true) as $column => $value) { $bean->$column = $value; } '
                 . 'echo \RedBeanPHP\R::store($bean);',
             ],
             codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir, 'SEED_BODY' => $body, 'SEED_VERSION' => (string) $version] + getenv(),
+            [
+                'LAMB_DATA_DIR' => $data_dir,
+                'SEED_BODY' => $body,
+                'SEED_VERSION' => (string) $version,
+                'SEED_COLUMNS' => json_encode($columns, JSON_THROW_ON_ERROR),
+            ] + getenv(),
         );
         $process->mustRun();
 
@@ -295,6 +320,29 @@ XML;
         $process->mustRun();
 
         return (int) trim($process->getOutput());
+    }
+
+    /**
+     * Reads back a stored post's `body`, in its own subprocess for the same
+     * connection-isolation reason as seedPost().
+     */
+    private function storedPostBody(string $data_dir, int $id): string
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); "
+                . 'echo \RedBeanPHP\R::load("post", (int) getenv("SEED_ID"))->body;',
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir, 'SEED_ID' => (string) $id] + getenv(),
+        );
+        $process->mustRun();
+
+        return $process->getOutput();
     }
 
     public function testUpgradePostsCommandUpgradesEveryPostBelowPostVersion(): void
@@ -385,5 +433,44 @@ XML;
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
         $this->assertStringContainsString('upgrade_all_posts:', $process->getOutput());
         $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+    }
+
+    /**
+     * #924: a feed draft stored before ingestion wrote `draft: true` into its
+     * front matter is published by the next edit, so migrate adds the line.
+     */
+    public function testMigrateCommandAddsDraftTrueToAFeedDraft(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, POST_VERSION, "---\ntitle: Hello\n---\n\nFeed content", ['draft' => 1, 'feed_name' => 'TestBlog']);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('migrate_feed_drafts: added draft: true to 1 feed draft(s)', $process->getOutput());
+        $this->assertStringContainsString("draft: true\n", $this->storedPostBody($data_dir, $id));
+    }
+
+    public function testMigrateDryRunDoesNotChangeAFeedDraft(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $body = "---\ntitle: Hello\n---\n\nFeed content";
+        $id = $this->seedPost($data_dir, POST_VERSION, $body, ['draft' => 1, 'feed_name' => 'TestBlog']);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] migrate_feed_drafts: would add draft: true to 1 feed draft(s)', $process->getOutput());
+        $this->assertSame($body, $this->storedPostBody($data_dir, $id));
     }
 }

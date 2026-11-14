@@ -77,6 +77,8 @@ bin/lamb migrate
 
 It's safe to run at any time: each migration checks whether it still has anything to do and does nothing on a database that's already current.
 
+One of these migrations adds `draft: true` to the front matter of every [feed draft]({{ site.baseurl }}{% link drafts.md %}) that lacks it. Without the line, editing a feed draft in Lamb publishes it.
+
 `bin/lamb migrate` also brings every stored post up to date, the same upgrade `bin/lamb upgrade-posts` runs on its own. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
 
 `bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
@@ -118,6 +120,11 @@ docker run -d --name lamb -p 80:80 \
 ```
 
 The database and uploads live in the named volumes and survive the recreate.
+
+## Upgrading to 0.16
+
+* The settings page is now a form. Site title, site URL and author name must be filled in the first time you save it.
+* Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import <source> <path> --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#deprecated-settings).
 
 ## Related
 

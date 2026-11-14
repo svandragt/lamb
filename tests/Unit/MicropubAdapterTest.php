@@ -14,8 +14,12 @@ use function Lamb\Post\reset_subscribers;
 
 class MicropubAdapterTest extends TestCase
 {
+    private string|false $previous_debug_env = false;
+
     protected function setUp(): void
     {
+        $this->previous_debug_env = getenv('LAMB_MICROPUB_DEBUG');
+        putenv('LAMB_MICROPUB_DEBUG');
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
@@ -52,6 +56,7 @@ class MicropubAdapterTest extends TestCase
     {
         global $config;
         unset($config['micropub_debug'], $config['site_url']);
+        putenv($this->previous_debug_env === false ? 'LAMB_MICROPUB_DEBUG' : 'LAMB_MICROPUB_DEBUG=' . $this->previous_debug_env);
         if (isset($GLOBALS['lamb_mp_log_path'])) {
             @unlink($GLOBALS['lamb_mp_log_path']);
             unset($GLOBALS['lamb_mp_log_path']);
@@ -115,6 +120,39 @@ class MicropubAdapterTest extends TestCase
         $contents = (string) file_get_contents($path);
         $this->assertStringContainsString('unit_test_event', $contents);
         $this->assertStringContainsString('bar', $contents);
+    }
+
+    /**
+     * @dataProvider debugEnvProvider
+     */
+    public function testMicropubDebugEnvVarOverridesTheConfigKey(string $env, bool $config_value, bool $expected): void
+    {
+        global $config;
+        $config['micropub_debug'] = $config_value;
+        putenv("LAMB_MICROPUB_DEBUG=$env");
+
+        $this->assertSame($expected, \Lamb\Micropub\mp_debug_enabled());
+    }
+
+    /**
+     * @return array<string, array{string, bool, bool}>
+     */
+    public function debugEnvProvider(): array
+    {
+        return [
+            'on enables with config off' => ['1', false, true],
+            'yes enables with config off' => ['yes', false, true],
+            'false wins over config on' => ['false', true, false],
+            'empty wins over config on' => ['', true, false],
+        ];
+    }
+
+    public function testMicropubDebugFallsBackToTheConfigKeyWhenTheEnvVarIsUnset(): void
+    {
+        global $config;
+        $config['micropub_debug'] = true;
+
+        $this->assertTrue(\Lamb\Micropub\mp_debug_enabled());
     }
 
     public function testMpLogWritesNothingWhenDebugDisabled(): void
@@ -335,6 +373,42 @@ class MicropubAdapterTest extends TestCase
         $post = R::findOne('post', ' body = ? ', ['A new micropub post']);
         $this->assertNotNull($post);
         $this->assertSame('A new micropub post', $post->body);
+    }
+
+    public function testCreateCallbackRefusesInvalidFrontMatterWith400(): void
+    {
+        $before = R::count('post');
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]],
+        ]);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(400, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringStartsWith('Front matter is not valid YAML: ', $body['error_description']);
+        $this->assertSame($before, R::count('post'));
+    }
+
+    public function testCreateCallbackRefusingInvalidFrontMatterStoresNoUploadedPhoto(): void
+    {
+        $uploadDir = \Lamb\Response\get_upload_dir();
+        $filesBefore = glob($uploadDir . '/*');
+
+        $bytes = self::gifBytes();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
+        file_put_contents($tmpFile, $bytes);
+        $upload = new \Nyholm\Psr7\UploadedFile($tmpFile, strlen($bytes), UPLOAD_ERR_OK, 'refused.gif', 'image/gif');
+
+        $result = (new LambMicropubAdapter())->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]],
+        ], ['photo' => $upload]);
+
+        $this->assertSame(400, $result->getStatusCode());
+        $this->assertSame($filesBefore, glob($uploadDir . '/*'));
     }
 
     public function testCreateCallbackWithNameSetsTitleFrontMatter(): void
@@ -1126,6 +1200,24 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(ROOT_URL . '/status/999999', ['replace' => ['content' => ['new']]]);
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUpdateCallbackRefusesInvalidFrontMatterWith400AndKeepsThePost(): void
+    {
+        $post = $this->storedPost('Plain body', 'fm-invalid-update');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            'http://localhost/fm-invalid-update',
+            ['replace' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]]]
+        );
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(400, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringStartsWith('Front matter is not valid YAML: ', $body['error_description']);
+        $this->assertSame('Plain body', R::load('post', $post->id)->body);
     }
 
     public function testUpdateCallbackAdvancesTheContentTimestamp(): void

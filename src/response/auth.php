@@ -579,7 +579,11 @@ function redirect_logout(): void
 /**
  * Handles the settings page logic, including displaying, validating, and saving settings.
  *
- * @return array<string, mixed> An array containing the page title and the current or updated INI configuration text.
+ * A POST carrying the hidden `settings_form` field saves the form fields (see
+ * Config\form_to_ini()); `action=reset` restores the defaults. Any other POST is refused.
+ *
+ * @return array<string, mixed> An array containing the page title and the stored INI text, which the
+ *     form is prefilled from. A refused form post also returns its typed fields as `form_values`.
  */
 function respond_settings(): array
 {
@@ -602,20 +606,36 @@ function respond_settings(): array
             redirect_uri('/settings');
         }
 
-        // A submission carrying no configuration text at all is not an author
-        // clearing the box (that posts an empty string) — it is a malformed
-        // request, and saving '' for it would wipe every setting.
-        $submitted_ini = \Lamb\Http\request_string($_POST['ini_text'] ?? null);
-        if ($submitted_ini === null) {
-            $_SESSION['flash'][] = 'Settings not saved: the form did not include the configuration text.';
+        // A post without the form marker is not a save. Saving '' for it would
+        // wipe every setting.
+        if (!isset($_POST['settings_form'])) {
+            $_SESSION['flash'][] = 'Settings not saved: the form did not include the settings.';
             redirect_uri('/settings');
         }
 
+        $stored_ini = Config\get_ini_text();
+        // Typed content, kept when the save is refused.
+        $form_values = array_intersect_key(
+            $_POST,
+            array_flip([...Config\SETTINGS_FORM_FIELDS, 'feeds_draft', ...Config\SETTINGS_FORM_SECTIONS])
+        );
+
+        $form_errors = Config\settings_form_errors($_POST, $stored_ini);
+        if ($form_errors !== []) {
+            $_SESSION['flash'][] = 'Settings not saved. Fix the following and save again.';
+            foreach ($form_errors as $form_error) {
+                $_SESSION['flash'][] = $form_error;
+            }
+            $data['form_values'] = $form_values;
+
+            return $data;
+        }
+
+        $submitted_ini = Config\form_to_ini($_POST, $stored_ini);
         $validation = Config\validate_ini($submitted_ini);
 
         if ($validation['valid']) {
             Config\save_ini_text($submitted_ini);
-            $_SESSION['flash'][] = "Settings saved successfully.";
             // Syntactically valid INI can still hold a setting in the wrong
             // shape — a `[site_title]` section, a `feeds = <url>` line. Those
             // are ignored on read so they cannot break the site; say so here,
@@ -629,7 +649,7 @@ function respond_settings(): array
             if ($validation['error']) {
                 $_SESSION['flash'][] = $validation['error'];
             }
-            $data['ini_text'] = $submitted_ini; // Preserve typed content
+            $data['form_values'] = $form_values;
         }
     }
 

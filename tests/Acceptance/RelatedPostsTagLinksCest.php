@@ -16,6 +16,8 @@ use Tests\Support\AcceptanceTester;
  *   - 2026 — related items show only a title/excerpt (no body), so a /tag/ link
  *            appears solely via the "More in #tag" overflow link, which requires
  *            more than five related posts.
+ *
+ * @group seeds-db
  */
 class RelatedPostsTagLinksCest
 {
@@ -28,9 +30,7 @@ class RelatedPostsTagLinksCest
 
     private function setTheme(AcceptanceTester $I, string $theme): void
     {
-        $I->amOnPage('/settings');
-        $I->fillField('ini_text', "theme = $theme\n");
-        $I->click('Save settings');
+        $I->haveStoredSettings("theme = $theme\n");
     }
 
     private function createPost(AcceptanceTester $I, string $contents): void

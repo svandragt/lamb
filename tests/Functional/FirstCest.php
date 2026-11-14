@@ -49,7 +49,7 @@ class FirstCest
 
         // Emoji tags
         $text = "Hello #🐑 #world";
-        $expectedOutput = "<p>Hello <a href=\"/tag/🐑\">#🐑</a> <a href=\"/tag/world\">#world</a></p>";
+        $expectedOutput = "<p>Hello <a href=\"/tag/🐑\" rel=\"tag\">#🐑</a> <a href=\"/tag/world\" rel=\"tag\">#world</a></p>";
         Assert::assertEquals($expectedOutput, \Lamb\parse_tags(parse_markdown($text)));
     }
 }

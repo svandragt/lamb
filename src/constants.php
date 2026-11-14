@@ -33,7 +33,7 @@ define('FEED_FETCH_INTERVAL', 30 * MINUTE_IN_SECONDS);
 // (e.g. new syntax highlighting); older posts are re-rendered on read
 // (Response\render_stale_posts()) without writing back, and only get their
 // stored version bumped by `bin/lamb migrate`/`upgrade-posts`.
-define('POST_VERSION', 4);
+define('POST_VERSION', 5);
 // How long a login is remembered. The session cookie and the server-side session
 // both persist this long, so logins survive a browser restart and idle time.
 define('REMEMBER_LIFETIME', 7 * 24 * 60 * MINUTE_IN_SECONDS); // one week

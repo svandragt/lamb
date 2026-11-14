@@ -5,28 +5,26 @@ parent: Site customisation
 
 # Preconnect
 
-Lamb supports preconnect hints through the web settings page, in a section called `preconnect`.
+Lamb adds preconnect hints to your pages itself. You don't need to configure anything.
 
-Preconnect hints tell the browser to establish a TCP connection to an external origin before it is needed, reducing latency when those resources are first requested. A [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) fallback is also emitted for browsers that do not support preconnect.
+When a post shows an image or video from another website, the browser has to open a connection to that site before it can load the file. A preconnect hint tells the browser to open the connection early, while it is still reading the page, so the file arrives sooner. Lamb also adds a [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) hint for browsers that do not support preconnect.
 
-This is most useful when your theme or content loads resources from external origins such as a font provider.
+Lamb looks at the posts on the page it is showing, and adds the hints for the websites those posts load images and video from. This works for addresses that start with `http://`, `https://` or `//`. An address such as `//images.example.com/photo.jpg` uses the same scheme as your site. A page of posts, a tag page, a search page and a single post all work this way. Lamb leaves out your own site and any image or video stored on it. The one exception is the [home page post]({{ site.baseurl }}{% link post-types.md %}#home-page) shown above your timeline at `/`: Lamb does not add hints for the images and video in it.
 
-```
-[preconnect]
-google-fonts = https://fonts.googleapis.com
-google-fonts-static = https://fonts.gstatic.com
-```
+Lamb adds at most three sites per page, in the order they first appear. Each hint opens a connection, and more than a few connections compete with the page's own files for bandwidth.
 
-Labels are used as keys, while the values are the origins (scheme + host, no trailing slash).
-
-The above configuration emits the following in the HTML `<head>`:
+For a post with an image on `https://images.example.com`, the page's `<head>` contains:
 
 ```
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="dns-prefetch" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com">
-<link rel="dns-prefetch" href="https://fonts.gstatic.com">
+<link rel="preconnect" href="https://images.example.com">
+<link rel="dns-prefetch" href="https://images.example.com">
 ```
+
+## The `[preconnect]` setting is deprecated
+
+Earlier versions listed the sites to connect to by hand in a section called `preconnect` on the settings page. That setting is deprecated, and Lamb removes it in 0.17. Until then, Lamb still adds the sites you listed, before the ones it finds itself, and the three-site limit covers both.
+
+Lamb only finds sites that posts load images and video from. A hint for any other site you listed, such as a font provider, stops when 0.17 removes the setting.
 
 ## Related
 

@@ -10,8 +10,11 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
+
+use const Lamb\HOME_SLUG;
 
 /**
  * Populates and returns an OODBBean instance with the given text and optional feed information.
@@ -63,6 +66,9 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
         $bean->source_url = is_valid_http_url($permalink) ? $permalink : null;
     }
 
+    // parse_bean() derives draft from the body's front matter, which a feed body
+    // never carries, so a re-sync would publish a stored draft. Keep what is stored.
+    $stored_draft = $bean->draft;
     parse_bean($bean);
     // Prefix a title-derived feed-item slug with the feed name so same-titled
     // posts from different feeds don't collide. Applied after parse_bean(),
@@ -76,10 +82,20 @@ function populate_bean(string $text, Item|JsonFeedItem|null $feed_item = null, ?
     }
     $bean->version = POST_VERSION;
 
-    // Auto-draft new feed items when feeds_draft is enabled (applied after parse_bean
-    // so frontmatter-driven draft:false cannot inadvertently publish a feed item).
-    if ($feed_item && !$bean->id && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
+    // Applied after parse_bean so frontmatter-driven draft:false cannot
+    // inadvertently publish a feed item. A new item is drafted when feeds_draft
+    // is enabled; a re-synced one keeps the draft value it had.
+    if ($feed_item && !$is_new) {
+        $bean->draft = (int) $stored_draft;
+    } elseif ($feed_item && filter_var($config['feeds_draft'] ?? true, FILTER_VALIDATE_BOOLEAN)) {
         $bean->draft = 1;
+    }
+
+    // The edit form posts the body back, and parse_bean() reads the draft state
+    // from its front matter, so a feed draft without the line is published by its
+    // first edit (#924).
+    if ($feed_item && $bean->draft) {
+        $bean->body = set_frontmatter_key($bean->body, 'draft', true);
     }
 
     return $bean;
@@ -134,6 +150,50 @@ function split_frontmatter(string $body): array
 }
 
 /**
+ * Parses the YAML of a front-matter block (without its fences).
+ *
+ * PARSE_DATETIME keeps absolute dates as DateTime objects carrying the author's
+ * typed wall-clock time, instead of coercing them to UTC Unix timestamps (which
+ * would shift the time by the server's timezone offset).
+ *
+ * @param string $yaml The YAML between the fences.
+ * @return mixed The parsed value, normally an array.
+ * @throws ParseException When the YAML is not valid.
+ */
+function parse_yaml_block(string $yaml): mixed
+{
+    return Yaml::parse($yaml, Yaml::PARSE_DATETIME);
+}
+
+/**
+ * Returns the message to show when a body opens with a front-matter block that
+ * is not valid YAML, or null when the body has no such block or it parses.
+ *
+ * parse_matter() reads an invalid block as no front matter, so saving one drops
+ * every field in it — including `draft: true`, which publishes the post. Every
+ * path that saves text an author wrote calls this first and refuses on a message.
+ *
+ * @param string $body The raw post body.
+ * @return string|null The refusal message, or null when the front matter is fine.
+ */
+function front_matter_error(string $body): ?string
+{
+    // The same repairs parse_bean() makes before it reads the block, in its order.
+    [$yaml] = split_frontmatter(normalize_frontmatter_fence(normalize_utf8($body)));
+    if ($yaml === '') {
+        return null;
+    }
+
+    try {
+        parse_yaml_block($yaml);
+    } catch (ParseException $e) {
+        return 'Front matter is not valid YAML: ' . $e->getMessage();
+    }
+
+    return null;
+}
+
+/**
  * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
  * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
@@ -147,12 +207,10 @@ function parse_matter(string $body): array
     }
 
     try {
-        // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
-        // author's typed wall-clock time, instead of coercing them to UTC Unix
-        // timestamps (which would shift the time by the server's timezone offset).
-        $matter = Yaml::parse($yaml, Yaml::PARSE_DATETIME);
+        $matter = parse_yaml_block($yaml);
     } catch (ParseException) {
-        // Invalid YAML
+        // Invalid YAML. The save paths refuse it up front (front_matter_error());
+        // what reaches here is a body stored before that check existed.
         return [];
     }
 
@@ -495,7 +553,7 @@ function slugify(string $text): string
  * the single place that assembles a fresh front-matter block from scratch
  * (used by Micropub create/update).
  *
- * @param array<string, string|list<string>> $matter Ordered front-matter key/value pairs.
+ * @param array<string, string|bool|list<string>> $matter Ordered front-matter key/value pairs.
  *        A list value (e.g. a multi-target `in-reply-to`, #583) dumps as a YAML list.
  * @param string $content The post content to place after the fence.
  * @return string The assembled body.
@@ -597,12 +655,15 @@ function set_matter(string $body, string $key, string $value, bool $append = tru
  * existing single-target caller is unaffected; two or more entries are
  * written as a YAML list, the same shape parse_matter() already accepts.
  *
+ * A bool is dumped as a YAML bool (`draft: true`); as a string it would be quoted
+ * (`draft: 'true'`).
+ *
  * @param string $body The raw post body.
  * @param string $key The front-matter key to set, in its hyphenated spelling.
- * @param string|list<string> $value The value(s) to write, or '' / [] to remove the key.
+ * @param string|bool|list<string> $value The value(s) to write, or '' / [] to remove the key.
  * @return string The body with its front-matter key set.
  */
-function set_frontmatter_key(string $body, string $key, string|array $value): string
+function set_frontmatter_key(string $body, string $key, string|bool|array $value): string
 {
     $body = normalize_frontmatter_fence($body);
 
@@ -617,11 +678,11 @@ function set_frontmatter_key(string $body, string $key, string|array $value): st
         if (count($value) <= 1) {
             $value = $value[0] ?? '';
         }
-    } else {
+    } elseif (is_string($value)) {
         $value = trim($value);
     }
     // The array branch above always collapses to a string when 0 or 1 entries
-    // survive filtering, so $value here is either a string or a non-empty list.
+    // survive filtering, so $value here is a string, a bool or a non-empty list.
     $is_empty = $value === '';
     [$yaml, $content] = split_frontmatter($body);
 
@@ -719,7 +780,9 @@ function finalize_slug(OODBBean $bean): bool
         return false;
     }
 
-    if (is_reserved_route($slug)) {
+    // `home` is the one reserved name that means a page: the post slugged `home`
+    // is shown at the root, so it keeps its slug.
+    if ($slug !== HOME_SLUG && is_reserved_route($slug)) {
         $slug .= '-' . $bean->id;
     }
     while (R::findOne('post', ' slug = ? AND id != ? ', [$slug, $bean->id])) {

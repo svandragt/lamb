@@ -7,7 +7,7 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [WordPress WXR export](https://wordpress.com/support/export/) and feeds each published post and page through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Enable it by setting `experimental_features = true` in [Settings](site-configuration.md) before running the script — it refuses to run otherwise.
+**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. Until 0.17, the deprecated `experimental_features = true` setting (see [Site Configuration](site-configuration.md#deprecated-settings)) also enables it. The importer refuses to run without either.
 
 ## What you get
 
@@ -31,10 +31,10 @@ From the project root, as the web server user rather than your own shell user (s
 
 ```bash
 # Preview what would be imported without writing anything
-sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dry-run
+sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --dry-run --experimental
 
 # Run it for real
-sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml
+sudo -u www-data bin/lamb import wordpress /path/to/wordpress.WordPress.xml --experimental
 ```
 
 `data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone changes the sidecars' owner (see [NGINX configuration](nginx.md)). `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.

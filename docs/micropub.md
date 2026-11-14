@@ -36,10 +36,9 @@ so a value like `https://example.com/blog` cannot work — see
 
 ### 2. Add `rel="me"` identity links
 
-IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add a `[me]` section to your site configuration at `/settings`:
+IndieAuth verifies who you are by checking that your site links to your profiles and those profiles link back. Add each profile to the **Profile links** box at `/settings`:
 
 ```ini
-[me]
 Github = https://github.com/yourusername
 Email = mailto:you@example.com
 ```
@@ -71,6 +70,8 @@ token_endpoint = https://token.example.com/token
 
 A Micropub `h-entry` with a `content` property creates a status post (no title, no slug). If a `name` property is also present, it creates a titled post with a slug derived from the title.
 
+A create or update whose `content` opens with a front-matter block that is not valid YAML is refused with a 400 `invalid_request` response. Its `error_description` carries the YAML parser's message, and Lamb does not save the post. This applies when the content's block is the post's front matter. A create with a `name`, `in-reply-to` or `mp-syndicate-to` property makes Lamb write its own block first, and an update to a post that already has front matter keeps that block, so a block in the content after it is plain text.
+
 ## Draft and scheduled post previews
 
 Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a secret preview token to the URL it returns (`?preview=…`). That link shows the unpublished post to anyone who has it — without logging in — and expires after 24 hours. The plain permalink (without the token) stays hidden until the post is published.
@@ -83,15 +84,17 @@ The first thing to check is that `site_url` is set (see [Set your site URL](#1-s
 
 The second is that your site is served from the root of a domain. Lamb does not support an install under a subdirectory such as `https://example.com/blog`: it reads `site_url` as the domain alone, while your IndieAuth identity is the whole address including the path, so no token can ever match and every request is refused with a `me_mismatch` reason. The settings page warns you if you save a `site_url` with a path in it. Serve the site from its own domain or subdomain instead.
 
-Add this to your site configuration at `/settings`:
+Set the `LAMB_MICROPUB_DEBUG` environment variable to `true` (`1`, `yes` and `on` also work) and reload PHP:
 
-```ini
-micropub_debug = true
 ```
+LAMB_MICROPUB_DEBUG=true
+```
+
+The deprecated `micropub_debug = true` setting still works until 0.17. When the environment variable is set, it wins, even when set to `false`.
 
 Reproduce the problem with your client, then read `data/micropub.log` (next to your `lamb.db`). Each line is one event: the incoming request (method, client `User-Agent`, whether a token was supplied), the token-verification outcome (including a `me_mismatch` reason when the token's identity doesn't match your site URL), and the response status. The bearer token itself is never written — only a non-reversible fingerprint.
 
-Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (`micropub_debug = false`) when you're done** so the log stops growing.
+Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (set `LAMB_MICROPUB_DEBUG=false`) when you're done** so the log stops growing.
 
 ## POSSE syndication
 
@@ -99,15 +102,14 @@ Lamb supports advertising syndication targets to Micropub clients so you can pub
 
 ### Configure targets
 
-Add a `[syndicate_to]` section to your site configuration at `/settings`:
+Add each target to the **Syndication targets** box at `/settings`:
 
 ```ini
-[syndicate_to]
 https://bsky.app/profile/yourusername = Bluesky
 https://mastodon.social/@yourusername = Mastodon
 ```
 
-Each entry is a `uid = name` pair. The `uid` is the profile URL of the syndication target; the `name` is the human-readable label shown in Micropub clients (e.g. Quill). Clients discover the list from `GET /micropub?q=config`.
+Each entry is a `profile URL = name` pair. The profile URL identifies the syndication target: a client sends it back as `mp-syndicate-to` to select the target. The `name` is the human-readable label shown in Micropub clients (e.g. Quill). Clients discover the list from `GET /micropub?q=config`.
 
 ### Syndicating a post
 

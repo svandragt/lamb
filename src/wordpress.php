@@ -44,14 +44,6 @@ function wordpress_uuid(string $guid): string
 }
 
 /**
- * Loads a WXR XML string into a SimpleXMLElement.
- */
-function parse_wxr_string(string $xml): SimpleXMLElement
-{
-    return parse_rss_string($xml);
-}
-
-/**
  * Loads a WXR XML file from disk.
  */
 function parse_wxr_file(string $path): SimpleXMLElement

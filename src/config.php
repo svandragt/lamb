@@ -333,7 +333,21 @@ function normalize_config_section(mixed $section): array
  */
 function canonical_site_url(array $config): ?string
 {
-    $candidate = (string) (getenv('LAMB_SITE_URL') ?: ($config['site_url'] ?? ''));
+    return normalize_site_url((string) (getenv('LAMB_SITE_URL') ?: ($config['site_url'] ?? '')));
+}
+
+/**
+ * Normalises a site URL to `scheme://host[:port]`, or null when it is unusable.
+ *
+ * The check canonical_site_url() applies to the configured value, kept apart
+ * from the environment lookup so the settings form can validate what the
+ * author typed even when LAMB_SITE_URL overrides it.
+ *
+ * @param string $candidate The URL as written.
+ * @return string|null The normalised URL, or null unless it is an absolute http(s) URL with a host.
+ */
+function normalize_site_url(string $candidate): ?string
+{
     $candidate = trim($candidate);
     if ($candidate === '') {
         return null;
@@ -544,6 +558,9 @@ function validate_ini(string $ini_text): array
  * damage surfaces somewhere else entirely, as a Micropub endpoint refusing every
  * token.
  *
+ * Notices about deprecated settings (see deprecation_warnings) are appended, so
+ * both save paths report them.
+ *
  * @param string $ini_text The raw INI text as the author submitted it.
  * @return list<string> Human-readable warnings, empty when every value fits.
  */
@@ -588,6 +605,47 @@ function shape_warnings(string $ini_text): array
         }
     }
 
+    return array_merge($warnings, deprecation_warnings($ini_text));
+}
+
+/**
+ * Describes the deprecated settings the stored INI still uses, and what replaces them.
+ *
+ * Each notice names the release that removes the setting (0.17). A setting is
+ * only reported when it changes something: the seeded defaults hold
+ * `posts_per_page = 10`, `experimental_features = false` and an empty
+ * `[preconnect]`, so every install has those keys, and warning about them
+ * would show a notice on every save to authors who never set them.
+ *
+ * @param string $ini_text The raw INI text.
+ * @return list<string> Human-readable notices, empty when no deprecated setting is in use.
+ */
+function deprecation_warnings(string $ini_text): array
+{
+    $parsed = parse_ini_safe($ini_text);
+    $notice = fn (string $key, string $advice): string => "`{$key}` is deprecated and will be removed in 0.17. {$advice}";
+    $text = fn (string $key): string => is_scalar($parsed[$key] ?? null) ? trim((string) $parsed[$key]) : '';
+    $warnings = [];
+
+    if ($text('posts_per_page') !== '' && $text('posts_per_page') !== '10') {
+        $warnings[] = $notice('posts_per_page', 'Lamb will use 10.');
+    }
+    if ($text('404_fallback') !== '') {
+        $warnings[] = $notice('404_fallback', 'Add a `[redirections]` entry for each old address you still want to forward.');
+    }
+    if (!empty($parsed['preconnect']) && is_array($parsed['preconnect'])) {
+        $warnings[] = $notice(
+            '[preconnect]',
+            'Lamb now adds preconnect hints for the sites your pages load from, so you can delete this section.'
+        );
+    }
+    if (filter_var($text('micropub_debug'), FILTER_VALIDATE_BOOLEAN)) {
+        $warnings[] = $notice('micropub_debug', 'Use the LAMB_MICROPUB_DEBUG environment variable instead.');
+    }
+    if (experimental_features_enabled($parsed)) {
+        $warnings[] = $notice('experimental_features', 'Use `bin/lamb import --experimental` instead.');
+    }
+
     return $warnings;
 }
 
@@ -623,6 +681,324 @@ function site_url_warning(string $site_url): ?string
         . 'The path is ignored, so Micropub refuses every token: your identity is the whole '
         . "address including `/{$path}`, and Lamb compares tokens against the domain alone. "
         . 'Serve the site from its own domain or subdomain.';
+}
+
+/**
+ * The single-value settings the /settings form owns, in the order they are written.
+ *
+ * `feeds_draft` is also form-owned but is a checkbox, so form_to_ini() handles
+ * it apart from these text fields.
+ */
+const SETTINGS_FORM_FIELDS = [
+    'site_title',
+    'site_url',
+    'site_description',
+    'timezone',
+    'theme',
+    'author_name',
+    'author_email',
+    'following_url',
+    'authorization_endpoint',
+    'token_endpoint',
+    'websub_hubs',
+];
+
+/**
+ * The sections the /settings form owns, each posted as one textarea of `label = value` lines.
+ *
+ * Every other section in the stored INI (`[preconnect]`, an author's own) is
+ * carried over untouched by form_to_ini().
+ */
+const SETTINGS_FORM_SECTIONS = [
+    'menu_items',
+    'footer_items',
+    'feeds',
+    'me',
+    'redirections',
+    'syndicate_to',
+];
+
+/**
+ * Builds the stored INI text from the settings form fields.
+ *
+ * Storage stays one INI blob, so existing installs need no migration. The form
+ * owns the keys in SETTINGS_FORM_FIELDS, `feeds_draft` and SETTINGS_FORM_SECTIONS:
+ * they are rebuilt from the post. Every other key and section in the current
+ * INI (deprecated settings, an author's own keys) is carried over unchanged, so
+ * saving the form cannot drop a setting it does not show. Comments in the
+ * current INI are not kept. An empty text field is left out so the default
+ * applies; an owned section is always written, because an absent `[menu_items]`
+ * brings back the default menu while an empty one means no menu.
+ *
+ * Call settings_form_errors() first: lines it reports as malformed are skipped here.
+ *
+ * @param array<string, mixed> $post        The submitted form fields.
+ * @param string               $current_ini The INI text currently stored.
+ * @return string The INI text to store.
+ * @throws \InvalidArgumentException When a posted value spans lines (settings_form_errors() reports it).
+ */
+function form_to_ini(array $post, string $current_ini): string
+{
+    $values = [];
+    foreach (SETTINGS_FORM_FIELDS as $key) {
+        $value = settings_form_value($post, $key);
+        if ($value !== '') {
+            $values[$key] = $value;
+        }
+    }
+    $values['feeds_draft'] = array_key_exists('feeds_draft', $post) ? 'true' : 'false';
+
+    $sections = [];
+    foreach (SETTINGS_FORM_SECTIONS as $name) {
+        $sections[$name] = parse_section_text(settings_form_value($post, $name, false))['entries'];
+    }
+
+    $owned = [...SETTINGS_FORM_FIELDS, 'feeds_draft', ...SETTINGS_FORM_SECTIONS];
+    foreach (parse_ini_safe($current_ini) as $key => $value) {
+        if (in_array((string) $key, $owned, true)) {
+            continue;
+        }
+        if (is_array($value)) {
+            // A repeated label (`Home[] = /`) nests an array; readers drop it
+            // anyway (see normalize_config_section), so it is not carried over.
+            $sections[$key] = array_filter($value, 'is_string');
+            continue;
+        }
+        $values[$key] = (string) $value;
+    }
+
+    return write_ini($values, $sections);
+}
+
+/**
+ * Lists what stops the settings form being saved, in the author's terms.
+ *
+ * Site title, site URL and author name are required: an unset author name
+ * publishes the placeholder identity in feeds. The site URL must pass the check
+ * canonical_site_url() applies. A section line that cannot be read, or a value
+ * that would not survive the INI file, is reported with the section and line.
+ *
+ * The stored INI is checked too: form_to_ini() carries over what it holds, and
+ * INI that does not parse has nothing to carry, so saving over it would silently
+ * drop every setting the form does not show. Comments-only or empty INI parses
+ * fine and is not refused.
+ *
+ * @param array<string, mixed> $post        The submitted form fields.
+ * @param string               $current_ini The INI text currently stored.
+ * @return list<string> Human-readable errors, empty when the form can be saved.
+ */
+function settings_form_errors(array $post, string $current_ini = ''): array
+{
+    $errors = [];
+
+    if (@parse_ini_string($current_ini, true, INI_SCANNER_RAW) === false) {
+        $errors[] = "The settings stored on this site can't be read, so saving this form would lose them. "
+            . 'Fix the stored settings first, or reset them to the defaults.';
+    }
+
+    $required = ['site_title' => 'Site title', 'site_url' => 'Site URL', 'author_name' => 'Author name'];
+    foreach ($required as $key => $label) {
+        if (settings_form_value($post, $key) === '') {
+            $errors[] = "{$label} is required.";
+        }
+    }
+
+    $site_url = settings_form_value($post, 'site_url');
+    if ($site_url !== '' && normalize_site_url($site_url) === null) {
+        $errors[] = 'Site URL must be a full web address, such as https://example.com.';
+    }
+
+    foreach (SETTINGS_FORM_FIELDS as $key) {
+        if (preg_match('/[\r\n\0]/', settings_form_value($post, $key)) === 1) {
+            $errors[] = "`{$key}` must fit on one line.";
+        }
+    }
+
+    foreach (SETTINGS_FORM_SECTIONS as $name) {
+        foreach (parse_section_text(settings_form_value($post, $name, false))['errors'] as $error) {
+            $errors[] = "`[{$name}]` {$error}";
+        }
+    }
+
+    return $errors;
+}
+
+/**
+ * Returns the values the /settings form shows.
+ *
+ * They come from the stored INI, not from load(): the effective config fills an
+ * unset author with IDENTITY_FALLBACK, and a form prefilled with that
+ * placeholder would save it as the author's own. A field the stored INI lacks is
+ * empty, except `timezone` (UTC, as apply_timezone() falls back to) and the
+ * `feeds_draft` checkbox (on, as its reader defaults to). `theme` is returned as
+ * stored: the template resolves an unset one to the theme in use. Deprecated
+ * keys are not offered.
+ *
+ * Fields in $posted, a refused submission (see respond_settings()), replace the
+ * stored ones, even when posted empty. A submission without `feeds_draft` means
+ * the box was unchecked.
+ *
+ * @param string               $stored_ini The INI text currently stored.
+ * @param array<string, mixed> $posted     The refused submission, or [] to show the stored settings.
+ * @return array{fields: array<string, string>, feeds_draft: bool} The text of every field and
+ *     section textarea (one `label = value` line per entry), and whether the checkbox is checked.
+ */
+function settings_form_prefill(string $stored_ini, array $posted = []): array
+{
+    $stored = parse_ini_safe($stored_ini);
+    $fields = [];
+
+    foreach (SETTINGS_FORM_FIELDS as $key) {
+        $fields[$key] = array_key_exists($key, $posted)
+            ? settings_form_value($posted, $key)
+            : (is_scalar($stored[$key] ?? null) ? trim((string) $stored[$key]) : '');
+    }
+    if (!in_array($fields['timezone'], \DateTimeZone::listIdentifiers(), true)) {
+        $fields['timezone'] = 'UTC';
+    }
+
+    foreach (SETTINGS_FORM_SECTIONS as $name) {
+        if (array_key_exists($name, $posted)) {
+            $fields[$name] = settings_form_value($posted, $name, false);
+            continue;
+        }
+        $lines = [];
+        foreach (normalize_config_section($stored[$name] ?? null) as $label => $value) {
+            $lines[] = "{$label} = {$value}";
+        }
+        $fields[$name] = implode("\n", $lines);
+    }
+
+    $feeds_draft = is_scalar($stored['feeds_draft'] ?? null) ? $stored['feeds_draft'] : true;
+
+    return [
+        'fields' => $fields,
+        'feeds_draft' => $posted === []
+            ? filter_var($feeds_draft, FILTER_VALIDATE_BOOLEAN)
+            : array_key_exists('feeds_draft', $posted),
+    ];
+}
+
+/**
+ * Reads a posted form field as text, treating a missing or array value as empty.
+ *
+ * A section textarea is read untrimmed, so the line numbers in its errors
+ * count from the first line the author sees.
+ *
+ * @param array<string, mixed> $post The submitted form fields.
+ * @param string               $key  The field name.
+ * @param bool                 $trim Whether to trim surrounding whitespace.
+ * @return string The value.
+ */
+function settings_form_value(array $post, string $key, bool $trim = true): string
+{
+    $value = \Lamb\Http\request_string($post[$key] ?? null) ?? '';
+
+    return $trim ? trim($value) : $value;
+}
+
+/**
+ * Parses a section textarea of `label = value` lines into ordered entries.
+ *
+ * Blank lines and `;` comment lines are skipped, and the line splits at its
+ * first `=`, so a value may contain more of them (`/search?q=a`). A line is
+ * reported, and left out of the entries, when it has no `=`, no label, a label
+ * already used above it, a label the INI file cannot hold (a `[`, `"`, `&`
+ * and so on, which would fail to parse or turn the entry into a list), or a
+ * NUL byte.
+ *
+ * @param string $text The textarea content.
+ * @return array{entries: array<string, string>, errors: list<string>} The entries in order, and one
+ *     error per rejected line, each starting with its 1-based line number.
+ */
+function parse_section_text(string $text): array
+{
+    $entries = [];
+    $errors = [];
+
+    foreach (preg_split('/\R/', $text) ?: [] as $index => $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === ';') {
+            continue;
+        }
+
+        $number = $index + 1;
+        if (str_contains($line, "\0")) {
+            $errors[] = "line {$number}: it contains a NUL byte, which cannot be saved.";
+            continue;
+        }
+
+        $split = strpos($line, '=');
+        if ($split === false) {
+            $errors[] = "line {$number}: `{$line}` needs a label, an `=` and a value, like `label = value`.";
+            continue;
+        }
+
+        $label = trim(substr($line, 0, $split));
+        if ($label === '') {
+            $errors[] = "line {$number}: there is no label before the `=`.";
+        } elseif (parse_ini_safe("[s]\n{$label} = x\n") !== ['s' => [$label => 'x']]) {
+            $errors[] = "line {$number}: `{$label}` cannot be used as a label.";
+        } elseif (array_key_exists($label, $entries)) {
+            $errors[] = "line {$number}: `{$label}` appears more than once.";
+        } else {
+            $entries[$label] = trim(substr($line, $split + 1));
+        }
+    }
+
+    return ['entries' => $entries, 'errors' => $errors];
+}
+
+/**
+ * Writes settings as INI text that parse_ini_safe() reads back exactly.
+ *
+ * Single values come first, then one `[section]` block per section, empty
+ * ones included. A value is wrapped in double quotes when the INI_SCANNER_RAW
+ * parser would otherwise misread it: leading or trailing space, an empty value,
+ * or a `;`, `=`, `"`, `[` or `]` in it. The raw parser has no escape for a line
+ * break, so a value or label containing one is refused.
+ *
+ * @param array<string, string>                $values   The single-value settings.
+ * @param array<string, array<string, string>> $sections The sections, as label => value entries.
+ * @return string The INI text.
+ * @throws \InvalidArgumentException When a key, label or value contains a line break or NUL.
+ */
+function write_ini(array $values, array $sections): string
+{
+    $lines = [];
+    foreach ($values as $key => $value) {
+        $lines[] = ini_line((string) $key, $value);
+    }
+    foreach ($sections as $name => $entries) {
+        if ($lines !== []) {
+            $lines[] = '';
+        }
+        $lines[] = "[{$name}]";
+        foreach ($entries as $label => $value) {
+            $lines[] = ini_line((string) $label, $value);
+        }
+    }
+
+    return implode("\n", $lines) . "\n";
+}
+
+/**
+ * Writes one `key = value` INI line, quoting the value when the raw parser needs it.
+ *
+ * @param string $key   The key or label.
+ * @param string $value The value.
+ * @return string The line, without a line break.
+ * @throws \InvalidArgumentException When the key or value contains a line break or NUL.
+ */
+function ini_line(string $key, string $value): string
+{
+    if (preg_match('/[\r\n\0]/', $key . $value) === 1) {
+        throw new \InvalidArgumentException("The setting `{$key}` cannot be saved: it contains a line break.");
+    }
+
+    $needs_quotes = $value === '' || $value !== trim($value) || preg_match('/[;"=\[\]]/', $value) === 1;
+
+    return $key . ' = ' . ($needs_quotes ? '"' . $value . '"' : $value);
 }
 
 /**

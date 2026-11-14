@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use SimplePie\Item as SimplePieItem;
 
+use function Lamb\Post\parse_matter;
 use function Lamb\Post\populate_bean;
 
 class PopulateBeanTest extends TestCase
@@ -180,6 +181,105 @@ class PopulateBeanTest extends TestCase
         $config = $saved;
 
         $this->assertNotSame(1, $bean->draft);
+    }
+
+    public function testRemovingDraftFromFrontMatterOfAStoredPostPublishesIt(): void
+    {
+        $bean = \RedBeanPHP\R::dispense('post');
+        $bean->body = "---\ndraft: true\n---\nContent.";
+        $bean->draft = 1;
+        \RedBeanPHP\R::store($bean);
+
+        $bean = populate_bean("---\ntitle: Now live\n---\nContent.", null, null, $bean);
+
+        $this->assertSame(0, $bean->draft);
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function feedBodies(): array
+    {
+        return [
+            'with a title' => ["---\ntitle: Hello feed\n---\n\nFeed content"],
+            'without a title' => ['Feed content'],
+        ];
+    }
+
+    /**
+     * @dataProvider feedBodies
+     */
+    public function testNewFeedDraftCarriesDraftTrueInItsFrontMatter(string $text): void
+    {
+        global $config;
+        $saved = $config;
+        $config['feeds_draft'] = true;
+
+        $bean = populate_bean($text, $this->makeFeedItem('draft-fm-1'), 'test-feed');
+        $config = $saved;
+
+        $this->assertSame(1, $bean->draft);
+        $this->assertTrue(parse_matter($bean->body)['draft'] ?? null);
+    }
+
+    public function testNewFeedDraftKeepsItsTitleInFrontMatter(): void
+    {
+        global $config;
+        $saved = $config;
+        $config['feeds_draft'] = true;
+
+        $bean = populate_bean("---\ntitle: Hello feed\n---\n\nFeed content", $this->makeFeedItem('draft-fm-2'), 'test-feed');
+        $config = $saved;
+
+        $this->assertSame('Hello feed', parse_matter($bean->body)['title']);
+        $this->assertSame('Hello feed', $bean->title);
+    }
+
+    /**
+     * @dataProvider feedBodies
+     */
+    public function testResyncedFeedDraftKeepsDraftTrueInItsFrontMatter(string $text): void
+    {
+        $stored = R::dispense('post');
+        $stored->body = 'Old content';
+        $stored->draft = 1;
+        R::store($stored);
+
+        $bean = populate_bean($text, $this->makeFeedItem('draft-fm-3'), 'test-feed', $stored);
+
+        $this->assertSame(1, $bean->draft);
+        $this->assertTrue(parse_matter($bean->body)['draft'] ?? null);
+    }
+
+    /**
+     * @dataProvider feedBodies
+     */
+    public function testPublishedFeedPostHasNoDraftLineInItsFrontMatter(string $text): void
+    {
+        $stored = R::dispense('post');
+        $stored->body = 'Old content';
+        $stored->draft = 0;
+        R::store($stored);
+
+        $bean = populate_bean($text, $this->makeFeedItem('draft-fm-4'), 'test-feed', $stored);
+
+        $this->assertArrayNotHasKey('draft', parse_matter($bean->body));
+        $this->assertStringNotContainsString('draft', $bean->body);
+    }
+
+    /**
+     * @dataProvider feedBodies
+     */
+    public function testFeedPostIngestedAsPublishedHasNoDraftLineInItsFrontMatter(string $text): void
+    {
+        global $config;
+        $saved = $config;
+        $config['feeds_draft'] = 'false';
+
+        $bean = populate_bean($text, $this->makeFeedItem('draft-fm-5'), 'test-feed');
+        $config = $saved;
+
+        $this->assertStringNotContainsString('draft', $bean->body);
     }
 
     public function testPopulateBeanSetsCurrentVersion(): void

@@ -12,6 +12,7 @@ use function Lamb\Network\get_feeds;
 use function Lamb\Network\ingest_item;
 use function Lamb\Network\prepare_item;
 use function Lamb\Network\update_item;
+use function Lamb\Post\parse_matter;
 
 class NetworkFeedTest extends TestCase
 {
@@ -439,5 +440,84 @@ class NetworkFeedTest extends TestCase
         $reloaded = R::load('post', $bean->id);
         $this->assertSame('Author edited body', $reloaded->body);
         $this->assertSame('2024-01-01 10:00:00', $reloaded->updated);
+    }
+
+    public function testIngestItemKeepsAFeedDraftAsADraftWhenTheFeedUpdatesIt(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 1', 'Notes', 'https://example.com/r1', 'draft-resync-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        $this->assertTrue(ingest_item($item, 'TestBlog', 0));
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'draft-resync-id')]);
+        $this->assertSame(1, (int) $stored->draft);
+
+        $newer = $this->makeItem('Release 1', 'Notes and artefact', 'https://example.com/r1', 'draft-resync-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $this->assertTrue(ingest_item($newer, 'TestBlog', 0));
+
+        $resynced = R::load('post', $stored->id);
+        $this->assertSame('2024-06-01 15:00:00', $resynced->updated);
+        $this->assertSame(1, (int) $resynced->draft);
+    }
+
+    public function testStoredFeedDraftCarriesDraftTrueAlongsideItsTitleAndSlug(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 3', 'Notes', 'https://example.com/r3', 'draft-line-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        $this->assertTrue(ingest_item($item, 'TestBlog', 0));
+
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'draft-line-id')]);
+        $matter = parse_matter($stored->body);
+        $this->assertTrue($matter['draft'] ?? null);
+        $this->assertSame('Release 3', $matter['title']);
+        $this->assertSame($stored->slug, $matter['slug']);
+    }
+
+    public function testResyncedFeedDraftStillCarriesDraftTrueInItsBody(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 4', 'Notes', 'https://example.com/r4', 'draft-line-resync-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        ingest_item($item, 'TestBlog', 0);
+        $newer = $this->makeItem('Release 4', 'Notes and artefact', 'https://example.com/r4', 'draft-line-resync-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $this->assertTrue(ingest_item($newer, 'TestBlog', 0));
+
+        $resynced = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'draft-line-resync-id')]);
+        $this->assertStringContainsString('artefact', $resynced->body);
+        $this->assertTrue(parse_matter($resynced->body)['draft'] ?? null);
+    }
+
+    public function testFeedPostIngestedAsPublishedHasNoDraftLineInItsBody(): void
+    {
+        global $config;
+        $config['feeds_draft'] = false;
+
+        $item = $this->makeItem('Release 5', 'Notes', 'https://example.com/r5', 'published-line-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        $this->assertTrue(ingest_item($item, 'TestBlog', 0));
+
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'published-line-id')]);
+        $this->assertArrayNotHasKey('draft', parse_matter($stored->body));
+    }
+
+    public function testIngestItemKeepsAFeedPostTheOwnerPublishedPublishedWhenTheFeedUpdatesIt(): void
+    {
+        global $config;
+        $config['feeds_draft'] = true;
+
+        $item = $this->makeItem('Release 2', 'Notes', 'https://example.com/r2', 'published-resync-id', '2024-01-01 10:00:00', '2024-01-01 10:00:00');
+        ingest_item($item, 'TestBlog', 0);
+        $stored = R::findOne('post', ' feeditem_uuid = ? ', [md5('TestBlog' . 'published-resync-id')]);
+        $stored->draft = 0;
+        R::store($stored);
+
+        $newer = $this->makeItem('Release 2', 'Notes and artefact', 'https://example.com/r2', 'published-resync-id', '2024-01-01 10:00:00', '2024-06-01 15:00:00');
+        $this->assertTrue(ingest_item($newer, 'TestBlog', 0));
+
+        $resynced = R::load('post', $stored->id);
+        $this->assertSame('2024-06-01 15:00:00', $resynced->updated);
+        $this->assertSame(0, (int) $resynced->draft);
     }
 }

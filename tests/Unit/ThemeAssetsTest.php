@@ -355,7 +355,6 @@ class ThemeAssetsTest extends TestCase
         $output = ob_get_clean();
 
         $this->assertStringNotContainsString('growing-input.js', $output);
-        $this->assertStringNotContainsString('confirm-delete.js', $output);
         $this->assertStringNotContainsString('link-edit-buttons.js', $output);
         $this->assertStringNotContainsString('upload-image.js', $output);
     }
@@ -369,7 +368,7 @@ class ThemeAssetsTest extends TestCase
         $output = ob_get_clean();
 
         $this->assertStringContainsString('growing-input.js', $output);
-        $this->assertStringContainsString('confirm-delete.js', $output);
+        $this->assertStringNotContainsString('confirm-delete.js', $output);
         $this->assertStringContainsString('link-edit-buttons.js', $output);
         $this->assertStringContainsString('upload-image.js', $output);
         $this->assertStringContainsString('paste-link.js', $output);

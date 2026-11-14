@@ -74,6 +74,15 @@ registers the PHPCompatibility standard for that checkout (handled on install
 by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
+Generate each worktree's own `.env` with
+`LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` instead of copying
+one. By default the script picks the acceptance port from the checkout's
+path, so parallel worktrees almost always run their acceptance servers on
+different ports. A copied `.env` carries the other checkout's `LAMB_TEST_PORT`,
+and the suite's startup then kills the other worktree's server on that port.
+If two worktrees get the same port, set `LAMB_TEST_PORT` when you run
+`make-password.php` in one of them.
+
 ### Cloud sessions
 
 If the SessionStart hook warns that `viv install` is incomplete (a network that
@@ -87,7 +96,9 @@ composer, npm, github-actions, docker, devcontainers — and
 Dependabot parses `composer.json`/`composer.lock` directly, so the composer
 ecosystem is unaffected by installing dependencies with viv instead of
 Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
-audit` (js-test job).
+audit` (js-test job). An advisory only warns on a PR into any branch except
+`release`, so an unrelated PR can still merge. It fails the job on a PR into,
+or a push to, `release`, so it blocks a release until the dependency is fixed.
 
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
@@ -256,6 +267,7 @@ Post content here. Use #hashtags inline.
 ```
 
 `parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` reads a block that is not valid YAML as no front matter, which drops every field in it (including `draft: true`). So every path that saves text an author wrote — `redirect_created()`, `redirect_edited()` and the Micropub create/update callbacks — calls `Post\front_matter_error()` first and refuses on a message: the web forms flash it and re-render with the typed text (`preload_text()`, `respond_edit()`), Micropub answers 400 `invalid_request`. Feed ingestion and `bin/lamb import` build their own front matter, so they do not call it.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
@@ -290,7 +302,7 @@ define("THEME_URL", 'themes/' . THEME . '/');               // URL prefix (relat
 
 `ROOT_DIR` is `src/`. So `THEME_DIR` for a theme named `news` resolves to `src/themes/news/`.
 
-To activate a theme add `theme = news` to the INI config in the DB (edit at `/settings`).
+To activate a theme, pick it in the Theme field at `/settings` (the list is the directories under `src/themes/`), or set `theme = news` in the stored INI.
 
 New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. An install with no `theme` key set falls back to `theme = base` via `Theme\resolve_theme()` at read time — nothing is rewritten in storage.
 
@@ -339,12 +351,12 @@ index.php
 
 | Template | Keys always present | Keys sometimes present |
 |----------|--------------------|-----------------------|
-| `home` | `posts`, `pagination`, `title` | — |
+| `home` | `posts`, `pagination`, `title` | `home_post` (the published post slugged `home`, first page only; excluded from `posts`; the base theme renders it above the timeline, so a custom `parts/home.php` must render it itself) |
 | `status` / slugged post | `posts` (single-item array), `title` | — |
 | `tag` | `posts`, `pagination`, `title`, `intro`, `feed_url` | — |
 | `search` | `posts`, `pagination`, `title`, `intro` | — |
 | `drafts` | `posts`, `pagination`, `title` | — |
-| `settings` | — | `ini_text` (on failed save) |
+| `settings` | `title`, `ini_text` (the stored INI, which the form is prefilled from via `Config\settings_form_prefill()`), `feed_statuses`, `redirects` | `form_values` (the typed fields, on a refused save) |
 | `404` | `action` | — |
 
 **`$data['posts']`** is an array of RedBeanPHP `OODBBean` objects. Each bean exposes:
@@ -399,7 +411,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` when the response is marked noindex (private routes, `?preview=` links); nothing otherwise |
-| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` for `$config['preconnect']` origins |
+| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `dns-prefetch` for up to 3 distinct origins in total: deprecated `$config['preconnect']` origins first, then the remote origins in the `src`/`srcset`/`poster` URLs of `$data['posts']` bodies |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
 | `csrf_token()` | `string` | Returns (and creates if needed) the current session CSRF token |
 | `related_posts($body)` | `array` | Posts sharing hashtags with `$body`; returns `['posts' => OODBBean[]]` |
@@ -443,7 +455,6 @@ It always loads:
 When the user is logged in, it also loads:
 
 - `src/scripts/logged_in/growing-input.js`
-- `src/scripts/logged_in/confirm-delete.js`
 - `src/scripts/logged_in/link-edit-buttons.js`
 - `src/scripts/logged_in/upload-image.js`
 - `src/scripts/logged_in/paste-link.js`
@@ -529,11 +540,15 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests
-- Every user-visible change adds a bullet under `## [Unreleased]` in
-  `CHANGELOG.md` in the same commit as the code. Say what the user sees, in
-  plain language, with the issue as `([#N](url))`. Use the Keep a Changelog
-  types: Added, Changed, Deprecated, Removed, Fixed, Security. Internal-only changes
-  (tests, tooling, refactors) don't get a bullet.
+- Every user-visible change adds a fragment file in `changelog.d/` in the same
+  commit as the code, named `<issue>.<type>.md` (or `<issue>-<slug>.<type>.md`,
+  or `<slug>.<type>.md` with no issue). Don't edit `CHANGELOG.md`: the release
+  assembles the fragments into it. Each fragment holds bullets that say what
+  the user sees, in plain language, and link the issue as `([#N](url))` when
+  there is one. Use the Keep a Changelog types: added, changed, deprecated,
+  removed, fixed, security. Internal-only changes (tests, tooling, refactors)
+  don't get a fragment. A PR that changes `src/` or `bin/` without one fails CI
+  unless it has the `no-changelog` label. See `changelog.d/README.md`.
 - Run `viv run lint` before committing
 
 ### Comments
@@ -585,6 +600,17 @@ Tests use **Codeception 5** with PHPUnit underneath.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
 Config in `codeception.yml` reads env from `.env`.
+
+An acceptance test that calls `haveStoredSettings()` writes the SQLite file from the
+test process, which fails against the external server `release-verify.yml` tests (it
+owns the file). Mark such a test `@group seeds-db`, on the method or the class:
+`release-verify.yml` passes `--skip-group seeds-db`, and `SeedsDbGroupGuardTest` fails
+the build when a test that seeds is not in the group.
+
+Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
+annotation for data providers. Codeception ignores PHPUnit's
+`#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
+no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
 
 ### JavaScript unit tests
 
@@ -725,7 +751,7 @@ When adding features, prefer the minimal implementation. Avoid adding configurat
 ### Running Acceptance Tests
 *~1,500 tokens/session saved*
 - `vendor/bin/codecept run Acceptance` needs `LAMB_LOGIN_PASSWORD` and `SITE_URL` in the environment. Source `.env` first: `set -a; . ./.env; set +a` then run. CI passes it via the acceptance suite server env (tests/Acceptance.suite.yml).
-- Kill stale dev servers on port 8747 before re-running (`pkill -f 'php -S 0.0.0.0:8747'`) or the run hangs/fails.
+- The acceptance server listens on `LAMB_TEST_PORT` from `.env`, which by default is not the dev server's 8747, and the suite frees that port before it starts.
 
 ### Editing Files
 *~1,200 tokens/session saved*

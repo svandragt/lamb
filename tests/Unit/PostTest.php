@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\get_tags;
 use function Lamb\Post\body_has_tag;
+use function Lamb\Post\front_matter_error;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Post\load_posts_in_order;
 use function Lamb\Post\parse_matter;
@@ -189,6 +190,27 @@ class PostTest extends TestCase
         $body = "---\n: this is: invalid yaml\n---\nContent.";
         $result = parse_matter($body);
         $this->assertIsArray($result);
+    }
+
+    public function testFrontMatterErrorNamesTheParserMessageForInvalidYaml()
+    {
+        $error = front_matter_error("---\ndraft: true\ntitle: a: b\n---\nHello");
+        $this->assertStringStartsWith('Front matter is not valid YAML: ', (string) $error);
+        $this->assertStringContainsString('title: a: b', (string) $error);
+    }
+
+    public function testFrontMatterErrorRepairsABodyThatIsNotValidUtf8LikeParseBeanDoes()
+    {
+        // A stray Windows-1252 byte (\xE9 is "é") in valid YAML: parse_bean()
+        // repairs the encoding before it parses, so the save must not be refused.
+        $this->assertNull(front_matter_error("---\ntitle: caf\xE9\n---\nHello"));
+    }
+
+    public function testFrontMatterErrorIsNullForValidOrAbsentFrontMatter()
+    {
+        $this->assertNull(front_matter_error("---\ntitle: a\n---\nHello"));
+        $this->assertNull(front_matter_error("Hello\n\n---\ntitle: a: b\n---\n"));
+        $this->assertNull(front_matter_error("---\n---\nHello"));
     }
 
     public function testParseMatterReturnsListWhenFrontMatterIsSequence()
@@ -404,6 +426,7 @@ class PostTest extends TestCase
         $schema = R::dispense('post');
         $schema->draft   = null;
         $schema->deleted = null;
+        $schema->slug    = null;
         R::store($schema);
         R::exec('DELETE FROM post');
     }

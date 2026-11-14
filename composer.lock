@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "8279a9aec2c3107c6e164d3e2a0e7b73",
+    "content-hash": "b71c5d4250efed5f8e96b09396109597",
     "packages": [
         {
             "name": "erusev/parsedown",
@@ -727,16 +727,16 @@
         },
         {
             "name": "symfony/yaml",
-            "version": "v8.1.10",
+            "version": "v8.1.11",
             "source": {
                 "type": "git",
                 "url": "https://github.com/symfony/yaml.git",
-                "reference": "9de4ff9874dd18b738b9f248398c3e36ef15a1d2"
+                "reference": "e8266f55160f674f290a5f567cb55e11e21f921b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/symfony/yaml/zipball/9de4ff9874dd18b738b9f248398c3e36ef15a1d2",
-                "reference": "9de4ff9874dd18b738b9f248398c3e36ef15a1d2",
+                "url": "https://api.github.com/repos/symfony/yaml/zipball/e8266f55160f674f290a5f567cb55e11e21f921b",
+                "reference": "e8266f55160f674f290a5f567cb55e11e21f921b",
                 "shasum": ""
             },
             "require": {
@@ -779,7 +779,7 @@
             "description": "Loads and dumps YAML files",
             "homepage": "https://symfony.com",
             "support": {
-                "source": "https://github.com/symfony/yaml/tree/v8.1.10"
+                "source": "https://github.com/symfony/yaml/tree/v8.1.11"
             },
             "funding": [
                 {
@@ -799,20 +799,20 @@
                     "type": "tidelift"
                 }
             ],
-            "time": "2026-10-18T14:56:39+00:00"
+            "time": "2026-11-04T08:39:20+00:00"
         },
         {
             "name": "taproot/micropub-adapter",
-            "version": "v0.1.3",
+            "version": "v0.1.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/Taproot/micropub-adapter.git",
-                "reference": "c253f3dab6e3b1e58f791a552ca0b947ed344b3f"
+                "reference": "5e284f105f92b482762c72bfa8eec36833f0412b"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Taproot/micropub-adapter/zipball/c253f3dab6e3b1e58f791a552ca0b947ed344b3f",
-                "reference": "c253f3dab6e3b1e58f791a552ca0b947ed344b3f",
+                "url": "https://api.github.com/repos/Taproot/micropub-adapter/zipball/5e284f105f92b482762c72bfa8eec36833f0412b",
+                "reference": "5e284f105f92b482762c72bfa8eec36833f0412b",
                 "shasum": ""
             },
             "require": {
@@ -852,9 +852,9 @@
             "description": "The easiest way to add micropub support to existing or new applications.",
             "support": {
                 "issues": "https://github.com/Taproot/micropub-adapter/issues",
-                "source": "https://github.com/Taproot/micropub-adapter/tree/v0.1.3"
+                "source": "https://github.com/Taproot/micropub-adapter/tree/v0.1.4"
             },
-            "time": "2023-07-24T13:55:02+00:00"
+            "time": "2026-10-29T21:51:21+00:00"
         }
     ],
     "packages-dev": [
@@ -2264,11 +2264,11 @@
         },
         {
             "name": "phpstan/phpstan",
-            "version": "2.3.2",
+            "version": "2.3.5",
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/18bc23a0682f08591529377d271b5c4dfe9ed1dd",
-                "reference": "18bc23a0682f08591529377d271b5c4dfe9ed1dd",
+                "url": "https://api.github.com/repos/phpstan/phpstan/zipball/645a1bd6bead15fc1b8474137467961d0fa30a79",
+                "reference": "645a1bd6bead15fc1b8474137467961d0fa30a79",
                 "shasum": ""
             },
             "require": {
@@ -2324,7 +2324,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-24T11:36:00+00:00"
+            "time": "2026-11-03T12:14:22+00:00"
         },
         {
             "name": "phpunit/php-code-coverage",
@@ -5779,5 +5779,5 @@
     "platform-overrides": {
         "php": "8.4.1"
     },
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }
