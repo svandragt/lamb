@@ -11,8 +11,8 @@ use function Lamb\Theme\author_card;
 /**
  * Characterisation test for the 2026 theme's _items.php.
  *
- * These tests pin the exact rendered HTML of the part, so a change to it is
- * verified byte-for-byte rather than eyeballed.
+ * These tests pin the exact rendered HTML of the markup that Lamb\Theme\render_post_list()
+ * produces, so a change to it is verified byte-for-byte rather than eyeballed.
  *
  * Fixtures live in tests/Support/Data/theme-items/*.html, captured from the
  * theme's output with the per-post author line replaced by a
@@ -142,6 +142,20 @@ class ThemeModernItemsPartTest extends TestCase
         $this->assertStringNotContainsString('</span> @', $html);
     }
 
+    // Custom themes copied from the 0.16 2026 theme still call render_post_list(true).
+    public function testRenderPostListIgnoresTheLegacyHideAuthorArgument(): void
+    {
+        $bean     = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
+        $expected = $this->normalize($this->render('2026', 'tag', [$bean]));
+
+        ob_start();
+        \call_user_func('Lamb\Theme\render_post_list', true);
+        $html = $this->normalize((string) ob_get_clean());
+
+        $this->assertSame($expected, $html);
+        $this->assertStringContainsString('<span itemprop="author" class="screen-reader-text">', $html);
+    }
+
     public function testEmptyPostsRendersTheNoItemsMessage(): void
     {
         $html = $this->render('2026', 'tag', []);
@@ -165,7 +179,7 @@ class ThemeModernItemsPartTest extends TestCase
     }
 
     /**
-     * The part decided Restore-vs-Delete with the raw
+     * render_post_list() decided Restore-vs-Delete with the raw
      * `$bean->deleted` truthy check instead of the canonical is_deleted()
      * predicate ((bean->deleted ?? null) == 1). A non-canonical truthy value
      * (deleted = 2) would previously still show Restore even though

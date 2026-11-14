@@ -503,21 +503,11 @@ class ThemeTest extends TestCase
         }
     }
 
-    private function isRealSrcRoot(): bool
+    // The 2024 theme was removed in 0.17: a stored `2024` renders as 2026, even
+    // when a tarball upgrade left the old src/themes/2024 directory behind.
+    public function testResolveThemeRendersARemovedThemeAsItsReplacement(): void
     {
-        $this->ensureRootDir();
-
-        return realpath(ROOT_DIR) === realpath(dirname(__DIR__, 2) . '/src');
-    }
-
-    // The 2024 theme was removed in 0.17: while its directory is missing, a stored `2024` renders as 2026.
-    public function testResolveThemeRendersARemovedThemeAsItsReplacementWhenItsDirectoryIsMissing(): void
-    {
-        $themes = $this->themesDir();
-        if (is_dir($themes . '/2024')) {
-            $this->markTestSkipped('ROOT_DIR already has a 2024 theme directory.');
-        }
-        $replacement = $themes . '/2026';
+        $replacement = $this->themesDir() . '/2026';
         $created     = !is_dir($replacement);
         if ($created) {
             mkdir($replacement, 0777, true);
@@ -532,30 +522,24 @@ class ThemeTest extends TestCase
         }
     }
 
-    public function testResolveThemeFallsBackToBaseWhenTheRemovedThemesReplacementIsMissingToo(): void
+    public function testResolveThemeRendersARemovedThemeAsItsReplacementWhenItsOldDirectoryRemains(): void
     {
-        $themes = $this->themesDir();
-        if (is_dir($themes . '/2024') || is_dir($themes . '/2026')) {
-            $this->markTestSkipped('ROOT_DIR already has a 2024 or 2026 theme directory.');
+        $themes      = $this->themesDir();
+        $replacement = $themes . '/2026';
+        $leftover    = $themes . '/2024';
+        $created     = !is_dir($replacement);
+        if ($created) {
+            mkdir($replacement, 0777, true);
         }
-
-        $this->assertSame('base', resolve_theme('2024'));
-    }
-
-    // A site that installed its own src/themes/2024 keeps it (see 430c5b9).
-    public function testResolveThemeKeepsARemovedThemeNameWhenTheSiteHasItsOwnDirectory(): void
-    {
-        $themes = $this->themesDir();
-        if ($this->isRealSrcRoot() || is_dir($themes . '/2024')) {
-            $this->markTestSkipped('Creating a 2024 directory needs a temporary ROOT_DIR.');
-        }
-        $dir = $themes . '/2024';
-        mkdir($dir, 0777, true);
+        mkdir($leftover, 0777, true);
 
         try {
-            $this->assertSame('2024', resolve_theme('2024'));
+            $this->assertSame('2026', resolve_theme('2024'));
         } finally {
-            rmdir($dir);
+            rmdir($leftover);
+            if ($created) {
+                rmdir($replacement);
+            }
         }
     }
 
