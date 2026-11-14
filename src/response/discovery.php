@@ -71,7 +71,7 @@ function sitemap_date(?string $datetime): ?string
 function sitemap_urls(string $root = ROOT_URL, int $page = 0, int $cap = SITEMAP_MAX_URLS): array
 {
     $visible = \Lamb\visible_clause();
-    // The home entry added below stands for the home post, which has no row of its own.
+    // The home post's URL is `/`, which the home entry added below already lists.
     $sql = 'SELECT id, slug, updated FROM post WHERE ' . $visible['sql'] . 'AND' . \Lamb\SQL_NOT_HOME
         . 'ORDER BY updated DESC';
     $params = $visible['params'];

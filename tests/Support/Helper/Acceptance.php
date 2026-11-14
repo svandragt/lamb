@@ -70,6 +70,15 @@ class Acceptance extends Module
      * request first, so the server has created the database. The connection is
      * closed before returning, which checkpoints the WAL and removes the sidecar
      * files, so the server (which may run as another user) can open the file next.
+     *
+     * A test that calls this must be in the `seeds-db` group: release-verify runs against an
+     * external server whose database this process cannot write, and skips that group.
+     *
+     * @param string $ini The full settings INI text to store.
+     *
+     * @return void
+     *
+     * @throws \PDOException When the database cannot be opened or written.
      */
     public function haveStoredSettings(string $ini): void
     {

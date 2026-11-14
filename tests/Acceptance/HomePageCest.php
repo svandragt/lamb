@@ -54,6 +54,7 @@ class HomePageCest
 
     /**
      * @dataProvider themeProvider
+     * @group seeds-db
      */
     public function homePostShowsAboveTheTimeline(AcceptanceTester $I, Example $example): void
     {
@@ -129,6 +130,9 @@ class HomePageCest
         $I->see(self::TIMELINE_BODY);
     }
 
+    /**
+     * @group seeds-db
+     */
     public function laterPagesDoNotShowTheHomePost(AcceptanceTester $I): void
     {
         $this->login($I);

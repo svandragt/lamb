@@ -99,6 +99,8 @@ jobs:
         run: viv validate
 
       - name: Security audit
+        # An advisory warns on other PRs and blocks only a release: a PR into, or a push to, `release`.
+        continue-on-error: ${{ github.base_ref != 'release' && github.ref_name != 'release' }}
         run: viv audit
 
       - name: Run PHPCS
@@ -151,7 +153,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: lts/*
@@ -169,6 +171,8 @@ jobs:
       # threshold instead of viv audit's fail-on-anything. Dependabot
       # alerts still surface the lower-severity ones.
       - name: Security audit
+        # An advisory warns on other PRs and blocks only a release: a PR into, or a push to, `release`.
+        continue-on-error: ${{ github.base_ref != 'release' && github.ref_name != 'release' }}
         run: pnpm audit --audit-level=high
       - name: Run JS tests
         run: pnpm test
@@ -196,7 +200,7 @@ jobs:
           key: viv-${{ hashFiles('composer.lock') }}
       - name: Install viv dependencies
         run: viv install --no-dev --no-scripts
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: lts/*

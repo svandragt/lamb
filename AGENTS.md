@@ -9,6 +9,10 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - Check whether a docs page exists for the feature and update it if needed.
 - When adding new user-facing behaviour, consider whether a new docs page is warranted.
 - Ensure docs pages that are topically related link to each other via a "Related" section.
+- Describe the behaviour of the release the docs ship in. For a deprecation, write
+  "works until 0.N, then …", not the behaviour after removal.
+- When a sentence claims behaviour, find the code line that produces it and cite
+  `file:line` in the PR body.
 
 GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `make docs` (serves at http://localhost:4000/lamb/).
 
@@ -96,7 +100,9 @@ composer, npm, github-actions, docker, devcontainers — and
 Dependabot parses `composer.json`/`composer.lock` directly, so the composer
 ecosystem is unaffected by installing dependencies with viv instead of
 Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
-audit` (js-test job).
+audit` (js-test job). An advisory only warns on a PR into any branch except
+`release`, so an unrelated PR can still merge. It fails the job on a PR into,
+or a push to, `release`, so it blocks a release until the dependency is fixed.
 
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
@@ -119,6 +125,10 @@ human:
   resolving undici 7.x after jsdom 30 moved to `^8.7.0`. If you must add one,
   say in a comment why it exists and what would let it go — then remove it as
   soon as the upstream range covers the fix.
+
+The viv release that CI, the Docker release image, `docker compose` and Workshop
+download is pinned in four files, and Dependabot does not update them.
+`VivVersionPinsGuardTest` fails when the pins differ, so change all four together.
 
 New dependencies are subject to a 3-day supply-chain cooldown (`cooldown` in
 `dependabot.yml`, `min-release-age` in `.npmrc`). To pull something newer by
@@ -265,6 +275,7 @@ Post content here. Use #hashtags inline.
 ```
 
 `parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` reads a block that is not valid YAML as no front matter, which drops every field in it (including `draft: true`). So every path that saves text an author wrote — `redirect_created()`, `redirect_edited()` and the Micropub create/update callbacks — calls `Post\front_matter_error()` first and refuses on a message: the web forms flash it and re-render with the typed text (`preload_text()`, `respond_edit()`), Micropub answers 400 `invalid_request`. Feed ingestion and `bin/lamb import` build their own front matter, so they do not call it.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
@@ -598,10 +609,21 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
+An acceptance test that calls `haveStoredSettings()` writes the SQLite file from the
+test process, which fails against the external server `release-verify.yml` tests (it
+owns the file). Mark such a test `@group seeds-db`, on the method or the class:
+`release-verify.yml` passes `--skip-group seeds-db`, and `SeedsDbGroupGuardTest` fails
+the build when a test that seeds is not in the group.
+
 Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
 annotation for data providers. Codeception ignores PHPUnit's
 `#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
 no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
+
+A change to a handler behind an HTML form needs an Acceptance test that submits the
+real form through its route. A Unit test that calls the handler with arguments the
+route never passes is not enough. In 0.16 the edit form posted to `/edit` with no id
+in the URL, so a Unit test that passed an id hid a bug that loaded post 0.
 
 ### JavaScript unit tests
 

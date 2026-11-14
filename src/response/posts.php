@@ -14,6 +14,7 @@ use RedBeanPHP\RedException\SQL;
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\Http\request_string;
 use function Lamb\parse_bean;
+use function Lamb\Post\front_matter_error;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\save;
@@ -36,6 +37,15 @@ function redirect_created(): void
     }
     $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     if (empty($contents)) {
+        return;
+    }
+
+    // Refuse before anything is built: the form re-renders with the typed text
+    // (see preload_text()) and the message.
+    $front_matter_error = front_matter_error($contents);
+    if ($front_matter_error !== null) {
+        $_SESSION['flash'][] = $front_matter_error;
+
         return;
     }
 
@@ -301,6 +311,14 @@ function redirect_edited(): void
         return;
     }
 
+    // Refuse before the bean is touched; respond_edit() shows the typed text.
+    $front_matter_error = front_matter_error($contents);
+    if ($front_matter_error !== null) {
+        $_SESSION['flash'][] = $front_matter_error;
+
+        return;
+    }
+
     $bean = R::load('post', (int)$id);
     $old_slug = $bean->slug;
 
@@ -475,8 +493,9 @@ function respond_status(array $args): array
 /**
  * Responds to an edit request, returning the post to render in the edit form.
  *
- * @param array<int, string> $args The first element should be the post ID.
+ * @param array<int, string|false|null> $args The first element is the post ID, absent on a POST.
  * @return array<string, mixed>
+ * @throws \RedBeanPHP\RedException\SQL When the post cannot be read.
  */
 function respond_edit(array $args): array
 {
@@ -484,6 +503,18 @@ function respond_edit(array $args): array
         redirect_edited();
     }
     Security\require_login();
+
+    // A POST that got this far was refused or failed to save. The form posts to
+    // /edit with no id in the URL, so the post comes from the posted id, and the
+    // typed text replaces the stored body in the editor. Not stored. The
+    // referrer saved when the editor opened stays: overwriting it with this
+    // page would send the next successful save back here.
+    if (!empty($_POST)) {
+        $post       = R::load('post', (int) request_string($_POST['id'] ?? null));
+        $post->body = request_string($_POST['contents'] ?? null) ?: $post->body;
+
+        return ['post' => $post];
+    }
 
     [$id] = $args;
 

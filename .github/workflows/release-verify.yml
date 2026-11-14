@@ -70,7 +70,8 @@ jobs:
           exit 1
 
       - name: Run acceptance tests against the release image
-        run: vendor/bin/codecept run Acceptance --env external --steps
+        # seeds-db tests write the SQLite file directly, which the container's user owns.
+        run: vendor/bin/codecept run Acceptance --env external --skip-group seeds-db --steps
 
       - name: Container logs on failure
         if: failure()
@@ -148,7 +149,8 @@ jobs:
           exit 1
 
       - name: Run acceptance tests against nginx + php-fpm
-        run: vendor/bin/codecept run Acceptance --env external --steps
+        # seeds-db tests write the SQLite file directly, which the php-fpm user owns.
+        run: vendor/bin/codecept run Acceptance --env external --skip-group seeds-db --steps
 
       - name: Server logs on failure
         if: failure()

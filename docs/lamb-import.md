@@ -7,7 +7,7 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [Lamb export](export.md) — the `.zip` that `/export` produces, or an already-unpacked copy of one — and restores every post and asset it describes. It's a Lamb-to-Lamb restore rather than a converter: it writes back exactly what you exported, through the same low-level pipeline every other importer uses. The importer works fully offline, with no credentials and no API access, and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it — it refuses to run otherwise.
+**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. Until 0.17, the deprecated `experimental_features = true` setting (see [Site Configuration](site-configuration.md#deprecated-settings)) also enables it. The importer refuses to run without either.
 
 ## What you get
 

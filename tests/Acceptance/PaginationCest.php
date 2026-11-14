@@ -10,6 +10,8 @@ use Tests\Support\AcceptanceTester;
  * Seeds enough posts to force a second page (the page size is fixed at 10, so
  * eleven posts), then checks the homepage's "Older" link is a clean path and that a
  * ?page= query string is inert (serves page one, not a redirect).
+ *
+ * @group seeds-db
  */
 class PaginationCest
 {

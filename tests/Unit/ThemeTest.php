@@ -175,10 +175,12 @@ class ThemeTest extends TestCase
 
     public function testPreconnectSkipsPostsHiddenFromTheListing()
     {
-        global $config;
-        $original = $config;
-        $config['menu_items'] = ['About' => '/about'];
-        global $data, $template;
+        global $config, $data, $template;
+        if (!R::testConnection()) {
+            R::setup('sqlite::memory:');
+        }
+        $original = [$config, $data, $template];
+        $config = ['menu_items' => ['About' => '/about']];
         $template = 'home';
         $about = R::dispense('post');
         $about->slug = 'about';
@@ -186,11 +188,13 @@ class ThemeTest extends TestCase
         $data = ['posts' => [$about]];
 
         ob_start();
-        the_preconnect();
-        $output = ob_get_clean();
+        try {
+            the_preconnect();
+        } finally {
+            $output = ob_get_clean();
+            [$config, $data, $template] = $original;
+        }
 
-        $config = $original;
-        $data = [];
         $this->assertSame('', $output);
     }
 

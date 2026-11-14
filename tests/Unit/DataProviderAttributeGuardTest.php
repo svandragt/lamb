@@ -31,10 +31,8 @@ class DataProviderAttributeGuardTest extends TestCase
             if ($file === __FILE__) {
                 continue;
             }
-            foreach (file($file, FILE_IGNORE_NEW_LINES) as $i => $line) {
-                if (preg_match(self::FORBIDDEN, $line)) {
-                    $violations[] = sprintf('%s:%d  %s', $file, $i + 1, trim($line));
-                }
+            foreach ($this->violatingLines((string) file_get_contents($file)) as $number => $line) {
+                $violations[] = sprintf('%s:%d  %s', $file, $number, $line);
             }
         }
 
@@ -44,6 +42,39 @@ class DataProviderAttributeGuardTest extends TestCase
             "Codeception ignores PHPUnit's provider attributes; use Codeception\\Attribute\\DataProvider:\n"
                 . implode("\n", $violations)
         );
+    }
+
+    public function testGuardCatchesAGroupedImportSplitOverSeveralLines(): void
+    {
+        $source = "<?php\nuse PHPUnit\\Framework\\Attributes\\{\n    Test,\n    DataProvider,\n};\n";
+
+        $this->assertSame([2 => 'use PHPUnit\\Framework\\Attributes\\{'], $this->violatingLines($source));
+    }
+
+    public function testGuardIgnoresAnUnrelatedAttributeImport(): void
+    {
+        $source = "<?php\nuse PHPUnit\\Framework\\Attributes\\Test;\n";
+
+        $this->assertSame([], $this->violatingLines($source));
+    }
+
+    /**
+     * The lines on which a forbidden import starts.
+     *
+     * @param string $source A PHP source file.
+     * @return array<int, string> The trimmed first line of each match, by line number.
+     */
+    private function violatingLines(string $source): array
+    {
+        $source_lines = explode("\n", $source);
+        $lines        = [];
+        preg_match_all(self::FORBIDDEN, $source, $matches, PREG_OFFSET_CAPTURE);
+        foreach ($matches[0] as [, $offset]) {
+            $number         = substr_count($source, "\n", 0, $offset) + 1;
+            $lines[$number] = trim($source_lines[$number - 1]);
+        }
+
+        return $lines;
     }
 
     /**
