@@ -11,6 +11,10 @@ no version string in the code — **the Git tag is the source of truth**.
 
 ## 1. Pre-flight (on `main`)
 
+- [ ] Once a milestone is about half done, open the `main` → `release` PR as a
+      draft (the step 4 `gh pr create` with `--draft`), so cubic reviews the
+      combined diff early.
+      Resolve its threads before the release, not during it.
 - [ ] All intended PRs are merged into `main`; nothing release-worthy is still open.
 - [ ] Working tree is clean and `main` is up to date: `git checkout main && git pull`.
 - [ ] Tests pass: `vendor/bin/codecept run` (Unit + Acceptance).
@@ -99,7 +103,9 @@ git log --format='- %s' <last-tag>..main
 
 Direct pushes to `release` are rejected by the branch ruleset (`GH013` —
 changes must go through a pull request), so promotion happens as a PR merged
-with a **merge commit** (not squash/rebase, to keep histories connected):
+with a **merge commit** (not squash/rebase, to keep histories connected). If you
+opened the draft PR in step 1, retitle it `Release <version>` and mark it ready
+with `gh pr ready` instead of running `gh pr create`:
 
 ```sh
 gh pr create --base release --head main \
