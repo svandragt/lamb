@@ -34,8 +34,8 @@ class ResponseHandlersTest extends TestCase
         }
         R::freeze(false);
 
-        // Start from the real schema: a post table a sibling test created holds only the
-        // columns that test stored, so the slug filters would fail against it.
+        // Start from a fresh post table: a sibling test may have created it with column
+        // types that ensure_schema() does not widen, because it only ALTER-adds missing columns.
         R::exec('DROP TABLE IF EXISTS post');
         ensure_schema();
 
