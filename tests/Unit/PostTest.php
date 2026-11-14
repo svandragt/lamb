@@ -199,6 +199,13 @@ class PostTest extends TestCase
         $this->assertStringContainsString('title: a: b', (string) $error);
     }
 
+    public function testFrontMatterErrorRepairsABodyThatIsNotValidUtf8LikeParseBeanDoes()
+    {
+        // A stray Windows-1252 byte (\xE9 is "é") in valid YAML: parse_bean()
+        // repairs the encoding before it parses, so the save must not be refused.
+        $this->assertNull(front_matter_error("---\ntitle: caf\xE9\n---\nHello"));
+    }
+
     public function testFrontMatterErrorIsNullForValidOrAbsentFrontMatter()
     {
         $this->assertNull(front_matter_error("---\ntitle: a\n---\nHello"));

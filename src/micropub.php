@@ -306,7 +306,7 @@ class LambMicropubAdapter extends MicropubAdapter
      * when it parses (or there is none).
      *
      * Saving it would drop every field in the block, including `draft: true`.
-     * Nothing is stored before this check, so a refused call changes nothing.
+     * No post is stored before this check, so a refused call leaves the posts as they were.
      *
      * @param string $body The post body about to be saved.
      * @return Response|null

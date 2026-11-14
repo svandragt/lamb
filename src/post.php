@@ -10,6 +10,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -177,7 +178,8 @@ function parse_yaml_block(string $yaml): mixed
  */
 function front_matter_error(string $body): ?string
 {
-    [$yaml] = split_frontmatter(normalize_frontmatter_fence($body));
+    // The same repairs parse_bean() makes before it reads the block, in its order.
+    [$yaml] = split_frontmatter(normalize_frontmatter_fence(normalize_utf8($body)));
     if ($yaml === '') {
         return null;
     }
