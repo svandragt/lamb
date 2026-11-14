@@ -97,7 +97,7 @@ The `$assets` array passed to `asset_loader()` (see `the_scripts()`) is keyed
 by when a group should load: `''` always, `SESSION_LOGIN` only when the
 viewer is authenticated, and any other string only when it matches the
 current `$template`. This is how admin-only JS (`growing-input.js`,
-`confirm-delete.js`, …) stays off anonymous pages and how a page can carry
+`link-edit-buttons.js`, …) stays off anonymous pages and how a page can carry
 JS scoped to just its own template (e.g. `search-highlight.js` on `search`)
 without a per-template loader function.
 
