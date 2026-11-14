@@ -306,12 +306,9 @@ function render_atom_feed(array $data, array $config): void
         $hub->addAttribute('href', $websub_hub);
     }
 
-    $author_name = \Lamb\Config\author_display_name($config);
-    if ($author_name !== '') {
-        $author = $xml->addChild('author');
-        $author->addChild('name', \Lamb\Theme\escape_xml($author_name));
-        $author->addChild('uri', ROOT_URL);
-    }
+    $author = $xml->addChild('author');
+    $author->addChild('name', \Lamb\Theme\escape_xml(\Lamb\Config\author_display_name($config, ROOT_URL)));
+    $author->addChild('uri', ROOT_URL);
 
     foreach ($data['posts'] as $bean) {
         $entry = $xml->addChild('entry');
@@ -374,17 +371,12 @@ function render_json_feed(array $data, array $config): void
     header('Content-type: application/feed+json');
     $channel_link = $data['feed_url'] ?? ROOT_URL . '/feed.json';
 
-    $author = ['name' => \Lamb\Config\author_name($config), 'url' => ROOT_URL];
-    if ($author['name'] === '') {
-        unset($author['name']);
-    }
-
     $feed = [
         'version'       => 'https://jsonfeed.org/version/1.1',
         'title'         => $data['title'] ?? $config['site_title'],
         'home_page_url' => ROOT_URL,
         'feed_url'      => $channel_link,
-        'authors'       => [$author],
+        'authors'       => [['name' => \Lamb\Config\author_display_name($config, ROOT_URL), 'url' => ROOT_URL]],
         'items'         => [],
     ];
 

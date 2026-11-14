@@ -127,11 +127,11 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedJsonWithoutAnAuthorNameLeavesTheAuthorNameOut(): void
+    public function testFeedJsonWithoutAnAuthorNameNamesTheSiteAsTheAuthor(): void
     {
         $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => null]);
 
-        $this->assertArrayNotHasKey('name', $json['authors'][0]);
+        $this->assertSame('Test Blog', $json['authors'][0]['name']);
         $this->assertSame('http://localhost', $json['authors'][0]['url']);
     }
 
@@ -143,8 +143,18 @@ class FeedJsonTemplateTest extends TestCase
     {
         $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => '   ']);
 
-        $this->assertArrayNotHasKey('name', $json['authors'][0]);
-        $this->assertSame('http://localhost', $json['authors'][0]['url']);
+        $this->assertSame('Test Blog', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonNamesTheSiteHostAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => ' ', 'site_title' => ' ']);
+
+        $this->assertSame('localhost', $json['authors'][0]['name']);
     }
 
     /**

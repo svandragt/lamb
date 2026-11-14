@@ -552,4 +552,77 @@ XML;
         $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
         $this->assertSame(1, $this->gateStampCount($data_dir));
     }
+
+    private function storeSettings(string $data_dir, string $ini): void
+    {
+        $this->inDatabase(
+            $data_dir,
+            '\Lamb\Config\load(); \Lamb\Config\save_ini_text(getenv("SEED_INI"));',
+            ['SEED_INI' => $ini]
+        );
+    }
+
+    private function storedSettings(string $data_dir): string
+    {
+        return $this->inDatabase($data_dir, 'echo \Lamb\Config\get_ini_text();');
+    }
+
+    private function runMigrate(string $data_dir, array $args = []): Process
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', ...$args],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+
+        return $process;
+    }
+
+    private const STORED_WITH_REMOVED_SETTINGS = "posts_per_page = 5\nexperimental_features = false\nmystery_key = kept\n\n"
+        . "[preconnect]\nfonts = https://fonts.googleapis.com\n";
+
+    public function testMigrateCommandRemovesRemovedSettingsAndReportsTheOnesInUse(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeSettings($data_dir, self::STORED_WITH_REMOVED_SETTINGS);
+
+        $output = $this->runMigrate($data_dir)->getOutput();
+
+        $this->assertStringContainsString('remove_retired_settings: removed `posts_per_page`. Replacement: None. Lamb uses 10 posts per page.', $output);
+        $this->assertStringContainsString('remove_retired_settings: removed `[preconnect]`. Replacement: None.', $output);
+        // The seeded default `experimental_features = false` goes without a line.
+        $this->assertStringNotContainsString('`experimental_features`', $output);
+        $stored = $this->storedSettings($data_dir);
+        foreach (['posts_per_page', 'experimental_features', 'preconnect'] as $gone) {
+            $this->assertStringNotContainsString($gone, $stored);
+        }
+        $this->assertStringContainsString('mystery_key = kept', $stored);
+
+        $this->assertStringNotContainsString('remove_retired_settings', $this->runMigrate($data_dir)->getOutput());
+    }
+
+    public function testMigrateDryRunReportsRemovedSettingsButKeepsThem(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeSettings($data_dir, self::STORED_WITH_REMOVED_SETTINGS);
+
+        $output = $this->runMigrate($data_dir, ['--dry-run'])->getOutput();
+
+        $this->assertStringContainsString('[dry-run] remove_retired_settings: would remove `posts_per_page`. Replacement:', $output);
+        $this->assertSame(self::STORED_WITH_REMOVED_SETTINGS, $this->storedSettings($data_dir));
+    }
+
+    public function testMigrateLeavesSettingsItCannotParseAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $broken = "[unclosed\n=== not ini ===\nposts_per_page = 5\n";
+        $this->storeSettings($data_dir, $broken);
+
+        $output = $this->runMigrate($data_dir)->getOutput();
+
+        $this->assertStringNotContainsString('remove_retired_settings', $output);
+        $this->assertSame($broken, $this->storedSettings($data_dir));
+    }
 }

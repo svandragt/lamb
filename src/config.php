@@ -20,10 +20,10 @@ function get_default_ini_text(): string
 theme = 2026
 
 ;; Author email in feed
-;author_email = joe.sheeple@example.com
+;author_email = you@example.com
 
 ;; Author name in feed
-;author_name = Joe Sheeple
+;author_name = Your Name
 
 ;; Title of the site, in html and feed views
 site_title = My Microblog
@@ -134,8 +134,8 @@ function load(): array
  * The seeded INI (`get_default_ini_text()`) is the single source of truth for the
  * real defaults (timezone, feeds_draft, IndieAuth endpoints), so they no longer
  * live in a parallel hardcoded array. Precedence (lowest to highest): seeded
- * defaults → stored config. An unset author_name or author_email stays absent,
- * so readers fall back to an empty value rather than publishing a placeholder.
+ * defaults → stored config. An unset author_name or author_email is an empty
+ * string rather than a placeholder, so themes can read both keys directly.
  *
  * @param string $stored_ini  The raw stored INI text.
  * @param string $default_ini The seeded default INI text.
@@ -152,7 +152,7 @@ function compose_config(string $stored_ini, string $default_ini): array
     // existing sites.
     unset($defaults['theme']);
 
-    return array_merge($defaults, $config);
+    return array_merge(['author_name' => '', 'author_email' => ''], $defaults, $config);
 }
 
 /**
@@ -171,19 +171,25 @@ function author_name(array $config): string
 }
 
 /**
- * Returns the name to publish for the author: the author name, else the site title.
+ * Returns the name to publish for the author: the author name, else the site
+ * title, else the host of the site URL.
  *
  * Compares with `!== ''` rather than testing truthiness, so an author named "0"
- * is kept. Returns '' when neither is set.
+ * is kept. Feeds name the same author, and the Atom feed needs one.
  *
- * @param array<string, mixed> $config The effective configuration.
- * @return string The author name, the trimmed site title, or ''.
+ * @param array<string, mixed> $config   The effective configuration.
+ * @param string               $root_url The site root, as in ROOT_URL.
+ * @return string The author name, the trimmed site title, or the site host.
  */
-function author_display_name(array $config): string
+function author_display_name(array $config, string $root_url): string
 {
-    $name = author_name($config);
+    foreach ([author_name($config), trim((string) ($config['site_title'] ?? ''))] as $name) {
+        if ($name !== '') {
+            return $name;
+        }
+    }
 
-    return $name !== '' ? $name : trim((string) ($config['site_title'] ?? ''));
+    return (string) parse_url($root_url, PHP_URL_HOST);
 }
 
 /**
@@ -564,15 +570,108 @@ function shape_warnings(string $ini_text): array
 function removed_setting_warnings(string $stored_ini): array
 {
     $warnings = [];
-    foreach (parse_ini_safe($stored_ini) as $key => $value) {
-        if (!isset(RETIRED_SETTINGS[$key]) || !removed_setting_in_use((string) $key, $value)) {
-            continue;
-        }
-        $name = is_array($value) ? "[{$key}]" : (string) $key;
-        $warnings[] = "`{$name}` was removed, so saving the settings dropped it. Replacement: " . RETIRED_SETTINGS[$key];
+    foreach (removed_settings_in_use($stored_ini) as $name => $replacement) {
+        $warnings[] = "`{$name}` was removed, so saving the settings dropped it. Replacement: {$replacement}";
     }
 
     return $warnings;
+}
+
+/**
+ * Lists the removed settings the stored INI still uses, with what replaces each.
+ *
+ * @param string $stored_ini The stored INI text.
+ * @return array<string, string> Replacement text by setting name, `[preconnect]` for a section.
+ */
+function removed_settings_in_use(string $stored_ini): array
+{
+    $in_use = [];
+    foreach (parse_ini_safe($stored_ini) as $key => $value) {
+        if (isset(RETIRED_SETTINGS[$key]) && removed_setting_in_use((string) $key, $value)) {
+            $in_use[is_array($value) ? "[{$key}]" : (string) $key] = RETIRED_SETTINGS[$key];
+        }
+    }
+
+    return $in_use;
+}
+
+/**
+ * Takes the removed settings out of the stored INI, for `bin/lamb migrate`.
+ *
+ * Unlike the settings form this edits the text, so the comments an install was
+ * seeded with survive. Each removed key goes with the comment lines above it,
+ * and a removed `[section]` goes with everything under it. Skipped when the
+ * stored INI cannot be parsed, as the form refuses to save over it.
+ *
+ * @param bool $dry_run When true, report what would be removed but change nothing.
+ * @return array<string, string> The settings that were in use, with their replacements.
+ * @throws \RedBeanPHP\RedException\SQL When the stored settings cannot be read.
+ */
+function drop_retired_settings(bool $dry_run = false): array
+{
+    $stored = get_ini_text();
+    if (@parse_ini_string($stored, true, INI_SCANNER_RAW) === false) {
+        return [];
+    }
+
+    $cleaned = without_retired_settings($stored);
+    if (!$dry_run && $cleaned !== $stored) {
+        save_ini_text($cleaned);
+    }
+
+    return removed_settings_in_use($stored);
+}
+
+/**
+ * Returns the INI text without the RETIRED_SETTINGS keys and sections.
+ *
+ * Only top-level keys count: a label in another section that shares a retired
+ * key's name is the author's own. A commented-out `;key = value` line counts as
+ * its key, so the examples the seeded INI carried go too.
+ *
+ * @param string $ini_text The INI text.
+ * @return string The INI text without them.
+ */
+function without_retired_settings(string $ini_text): string
+{
+    $keys = implode('|', array_map(fn (string $key): string => preg_quote($key, '/'), array_keys(RETIRED_SETTINGS)));
+    $kept = [];
+    $in_section = false;
+    $skipping = false;
+
+    foreach (explode("\n", $ini_text) as $line) {
+        if (preg_match('/^\s*\[([^\]]*)\]/', $line, $header) === 1) {
+            $in_section = true;
+            $skipping = isset(RETIRED_SETTINGS[trim($header[1])]);
+            if ($skipping) {
+                $kept = without_trailing_comments($kept);
+                continue;
+            }
+        } elseif ($skipping) {
+            continue;
+        } elseif (!$in_section && preg_match("/^\s*;?\s*({$keys})\s*=/", $line) === 1) {
+            $kept = without_trailing_comments($kept);
+            continue;
+        }
+        $kept[] = $line;
+    }
+
+    return implode("\n", $kept);
+}
+
+/**
+ * Drops the comment lines at the end of a list of INI lines.
+ *
+ * @param list<string> $lines INI lines.
+ * @return list<string> The lines without the trailing run of `;` comments.
+ */
+function without_trailing_comments(array $lines): array
+{
+    while ($lines !== [] && str_starts_with(ltrim(end($lines)), ';')) {
+        array_pop($lines);
+    }
+
+    return $lines;
 }
 
 /**

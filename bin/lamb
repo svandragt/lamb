@@ -29,7 +29,8 @@
  * migrate runs the one-time data migrations that used to run implicitly on
  * every boot (backfill_post_version(), backfill_imported_post_identity(),
  * migrate_feed_watermarks()), the one-time migrate_feed_drafts() (#924), the
- * one-time drop_experimental_gate_stamp() for the removed gate's option row, plus
+ * one-time drop_experimental_gate_stamp() for the removed gate's option row,
+ * drop_retired_settings() for the settings 0.17 removed, plus
  * the same post upgrade as upgrade-posts (#814, reusing
  * Response\upgrade_all_posts() rather than duplicating its
  * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
@@ -214,6 +215,11 @@ if ($command === 'migrate') {
     $verb = $dry_run ? 'would delete' : 'deleted';
     $stamp_count = Bootstrap\drop_experimental_gate_stamp($dry_run);
     echo "{$prefix}drop_experimental_gate_stamp: $verb $stamp_count unused option row(s)\n";
+
+    $verb = $dry_run ? 'would remove' : 'removed';
+    foreach (Config\drop_retired_settings($dry_run) as $setting => $replacement) {
+        echo "{$prefix}remove_retired_settings: $verb `$setting`. Replacement: $replacement\n";
+    }
 
     // Must run after backfill_post_version() above: that's what gives a
     // pre-versioning post a `version` at all, so upgrade_all_posts()'s

@@ -45,7 +45,7 @@ Lamb stores the settings as text in the database. Saving the form rewrites that 
 
 ## Removed settings
 
-Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form removes the ones still in your configuration, and tells you which, once.
+Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form, or running `bin/lamb migrate`, removes the ones still in your configuration and tells you which, once.
 
 | Setting | Replacement |
 |---|---|

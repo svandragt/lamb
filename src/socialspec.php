@@ -194,7 +194,7 @@ function contact_vcard(array $config, string $root_url): ?string
     if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
         return null;
     }
-    $name = author_display_name($config);
+    $name = author_display_name($config, $root_url);
 
     $lines = ['BEGIN:VCARD', 'VERSION:4.0', 'FN:' . vcard_escape($name), 'EMAIL;PREF=1:' . $email, 'URL:' . rtrim($root_url, '/') . '/'];
     foreach ((array) ($config['me'] ?? []) as $url) {

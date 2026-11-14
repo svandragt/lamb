@@ -13,6 +13,7 @@ use function Lamb\Config\parse_section_text;
 use function Lamb\Config\removed_setting_warnings;
 use function Lamb\Config\settings_form_errors;
 use function Lamb\Config\shape_warnings;
+use function Lamb\Config\without_retired_settings;
 use function Lamb\Config\write_ini;
 use function Lamb\Response\respond_settings;
 
@@ -535,6 +536,50 @@ class ConfigFormTest extends TestCase
             'micropub_debug' => ["micropub_debug = true\n", '`micropub_debug`', '`LAMB_MICROPUB_DEBUG`'],
             'experimental_features' => ["experimental_features = true\n", '`experimental_features`', '`--experimental`'],
         ];
+    }
+
+    public function testWithoutRetiredSettingsDropsTheKeysAndSectionsWithTheirComments(): void
+    {
+        $stored = <<<'INI'
+;; Theme used to render the site.
+theme = 2026
+
+;; Number of posts shown per page in lists and feeds.
+posts_per_page = 10
+
+;; Title of the site.
+site_title = Notes
+
+;; Gates features still gathering real-world testing.
+experimental_features = false
+
+;micropub_debug = false
+
+[menu_items]
+Home = /
+
+[preconnect]
+;; List external origins to preconnect to.
+;google-fonts = https://fonts.googleapis.com
+
+[feeds]
+posts_per_page = https://example.com/feed
+
+[me]
+mastodon = https://example.social/@me
+INI;
+
+        $result = without_retired_settings($stored);
+
+        $this->assertSame(['theme', 'site_title', 'menu_items', 'feeds', 'me'], array_keys(parse_ini_safe($result)));
+        $this->assertStringContainsString(";; Theme used to render the site.\ntheme = 2026", $result);
+        $this->assertStringContainsString(";; Title of the site.\nsite_title = Notes", $result);
+        foreach (['Number of posts', 'Gates features', 'micropub_debug', 'preconnect', 'google-fonts'] as $gone) {
+            $this->assertStringNotContainsString($gone, $result);
+        }
+        // A label in another section that shares a retired key's name is an author's own.
+        $this->assertStringContainsString("[feeds]\nposts_per_page = https://example.com/feed", $result);
+        $this->assertStringContainsString("[me]\nmastodon = https://example.social/@me", $result);
     }
 
     public function testRemovedSettingWarningsAreSilentAboutTheValuesEarlierVersionsSeeded(): void

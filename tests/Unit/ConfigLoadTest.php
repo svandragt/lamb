@@ -191,7 +191,7 @@ class ConfigLoadTest extends TestCase
         $config = load();
         // timezone comes from the seeded defaults since it's not in the saved INI
         $this->assertSame('UTC', $config['timezone']);
-        $this->assertArrayNotHasKey('author_email', $config);
+        $this->assertSame('', $config['author_email']);
     }
 
     public function testLoadIncludesAuthorizationEndpointDefault(): void

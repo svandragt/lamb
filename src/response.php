@@ -27,6 +27,9 @@ if (PHP_SAPI === 'cli-server') {
 
 define('LOGIN_PASSWORD', \Lamb\Bootstrap\login_password());
 
+/** Posts per page in lists and feeds. */
+const POSTS_PER_PAGE = 10;
+
 // IMAGE_FILES is defined in constants.php
 
 /**
@@ -442,9 +445,6 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
         'pagination' => build_pagination_meta($page, $total_posts, $offset),
     ];
 }
-
-/** Posts per page in lists and feeds. */
-const POSTS_PER_PAGE = 10;
 
 /**
  * Paginates a collection of posts, either from an array or a database query.

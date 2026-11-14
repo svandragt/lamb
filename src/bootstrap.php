@@ -572,6 +572,7 @@ function backfill_imported_post_identity(array $columns, bool $dry_run = false):
  *
  * @param bool $dry_run When true, report the row count but delete nothing.
  * @return int Number of rows deleted (or that dry-run would delete).
+ * @throws SQL When the option table cannot be read or written.
  */
 function drop_experimental_gate_stamp(bool $dry_run = false): int
 {

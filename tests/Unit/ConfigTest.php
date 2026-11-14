@@ -168,14 +168,6 @@ class ConfigTest extends TestCase
         $this->assertSame('Europe/London', $config['timezone']);
     }
 
-    public function testComposeConfigLeavesAnUnsetAuthorOutInsteadOfSupplyingAPlaceholder(): void
-    {
-        $config = compose_config("site_title = Mine\n", get_default_ini_text());
-
-        $this->assertArrayNotHasKey('author_name', $config);
-        $this->assertArrayNotHasKey('author_email', $config);
-    }
-
     public function testComposeConfigNeverInheritsThemeFromDefaults(): void
     {
         // A stored config without a theme must not be silently re-themed by the
@@ -229,9 +221,9 @@ class ConfigTest extends TestCase
     /**
      * @dataProvider authorDisplayNameProvider
      */
-    public function testAuthorDisplayNameFallsBackToTheSiteTitle(array $config, string $expected): void
+    public function testAuthorDisplayNameFallsBackToTheSiteTitleThenTheSiteHost(array $config, string $expected): void
     {
-        $this->assertSame($expected, author_display_name($config));
+        $this->assertSame($expected, author_display_name($config, 'https://notes.example.com:8080'));
     }
 
     /**
@@ -244,8 +236,30 @@ class ConfigTest extends TestCase
             'an author named 0 is kept' => [['author_name' => '0', 'site_title' => 'Notes'], '0'],
             'whitespace author falls back' => [['author_name' => '  ', 'site_title' => ' Notes '], 'Notes'],
             'missing author falls back' => [['site_title' => 'Notes'], 'Notes'],
-            'neither' => [['author_name' => ' ', 'site_title' => ' '], ''],
-            'empty config' => [[], ''],
+            'neither falls back to the site host' => [['author_name' => ' ', 'site_title' => ' '], 'notes.example.com'],
+            'empty config falls back to the site host' => [[], 'notes.example.com'],
         ];
+    }
+
+    public function testComposeConfigAlwaysHasAnAuthorNameAndEmail(): void
+    {
+        // Custom themes read $config['author_name'] directly; an unset one must not warn.
+        $fresh = compose_config('', get_default_ini_text());
+        $this->assertSame('', $fresh['author_name']);
+        $this->assertSame('', $fresh['author_email']);
+
+        $set = compose_config("author_name = Ada\nauthor_email = ada@example.com\n", get_default_ini_text());
+        $this->assertSame('Ada', $set['author_name']);
+        $this->assertSame('ada@example.com', $set['author_email']);
+    }
+
+    public function testDefaultIniExamplesUseNeutralPlaceholders(): void
+    {
+        $text = get_default_ini_text();
+
+        $this->assertStringNotContainsString('Joe Sheeple', $text);
+        $this->assertStringNotContainsString('joe.sheeple', $text);
+        $this->assertStringContainsString(';author_name = Your Name', $text);
+        $this->assertStringContainsString(';author_email = you@example.com', $text);
     }
 }
