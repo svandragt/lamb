@@ -104,7 +104,7 @@
         "serve:frankenphp": "sudo -E frankenphp run",
         "test": "vendor/bin/codecept run",
         "coverage": [
-            "vendor/bin/codecept run Unit --coverage-xml -o \"settings: shuffle: true\"",
+            "vendor/bin/codecept run Unit --coverage-xml",
             "php check-coverage.php tests/_output/coverage.xml 70"
         ],
         "e2e": "pnpm exec playwright test",

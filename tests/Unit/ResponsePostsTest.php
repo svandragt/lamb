@@ -32,7 +32,6 @@ class ResponsePostsTest extends TestCase
         R::exec('DROP TABLE IF EXISTS post');
         ensure_schema();
 
-        R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
 
         global $config;

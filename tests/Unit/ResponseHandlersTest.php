@@ -27,9 +27,6 @@ use const Lamb\SQL_IS_SCHEDULED;
 
 class ResponseHandlersTest extends TestCase
 {
-    /** @var mixed */
-    private $originalConfig;
-
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -37,15 +34,14 @@ class ResponseHandlersTest extends TestCase
         }
         R::freeze(false);
 
-        // Create the real schema so every column the WHERE filters name (slug, draft,
-        // deleted) exists whichever test ran first.
+        // Start from the real schema: a post table a sibling test created holds only the
+        // columns that test stored, so the slug filters would fail against it.
+        R::exec('DROP TABLE IF EXISTS post');
         ensure_schema();
 
-        R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
 
         global $config;
-        $this->originalConfig = $config;
         $config = [
             'site_title'    => 'Test Blog',
             'menu_items'    => [],
@@ -60,8 +56,6 @@ class ResponseHandlersTest extends TestCase
 
     protected function tearDown(): void
     {
-        global $config;
-        $config = $this->originalConfig;
         $_SESSION = [];
         $_POST    = [];
         $_GET     = [];

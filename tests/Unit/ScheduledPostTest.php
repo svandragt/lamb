@@ -47,7 +47,6 @@ class ScheduledPostTest extends TestCase
     protected function tearDown(): void
     {
         R::exec('DELETE FROM post');
-        $_SESSION = [];
     }
 
     private function makePost(string $body, string $created, ?string $slug = null): \RedBeanPHP\OODBBean

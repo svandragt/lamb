@@ -11,7 +11,7 @@ use Codeception\Extension;
 /**
  * Gives every Unit test the globals it started with.
  *
- * Tests set `$config`, `$data`, `$_SESSION`, `$_GET` and `$_POST` to build a
+ * Tests set `$config`, `$data`, `$template`, `$_SESSION`, `$_GET` and `$_POST` to build a
  * request, and the app reads them as globals. A test that does not undo that
  * leaks it into whichever test runs next, so a shuffled run fails depending on
  * the order. This snapshots them before each test and restores them after it,
@@ -28,7 +28,7 @@ class RestoreGlobals extends Extension
     ];
 
     /** Globals the app reads by name. */
-    private const GLOBALS = ['config', 'data', '_SESSION', '_GET', '_POST'];
+    private const GLOBALS = ['config', 'data', 'template', '_SESSION', '_GET', '_POST'];
 
     /** @var array<string, mixed> Values of the globals that were set. */
     private array $snapshot = [];

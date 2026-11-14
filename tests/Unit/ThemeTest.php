@@ -19,19 +19,6 @@ use function Lamb\Theme\the_preconnect;
 
 class ThemeTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        // Page data a sibling test left behind would feed media_origins() and the like.
-        global $data;
-        $data = [];
-    }
-
-    protected function tearDown(): void
-    {
-        // A logged-in session left behind makes every draft viewable to the next test.
-        $_SESSION = [];
-    }
-
     // the_preconnect
 
     // the_preconnect: origins derived from the posts on the page
@@ -49,7 +36,6 @@ class ThemeTest extends TestCase
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
-        $original = [$config, $data, $template];
         $config = ['preconnect' => $configured];
         $template = 'home';
         $data = ['posts' => array_map(static function (string $html) {
@@ -60,10 +46,7 @@ class ThemeTest extends TestCase
 
         ob_start();
         the_preconnect();
-        $output = ob_get_clean();
-
-        [$config, $data, $template] = $original;
-        return $output;
+        return ob_get_clean();
     }
 
     /**
@@ -185,7 +168,6 @@ class ThemeTest extends TestCase
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
-        $original = [$config, $data, $template];
         $config = ['menu_items' => ['About' => '/about']];
         $template = 'home';
         $about = R::dispense('post');
@@ -198,7 +180,6 @@ class ThemeTest extends TestCase
             the_preconnect();
         } finally {
             $output = ob_get_clean();
-            [$config, $data, $template] = $original;
         }
 
         $this->assertSame('', $output);
