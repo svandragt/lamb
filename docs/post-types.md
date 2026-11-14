@@ -101,7 +101,7 @@ I write about small web tools. The latest posts are below.
 
 Lamb shows this post above your timeline at `/`. The post is a page, so it does not appear in the timeline, the feeds or search results. Its permalink is `/`, and a visit to `/home` redirects there. Only the first page of the timeline shows it, not `/page/2` onwards.
 
-Unlike other built-in route names, `home` keeps its slug, so the post is not renamed. A draft, scheduled or deleted `home` post is not shown, and `/` shows the timeline on its own. To remove the home page, unpublish or delete the post.
+Unlike other built-in route names, `home` keeps its slug, so the post is not renamed. A deleted `home` post is never shown. A draft or scheduled `home` post is shown at `/` only to a visitor who opens its Preview link (`/?preview=<token>`); without the link, `/` shows the timeline on its own. To remove the home page, unpublish or delete the post.
 
 # System types
 
