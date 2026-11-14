@@ -127,11 +127,12 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedJsonWithoutAnAuthorNameHasAnEmptyAuthorName(): void
+    public function testFeedJsonWithoutAnAuthorNameLeavesTheAuthorNameOut(): void
     {
         $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => null]);
 
-        $this->assertSame('', $json['authors'][0]['name']);
+        $this->assertArrayNotHasKey('name', $json['authors'][0]);
+        $this->assertSame('http://localhost', $json['authors'][0]['url']);
     }
 
     /**

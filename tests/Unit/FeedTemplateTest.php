@@ -330,13 +330,13 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedWithoutAnAuthorNameHasAnEmptyAuthorInsteadOfFailing(): void
+    public function testFeedWithoutAnAuthorNameNamesTheSiteAsTheAuthor(): void
     {
         // An old config can lack author_name; the feed used to read the placeholder
         // Config\compose_config() filled in, which is gone.
         $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => null]);
 
-        $this->assertSame('', (string) $xml->author->name);
+        $this->assertSame('Test Blog', (string) $xml->author->name);
         $this->assertSame('http://localhost', (string) $xml->author->uri);
     }
 

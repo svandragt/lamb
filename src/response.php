@@ -198,6 +198,7 @@ function public_posts_clause(): array
  */
 function pagination_window(int $total_posts, int $page, int $per_page): array
 {
+    // The size is a caller argument, not a setting any more, so only a caller bug can make it non-positive.
     $per_page    = max(1, $per_page);
     $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
     $page        = min($page, $total_pages);
@@ -467,9 +468,6 @@ const POSTS_PER_PAGE = 10;
 function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
 {
     $per_page ??= POSTS_PER_PAGE;
-    // Clamped here as well as in pagination_window() so the page count, the row
-    // offset and the SQL LIMIT all agree on the same size (see that helper).
-    $per_page = max(1, $per_page);
 
     // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));

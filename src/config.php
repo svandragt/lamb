@@ -175,6 +175,14 @@ const CONFIG_SECTIONS = [
 ];
 
 /**
+ * Sections earlier versions wrote that no setting reads any more.
+ *
+ * Installs seeded before 0.17 store an empty `[preconnect]`. shape_warnings()
+ * does not report an empty one, and form_to_ini() drops the section on save.
+ */
+const RETIRED_SECTIONS = ['preconnect'];
+
+/**
  * Returns true when the named config key holds a section rather than a value.
  *
  * The seeded defaults are consulted as well as CONFIG_SECTIONS, so a section
@@ -480,9 +488,8 @@ function shape_warnings(string $ini_text): array
             continue;
         }
 
-        // An empty section ignores nothing: installs seeded before 0.17 store an
-        // empty `[preconnect]` that no setting reads any more.
-        if (!$expects_section && is_array($value) && $value !== []) {
+        $is_empty_retired_section = $value === [] && in_array((string) $key, RETIRED_SECTIONS, true);
+        if (!$expects_section && is_array($value) && !$is_empty_retired_section) {
             $warnings[] = "`[{$key}]` is not a section Lamb reads, so it was ignored. "
                 . 'A single-value setting is written as `name = value`, above the first section.';
             continue;
@@ -579,7 +586,8 @@ const SETTINGS_FORM_SECTIONS = [
  * owns the keys in SETTINGS_FORM_FIELDS, `feeds_draft` and SETTINGS_FORM_SECTIONS:
  * they are rebuilt from the post. Every other key and section in the current
  * INI (an author's own keys) is carried over unchanged, so
- * saving the form cannot drop a setting it does not show. Comments in the
+ * saving the form cannot drop a setting it does not show, except the
+ * RETIRED_SECTIONS, which no setting reads. Comments in the
  * current INI are not kept. An empty text field is left out so the default
  * applies; an owned section is always written, because an absent `[menu_items]`
  * brings back the default menu while an empty one means no menu.
@@ -609,7 +617,7 @@ function form_to_ini(array $post, string $current_ini): string
 
     $owned = [...SETTINGS_FORM_FIELDS, 'feeds_draft', ...SETTINGS_FORM_SECTIONS];
     foreach (parse_ini_safe($current_ini) as $key => $value) {
-        if (in_array((string) $key, $owned, true)) {
+        if (in_array((string) $key, [...$owned, ...RETIRED_SECTIONS], true)) {
             continue;
         }
         if (is_array($value)) {

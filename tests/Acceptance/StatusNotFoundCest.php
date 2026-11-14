@@ -19,6 +19,9 @@ class StatusNotFoundCest
         $I->dontSee('Deprecated:');
     }
 
+    /**
+     * @group seeds-db
+     */
     public function theRemoved404FallbackSettingNoLongerRedirects(AcceptanceTester $I)
     {
         $I->amOnPage('/');

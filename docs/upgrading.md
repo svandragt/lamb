@@ -129,7 +129,7 @@ The database and uploads live in the named volumes and survive the recreate.
 ## Upgrading to 0.17
 
 * Lamb removed the five settings that 0.16 deprecated: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. A leftover setting does nothing. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings) for what replaces each one.
-* A site with no author name in its settings now shows an empty author in its feeds and page metadata instead of `Joe Sheeple`. Open the settings page and fill in the author name.
+* A site with no author name in its settings no longer shows `Joe Sheeple`. The Atom feed names the site title as the author, the JSON feed leaves the author name out, and the pages have no `author` meta tag. Open the settings page and fill in the author name.
 
 ## Related
 

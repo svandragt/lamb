@@ -187,13 +187,13 @@ class ConfigFormTest extends TestCase
         $this->assertSame('2026', $parsed['theme']);
     }
 
-    public function testFormToIniCarriesOverRemovedAndUnknownSections(): void
+    public function testFormToIniDropsTheRemovedPreconnectSectionAndCarriesOverUnknownSections(): void
     {
         $current = "[preconnect]\nfonts = https://fonts.googleapis.com\n\n[custom]\nOne = 1\nTwo = two words\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(), $current));
 
-        $this->assertSame(['fonts' => 'https://fonts.googleapis.com'], $parsed['preconnect']);
+        $this->assertArrayNotHasKey('preconnect', $parsed);
         $this->assertSame(['One' => '1', 'Two' => 'two words'], $parsed['custom']);
     }
 
@@ -506,6 +506,15 @@ class ConfigFormTest extends TestCase
         $this->assertSame([], shape_warnings("[preconnect]\n\n[me]\n"));
     }
 
+    public function testShapeWarningsStillWarnsAboutAnEmptySectionThatShadowsASingleValueSetting(): void
+    {
+        // `[site_title]` with no keys drops the title: it is not a retired section.
+        $warnings = shape_warnings("[site_title]\n");
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('`[site_title]` is not a section Lamb reads', $warnings[0]);
+    }
+
     public function testShapeWarningsNamesARemovedPreconnectSectionThatStillHoldsEntries(): void
     {
         $warnings = shape_warnings("[preconnect]\nfonts = https://fonts.googleapis.com\n");
@@ -550,6 +559,17 @@ class ConfigFormTest extends TestCase
         $this->assertSame('kept', $parsed['mystery']);
         $this->assertNotContains('Settings saved successfully.', $result['flash']);
         $this->assertStringNotContainsString('posts_per_page', implode("\n", $result['flash']));
+    }
+
+    public function testRespondSettingsSaveClearsARemovedPreconnectSectionWithoutWarning(): void
+    {
+        $result = $this->runSettingsPost(
+            $this->post(['menu_items' => 'Home = /']),
+            "[preconnect]\nfonts = https://fonts.googleapis.com\n"
+        );
+
+        $this->assertArrayNotHasKey('preconnect', parse_ini_safe($result['ini']));
+        $this->assertStringNotContainsString('preconnect', implode("\n", $result['flash']));
     }
 
     public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void
