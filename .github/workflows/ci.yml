@@ -141,7 +141,12 @@ jobs:
           GIT_REF: ${{ github.ref }}
         run: |
           LAMB_WRITE_TEST_PASSWORD=1 php make-password.php "$GIT_REF"
-          vendor/bin/codecept run --steps
+          # Unit runs in random order so a test that only passes after another
+          # one fails here. The run prints `[Seed] N`; reproduce it with `--seed N`.
+          # Acceptance keeps its fixed order: it shares one server and database.
+          vendor/bin/codecept run Unit --steps -o "settings: shuffle: true"
+          vendor/bin/codecept run Acceptance --steps
+          vendor/bin/codecept run Functional --steps
 
       - name: Check code coverage
         if: matrix.php-version == '8.5'

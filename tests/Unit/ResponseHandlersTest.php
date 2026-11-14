@@ -34,11 +34,9 @@ class ResponseHandlersTest extends TestCase
         }
         R::freeze(false);
 
-        // Ensure post schema columns exist so WHERE filters work regardless of test order.
-        $schema = R::dispense('post');
-        $schema->draft   = null;
-        $schema->deleted = null;
-        R::store($schema);
+        // Create the real schema so every column the WHERE filters name (slug, draft,
+        // deleted) exists whichever test ran first.
+        ensure_schema();
 
         R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
