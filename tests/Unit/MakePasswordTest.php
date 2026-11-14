@@ -73,32 +73,46 @@ class MakePasswordTest extends TestCase
      */
     public function testDefaultTestPortDependsOnTheCheckoutDirectory(): void
     {
-        // Fixed paths, not the random workspace: two random paths can hash to
-        // the same port, which the script accepts.
-        $root = sys_get_temp_dir() . '/lamb-make-password-port-test';
-        (new Process(['rm', '-rf', $root]))->mustRun();
-        $one   = $root . '/worktree-one';
-        $other = $root . '/worktree-two';
-        mkdir($one, 0777, true);
-        mkdir($other);
-
-        $env = ['LAMB_TEST_PORT' => false];
-        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $one, $env + ['PWD' => $one]))->mustRun();
-        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $other, $env + ['PWD' => $other]))->mustRun();
-        $first  = (string)file_get_contents($one . '/.env');
-        $second = (string)file_get_contents($other . '/.env');
-
-        preg_match("/LAMB_TEST_PORT='(\\d+)'/", $first, $a);
-        preg_match("/LAMB_TEST_PORT='(\\d+)'/", $second, $b);
-        $this->assertNotEmpty($a);
-        $this->assertNotEmpty($b);
-        $this->assertNotSame($a[1], $b[1]);
-        foreach ([(int)$a[1], (int)$b[1]] as $port) {
+        // Three sibling checkouts: two random paths can share a port, which the
+        // script accepts, but three sharing one is a one-in-a-million event.
+        $ports = [];
+        foreach (['one', 'two', 'three'] as $name) {
+            $dir = $this->workspace . '/worktree-' . $name;
+            mkdir($dir);
+            $process = new Process(
+                ['php', codecept_root_dir('make-password.php'), 'hackme'],
+                $dir,
+                ['PWD' => $dir, 'LAMB_TEST_PORT' => false]
+            );
+            $process->mustRun();
+            $contents = (string)file_get_contents($dir . '/.env');
+            $this->assertSame(1, preg_match("/LAMB_TEST_PORT='(\\d+)'/", $contents, $match));
+            $port = (int)$match[1];
             $this->assertGreaterThan(8747, $port);
             $this->assertLessThan(9748, $port);
+            $this->assertStringContainsString("SITE_URL='http://0.0.0.0:{$port}'", $contents);
+            $ports[] = $port;
         }
-        $this->assertStringContainsString("SITE_URL='http://0.0.0.0:{$a[1]}'", $first);
-        (new Process(['rm', '-rf', $root]))->run();
+        $this->assertGreaterThan(1, count(array_unique($ports)));
+    }
+
+    /**
+     * The override must work under the stock variables_order, which leaves
+     * $_ENV empty.
+     *
+     * @return void
+     */
+    public function testTestPortOverrideIsReadFromProcessEnvNotVariablesOrder(): void
+    {
+        $process = new Process(
+            ['php', '-d', 'variables_order=GPCS', codecept_root_dir('make-password.php'), 'hackme'],
+            $this->workspace,
+            ['LAMB_TEST_PORT' => '9999']
+        );
+        $process->mustRun();
+
+        $contents = (string)file_get_contents($this->workspace . '/.env');
+        $this->assertStringContainsString("LAMB_TEST_PORT='9999'", $contents);
     }
 
     public function testWeakPasswordWarnsOnStderr(): void
