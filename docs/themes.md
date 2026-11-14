@@ -16,7 +16,7 @@ Existing sites keep whatever theme they already use; only fresh installs start o
 
 To switch between themes, choose it in the **Theme** field at `/settings`.
 
-The field lists every theme directory Lamb finds, including your own. To add a theme of your own, create its directory and select it here.
+The field lists every theme directory Lamb finds, including your own, except one named `2024` (see [Upgrading to 0.17]({{ site.baseurl }}{% link upgrading.md %}#upgrading-to-017)). To add a theme of your own, create its directory and select it here.
 It's recommended to version control your theme as it's own git repo. This allows you to update Lamb and your theme
 separately using git.
 

@@ -626,8 +626,8 @@ const RETIRED_THEMES = ['2024' => '2026'];
  * `src/themes/base`) without needing to know that name specifically.
  *
  * A removed theme name (RETIRED_THEMES) resolves to its replacement even when
- * its old directory remains, because a tarball upgrade leaves that directory
- * behind and its parts call helpers that no longer exist.
+ * its old directory remains. A tarball upgrade leaves that directory behind,
+ * and its stylesheet and parts are out of date and no longer maintained.
  *
  * sanitize_filename() runs first and is what closes the path-traversal and
  * stored-XSS surface (see src/index.php) — this function only adds the
