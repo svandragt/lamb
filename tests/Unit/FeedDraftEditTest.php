@@ -127,6 +127,7 @@ class FeedDraftEditTest extends TestCase
             $edit($stored),
         ]);
         $process->run();
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
 
         /** @var array{draft: int, body: string, outbox: int} */
         return json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);

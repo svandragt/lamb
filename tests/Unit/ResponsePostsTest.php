@@ -57,6 +57,7 @@ class ResponsePostsTest extends TestCase
 
     protected function tearDown(): void
     {
+        unset($_SERVER['HTTP_REFERER']);
         $_SESSION = [];
         $_POST    = [];
         $_GET     = [];
@@ -453,13 +454,33 @@ class ResponsePostsTest extends TestCase
         $_POST['id']                = (string) $id;
         $_POST['contents']          = self::BROKEN_FRONT_MATTER;
 
-        $post = respond_edit([(string) $id])['post'];
+        // The form posts to /edit with no id in the URL, so the route hands the
+        // handler `[false]` (strtok() has no second segment); the id is in $_POST.
+        $post = respond_edit([false])['post'];
 
         $this->assertFlashedInvalidFrontMatter();
+        $this->assertSame($id, (int) $post->id);
         $this->assertSame(self::BROKEN_FRONT_MATTER, $post->body);
         $stored = R::load('post', $id);
         $this->assertSame("# Original title\n\nsome text\n", $stored->body);
         $this->assertSame('original-title', (string) $stored->slug);
+    }
+
+    public function testRefusedEditKeepsTheReferrerSavedWhenTheEditorOpened(): void
+    {
+        $id = $this->seedEditablePost();
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION['edit-referrer']  = ROOT_URL . '/tag/lamb';
+        $_SERVER['HTTP_REFERER']    = ROOT_URL . '/edit/' . $id;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'fmtok3';
+        $_POST[HIDDEN_CSRF_NAME]    = 'fmtok3';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = (string) $id;
+        $_POST['contents']          = self::BROKEN_FRONT_MATTER;
+
+        respond_edit([false]);
+
+        $this->assertSame(ROOT_URL . '/tag/lamb', $_SESSION['edit-referrer']);
     }
 
     // -------------------------------------------------------------------------

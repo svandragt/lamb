@@ -159,7 +159,8 @@ function create_item(SimplePieItem|JsonFeedItem $item, string $name): bool
  * shows a body with no draft state, and saving it publishes the post.
  *
  * Idempotent: a feed draft whose front matter already says `draft: true` is
- * skipped, so a second run finds nothing. Runs only from `bin/lamb migrate`.
+ * skipped, and so is one the write would leave unchanged, so a second run finds
+ * nothing. Runs only from `bin/lamb migrate`.
  * `updated` is left alone, because ingest_item() compares it with the feed's
  * date to decide whether to re-sync.
  *
@@ -176,11 +177,18 @@ function migrate_feed_drafts(bool $dry_run = false): int
             continue;
         }
 
+        // Unchanged for front matter parse_matter() cannot read: the key is
+        // already there but unseen, so counting it would repeat on every run.
+        $migrated = set_frontmatter_key($body, 'draft', true);
+        if ($migrated === $body) {
+            continue;
+        }
+
         $count++;
         if ($dry_run) {
             continue;
         }
-        $post->body = set_frontmatter_key($body, 'draft', true);
+        $post->body = $migrated;
         R::store($post);
     }
 

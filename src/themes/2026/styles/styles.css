@@ -452,11 +452,10 @@ main > ul {
 
 main > ul > li { margin: 0; padding: 0; }
 
-/* The home post is a page above the timeline, set apart from it by a rule. */
+/* The home post is a page above the timeline. Space, not a rule, sets it apart:
+   DESIGN.md allows two rules per page, and nav and footer use them. */
 .home-post {
-    margin: 0 0 var(--s-7);
-    padding-bottom: var(--s-6);
-    border-bottom: 1px solid var(--rule);
+    margin: 0 0 var(--s-8);
 }
 
 /* Post — the typographic signature.
