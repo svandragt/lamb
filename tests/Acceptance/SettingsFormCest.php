@@ -98,6 +98,9 @@ class SettingsFormCest
         $I->seeInField('site_url', '');
     }
 
+    /**
+     * @group seeds-db
+     */
     public function resetToDefaultsStaysUsableWhileRequiredFieldsAreEmpty(AcceptanceTester $I): void
     {
         $this->login($I);
@@ -115,6 +118,9 @@ class SettingsFormCest
         $I->seeInField('site_title', 'My Microblog');
     }
 
+    /**
+     * @group seeds-db
+     */
     public function savingTheFormKeepsUnknownAndDeprecatedSettings(AcceptanceTester $I): void
     {
         $this->login($I);

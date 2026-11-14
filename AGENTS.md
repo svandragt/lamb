@@ -599,6 +599,12 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
+An acceptance test that calls `haveStoredSettings()` writes the SQLite file from the
+test process, which fails against the external server `release-verify.yml` tests (it
+owns the file). Mark such a test `@group seeds-db`, on the method or the class:
+`release-verify.yml` passes `--skip-group seeds-db`, and `SeedsDbGroupGuardTest` fails
+the build when a test that seeds is not in the group.
+
 Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
 annotation for data providers. Codeception ignores PHPUnit's
 `#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
