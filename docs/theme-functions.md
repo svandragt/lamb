@@ -24,7 +24,7 @@ use function Lamb\Theme\escape;
 <?= site_title() ?>
 ```
 
-The built-in themes (`base`, `2024`, `2026`) are the best worked examples — copy
+The built-in themes (`base`, `2026`) are the best worked examples — copy
 the `use function` lines from the part you are overriding.
 
 ## Globals available in every part

@@ -135,7 +135,7 @@ class ConfigFormPrefillTest extends TestCase
     public function testSavingAnUntouchedFormKeepsEveryStoredSetting(): void
     {
         $stored = "site_title = My Blog\nsite_url = https://example.com\nauthor_name = Ada\n"
-            . "timezone = Europe/London\ntheme = 2024\nwebsub_hubs = https://hub.example/\nfeeds_draft = false\n\n"
+            . "timezone = Europe/London\ntheme = base\nwebsub_hubs = https://hub.example/\nfeeds_draft = false\n\n"
             . "[menu_items]\nHome = /\nSearch = /search?q=a=b\n\n[syndicate_to]\nhttps://bsky.app/profile/ada = Bluesky\n";
 
         $form = settings_form_prefill($stored);

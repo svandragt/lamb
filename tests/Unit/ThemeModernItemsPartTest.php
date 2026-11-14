@@ -7,18 +7,16 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
 use function Lamb\Theme\author_card;
+use function Lamb\Theme\render_post_list;
 
 /**
- * Characterisation test for the 2024 and 2026 themes' _items.php.
+ * Characterisation test for the 2026 theme's _items.php.
  *
- * The two files are identical markup apart from one line (the per-post
- * author is shown inline in 2024, screen-reader-only in 2026 — see #690).
- * These tests pin the exact rendered HTML of both themes before the shared
- * markup is extracted into Lamb\Theme\render_post_list(), so the extraction
- * is verified byte-for-byte rather than eyeballed.
+ * These tests pin the exact rendered HTML of the markup that Lamb\Theme\render_post_list()
+ * produces, so a change to it is verified byte-for-byte rather than eyeballed.
  *
  * Fixtures live in tests/Support/Data/theme-items/*.html, captured from the
- * pre-extraction files with the one differing line replaced by a
+ * theme's output with the per-post author line replaced by a
  * `{{AUTHOR_SPAN}}` placeholder (see expectedAuthorSpan()) and the
  * relative "human time" text normalised (it drifts with the current time).
  */
@@ -95,46 +93,22 @@ class ThemeModernItemsPartTest extends TestCase
     }
 
     /**
-     * Builds the one line that legitimately differs between the two themes,
-     * from the real author_card() output, so the fixture doesn't have to
-     * hardcode it.
+     * Builds the author line from the real author_card() output, so the
+     * fixture doesn't have to hardcode it.
      */
-    private function expectedAuthorSpan(string $theme): string
+    private function expectedAuthorSpan(): string
     {
         global $config;
         $config = ['author_name' => 'Jane Doe', 'menu_items' => []];
-        $author = author_card();
 
-        return $theme === '2026'
-            ? '<span itemprop="author" class="screen-reader-text">' . $author . '</span>'
-            : '<span itemprop="author">' . $author . '</span> @';
+        return '<span itemprop="author" class="screen-reader-text">' . author_card() . '</span>';
     }
 
     private function assertRendersFixture(string $fixture, string $theme, string $templateName, string $title, string $body, string $created): void
     {
         $bean     = $this->makeBean($title, $body, $created);
         $html     = $this->normalize($this->render($theme, $templateName, [$bean]));
-        $expected = str_replace('{{AUTHOR_SPAN}}', $this->expectedAuthorSpan($theme), $this->loadFixture($fixture));
-
-        $this->assertSame($expected, $html);
-    }
-
-    public function test2024RendersTitledPost(): void
-    {
-        $this->assertRendersFixture('titled_single', '2024', 'tag', 'Hello World', '<p>Body text.</p>', '2024-01-01 12:00:00');
-    }
-
-    public function test2024RendersStatusPost(): void
-    {
-        $this->assertRendersFixture('status_single', '2024', 'status', 'Status Post Title', '<p>Status update text.</p>', '2024-02-02 08:30:00');
-    }
-
-    public function test2024RendersMultiplePostsWrappedInAList(): void
-    {
-        $b1 = $this->makeBean('First Post', '<p>First body.</p>', '2024-03-01 09:00:00');
-        $b2 = $this->makeBean('Second Post', '<p>Second body.</p>', '2024-03-02 10:00:00');
-        $html     = $this->normalize($this->render('2024', 'tag', [$b1, $b2]));
-        $expected = str_replace('{{AUTHOR_SPAN}}', $this->expectedAuthorSpan('2024'), $this->loadFixture('multiple'));
+        $expected = str_replace('{{AUTHOR_SPAN}}', $this->expectedAuthorSpan(), $this->loadFixture($fixture));
 
         $this->assertSame($expected, $html);
     }
@@ -154,23 +128,14 @@ class ThemeModernItemsPartTest extends TestCase
         $b1 = $this->makeBean('First Post', '<p>First body.</p>', '2024-03-01 09:00:00');
         $b2 = $this->makeBean('Second Post', '<p>Second body.</p>', '2024-03-02 10:00:00');
         $html     = $this->normalize($this->render('2026', 'tag', [$b1, $b2]));
-        $expected = str_replace('{{AUTHOR_SPAN}}', $this->expectedAuthorSpan('2026'), $this->loadFixture('multiple'));
+        $expected = str_replace('{{AUTHOR_SPAN}}', $this->expectedAuthorSpan(), $this->loadFixture('multiple'));
 
         $this->assertSame($expected, $html);
     }
 
-    // The author line is the ONE line the two themes differ on and the whole
-    // point of the refactor to preserve. The fixture tests above substitute the
-    // same literal the implementation builds, so a typo there would be copied
-    // into both sides and pass — pin it here with hardcoded literals instead.
-    public function test2024ShowsTheAuthorInlineWithTrailingAt(): void
-    {
-        $html = $this->render('2024', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
-        $this->assertStringContainsString('<span itemprop="author">', $html);
-        $this->assertStringContainsString('</span> @', $html);
-        $this->assertStringNotContainsString('screen-reader-text', $html);
-    }
-
+    // The fixture tests above substitute the same literal the implementation
+    // builds, so a typo there would be copied into both sides and pass — pin
+    // the author line here with hardcoded literals instead.
     public function test2026HidesTheAuthorForScreenReadersWithNoTrailingAt(): void
     {
         $html = $this->render('2026', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
@@ -178,15 +143,41 @@ class ThemeModernItemsPartTest extends TestCase
         $this->assertStringNotContainsString('</span> @', $html);
     }
 
-    public function testEmptyPostsRendersTheNoItemsMessageIdenticallyForBothThemes(): void
+    // render_post_list() is a public theme helper: a custom theme copied from the
+    // 0.16 2026 theme calls it with true, one copied from the 0.16 2024 theme with
+    // false and expects the author to stay visible. Hardcoded literals, as above.
+    public function testRenderPostListHidesTheAuthorByDefaultAndWhenAskedTo(): void
     {
-        $html2024 = $this->render('2024', 'tag', []);
-        $html2026 = $this->render('2026', 'tag', []);
+        $bean     = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
+        $expected = $this->normalize($this->render('2026', 'tag', [$bean]));
 
-        $this->assertStringContainsString('<p>Sorry no items found.</p>', $html2024);
-        $this->assertStringNotContainsString('<article', $html2024);
-        // Both themes share the one implementation, so the empty branch is byte-identical.
-        $this->assertSame($html2024, $html2026);
+        foreach ([[], [true]] as $args) {
+            ob_start();
+            render_post_list(...$args);
+            $this->assertSame($expected, $this->normalize((string) ob_get_clean()));
+        }
+        $this->assertStringContainsString('<span itemprop="author" class="screen-reader-text">', $expected);
+    }
+
+    public function testRenderPostListShowsTheAuthorInlineWithTrailingAtWhenAskedTo(): void
+    {
+        $this->render('2026', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
+
+        ob_start();
+        render_post_list(false);
+        $html = (string) ob_get_clean();
+
+        $this->assertStringContainsString('<span itemprop="author">', $html);
+        $this->assertStringContainsString('</span> @', $html);
+        $this->assertStringNotContainsString('screen-reader-text', $html);
+    }
+
+    public function testEmptyPostsRendersTheNoItemsMessage(): void
+    {
+        $html = $this->render('2026', 'tag', []);
+
+        $this->assertStringContainsString('<p>Sorry no items found.</p>', $html);
+        $this->assertStringNotContainsString('<article', $html);
     }
 
     public function testLoggedInAuthorGetsTheActionsFooterAnonymousDoesNot(): void

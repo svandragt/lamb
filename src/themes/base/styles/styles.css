@@ -240,7 +240,7 @@ mark {
     /* Descendant, not `header + h2`: the h2 is *inside* the header (see
        parts/_items.php), so the sibling combinator matched nothing and the
        title rendered twice — once as the h1, once as the h2 that exists to
-       carry the p-name. Same selector the 2024 theme already uses. */
+       carry the p-name. */
     article header h2 {
         display: none
     }

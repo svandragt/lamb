@@ -131,6 +131,12 @@ The database and uploads live in the named volumes and survive the recreate.
 * Lamb removed the five settings that 0.16 deprecated: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. A leftover setting does nothing, and the next save of the settings page removes it and says so. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings) for what replaces each one.
 * A site with no author name in its settings no longer shows `Joe Sheeple`. The Atom feed names the site title as the author, the JSON feed leaves the author name out, and the pages have no `author` meta tag. Open the settings page and fill in the author name.
 
+## Upgrading to 0.17
+
+* The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
+* If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.
+* If your site uses its own theme named `2024`, rename the theme directory and the `theme` setting. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.
+
 ## Related
 
 - [Installation options]({{ site.baseurl }}{% link index.md %})

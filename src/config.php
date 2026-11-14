@@ -15,7 +15,7 @@ use function Lamb\set_option;
 function get_default_ini_text(): string
 {
     return <<<INI
-;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), 2024, base.
+;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), base.
 ;; Custom themes live in src/themes/<name>/ and only need to override the parts they change.
 theme = 2026
 

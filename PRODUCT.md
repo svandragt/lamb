@@ -29,7 +29,7 @@ Emotional goal: calm presence. Like a well-kept notebook, not a publication or a
 - **Editorial-magazine grammar.** Display serif, italic drop caps, broadsheet grids. Wrong register for short status updates.
 - **Developer-blog dark mode by default.** Costume, not voice. The scene (daytime, mixed light, break time) doesn't force dark.
 - **Inter, Söhne, JetBrains Mono.** First-reflex picks for "technical and modern"; on the saturated list.
-- **2000s blog template.** Yellow nav band, centered column with a left rule, gray-on-white. What the previous 2024 theme was. The 2026 overhaul exists to move past this.
+- **2000s blog template.** Yellow nav band, centered column with a left rule, gray-on-white. What the removed 2024 theme was. The 2026 overhaul exists to move past this.
 - **SaaS chrome.** Card grids, hero-metric layouts, gradient accents, bordered panels, glassmorphism.
 - **High-chroma accents that shout.** An earlier brick-red `oklch(52% 0.17 28)` was rejected as too aggressive for a site whose tagline is "doesn't demand your attention."
 
