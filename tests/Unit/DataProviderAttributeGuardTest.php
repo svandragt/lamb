@@ -16,7 +16,10 @@ use RecursiveIteratorIterator;
  */
 class DataProviderAttributeGuardTest extends TestCase
 {
-    private const FORBIDDEN = '/PHPUnit\\\\Framework\\\\Attributes\\\\(DataProvider|DataProviderExternal|TestWith|TestWithJson)\b/';
+    // Also matches a grouped import: `use PHPUnit\Framework\Attributes\{Test, DataProvider};`.
+    // shortcut: an aliased namespace (`use PHPUnit\Framework\Attributes as A;`) is not caught.
+    private const FORBIDDEN = '/PHPUnit\\\\Framework\\\\Attributes\\\\(\\{[^}]*\\b)?'
+        . '(DataProvider|DataProviderExternal|TestWith|TestWithJson)\b/';
 
     /**
      * @return void

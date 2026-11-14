@@ -590,10 +590,10 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
-Use `#[Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
+Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
 annotation for data providers. Codeception ignores PHPUnit's
 `#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
-no rows, so `DataProviderAttributeGuardTest` fails the build when a test uses it.
+no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
 
 ### JavaScript unit tests
 
