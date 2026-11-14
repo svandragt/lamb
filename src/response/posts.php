@@ -493,8 +493,9 @@ function respond_status(array $args): array
 /**
  * Responds to an edit request, returning the post to render in the edit form.
  *
- * @param array<int, string> $args The first element should be the post ID.
+ * @param array<int, string|false|null> $args The first element is the post ID, absent on a POST.
  * @return array<string, mixed>
+ * @throws \RedBeanPHP\RedException\SQL When the post cannot be read.
  */
 function respond_edit(array $args): array
 {
@@ -503,18 +504,23 @@ function respond_edit(array $args): array
     }
     Security\require_login();
 
+    // A POST that got this far was refused or failed to save. The form posts to
+    // /edit with no id in the URL, so the post comes from the posted id, and the
+    // typed text replaces the stored body in the editor. Not stored. The
+    // referrer saved when the editor opened stays: overwriting it with this
+    // page would send the next successful save back here.
+    if (!empty($_POST)) {
+        $post       = R::load('post', (int) request_string($_POST['id'] ?? null));
+        $post->body = request_string($_POST['contents'] ?? null) ?: $post->body;
+
+        return ['post' => $post];
+    }
+
     [$id] = $args;
 
     $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'] ?? null;
 
-    $post = R::load('post', (int)$id);
-    // A POST that got this far was refused or failed to save: keep what the
-    // author typed in the editor instead of reverting to the stored body. Not stored.
-    if (!empty($_POST)) {
-        $post->body = request_string($_POST['contents'] ?? null) ?: $post->body;
-    }
-
-    return ['post' => $post];
+    return ['post' => R::load('post', (int)$id)];
 }
 
 /**

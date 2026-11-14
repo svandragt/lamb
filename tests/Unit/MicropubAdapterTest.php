@@ -392,6 +392,25 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame($before, R::count('post'));
     }
 
+    public function testCreateCallbackRefusingInvalidFrontMatterStoresNoUploadedPhoto(): void
+    {
+        $uploadDir = \Lamb\Response\get_upload_dir();
+        $filesBefore = glob($uploadDir . '/*');
+
+        $bytes = self::gifBytes();
+        $tmpFile = tempnam(sys_get_temp_dir(), 'micropub_test_');
+        file_put_contents($tmpFile, $bytes);
+        $upload = new \Nyholm\Psr7\UploadedFile($tmpFile, strlen($bytes), UPLOAD_ERR_OK, 'refused.gif', 'image/gif');
+
+        $result = (new LambMicropubAdapter())->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]],
+        ], ['photo' => $upload]);
+
+        $this->assertSame(400, $result->getStatusCode());
+        $this->assertSame($filesBefore, glob($uploadDir . '/*'));
+    }
+
     public function testCreateCallbackWithNameSetsTitleFrontMatter(): void
     {
         $adapter = new LambMicropubAdapter();

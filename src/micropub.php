@@ -379,22 +379,25 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $props = $data['properties'] ?? [];
 
-        // Merge any uploaded photo files into the photo property as URLs.
-        $uploadedPhotoUrls = $this->saveUploadedPhotos($uploadedFiles);
-        if (!empty($uploadedPhotoUrls)) {
-            $props['photo'] = array_merge($props['photo'] ?? [], $uploadedPhotoUrls);
-        }
-
         ['content' => $content, 'is_html' => $isHtml] = $this->extractContent($props);
         if ($content === null) {
             return 'invalid_request';
         }
 
-        $body = $this->buildBody($props, $isHtml ? strip_tags($content) : $content);
+        $text = $isHtml ? strip_tags($content) : $content;
+        $body = $this->buildBody($props, $text);
 
+        // Before the uploads are written, so a refused call leaves no files behind.
         $rejection = $this->frontMatterRejection($body);
         if ($rejection !== null) {
             return $rejection;
+        }
+
+        // Merge any uploaded photo files into the photo property as URLs.
+        $uploadedPhotoUrls = $this->saveUploadedPhotos($uploadedFiles);
+        if (!empty($uploadedPhotoUrls)) {
+            $props['photo'] = array_merge($props['photo'] ?? [], $uploadedPhotoUrls);
+            $body = $this->buildBody($props, $text);
         }
 
         $bean = populate_bean($body);

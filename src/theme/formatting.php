@@ -144,8 +144,9 @@ function og_escape(string $html): string
  * Returns the HTML-escaped value of the ?text= query parameter, used to pre-fill the entry form textarea.
  *
  * After a refused create (invalid front matter, a failed save) the text the
- * author posted comes back instead: a create that is saved redirects, so a POST
- * that renders this form was not saved.
+ * author posted comes back instead. A create that succeeds redirects, so a POST
+ * that renders this form was refused or reported a failure. A failure reported
+ * after the first of the two stores in Post\save() leaves a row behind.
  *
  * @return string Escaped text string, or '' when neither is present.
  */
