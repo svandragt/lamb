@@ -143,11 +143,17 @@ function og_escape(string $html): string
 /**
  * Returns the HTML-escaped value of the ?text= query parameter, used to pre-fill the entry form textarea.
  *
- * @return string Escaped text string, or '' when the parameter is absent.
+ * After a refused create (invalid front matter, a failed save) the text the
+ * author posted comes back instead: a create that is saved redirects, so a POST
+ * that renders this form was not saved.
+ *
+ * @return string Escaped text string, or '' when neither is present.
  */
 function preload_text(): string
 {
-    return htmlspecialchars(\Lamb\Http\request_string($_GET['text'] ?? null) ?? '', ENT_QUOTES, 'UTF-8');
+    $text = $_GET['text'] ?? $_POST['contents'] ?? null;
+
+    return htmlspecialchars(\Lamb\Http\request_string($text) ?? '', ENT_QUOTES, 'UTF-8');
 }
 
 /**

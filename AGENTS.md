@@ -265,6 +265,7 @@ Post content here. Use #hashtags inline.
 ```
 
 `parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` reads a block that is not valid YAML as no front matter, which drops every field in it (including `draft: true`). So every path that saves text an author wrote — `redirect_created()`, `redirect_edited()` and the Micropub create/update callbacks — calls `Post\front_matter_error()` first and refuses on a message: the web forms flash it and re-render with the typed text (`preload_text()`, `respond_edit()`), Micropub answers 400 `invalid_request`. Feed ingestion and `bin/lamb import` build their own front matter, so they do not call it.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 

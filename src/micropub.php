@@ -24,6 +24,7 @@ use function Lamb\remove_body_tags;
 use function Lamb\sanitize_tag_name;
 use function Lamb\strip_trailing_body_tags;
 use function Lamb\Post\build_matter;
+use function Lamb\Post\front_matter_error;
 use function Lamb\Post\matter_string;
 use function Lamb\Post\matter_url_list;
 use function Lamb\Post\normalize_frontmatter_fence;
@@ -301,6 +302,34 @@ class LambMicropubAdapter extends MicropubAdapter
     }
 
     /**
+     * The 400 response for a body whose front matter is not valid YAML, or null
+     * when it parses (or there is none).
+     *
+     * Saving it would drop every field in the block, including `draft: true`.
+     * Nothing is stored before this check, so a refused call changes nothing.
+     *
+     * @param string $body The post body about to be saved.
+     * @return Response|null
+     */
+    private function frontMatterRejection(string $body): ?Response
+    {
+        $error = front_matter_error($body);
+        if ($error === null) {
+            return null;
+        }
+
+        return new Response(
+            400,
+            ['content-type' => 'application/json'],
+            // Substitute, as micropub_error() does: the message quotes client input.
+            json_encode(
+                ['error' => 'invalid_request', 'error_description' => $error],
+                JSON_INVALID_UTF8_SUBSTITUTE
+            ) ?: ''
+        );
+    }
+
+    /**
      * The insufficient_scope response for an action the token may not perform,
      * or null when it may proceed.
      *
@@ -362,6 +391,11 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         $body = $this->buildBody($props, $isHtml ? strip_tags($content) : $content);
+
+        $rejection = $this->frontMatterRejection($body);
+        if ($rejection !== null) {
+            return $rejection;
+        }
 
         $bean = populate_bean($body);
 
@@ -548,6 +582,11 @@ class LambMicropubAdapter extends MicropubAdapter
                     return 'invalid_request';
                 }
             }
+        }
+
+        $rejection = $this->frontMatterRejection((string) ($bean->body ?? ''));
+        if ($rejection !== null) {
+            return $rejection;
         }
 
         parse_bean($bean);

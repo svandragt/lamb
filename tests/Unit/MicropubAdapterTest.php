@@ -375,6 +375,23 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('A new micropub post', $post->body);
     }
 
+    public function testCreateCallbackRefusesInvalidFrontMatterWith400(): void
+    {
+        $before = R::count('post');
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]],
+        ]);
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(400, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringStartsWith('Front matter is not valid YAML: ', $body['error_description']);
+        $this->assertSame($before, R::count('post'));
+    }
+
     public function testCreateCallbackWithNameSetsTitleFrontMatter(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -1164,6 +1181,24 @@ class MicropubAdapterTest extends TestCase
         $adapter = new LambMicropubAdapter();
         $result = $adapter->updateCallback(ROOT_URL . '/status/999999', ['replace' => ['content' => ['new']]]);
         $this->assertSame('invalid_request', $result);
+    }
+
+    public function testUpdateCallbackRefusesInvalidFrontMatterWith400AndKeepsThePost(): void
+    {
+        $post = $this->storedPost('Plain body', 'fm-invalid-update');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            'http://localhost/fm-invalid-update',
+            ['replace' => ['content' => ["---\ndraft: true\ntitle: a: b\n---\nHello"]]]
+        );
+
+        $this->assertInstanceOf(\Psr\Http\Message\ResponseInterface::class, $result);
+        $this->assertSame(400, $result->getStatusCode());
+        $body = json_decode((string) $result->getBody(), true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringStartsWith('Front matter is not valid YAML: ', $body['error_description']);
+        $this->assertSame('Plain body', R::load('post', $post->id)->body);
     }
 
     public function testUpdateCallbackAdvancesTheContentTimestamp(): void
