@@ -11,8 +11,8 @@ use function Lamb\Config\settings_form_prefill;
 
 /**
  * The /settings form shows what the author stored, not the effective config.
- * The effective config carries the placeholder identity (Joe Sheeple), and a
- * form prefilled with it would save the placeholder as the author's own.
+ * The effective config carries the seeded defaults, and a form prefilled with
+ * them would save those as the author's own.
  */
 class ConfigFormPrefillTest extends TestCase
 {
@@ -25,7 +25,7 @@ class ConfigFormPrefillTest extends TestCase
         $this->assertSame('Ada', $form['fields']['author_name']);
     }
 
-    public function testPrefillLeavesUnsetIdentityEmptyInsteadOfThePlaceholder(): void
+    public function testPrefillLeavesUnsetIdentityEmpty(): void
     {
         $form = settings_form_prefill(get_default_ini_text());
 
@@ -95,7 +95,7 @@ class ConfigFormPrefillTest extends TestCase
         $this->assertSame('Home = /', $form['fields']['menu_items']);
     }
 
-    public function testPrefillDoesNotOfferDeprecatedKeys(): void
+    public function testPrefillDoesNotOfferRemovedKeys(): void
     {
         $form = settings_form_prefill("posts_per_page = 5\n404_fallback = https://old.example\n[preconnect]\nfonts = https://fonts.example\n");
 

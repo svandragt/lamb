@@ -76,12 +76,11 @@ XML;
     }
 
     /**
-     * Seeds a fresh, file-backed data dir with `experimental_features = true`,
-     * mirroring LambRestoreTest's helper of the same purpose: the subprocess
-     * under test bootstraps its own SQLite file, a distinct connection from
-     * this test's in-memory DB.
+     * Seeds a fresh, file-backed data dir with the removed `experimental_features = true`
+     * setting: the subprocess under test bootstraps its own SQLite file, a distinct
+     * connection from this test's in-memory DB.
      */
-    private function enableExperimentalFeaturesInDataDir(string $data_dir): void
+    private function storeRemovedExperimentalFeaturesSetting(string $data_dir): void
     {
         mkdir($data_dir, 0777, true);
         $root = rtrim(codecept_root_dir(), '/');
@@ -100,24 +99,6 @@ XML;
         $setup->mustRun();
     }
 
-    public function testTheDriverRunsAWordpressImportEndToEnd(): void
-    {
-        $wxr = "$this->tmp_dir/export.xml";
-        file_put_contents($wxr, self::SAMPLE_WXR);
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
-
-        $process = new Process(
-            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
-        );
-        $process->run();
-
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
-    }
-
     public function testUnknownSourceExitsNonZeroListingTheValidSources(): void
     {
         $process = new Process(
@@ -133,7 +114,7 @@ XML;
         $this->assertStringContainsString('lamb', $process->getErrorOutput());
     }
 
-    public function testTheExperimentalFlagEnablesTheImporterWithTheConfigKeyOff(): void
+    public function testTheExperimentalFlagEnablesTheImporter(): void
     {
         $wxr = "$this->tmp_dir/export.xml";
         file_put_contents($wxr, self::SAMPLE_WXR);
@@ -149,7 +130,7 @@ XML;
         $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
     }
 
-    public function testTheDriverRefusesWhenExperimentalFeaturesDisabled(): void
+    public function testTheDriverRefusesWithoutTheExperimentalFlag(): void
     {
         $wxr = "$this->tmp_dir/export.xml";
         file_put_contents($wxr, self::SAMPLE_WXR);
@@ -158,6 +139,24 @@ XML;
             ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
             codecept_root_dir(),
             ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('experimental', $process->getErrorOutput());
+    }
+
+    public function testTheRemovedExperimentalFeaturesSettingNoLongerEnablesTheImporter(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeRemovedExperimentalFeaturesSetting($data_dir);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
         );
         $process->run();
 

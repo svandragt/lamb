@@ -43,9 +43,6 @@ site_title = My Microblog
 ;; Use a name from https://www.php.net/manual/en/timezones.php.
 timezone = UTC
 
-;; Number of posts shown per page in lists and feeds.
-posts_per_page = 10
-
 ;; Feed-ingested posts are saved as drafts by default for editorial review before
 ;; publishing. Set to false to publish feed items directly without review.
 feeds_draft = true
@@ -53,16 +50,6 @@ feeds_draft = true
 ;; IndieAuth endpoints used for Micropub discovery. Override to use your own server.
 authorization_endpoint = https://indieauth.com/auth
 token_endpoint = https://tokens.indieauth.com/token
-
-;; Diagnostic logging for the Micropub endpoint. Off by default. Set to true only to
-;; debug a misbehaving client — it writes request/token-verification details (never the
-;; token itself) to data/micropub.log. Turn it back off when you are done.
-;micropub_debug = false
-
-;; When content is not found, instead of a 404 by setting the following value the user is redirected to the same
-;; relative path on another site.
-;; Useful where old content is archived to an archive site, or the lamb blog is still under construction but public.
-;404_fallback = https://my.oldsite.com
 
 ;; WebSub hubs used to push new posts to feed subscribers in real time.
 ;; Hubs are advertised in the Atom and JSON feeds, and pinged when you publish.
@@ -73,13 +60,6 @@ token_endpoint = https://tokens.indieauth.com/token
 ;; Lamb copies it during scheduled tasks (/_cron) and serves the copy at
 ;; /.well-known/following.opml for SocialSpec apps (https://followspec.org/).
 ;following_url = https://reader.example/following/your-token.opml
-
-;; Gates features still gathering real-world testing before general release
-;; (currently: the WordPress, Known, and Lamb-export import CLI scripts).
-;; Off by default, and reset to false automatically whenever an upgrade
-;; changes what this gates — see docs for what is currently covered before
-;; turning it back on.
-experimental_features = false
 
 [menu_items]
 ;; Add <label>=<url> entries here where URL is either:
@@ -102,12 +82,6 @@ Feed = /feed
 ;; Each item is in the format of <name>=<url>  where URL is a link to an RSS or Atom feed.
 ;; Feeds can be tested for compatibility here: https://simplepie.org/demo/
 ;lamb-releases=https://github.com/svandragt/lamb/releases.atom
-
-[preconnect]
-;; List external origins to preconnect to, improving load time for external resources.
-;; Each item is in the format of <label>=<origin>.
-;google-fonts = https://fonts.googleapis.com
-;google-fonts-static = https://fonts.gstatic.com
 
 [me]
 ;; Add rel="me" identity links for IndieAuth verification.
@@ -158,9 +132,10 @@ function load(): array
  * Merges stored config over the seeded defaults to produce the effective config.
  *
  * The seeded INI (`get_default_ini_text()`) is the single source of truth for the
- * real defaults (timezone, posts_per_page, feeds_draft, IndieAuth endpoints), so
- * they no longer live in a parallel hardcoded array. Precedence (lowest to
- * highest): identity placeholders → seeded defaults → stored config.
+ * real defaults (timezone, feeds_draft, IndieAuth endpoints), so they no longer
+ * live in a parallel hardcoded array. Precedence (lowest to highest): seeded
+ * defaults → stored config. An unset author_name or author_email stays absent,
+ * so readers fall back to an empty value rather than publishing a placeholder.
  *
  * @param string $stored_ini  The raw stored INI text.
  * @param string $default_ini The seeded default INI text.
@@ -177,21 +152,8 @@ function compose_config(string $stored_ini, string $default_ini): array
     // existing sites.
     unset($defaults['theme']);
 
-    // Personal-identity values are kept commented in the seeded INI, so supply
-    // them as a last-resort fallback for consumers without an inline default
-    // (e.g. Response\render_atom_feed() reads author_name directly).
-    return array_merge(IDENTITY_FALLBACK, $defaults, $config);
+    return array_merge($defaults, $config);
 }
-
-/**
- * Placeholder identity compose_config() supplies while author_email and
- * author_name are unset. Readers that must not publish a placeholder as if it
- * were the author's (SocialSpec\contact_vcard()) compare against it.
- */
-const IDENTITY_FALLBACK = [
-    'author_email' => 'joe.sheeple@example.com',
-    'author_name'  => 'Joe Sheeple',
-];
 
 /**
  * The config keys written as `[section]` blocks of `label = value` entries.
@@ -200,14 +162,13 @@ const IDENTITY_FALLBACK = [
  * normalize_config() and shape_warnings() work from. It is spelled out rather
  * than inferred from the seeded defaults because the defaults keep the
  * personal-identity and opt-in settings (`author_name`, `site_description`,
- * `404_fallback`, …) commented out, so they are absent from the parsed
+ * `websub_hubs`, …) commented out, so they are absent from the parsed
  * defaults and inference could not tell they are scalars.
  */
 const CONFIG_SECTIONS = [
     'menu_items',
     'footer_items',
     'feeds',
-    'preconnect',
     'me',
     'redirections',
     'syndicate_to',
@@ -245,8 +206,7 @@ function is_config_section(string $key, array $defaults): bool
  * `[site_title]` header 500s every HTML page, including `/settings`, which is
  * the page the author would use to undo it. The quieter cases are worse: a
  * wrongly-shaped `feeds_draft` made `filter_var()` return false and silently
- * published third-party feed items that should have been held for review, and a
- * wrongly-shaped `posts_per_page` cast to 1.
+ * published third-party feed items that should have been held for review.
  *
  * Rather than guard 50 call sites, normalise once here, on the way out of the
  * parser. The seeded defaults declare each documented key's shape, so they are
@@ -390,62 +350,6 @@ function apply_timezone(array $config): string
 }
 
 /**
- * Whether experimental features are enabled for this install — currently the
- * WordPress, Known, and Lamb-export import CLI scripts.
- *
- * @param array<string, mixed> $config The loaded configuration.
- * @return bool
- */
-function experimental_features_enabled(array $config): bool
-{
-    return filter_var($config['experimental_features'] ?? false, FILTER_VALIDATE_BOOLEAN);
-}
-
-/**
- * Bumped only when the set of features gated behind `experimental_features`
- * changes (one graduates out, or a new one joins) — not on every release.
- * reset_stale_experimental_flag() uses this to force a re-opt-in when that
- * happens, so enabling the flag once cannot silently keep covering whatever
- * gets added to the gate later.
- */
-const EXPERIMENTAL_GATE_VERSION = 1;
-
-/**
- * Forces `experimental_features` back to `false` when the gated feature set
- * has changed since this install last read config, so opting in once cannot
- * silently keep covering something added to the gate later.
- *
- * Tracked via a hidden `experimental_gate_version` option row — not part of
- * the user-edited INI — compared against EXPERIMENTAL_GATE_VERSION. The
- * stamp advances every time this runs behind, even when the flag is already
- * `false`, so a stale stamp cannot cause a rewrite (and a save_ini_text()
- * call) on every single read.
- *
- * @param string $ini_text The raw INI configuration text.
- * @return string The INI text, with `experimental_features` reset if stale.
- */
-function reset_stale_experimental_flag(string $ini_text): string
-{
-    $stamp = get_option('experimental_gate_version', 0);
-    if ((int) $stamp->value >= EXPERIMENTAL_GATE_VERSION) {
-        return $ini_text;
-    }
-
-    set_option($stamp, EXPERIMENTAL_GATE_VERSION);
-
-    if (!experimental_features_enabled(parse_ini_safe($ini_text))) {
-        return $ini_text;
-    }
-
-    return (string) preg_replace(
-        '/^(\h*experimental_features\h*=).*$/mi',
-        '${1} false',
-        $ini_text,
-        1
-    );
-}
-
-/**
  * Retrieves the raw INI text from the database or bootstraps it if not present.
  *
  * @return string The raw INI configuration text.
@@ -454,20 +358,12 @@ function get_ini_text(): string
 {
     $option = get_option('site_config_ini', '');
     if ($option->id > 0) {
-        // Force a re-opt-in to the experimental-features gate whenever the
-        // set of features it covers has changed since this install last saw it.
-        $ini_text = reset_stale_experimental_flag($option->value);
-        if ($ini_text !== $option->value) {
-            save_ini_text($ini_text);
-        }
-        return $ini_text;
+        return $option->value;
     }
 
     // Bootstrap from the built-in defaults; the author edits from there at
     // /settings.
     $ini_text = get_default_ini_text();
-
-    $ini_text = reset_stale_experimental_flag($ini_text);
     save_ini_text($ini_text);
 
     return $ini_text;
@@ -558,9 +454,6 @@ function validate_ini(string $ini_text): array
  * damage surfaces somewhere else entirely, as a Micropub endpoint refusing every
  * token.
  *
- * Notices about deprecated settings (see deprecation_warnings) are appended, so
- * both save paths report them.
- *
  * @param string $ini_text The raw INI text as the author submitted it.
  * @return list<string> Human-readable warnings, empty when every value fits.
  */
@@ -587,7 +480,9 @@ function shape_warnings(string $ini_text): array
             continue;
         }
 
-        if (!$expects_section && is_array($value)) {
+        // An empty section ignores nothing: installs seeded before 0.17 store an
+        // empty `[preconnect]` that no setting reads any more.
+        if (!$expects_section && is_array($value) && $value !== []) {
             $warnings[] = "`{$key}` takes one value: write it as `{$key} = ...`, not a "
                 . "`[{$key}]` section. The section was ignored.";
             continue;
@@ -603,47 +498,6 @@ function shape_warnings(string $ini_text): array
                     . 'which makes it a list. The entry was ignored.';
             }
         }
-    }
-
-    return array_merge($warnings, deprecation_warnings($ini_text));
-}
-
-/**
- * Describes the deprecated settings the stored INI still uses, and what replaces them.
- *
- * Each notice names the release that removes the setting (0.17). A setting is
- * only reported when it changes something: the seeded defaults hold
- * `posts_per_page = 10`, `experimental_features = false` and an empty
- * `[preconnect]`, so every install has those keys, and warning about them
- * would show a notice on every save to authors who never set them.
- *
- * @param string $ini_text The raw INI text.
- * @return list<string> Human-readable notices, empty when no deprecated setting is in use.
- */
-function deprecation_warnings(string $ini_text): array
-{
-    $parsed = parse_ini_safe($ini_text);
-    $notice = fn (string $key, string $advice): string => "`{$key}` is deprecated and will be removed in 0.17. {$advice}";
-    $text = fn (string $key): string => is_scalar($parsed[$key] ?? null) ? trim((string) $parsed[$key]) : '';
-    $warnings = [];
-
-    if ($text('posts_per_page') !== '' && $text('posts_per_page') !== '10') {
-        $warnings[] = $notice('posts_per_page', 'Lamb will use 10.');
-    }
-    if ($text('404_fallback') !== '') {
-        $warnings[] = $notice('404_fallback', 'Add a `[redirections]` entry for each old address you still want to forward.');
-    }
-    if (!empty($parsed['preconnect']) && is_array($parsed['preconnect'])) {
-        $warnings[] = $notice(
-            '[preconnect]',
-            'Lamb now adds preconnect hints for the sites your pages load from, so you can delete this section.'
-        );
-    }
-    if (filter_var($text('micropub_debug'), FILTER_VALIDATE_BOOLEAN)) {
-        $warnings[] = $notice('micropub_debug', 'Use the LAMB_MICROPUB_DEBUG environment variable instead.');
-    }
-    if (experimental_features_enabled($parsed)) {
-        $warnings[] = $notice('experimental_features', 'Use `bin/lamb import --experimental` instead.');
     }
 
     return $warnings;
@@ -706,8 +560,8 @@ const SETTINGS_FORM_FIELDS = [
 /**
  * The sections the /settings form owns, each posted as one textarea of `label = value` lines.
  *
- * Every other section in the stored INI (`[preconnect]`, an author's own) is
- * carried over untouched by form_to_ini().
+ * Every other section in the stored INI (an author's own) is carried over
+ * untouched by form_to_ini().
  */
 const SETTINGS_FORM_SECTIONS = [
     'menu_items',
@@ -724,7 +578,7 @@ const SETTINGS_FORM_SECTIONS = [
  * Storage stays one INI blob, so existing installs need no migration. The form
  * owns the keys in SETTINGS_FORM_FIELDS, `feeds_draft` and SETTINGS_FORM_SECTIONS:
  * they are rebuilt from the post. Every other key and section in the current
- * INI (deprecated settings, an author's own keys) is carried over unchanged, so
+ * INI (an author's own keys) is carried over unchanged, so
  * saving the form cannot drop a setting it does not show. Comments in the
  * current INI are not kept. An empty text field is left out so the default
  * applies; an owned section is always written, because an absent `[menu_items]`
@@ -774,7 +628,7 @@ function form_to_ini(array $post, string $current_ini): string
  * Lists what stops the settings form being saved, in the author's terms.
  *
  * Site title, site URL and author name are required: an unset author name
- * publishes the placeholder identity in feeds. The site URL must pass the check
+ * leaves the author blank in feeds. The site URL must pass the check
  * canonical_site_url() applies. A section line that cannot be read, or a value
  * that would not survive the INI file, is reported with the section and line.
  *
@@ -826,13 +680,13 @@ function settings_form_errors(array $post, string $current_ini = ''): array
 /**
  * Returns the values the /settings form shows.
  *
- * They come from the stored INI, not from load(): the effective config fills an
- * unset author with IDENTITY_FALLBACK, and a form prefilled with that
- * placeholder would save it as the author's own. A field the stored INI lacks is
+ * They come from the stored INI, not from load(): the effective config also
+ * holds the seeded defaults, and a form prefilled with those would save them as
+ * the author's own. A field the stored INI lacks is
  * empty, except `timezone` (UTC, as apply_timezone() falls back to) and the
  * `feeds_draft` checkbox (on, as its reader defaults to). `theme` is returned as
- * stored: the template resolves an unset one to the theme in use. Deprecated
- * keys are not offered.
+ * stored: the template resolves an unset one to the theme in use. Keys the form
+ * does not own are not offered.
  *
  * Fields in $posted, a refused submission (see respond_settings()), replace the
  * stored ones, even when posted empty. A submission without `feeds_draft` means

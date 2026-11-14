@@ -98,9 +98,7 @@ class ConfigTypesTest extends TestCase
             'author_email'     => ['author_email'],
             'site_description' => ['site_description'],
             'site_url'         => ['site_url'],
-            '404_fallback'     => ['404_fallback'],
             'websub_hubs'      => ['websub_hubs'],
-            'micropub_debug'   => ['micropub_debug'],
         ];
     }
 
@@ -175,15 +173,6 @@ class ConfigTypesTest extends TestCase
         $config = $this->withConfig("[feeds_draft]\nx = y\n");
 
         $this->assertTrue(filter_var($config['feeds_draft'], FILTER_VALIDATE_BOOLEAN));
-    }
-
-    public function testPostsPerPageFallsBackToTheDefaultWhenWronglyShaped(): void
-    {
-        // (int) on a non-empty array is 1 — with no diagnostic — which
-        // paginated the whole site one post at a time.
-        $config = $this->withConfig("posts_per_page[] = 10\n");
-
-        $this->assertSame(10, (int) $config['posts_per_page']);
     }
 
     public function testThemeIsAlwaysAStringOrAbsent(): void
@@ -275,11 +264,11 @@ class ConfigTypesTest extends TestCase
     public function testEveryDefaultSectionStaysAnArray(): void
     {
         $config = $this->withConfig(
-            "menu_items = x\nfooter_items = x\nfeeds = x\npreconnect = x\nme = x\n"
+            "menu_items = x\nfooter_items = x\nfeeds = x\nme = x\n"
             . "redirections = x\nsyndicate_to = x\n"
         );
 
-        foreach (['menu_items', 'footer_items', 'feeds', 'preconnect', 'me', 'redirections', 'syndicate_to'] as $key) {
+        foreach (['menu_items', 'footer_items', 'feeds', 'me', 'redirections', 'syndicate_to'] as $key) {
             $this->assertIsArray($config[$key], "$key must stay an array");
         }
     }

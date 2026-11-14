@@ -97,7 +97,6 @@ Devtools / local environments / sandbox:
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %})
 * [Post Types]({{ site.baseurl }}{% link post-types.md %})
-* [Preconnect]({{ site.baseurl }}{% link preconnect.md %})
 * [Project Goals]({{ site.baseurl }}{% link project-goals.md %})
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %})

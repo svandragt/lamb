@@ -187,7 +187,7 @@ class SocialSpecTest extends TestCase
         $this->assertNull(contact_vcard(['author_email' => 'not-an-email'], 'https://example.com'));
     }
 
-    public function testContactVcardIgnoresThePlaceholderIdentityAFreshInstallGets(): void
+    public function testContactVcardNamesTheSiteWhenNoAuthorNameIsSet(): void
     {
         $fresh = compose_config('', get_default_ini_text());
         $this->assertNull(contact_vcard($fresh, 'https://example.com'));

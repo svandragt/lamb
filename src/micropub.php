@@ -179,7 +179,7 @@ class LambMicropubAdapter extends MicropubAdapter
                 'reason' => 'no_site_url',
                 'token'  => token_fingerprint($token),
             ]);
-            // Surfaced unconditionally: mp_log() is silent unless micropub_debug is
+            // Surfaced unconditionally: mp_log() is silent unless LAMB_MICROPUB_DEBUG is
             // on, and an author whose client suddenly gets 403 needs to be told why.
             error_log('micropub: rejecting token, no site_url configured (set site_url in /settings)');
             return false;
@@ -1263,7 +1263,7 @@ class LambMicropubAdapter extends MicropubAdapter
 /**
  * A minimal PSR-3 logger that funnels the taproot adapter's own trace into mp_log().
  *
- * Wired into the adapter's $logger (only when micropub_debug is on), so its
+ * Wired into the adapter's $logger (only when LAMB_MICROPUB_DEBUG is on), so its
  * info/warning/error messages — token verification, query handling, error
  * responses — land in the same file as Lamb's own diagnostic log points. An
  * anonymous class keeps micropub.php to a single named class (PSR1).
@@ -1285,18 +1285,14 @@ function mp_adapter_logger(): \Psr\Log\LoggerInterface
 
 /**
  * Whether opt-in Micropub diagnostic logging is enabled: the LAMB_MICROPUB_DEBUG
- * environment variable, or the deprecated config key `micropub_debug`. The variable
- * wins whenever it is set, even to a falsy value. Off by default and for any
- * non-truthy value, so no token/PII is ever written unless the operator turns it on.
+ * environment variable is truthy. Off by default and for any non-truthy value, so
+ * no token/PII is ever written unless the operator turns it on.
+ *
+ * @return bool
  */
 function mp_debug_enabled(): bool
 {
-    global $config;
-    $env = getenv('LAMB_MICROPUB_DEBUG');
-    $value = $env !== false ? $env : ($config['micropub_debug'] ?? false);
-    if (is_bool($value)) {
-        return $value;
-    }
+    $value = getenv('LAMB_MICROPUB_DEBUG');
     return in_array(strtolower(trim((string) $value)), ['1', 'true', 'yes', 'on'], true);
 }
 
@@ -1313,7 +1309,7 @@ function mp_log_path(): string
 }
 
 /**
- * Append one diagnostic event to the Micropub log. No-op unless micropub_debug is on.
+ * Append one diagnostic event to the Micropub log. No-op unless LAMB_MICROPUB_DEBUG is on.
  *
  * The token itself is never passed in here — callers log token_fingerprint() instead.
  *

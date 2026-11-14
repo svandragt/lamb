@@ -307,7 +307,7 @@ function render_atom_feed(array $data, array $config): void
     }
 
     $author = $xml->addChild('author');
-    $author->addChild('name', \Lamb\Theme\escape_xml($config['author_name']));
+    $author->addChild('name', \Lamb\Theme\escape_xml($config['author_name'] ?? ''));
     $author->addChild('uri', ROOT_URL);
 
     foreach ($data['posts'] as $bean) {

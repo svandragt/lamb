@@ -17,8 +17,7 @@
  * --replace     Re-apply every already-imported item over its existing post
  *               instead of skipping it. Local edits made since the import
  *               are lost. For re-running an export after a conversion fix.
- * --experimental  Enable the experimental importers for this run, without
- *               setting experimental_features (deprecated) in Settings.
+ * --experimental  Enable the experimental importers for this run.
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
@@ -261,7 +260,7 @@ global $config;
 $config = Config\load();
 Config\apply_timezone($config);
 
-if (!$experimental && !Config\experimental_features_enabled($config)) {
+if (!$experimental) {
     fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: pass --experimental.\n");
     exit(1);
 }

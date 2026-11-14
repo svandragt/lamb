@@ -189,9 +189,7 @@ function public_posts_clause(): array
  * and DB query) need the same clamp-then-offset, and build_pagination_meta() needs
  * the same page count to derive prev/next from.
  *
- * A non-positive $per_page is treated as 1 rather than dividing by zero: it comes
- * from `posts_per_page` in the INI config, which nothing validates, so `= 0` would
- * otherwise fatal every listing page.
+ * A non-positive $per_page is treated as 1 rather than dividing by zero.
  *
  * @param int $total_posts Total number of matching posts.
  * @param int $page        Requested page (1-based).
@@ -235,38 +233,15 @@ function build_pagination_meta(int $page, int $per_page, int $total_posts, int $
 }
 
 /**
- * Redirects the user to a 404 page with the provided fallback URL.
- *
- * @param string $fallback The URL to redirect to if the 404 page is not available.
- * @return void
- */
-#[NoReturn]
-function redirect_404(string $fallback): void
-{
-    global $request_uri;
-    $location = \Lamb\Http\sanitize_location($fallback . $request_uri);
-    header("Location: $location");
-    die();
-}
-
-/**
  * Responds with a 404 error page.
  *
- * @param array<int, string> $_args   Unused.
- * @param bool  $use_fallback Whether to redirect to the configured fallback URL.
+ * @param array<int, string> $_args Unused.
  * @return array{title: string, intro: string, action: string, requested: string} The
  *         404 page's view data: the human title, intro, the action marker the
  *         router switches on, and the path the visitor actually asked for.
  */
-function respond_404(array $_args = [], bool $use_fallback = false): array
+function respond_404(array $_args = []): array
 {
-    global $config;
-    if ($use_fallback && isset($config['404_fallback'])) {
-        $fallback = $config['404_fallback'];
-        if (filter_var($fallback, FILTER_VALIDATE_URL)) {
-            redirect_404($fallback);
-        }
-    }
     header('HTTP/1.0 404 Not Found');
 
     return [
@@ -475,6 +450,9 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
     ];
 }
 
+/** Posts per page in lists and feeds. */
+const POSTS_PER_PAGE = 10;
+
 /**
  * Paginates a collection of posts, either from an array or a database query.
  *
@@ -482,17 +460,13 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
  * @param string      $order_by_clause SQL ORDER BY expression (DB path only).
  * @param string|null $where_sql       Optional WHERE clause (DB path only).
  * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
- * @param int|null    $per_page        Items per page; falls back to config when null.
+ * @param int|null    $per_page        Items per page; falls back to POSTS_PER_PAGE when null.
  * @param int|null    $page            Current page; falls back to $_GET['page'] when null.
  * @return array{items: array<int, mixed>, pagination: array<string, mixed>}
  */
 function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
 {
-    // Explicit $per_page avoids the global; fall back to config only when not provided.
-    if ($per_page === null) {
-        global $config;
-        $per_page = (int)($config['posts_per_page'] ?? 10);
-    }
+    $per_page ??= POSTS_PER_PAGE;
     // Clamped here as well as in pagination_window() so the page count, the row
     // offset and the SQL LIMIT all agree on the same size (see that helper).
     $per_page = max(1, $per_page);

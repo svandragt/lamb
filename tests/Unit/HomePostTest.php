@@ -37,7 +37,7 @@ class HomePostTest extends TestCase
         }
 
         global $config;
-        $config = ['site_title' => 'Test Blog', 'posts_per_page' => 10, 'menu_items' => [], 'feeds' => []];
+        $config = ['site_title' => 'Test Blog', 'menu_items' => [], 'feeds' => []];
 
         $_SESSION = [];
         $_POST    = [];

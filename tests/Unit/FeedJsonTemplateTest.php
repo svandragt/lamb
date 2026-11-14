@@ -127,6 +127,17 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedJsonWithoutAnAuthorNameHasAnEmptyAuthorName(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => null]);
+
+        $this->assertSame('', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedJsonAbsolutisesRootRelativeImageUrls(): void
     {
         // Same syndication concern as the Atom feed: content_html must carry
@@ -187,6 +198,7 @@ class FeedJsonTemplateTest extends TestCase
             'author_name'  => 'Test Author',
             'author_email' => 'test@test.com',
         ], $extraConfig);
+        $config = array_filter($config, static fn ($value) => $value !== null);
         $data = [
             'posts'    => [$bean],
             'title'    => 'Test Blog',

@@ -236,17 +236,14 @@ const MAX_PRECONNECT_ORIGINS = 3;
 
 /**
  * Emits <link rel="preconnect"> and <link rel="dns-prefetch"> tags for the remote origins the
- * page's posts load media from, in order of first appearance, after any origins in the
- * deprecated $config['preconnect'] setting (removed in 0.17). Emits at most
+ * page's posts load media from, in order of first appearance. Emits at most
  * MAX_PRECONNECT_ORIGINS tags of each kind.
  *
  * @return void
  */
 function the_preconnect(): void
 {
-    global $config;
-    $origins = array_unique(array_merge(array_values($config['preconnect'] ?? []), media_origins()));
-    foreach (array_slice($origins, 0, MAX_PRECONNECT_ORIGINS) as $origin) {
+    foreach (array_slice(media_origins(), 0, MAX_PRECONNECT_ORIGINS) as $origin) {
         printf('<link rel="preconnect" href="%s">' . PHP_EOL, escape($origin));
         printf('<link rel="dns-prefetch" href="%s">' . PHP_EOL, escape($origin));
     }

@@ -6,7 +6,6 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use Symfony\Component\Process\Process;
 
-use function Lamb\Config\deprecation_warnings;
 use function Lamb\Config\form_to_ini;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\parse_ini_safe;
@@ -173,7 +172,7 @@ class ConfigFormTest extends TestCase
 
     // form_to_ini: carry-over
 
-    public function testFormToIniCarriesOverDeprecatedAndUnknownKeys(): void
+    public function testFormToIniCarriesOverRemovedAndUnknownKeys(): void
     {
         $current = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
             . "experimental_features = true\nmystery_key = kept\ntheme = 2024\n";
@@ -188,7 +187,7 @@ class ConfigFormTest extends TestCase
         $this->assertSame('2026', $parsed['theme']);
     }
 
-    public function testFormToIniCarriesOverDeprecatedAndUnknownSections(): void
+    public function testFormToIniCarriesOverRemovedAndUnknownSections(): void
     {
         $current = "[preconnect]\nfonts = https://fonts.googleapis.com\n\n[custom]\nOne = 1\nTwo = two words\n";
 
@@ -478,58 +477,42 @@ class ConfigFormTest extends TestCase
         $this->assertSame(['Café' => '/café?a=b&c=d'], $parsed['menu_items']);
     }
 
-    // deprecation_warnings
+    // removed settings
 
     /**
-     * @dataProvider deprecatedKeyProvider
+     * @dataProvider removedScalarSettingProvider
      */
-    public function testDeprecationWarningsNamesEachDeprecatedKeyInUse(string $ini, string $key, string $advice): void
+    public function testShapeWarningsIsSilentAboutARemovedScalarSetting(string $ini): void
     {
-        $warnings = deprecation_warnings($ini);
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString($key, $warnings[0]);
-        $this->assertStringContainsString($advice, $warnings[0]);
-        $this->assertStringContainsString('0.17', $warnings[0]);
+        $this->assertSame([], shape_warnings($ini));
     }
 
     /**
-     * @return array<string, array{string, string, string}>
+     * @return array<string, array{string}>
      */
-    public static function deprecatedKeyProvider(): array
+    public static function removedScalarSettingProvider(): array
     {
         return [
-            'posts_per_page' => ["posts_per_page = 5\n", 'posts_per_page', 'Lamb will use 10'],
-            '404_fallback' => ["404_fallback = https://old.example\n", '404_fallback', '[redirections]'],
-            'preconnect' => [
-                "[preconnect]\nfonts = https://fonts.googleapis.com\n",
-                '[preconnect]',
-                'Lamb now adds preconnect hints for the sites your pages load from',
-            ],
-            'micropub_debug' => ["micropub_debug = true\n", 'micropub_debug', 'LAMB_MICROPUB_DEBUG'],
-            'experimental_features' => [
-                "experimental_features = true\n",
-                'experimental_features',
-                'bin/lamb import --experimental',
-            ],
+            'posts_per_page' => ["posts_per_page = 5\n"],
+            '404_fallback' => ["404_fallback = https://old.example\n"],
+            'micropub_debug' => ["micropub_debug = true\n"],
+            'experimental_features' => ["experimental_features = true\n"],
         ];
     }
 
-    public function testDeprecationWarningsIsEmptyForSettingsThatDoNothing(): void
+    public function testShapeWarningsIsSilentAboutTheEmptyPreconnectSectionOldInstallsStore(): void
     {
-        // The seeded defaults carry these keys at their no-op values, so every
-        // existing install has them; warning about them would be noise.
-        $this->assertSame([], deprecation_warnings(get_default_ini_text()));
-        $this->assertSame([], deprecation_warnings(
-            "posts_per_page = 10\nmicropub_debug = false\nexperimental_features = false\n404_fallback =\n[preconnect]\n"
-        ));
+        // Every install seeded before 0.17 stores this empty section.
+        $this->assertSame([], shape_warnings("[preconnect]\n\n[me]\n"));
     }
 
-    public function testShapeWarningsIncludesTheDeprecationNotices(): void
+    public function testShapeWarningsNamesARemovedPreconnectSectionThatStillHoldsEntries(): void
     {
-        $warnings = shape_warnings("posts_per_page = 5\n[preconnect]\nfonts = https://fonts.googleapis.com\n");
+        $warnings = shape_warnings("[preconnect]\nfonts = https://fonts.googleapis.com\n");
 
-        $this->assertCount(2, $warnings);
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('`preconnect`', $warnings[0]);
+        $this->assertStringContainsString('ignored', $warnings[0]);
     }
 
     // respond_settings
@@ -553,7 +536,7 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('Author name', implode("\n", $_SESSION['flash']));
     }
 
-    public function testRespondSettingsSavesAFormPostAndFlashesDeprecationNotices(): void
+    public function testRespondSettingsSavesAFormPostAndKeepsRemovedSettingsQuietly(): void
     {
         $result = $this->runSettingsPost(
             $this->post(['menu_items' => 'Home = /', 'feeds_draft' => '1']),
@@ -566,7 +549,7 @@ class ConfigFormTest extends TestCase
         $this->assertSame('5', $parsed['posts_per_page']);
         $this->assertSame('kept', $parsed['mystery']);
         $this->assertContains('Settings saved successfully.', $result['flash']);
-        $this->assertStringContainsString('posts_per_page', implode("\n", $result['flash']));
+        $this->assertStringNotContainsString('posts_per_page', implode("\n", $result['flash']));
     }
 
     public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void

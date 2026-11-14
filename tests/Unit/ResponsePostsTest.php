@@ -40,7 +40,6 @@ class ResponsePostsTest extends TestCase
         global $config;
         $config = [
             'site_title'     => 'Test Blog',
-            'posts_per_page' => 10,
             'menu_items'     => [],
             'feeds'          => [],
             'redirections'   => [],

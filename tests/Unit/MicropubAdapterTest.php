@@ -106,12 +106,11 @@ class MicropubAdapterTest extends TestCase
         $this->assertArrayHasKey('syndicate-to', $body);
     }
 
-    // --- diagnostic logging (micropub_debug) ---
+    // --- diagnostic logging (LAMB_MICROPUB_DEBUG) ---
 
     public function testMpLogWritesWhenDebugEnabled(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         \Lamb\Micropub\mp_log('unit_test_event', ['foo' => 'bar']);
 
@@ -125,54 +124,48 @@ class MicropubAdapterTest extends TestCase
     /**
      * @dataProvider debugEnvProvider
      */
-    public function testMicropubDebugEnvVarOverridesTheConfigKey(string $env, bool $config_value, bool $expected): void
+    public function testMicropubDebugEnvVarTurnsLoggingOnOrOff(string $env, bool $expected): void
     {
-        global $config;
-        $config['micropub_debug'] = $config_value;
         putenv("LAMB_MICROPUB_DEBUG=$env");
 
         $this->assertSame($expected, \Lamb\Micropub\mp_debug_enabled());
     }
 
     /**
-     * @return array<string, array{string, bool, bool}>
+     * @return array<string, array{string, bool}>
      */
     public function debugEnvProvider(): array
     {
         return [
-            'on enables with config off' => ['1', false, true],
-            'yes enables with config off' => ['yes', false, true],
-            'false wins over config on' => ['false', true, false],
-            'empty wins over config on' => ['', true, false],
+            'on' => ['1', true],
+            'yes' => ['yes', true],
+            'false' => ['false', false],
+            'empty' => ['', false],
         ];
     }
 
-    public function testMicropubDebugFallsBackToTheConfigKeyWhenTheEnvVarIsUnset(): void
+    public function testMicropubDebugIgnoresTheRemovedConfigKey(): void
     {
         global $config;
         $config['micropub_debug'] = true;
 
-        $this->assertTrue(\Lamb\Micropub\mp_debug_enabled());
+        $this->assertFalse(\Lamb\Micropub\mp_debug_enabled());
     }
 
     public function testMpLogWritesNothingWhenDebugDisabled(): void
     {
-        global $config;
-        $config['micropub_debug'] = false;
-
         \Lamb\Micropub\mp_log('should_not_appear', []);
 
         $path = $GLOBALS['lamb_mp_log_path'];
         $this->assertFalse(
             is_file($path) && str_contains((string) file_get_contents($path), 'should_not_appear'),
-            'mp_log must write nothing when micropub_debug is disabled'
+            'mp_log must write nothing when LAMB_MICROPUB_DEBUG is unset'
         );
     }
 
     public function testMpLogKeepsTheEntryWhenAValueIsNotValidUtf8(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         // Without JSON_INVALID_UTF8_SUBSTITUTE, json_encode() returns false for
         // the whole document over one malformed byte and `?: ''` wrote a blank
@@ -191,8 +184,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testMpLogStillWritesTheEntriesAroundABadOne(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         \Lamb\Micropub\mp_log('first', ['body' => "bad \xC3\x28"]);
         \Lamb\Micropub\mp_log('second', ['body' => 'clean']);
@@ -207,8 +199,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testMpLogSubstitutesRatherThanDroppingTheBadByte(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         \Lamb\Micropub\mp_log('response', ['body' => "a\xC3\x28b"]);
 
@@ -221,8 +212,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testVerifyTokenLogsMeMismatchReasonWithoutLeakingToken(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         $adapter = new StubMicropubAdapter();
         $adapter->stubResponse = [
@@ -240,8 +230,7 @@ class MicropubAdapterTest extends TestCase
 
     public function testVerifyTokenLogsOkReasonWithScope(): void
     {
-        global $config;
-        $config['micropub_debug'] = true;
+        putenv('LAMB_MICROPUB_DEBUG=1');
 
         $adapter = new StubMicropubAdapter();
         $adapter->stubResponse = [

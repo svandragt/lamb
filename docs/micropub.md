@@ -88,8 +88,6 @@ Set the `LAMB_MICROPUB_DEBUG` environment variable to `true` (`1`, `yes` and `on
 LAMB_MICROPUB_DEBUG=true
 ```
 
-The deprecated `micropub_debug = true` setting still works until 0.17. When the environment variable is set, it wins, even when set to `false`.
-
 Reproduce the problem with your client, then read `data/micropub.log` (next to your `lamb.db`). Each line is one event: the incoming request (method, client `User-Agent`, whether a token was supplied), the token-verification outcome (including a `me_mismatch` reason when the token's identity doesn't match your site URL), and the response status. The bearer token itself is never written — only a non-reversible fingerprint.
 
 Comparing the log from a client that works against one that fails usually pinpoints the difference. **Turn it back off (set `LAMB_MICROPUB_DEBUG=false`) when you're done** so the log stops growing.

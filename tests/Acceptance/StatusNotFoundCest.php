@@ -18,4 +18,14 @@ class StatusNotFoundCest
         $I->dontSee('Fatal error');
         $I->dontSee('Deprecated:');
     }
+
+    public function theRemoved404FallbackSettingNoLongerRedirects(AcceptanceTester $I)
+    {
+        $I->amOnPage('/');
+        $I->haveStoredSettings("404_fallback = http://127.0.0.1:1\n");
+
+        $I->amOnPage('/status/99999999999');
+        $I->seeResponseCodeIs(404);
+        $I->seeCurrentUrlEquals('/status/99999999999');
+    }
 }

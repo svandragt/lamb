@@ -115,7 +115,7 @@ class SettingsFormCest
         $I->seeInField('site_title', 'My Microblog');
     }
 
-    public function savingTheFormKeepsUnknownAndDeprecatedSettings(AcceptanceTester $I): void
+    public function savingTheFormKeepsUnknownAndRemovedSettings(AcceptanceTester $I): void
     {
         $this->login($I);
         $I->haveStoredSettings(
@@ -132,17 +132,16 @@ class SettingsFormCest
         $I->fillField('site_description', 'Saved through the form');
         $I->click('Save settings');
         $I->see('Settings saved successfully.');
-        $I->see('`posts_per_page` is deprecated and will be removed in 0.17');
+        $I->dontSee('is deprecated');
 
         $I->seeStoredSettingsContain('posts_per_page = 5');
         $I->seeStoredSettingsContain('mystery_key = kept');
         $I->seeStoredSettingsContain('answer = 42');
         $I->seeStoredSettingsContain('site_description = Saved through the form');
 
-        // The deprecated page size still applies.
+        // The removed page size no longer applies: all six posts fit on the one page of ten.
         $I->amOnPage('/');
-        $I->seeNumberOfElements('article', 5);
-        $I->amOnPage('/page/2');
-        $I->seeNumberOfElements('article', 1);
+        $I->seeNumberOfElements('article', 6);
+        $I->dontSeeElement('nav.pagination a.next');
     }
 }

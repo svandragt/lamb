@@ -9,7 +9,6 @@ use function Lamb\Config\config_modified_timestamp;
 use function Lamb\Config\get_ini_text;
 use function Lamb\Config\load;
 use function Lamb\Config\parse_ini_safe;
-use function Lamb\Config\reset_stale_experimental_flag;
 use function Lamb\Config\save_ini_text;
 
 class ConfigLoadTest extends TestCase
@@ -22,7 +21,6 @@ class ConfigLoadTest extends TestCase
         R::freeze(false);
         // Remove any cached config option so each test starts fresh
         R::exec("DELETE FROM option WHERE name = 'site_config_ini'");
-        R::exec("DELETE FROM option WHERE name = 'experimental_gate_version'");
         // get_ini_text()'s bootstrap path reads from ROOT_DIR. It's a
         // process-wide constant that other unit tests may have already
         // pointed at their own temp dir, so operate on wherever it actually
@@ -79,53 +77,12 @@ class ConfigLoadTest extends TestCase
         $this->assertSame($custom, $text);
     }
 
-    public function testGetIniTextResetsStaleExperimentalFlagOnRead(): void
+    public function testGetIniTextLeavesARemovedExperimentalFeaturesSettingAsStored(): void
     {
-        save_ini_text("experimental_features = true\n");
+        $custom = "experimental_features = true\n";
+        save_ini_text($custom);
 
-        $text = get_ini_text();
-        $parsed = parse_ini_string($text, true, INI_SCANNER_RAW);
-
-        $this->assertSame('false', $parsed['experimental_features']);
-        // Persisted, so a second read is stable.
-        $this->assertSame($text, get_ini_text());
-    }
-
-    // reset_stale_experimental_flag
-
-    public function testResetStaleExperimentalFlagRewritesTrueToFalseWhenStampBehind(): void
-    {
-        $migrated = reset_stale_experimental_flag("experimental_features = true\n");
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('false', $parsed['experimental_features']);
-    }
-
-    public function testResetStaleExperimentalFlagLeavesFalseUntouched(): void
-    {
-        $ini = "experimental_features = false\nsite_title = Example\n";
-
-        $this->assertSame($ini, reset_stale_experimental_flag($ini));
-    }
-
-    public function testResetStaleExperimentalFlagIsNoOpOnceStampCaughtUp(): void
-    {
-        $once = reset_stale_experimental_flag("experimental_features = true\n");
-        $twice = reset_stale_experimental_flag($once);
-
-        $this->assertSame($once, $twice);
-    }
-
-    public function testResetStaleExperimentalFlagPreservesOtherContent(): void
-    {
-        $ini = "site_title = Example\nexperimental_features = true\n[menu_items]\nAbout = about\n";
-
-        $migrated = reset_stale_experimental_flag($ini);
-        $parsed = parse_ini_string($migrated, true, INI_SCANNER_RAW);
-
-        $this->assertSame('Example', $parsed['site_title']);
-        $this->assertSame('about', $parsed['menu_items']['About']);
-        $this->assertSame('false', $parsed['experimental_features']);
+        $this->assertSame($custom, get_ini_text());
     }
 
     // save_ini_text
@@ -218,8 +175,7 @@ class ConfigLoadTest extends TestCase
     {
         $config = load();
         $this->assertArrayHasKey('site_title', $config);
-        $this->assertArrayHasKey('author_email', $config);
-        $this->assertArrayHasKey('author_name', $config);
+        $this->assertArrayHasKey('timezone', $config);
     }
 
     public function testLoadReturnsCustomSiteTitle(): void
@@ -233,9 +189,9 @@ class ConfigLoadTest extends TestCase
     {
         save_ini_text("site_title = Minimal\n");
         $config = load();
-        // author_email should come from hardcoded defaults since it's not in the saved INI
-        $this->assertArrayHasKey('author_email', $config);
-        $this->assertNotEmpty($config['author_email']);
+        // timezone comes from the seeded defaults since it's not in the saved INI
+        $this->assertSame('UTC', $config['timezone']);
+        $this->assertArrayNotHasKey('author_email', $config);
     }
 
     public function testLoadIncludesAuthorizationEndpointDefault(): void

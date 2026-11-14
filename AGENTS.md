@@ -250,7 +250,7 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 
 Config is stored as raw INI text in the `option` table under key `site_config_ini`. On first run it bootstraps from built-in defaults. Edit it at `/settings` (login required).
 
-Config keys: `author_email`, `author_name`, `site_title`, `theme`, `404_fallback`, `posts_per_page`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[preconnect]`, `[redirections]`.
+Config keys: `author_email`, `author_name`, `site_title`, `theme`, `[menu_items]`, `[feeds]`, `feeds_draft`, `[redirections]`.
 
 ### Post Content Format
 
@@ -408,7 +408,7 @@ All helpers must be imported with `use function Lamb\Theme\<name>` before use.
 | `the_scripts()` | `void` | Emits `<script defer>` tags for application scripts in `src/scripts/`; logged-in users also get `src/scripts/logged_in/*.js` |
 | `the_opengraph()` | `void` | Emits `<meta>` OG/Twitter tags (status template only) |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` when the response is marked noindex (private routes, `?preview=` links); nothing otherwise |
-| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `dns-prefetch` for up to 3 distinct origins in total: deprecated `$config['preconnect']` origins first, then the remote origins in the `src`/`srcset`/`poster` URLs of `$data['posts']` bodies |
+| `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `dns-prefetch` for up to 3 distinct remote origins in the `src`/`srcset`/`poster` URLs of `$data['posts']` bodies |
 | `part($name, $dir='parts')` | `void` | Includes a theme part (see resolution rules above) |
 | `csrf_token()` | `string` | Returns (and creates if needed) the current session CSRF token |
 | `related_posts($body)` | `array` | Posts sharing hashtags with `$body`; returns `['posts' => OODBBean[]]` |
@@ -530,7 +530,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### Pagination
 
-`paginate_posts($source, ...)` in `response.php` handles both array-based and DB-based pagination. It reads `posts_per_page` from config (default 10) and `?page=` from query string.
+`paginate_posts($source, ...)` in `response.php` handles both array-based and DB-based pagination. It uses the fixed page size `POSTS_PER_PAGE` (10) and `?page=` from query string.
 
 ## Coding Standards
 

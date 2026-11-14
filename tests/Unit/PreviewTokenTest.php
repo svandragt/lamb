@@ -35,7 +35,7 @@ class PreviewTokenTest extends TestCase
         }
 
         global $config;
-        $config = ['site_title' => 'Test Blog', 'posts_per_page' => 10];
+        $config = ['site_title' => 'Test Blog'];
 
         $_SESSION = [];
         $_GET = [];

@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Config\compose_config;
-use function Lamb\Config\experimental_features_enabled;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
@@ -138,7 +137,6 @@ class ConfigTest extends TestCase
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
 
         $this->assertSame('UTC', $parsed['timezone']);
-        $this->assertSame('10', $parsed['posts_per_page']);
         $this->assertSame('https://indieauth.com/auth', $parsed['authorization_endpoint']);
         $this->assertSame('https://tokens.indieauth.com/token', $parsed['token_endpoint']);
         $this->assertArrayHasKey('feeds_draft', $parsed);
@@ -148,11 +146,9 @@ class ConfigTest extends TestCase
     {
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
 
-        // Regression: these were previously commented inside [feeds]/[preconnect],
+        // Regression: these were previously commented inside [feeds],
         // so uncommenting them in place parsed as nested keys the code never read.
         $this->assertArrayNotHasKey('feeds_draft', $parsed['feeds'] ?? []);
-        $this->assertArrayNotHasKey('authorization_endpoint', $parsed['preconnect'] ?? []);
-        $this->assertArrayNotHasKey('token_endpoint', $parsed['preconnect'] ?? []);
     }
 
     public function testComposeConfigFillsRealDefaultsForMissingKeys(): void
@@ -160,7 +156,6 @@ class ConfigTest extends TestCase
         $config = compose_config("site_title = Mine\n", get_default_ini_text());
 
         $this->assertSame('UTC', $config['timezone']);
-        $this->assertSame('10', $config['posts_per_page']);
         $this->assertSame('https://indieauth.com/auth', $config['authorization_endpoint']);
     }
 
@@ -171,13 +166,12 @@ class ConfigTest extends TestCase
         $this->assertSame('Europe/London', $config['timezone']);
     }
 
-    public function testComposeConfigSuppliesIdentityPlaceholderFallback(): void
+    public function testComposeConfigLeavesAnUnsetAuthorOutInsteadOfSupplyingAPlaceholder(): void
     {
-        // author_name is kept commented in the seeded INI, so it must come from
-        // the in-code fallback for consumers (feed.php) that have no inline default.
         $config = compose_config("site_title = Mine\n", get_default_ini_text());
 
-        $this->assertSame('Joe Sheeple', $config['author_name']);
+        $this->assertArrayNotHasKey('author_name', $config);
+        $this->assertArrayNotHasKey('author_email', $config);
     }
 
     public function testComposeConfigNeverInheritsThemeFromDefaults(): void
@@ -185,10 +179,10 @@ class ConfigTest extends TestCase
         // A stored config without a theme must not be silently re-themed by the
         // seeded default (Theme\resolve_theme() falls back to the base theme
         // for a missing theme instead).
-        $config = compose_config("site_title = Mine\n", "theme = 2026\nposts_per_page = 10\n");
+        $config = compose_config("site_title = Mine\n", "theme = 2026\ntimezone = UTC\n");
 
         $this->assertArrayNotHasKey('theme', $config);
-        $this->assertSame('10', $config['posts_per_page']);
+        $this->assertSame('UTC', $config['timezone']);
     }
 
     public function testComposeConfigHonorsTopLevelFeedsDraftFalse(): void
@@ -198,28 +192,12 @@ class ConfigTest extends TestCase
         $this->assertFalse(filter_var($config['feeds_draft'], FILTER_VALIDATE_BOOLEAN));
     }
 
-    public function testDefaultIniDisablesExperimentalFeaturesForNewInstalls(): void
+    public function testDefaultIniOmitsTheSettingsRemovedIn017(): void
     {
-        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+        $text = get_default_ini_text();
 
-        $this->assertArrayHasKey('experimental_features', $parsed);
-        $this->assertFalse(filter_var($parsed['experimental_features'], FILTER_VALIDATE_BOOLEAN));
-    }
-
-    // experimental_features_enabled
-
-    public function testExperimentalFeaturesEnabledReturnsFalseWhenKeyMissing(): void
-    {
-        $this->assertFalse(experimental_features_enabled([]));
-    }
-
-    public function testExperimentalFeaturesEnabledReturnsTrueWhenSetTrue(): void
-    {
-        $this->assertTrue(experimental_features_enabled(['experimental_features' => 'true']));
-    }
-
-    public function testExperimentalFeaturesEnabledReturnsFalseWhenSetFalse(): void
-    {
-        $this->assertFalse(experimental_features_enabled(['experimental_features' => 'false']));
+        foreach (['posts_per_page', '404_fallback', 'preconnect', 'micropub_debug', 'experimental_features'] as $key) {
+            $this->assertStringNotContainsString($key, $text);
+        }
     }
 }

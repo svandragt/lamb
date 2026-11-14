@@ -157,7 +157,7 @@ class ResponseTest extends TestCase
 
     public function testPaginationWindowTreatsNonPositivePerPageAsOne()
     {
-        // posts_per_page = 0 in the INI config would otherwise divide by zero.
+        // A per_page of 0 would otherwise divide by zero.
         $window = pagination_window(3, 2, 0);
         $this->assertSame(2, $window['page']);
         $this->assertSame(1, $window['offset']);

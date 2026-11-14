@@ -49,9 +49,9 @@ clamp from the offset-into-a-query step is what let the DB path and the
 array path stay in lock-step without either one reimplementing the other's
 arithmetic.
 
-`$per_page` and `$page` are optional parameters that fall back to config
-(`posts_per_page`) and `$_GET['page']` respectively, rather than reading the
-global/superglobal directly — callers that already know the values (tests,
+`$per_page` and `$page` are optional parameters that fall back to
+`POSTS_PER_PAGE` and `$_GET['page']` respectively, rather than reading the
+superglobal directly — callers that already know the values (tests,
 the tag-feed 20-item cap) pass them explicitly, and `paginate_posts()` itself
 never has to care which source they came from.
 

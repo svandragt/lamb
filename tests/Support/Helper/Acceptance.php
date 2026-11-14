@@ -65,7 +65,7 @@ class Acceptance extends Module
     /**
      * Replaces the stored settings INI, straight in the SQLite file the test server reads.
      *
-     * Some settings (posts_per_page, a key the form does not know) have no field
+     * Some settings (a key the form does not know) have no field
      * in the /settings form, so a test that needs them seeds them here. Make a
      * request first, so the server has created the database. The connection is
      * closed before returning, which checkpoints the WAL and removes the sidecar
