@@ -1,10 +1,12 @@
 onLoaded(() => {
-    let ta = $('textarea')
-    if (!ta) {
-        return
-    }
-    ta.on('input', growing_input)
-    growing_input({'target': ta})
+    $$('textarea').forEach(ta => {
+        ta.on('input', growing_input)
+        ta.on('focus', growing_input)
+        // A textarea in a hidden tab has scrollHeight 0; it is sized on focus instead.
+        if (ta.offsetParent !== null) {
+            growing_input({'target': ta})
+        }
+    })
 })
 
 function growing_input(ev)
