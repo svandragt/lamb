@@ -30,7 +30,7 @@
  * every boot (backfill_post_version(), backfill_imported_post_identity(),
  * migrate_feed_watermarks()), the one-time migrate_feed_drafts() (#924), the
  * one-time drop_experimental_gate_stamp() for the removed gate's option row,
- * drop_retired_settings() for the settings 0.17 removed, plus
+ * a report of the settings 0.17 removed that the stored settings still hold, plus
  * the same post upgrade as upgrade-posts (#814, reusing
  * Response\upgrade_all_posts() rather than duplicating its
  * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
@@ -216,9 +216,13 @@ if ($command === 'migrate') {
     $stamp_count = Bootstrap\drop_experimental_gate_stamp($dry_run);
     echo "{$prefix}drop_experimental_gate_stamp: $verb $stamp_count unused option row(s)\n";
 
-    $verb = $dry_run ? 'would remove' : 'removed';
-    foreach (Config\drop_retired_settings($dry_run) as $setting => $replacement) {
-        echo "{$prefix}remove_retired_settings: $verb `$setting`. Replacement: $replacement\n";
+    // Report only: the settings page is the one place that drops a removed setting.
+    $stored_ini = Config\get_ini_text();
+    if (!Config\validate_ini($stored_ini)['valid']) {
+        echo "{$prefix}check_removed_settings: the stored settings do not parse, so removed settings could not be checked\n";
+    }
+    foreach (Config\removed_settings_in_use($stored_ini) as $setting => $replacement) {
+        echo "{$prefix}check_removed_settings: `$setting` was removed and is ignored; saving the settings page drops it. Replacement: $replacement\n";
     }
 
     // Must run after backfill_post_version() above: that's what gives a

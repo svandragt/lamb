@@ -586,8 +586,7 @@ function drop_experimental_gate_stamp(bool $dry_run = false): int
 
 /**
  * Whether a one-time backfill has already recorded its probe as empty, via a
- * hidden row in the `option` table, reused here rather than a new table or file
- * to persist one-off state across boots.
+ * hidden row in the `option` table.
  *
  * Any failure to read — most notably a fresh install, or an upgrade from
  * before this marker existed, where the row (or the whole `option` table)

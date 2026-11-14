@@ -596,85 +596,6 @@ function removed_settings_in_use(string $stored_ini): array
 }
 
 /**
- * Takes the removed settings out of the stored INI, for `bin/lamb migrate`.
- *
- * Unlike the settings form this edits the text, so the comments an install was
- * seeded with survive. Each removed key goes with the comment lines above it,
- * and a removed `[section]` goes with everything under it. Skipped when the
- * stored INI cannot be parsed, as the form refuses to save over it.
- *
- * @param bool $dry_run When true, report what would be removed but change nothing.
- * @return array<string, string> The settings that were in use, with their replacements.
- * @throws \RedBeanPHP\RedException\SQL When the stored settings cannot be read.
- */
-function drop_retired_settings(bool $dry_run = false): array
-{
-    $stored = get_ini_text();
-    if (@parse_ini_string($stored, true, INI_SCANNER_RAW) === false) {
-        return [];
-    }
-
-    $cleaned = without_retired_settings($stored);
-    if (!$dry_run && $cleaned !== $stored) {
-        save_ini_text($cleaned);
-    }
-
-    return removed_settings_in_use($stored);
-}
-
-/**
- * Returns the INI text without the RETIRED_SETTINGS keys and sections.
- *
- * Only top-level keys count: a label in another section that shares a retired
- * key's name is the author's own. A commented-out `;key = value` line counts as
- * its key, so the examples the seeded INI carried go too.
- *
- * @param string $ini_text The INI text.
- * @return string The INI text without them.
- */
-function without_retired_settings(string $ini_text): string
-{
-    $keys = implode('|', array_map(fn (string $key): string => preg_quote($key, '/'), array_keys(RETIRED_SETTINGS)));
-    $kept = [];
-    $in_section = false;
-    $skipping = false;
-
-    foreach (explode("\n", $ini_text) as $line) {
-        if (preg_match('/^\s*\[([^\]]*)\]/', $line, $header) === 1) {
-            $in_section = true;
-            $skipping = isset(RETIRED_SETTINGS[trim($header[1])]);
-            if ($skipping) {
-                $kept = without_trailing_comments($kept);
-                continue;
-            }
-        } elseif ($skipping) {
-            continue;
-        } elseif (!$in_section && preg_match("/^\s*;?\s*({$keys})\s*=/", $line) === 1) {
-            $kept = without_trailing_comments($kept);
-            continue;
-        }
-        $kept[] = $line;
-    }
-
-    return implode("\n", $kept);
-}
-
-/**
- * Drops the comment lines at the end of a list of INI lines.
- *
- * @param list<string> $lines INI lines.
- * @return list<string> The lines without the trailing run of `;` comments.
- */
-function without_trailing_comments(array $lines): array
-{
-    while ($lines !== [] && str_starts_with(ltrim(end($lines)), ';')) {
-        array_pop($lines);
-    }
-
-    return $lines;
-}
-
-/**
  * Whether a removed setting's stored value changed anything while Lamb read it.
  *
  * @param string $key   A RETIRED_SETTINGS key.
@@ -820,8 +741,8 @@ function form_to_ini(array $post, string $current_ini): string
 /**
  * Lists what stops the settings form being saved, in the author's terms.
  *
- * Site title, site URL and author name are required: an unset author name
- * leaves the author blank in feeds. The site URL must pass the check
+ * Site title, site URL and author name are required: the author name is what
+ * feeds and page metadata name as the author. The site URL must pass the check
  * canonical_site_url() applies. A section line that cannot be read, or a value
  * that would not survive the INI file, is reported with the section and line.
  *
