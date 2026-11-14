@@ -116,7 +116,8 @@ class EditPostCest
         $broken = "---\ndraft: true\ntitle: a: b\n---\nedit-test-refused-" . uniqid();
         $fixed  = 'edit-test-fixed-' . uniqid();
 
-        $I->amOnPage('/');
+        // Not `/`: that is also where a lost referrer falls back to.
+        $I->amOnPage('/drafts');
         $I->amOnPage('/edit/' . $id);
         $I->fillField('contents', $broken);
         $I->click('Update post');
@@ -129,8 +130,8 @@ class EditPostCest
         $I->fillField('contents', $fixed);
         $I->click('Update post');
 
-        $I->dontSee('Status does not exist');
-        $I->see($fixed);
+        $I->seeCurrentUrlEquals('/drafts');
+        $I->seePostColumnEquals($id, 'body', $fixed);
     }
 
     public function testEditStampsTheCurrentRenderVersion(AcceptanceTester $I): void
