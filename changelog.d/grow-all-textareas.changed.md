@@ -1,0 +1,1 @@
+- Every text box in the editor and settings grows with its content, not only the first on the page.

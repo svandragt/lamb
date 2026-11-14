@@ -28,3 +28,41 @@ test('resizing the textarea restores the window scroll position', () => {
 
   assert.deepEqual(calls.at(-1), [0, 500])
 })
+
+function stubLayout(ta, { rendered, scrollHeight }) {
+  Object.defineProperty(ta, 'offsetParent', { configurable: true, get: () => (rendered ? ta.parentNode : null) })
+  Object.defineProperty(ta, 'scrollHeight', { configurable: true, get: () => scrollHeight })
+}
+
+test('typing into the second textarea grows the second one', () => {
+  const { window, document } = load('<!DOCTYPE html><body><textarea></textarea><textarea></textarea></body>')
+  const [, second] = document.querySelectorAll('textarea')
+  stubLayout(second, { rendered: true, scrollHeight: 100 })
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  second.style.height = ''
+  second.dispatchEvent(new window.Event('input'))
+
+  assert.equal(second.style.height, '120px')
+})
+
+test('a textarea that is not rendered at load keeps its rows height', () => {
+  const { window, document } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  stubLayout(ta, { rendered: false, scrollHeight: 0 })
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+
+  assert.equal(ta.style.height, '')
+})
+
+test('focusing a textarea that was hidden at load sizes it', () => {
+  const { window, document } = load('<!DOCTYPE html><body><textarea></textarea></body>')
+  const ta = document.querySelector('textarea')
+  stubLayout(ta, { rendered: false, scrollHeight: 80 })
+
+  document.dispatchEvent(new window.Event('DOMContentLoaded'))
+  ta.dispatchEvent(new window.Event('focus'))
+
+  assert.equal(ta.style.height, '100px')
+})
