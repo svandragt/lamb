@@ -45,6 +45,7 @@ class AuthorMetaCest
         $I->haveStoredSettings('theme = ' . $example['theme'] . "\n");
 
         $I->amOnPage('/');
+        $I->seeResponseCodeIs(200);
         $I->dontSeeElement('meta[name=author]');
     }
 
@@ -58,6 +59,7 @@ class AuthorMetaCest
         $I->haveStoredSettings('theme = ' . $example['theme'] . "\nauthor_name = \"   \"\n");
 
         $I->amOnPage('/');
+        $I->seeResponseCodeIs(200);
         $I->dontSeeElement('meta[name=author]');
     }
 }

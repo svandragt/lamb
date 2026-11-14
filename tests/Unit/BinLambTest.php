@@ -567,6 +567,25 @@ XML;
         $this->assertSame(0, $this->gateStampCount($data_dir));
     }
 
+    public function testMigrateCommandDeletesEveryDuplicateExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+        $this->seedGateStamp($data_dir);
+        $this->assertSame(2, $this->gateStampCount($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('drop_experimental_gate_stamp: deleted 2 unused option row(s)', $process->getOutput());
+        $this->assertSame(0, $this->gateStampCount($data_dir));
+    }
+
     public function testMigrateDryRunKeepsTheUnusedExperimentalGateRow(): void
     {
         $data_dir = "$this->tmp_dir/data";

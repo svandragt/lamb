@@ -568,7 +568,8 @@ function backfill_imported_post_identity(array $columns, bool $dry_run = false):
  *
  * The removed `experimental_features` gate stamped it on every config read, so
  * every database that ever read config holds one. Nothing reads it any more.
- * Idempotent: with no row there is nothing to delete.
+ * Deletes every row of that name, so a duplicate goes too. Idempotent: with no
+ * row there is nothing to delete.
  *
  * @param bool $dry_run When true, report the row count but delete nothing.
  * @return int Number of rows deleted (or that dry-run would delete).
@@ -576,15 +577,12 @@ function backfill_imported_post_identity(array $columns, bool $dry_run = false):
  */
 function drop_experimental_gate_stamp(bool $dry_run = false): int
 {
-    $stamp = R::findOne('option', ' name = ? ', ['experimental_gate_version']);
-    if ($stamp === null) {
-        return 0;
-    }
+    $stamps = R::find('option', ' name = ? ', ['experimental_gate_version']);
     if (!$dry_run) {
-        R::trash($stamp);
+        R::trashAll($stamps);
     }
 
-    return 1;
+    return count($stamps);
 }
 
 /**

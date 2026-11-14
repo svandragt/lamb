@@ -14,6 +14,20 @@ use function Lamb\Config\is_menu_item;
 // Since we need to test a function that depends on global $config, we'll mock it or set it.
 class ConfigTest extends TestCase
 {
+    private string|false $site_url_env = false;
+
+    protected function setUp(): void
+    {
+        // canonical_site_url() lets this variable override the configured site URL.
+        $this->site_url_env = getenv('LAMB_SITE_URL');
+        putenv('LAMB_SITE_URL');
+    }
+
+    protected function tearDown(): void
+    {
+        putenv($this->site_url_env === false ? 'LAMB_SITE_URL' : 'LAMB_SITE_URL=' . $this->site_url_env);
+    }
+
     public function testGetMenuSlugs()
     {
         global $config;

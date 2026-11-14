@@ -54,7 +54,8 @@ directly, so none of them takes a size. `$page` is an optional parameter that
 falls back to `$_GET['page']`, rather than reading the superglobal directly —
 callers that already know the page (tests) pass it explicitly, and
 `paginate_posts()` itself never has to care which source it came from. The tag
-feed does not paginate: it loads its latest 20 posts in one query.
+feed does not paginate: `get_tag_feed_data()` scans the post ids for the tag in
+batches until it has the latest 20 by `updated`, then loads only those beans.
 
 ## Conditional GET, ETag, and 304 caching
 
