@@ -417,7 +417,7 @@ function syndication_links(OODBBean $bean): string
  * ($template === 'status'): there the menu page *is* the requested post, so
  * hiding it would render an empty page.
  *
- * The single definition shared by render_post_list() (2024/2026 themes) and
+ * The single definition shared by render_post_list() (the 2026 theme) and
  * the base theme's parts/_items.php, which each hand-copied this check
  * before (#731).
  *
@@ -431,17 +431,18 @@ function is_hidden_menu_item(?string $template, OODBBean $bean): bool
 }
 
 /**
- * Renders the post-list loop shared by the 2024 and 2026 themes' _items.php.
+ * Renders the post-list loop used by the 2026 theme's _items.php.
  *
  * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
- * outside their own permalink, and prints each post as an h-entry. The only
- * difference between the two themes is whether the per-post author is shown
- * inline (2024) or kept screen-reader-only (2026), controlled by $hide_author.
+ * outside their own permalink, and prints each post as an h-entry.
  *
- * @param bool $hide_author Hide the per-post author visually instead of showing it inline.
+ * A stable theme helper: custom themes copied from the 0.16 2024 and 2026
+ * themes call it with `false` and `true`, so both behaviours stay.
+ *
+ * @param bool $hide_author Hide the per-post author visually (the default) instead of showing it inline.
  * @return void
  */
-function render_post_list(bool $hide_author): void
+function render_post_list(bool $hide_author = true): void
 {
     global $data;
     global $template;
@@ -607,6 +608,13 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Themes that no longer ship, each mapped to the theme that renders in its place.
+ *
+ * Read by resolve_theme().
+ */
+const RETIRED_THEMES = ['2024' => '2026'];
+
+/**
  * Resolves the configured theme to a name that actually has a directory under `src/themes/`.
  *
  * Falls back to $fallback for anything that doesn't resolve to a real theme
@@ -616,6 +624,10 @@ function sanitize_filename($filename): string
  * live check rather than a stored migration, so it also covers the historical
  * pre-#289 name (`default`, before `src/themes/default` was renamed to
  * `src/themes/base`) without needing to know that name specifically.
+ *
+ * A removed theme name (RETIRED_THEMES) resolves to its replacement even when
+ * its old directory remains. A tarball upgrade leaves that directory behind,
+ * and its stylesheet and parts are out of date and no longer maintained.
  *
  * sanitize_filename() runs first and is what closes the path-traversal and
  * stored-XSS surface (see src/index.php) — this function only adds the
@@ -628,6 +640,7 @@ function sanitize_filename($filename): string
 function resolve_theme(mixed $configured, string $fallback = 'base'): string
 {
     $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
+    $name = RETIRED_THEMES[$name] ?? $name;
 
     return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
 }

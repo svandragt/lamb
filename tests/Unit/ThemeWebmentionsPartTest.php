@@ -20,8 +20,6 @@ class ThemeWebmentionsPartTest extends TestCase
      */
     public static function layoutProvider(): array
     {
-        // The 2024 theme ships no html.php of its own, so it renders through
-        // the base layout (Theme\part() falls back per file).
         return [
             'base' => ['base'],
             '2026' => ['2026'],

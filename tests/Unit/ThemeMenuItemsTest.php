@@ -99,7 +99,7 @@ class ThemeMenuItemsTest extends TestCase
     }
 
     /**
-     * The 2024 and 2026 themes used to fall back to the post's numeric id
+     * The 2026 theme used to fall back to the post's numeric id
      * (`$bean->slug ?? $bean->id`) instead of an empty string when a post has
      * no slug — unlike the base theme, which the assertion above already pins
      * to `(string) ($bean->slug ?? '')`. A [menu_items] value that happens to
@@ -107,13 +107,6 @@ class ThemeMenuItemsTest extends TestCase
      * "slug of an existing post" format) then matched any un-slugged post
      * whose id equals that number and hid it from every listing.
      */
-    public function testUnsluggedPostIsNotHiddenByANumericMenuItemIn2024Theme(): void
-    {
-        $html = $this->render(null, 'tag', ['Foo' => '1'], '2024');
-
-        $this->assertStringContainsString('menu page body', $html);
-    }
-
     public function testUnsluggedPostIsNotHiddenByANumericMenuItemIn2026Theme(): void
     {
         $html = $this->render(null, 'tag', ['Foo' => '1'], '2026');

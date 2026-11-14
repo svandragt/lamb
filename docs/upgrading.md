@@ -126,6 +126,12 @@ The database and uploads live in the named volumes and survive the recreate.
 * The settings page is now a form. Site title, site URL and author name must be filled in the first time you save it.
 * Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import <source> <path> --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#deprecated-settings).
 
+## Upgrading to 0.17
+
+* The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
+* If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.
+* If your site uses its own theme named `2024`, rename the theme directory and the `theme` setting. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.
+
 ## Related
 
 - [Installation options]({{ site.baseurl }}{% link index.md %})

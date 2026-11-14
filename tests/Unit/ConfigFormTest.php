@@ -70,7 +70,7 @@ class ConfigFormTest extends TestCase
         $ini = form_to_ini($this->post([
             'site_description' => 'Notes on engines',
             'timezone' => 'Europe/London',
-            'theme' => '2024',
+            'theme' => 'base',
             'author_email' => 'ada@example.com',
             'following_url' => 'https://reader.example/following.opml',
             'authorization_endpoint' => 'https://auth.example/auth',
@@ -84,7 +84,7 @@ class ConfigFormTest extends TestCase
         $this->assertSame('Ada Lovelace', $parsed['author_name']);
         $this->assertSame('Notes on engines', $parsed['site_description']);
         $this->assertSame('Europe/London', $parsed['timezone']);
-        $this->assertSame('2024', $parsed['theme']);
+        $this->assertSame('base', $parsed['theme']);
         $this->assertSame('ada@example.com', $parsed['author_email']);
         $this->assertSame('https://reader.example/following.opml', $parsed['following_url']);
         $this->assertSame('https://auth.example/auth', $parsed['authorization_endpoint']);
@@ -176,7 +176,7 @@ class ConfigFormTest extends TestCase
     public function testFormToIniCarriesOverDeprecatedAndUnknownKeys(): void
     {
         $current = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
-            . "experimental_features = true\nmystery_key = kept\ntheme = 2024\n";
+            . "experimental_features = true\nmystery_key = kept\ntheme = base\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(['theme' => '2026']), $current));
 

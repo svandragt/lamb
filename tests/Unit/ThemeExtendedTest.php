@@ -347,8 +347,7 @@ class ThemeExtendedTest extends TestCase
     /**
      * Renders the base theme's related-posts partial for one seeded post.
      *
-     * The 2024 theme has no _related.php of its own and falls back to this one,
-     * so it renders identically; the 2026 theme overrides it.
+     * The 2026 theme overrides this partial.
      */
     private function renderRelated(string $relatedTitle): string
     {
