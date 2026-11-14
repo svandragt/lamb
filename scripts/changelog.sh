@@ -10,7 +10,7 @@ version=""
 date=""
 for arg in "$@"; do
 	case "$arg" in
-	-*)
+	--*)
 		echo "Unknown argument: $arg" >&2
 		exit 1
 		;;
