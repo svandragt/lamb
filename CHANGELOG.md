@@ -47,7 +47,7 @@ Changes for the next release are in `changelog.d/` until the release assembles t
 - A feed post saved as a draft no longer goes live when the feed updates it ([#921](https://github.com/svandragt/lamb/issues/921)).
 - Editing a feed draft no longer publishes it, and `bin/lamb migrate` adds `draft: true` to existing feed drafts ([#924](https://github.com/svandragt/lamb/issues/924)).
 - A link whose address contains `/tag/`, such as a GitHub release, is no longer styled as a hashtag in the 2026 theme ([#925](https://github.com/svandragt/lamb/issues/925)).
-- Pasting a link copied on iOS over selected text now turns the selection into a link, as it does on desktop (#932).
+- Pasting a link copied on iOS over selected text now turns the selection into a link, as it does on desktop ([#932](https://github.com/svandragt/lamb/issues/932)).
 - A post whose front matter is not valid YAML is no longer saved with its front matter ignored, which published a post marked `draft: true`. The editor keeps your text and shows the parser's message, and Micropub answers 400 ([#939](https://github.com/svandragt/lamb/issues/939)).
 
 ## [0.15.1] - 2026-11-04
