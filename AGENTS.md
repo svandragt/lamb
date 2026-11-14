@@ -74,6 +74,15 @@ registers the PHPCompatibility standard for that checkout (handled on install
 by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
+Generate each worktree's own `.env` with
+`LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` instead of copying
+one. By default the script picks the acceptance port from the checkout's
+path, so parallel worktrees almost always run their acceptance servers on
+different ports. A copied `.env` carries the other checkout's `LAMB_TEST_PORT`,
+and the suite's startup then kills the other worktree's server on that port.
+If two worktrees get the same port, set `LAMB_TEST_PORT` when you run
+`make-password.php` in one of them.
+
 ### Cloud sessions
 
 If the SessionStart hook warns that `viv install` is incomplete (a network that
@@ -256,6 +265,7 @@ Post content here. Use #hashtags inline.
 ```
 
 `parse_matter()` extracts YAML and normalises keys before matching (`normalize_matter_keys()`: lower-cased, underscores → dashes), so `Title`/`title` and `in_reply_to`/`in-reply-to` collapse onto canonical keys — this smooths over mobile auto-capitalisation and the underscore/dash ambiguity. If `title` is present and `slug` is absent, it derives `slug` from `title` via `slugify()`. If `slug` is explicitly present in front matter, that value is used.
+`parse_matter()` reads a block that is not valid YAML as no front matter, which drops every field in it (including `draft: true`). So every path that saves text an author wrote — `redirect_created()`, `redirect_edited()` and the Micropub create/update callbacks — calls `Post\front_matter_error()` first and refuses on a message: the web forms flash it and re-render with the typed text (`preload_text()`, `respond_edit()`), Micropub answers 400 `invalid_request`. Feed ingestion and `bin/lamb import` build their own front matter, so they do not call it.
 `parse_bean()` runs Markdown → HTML, extracts tags, stores `transformed`, `description`, and front-matter-derived fields on the bean.
 `LambDown` extends Parsedown with safe mode on and restricts `#` headings (must be `# ` with a space).
 
@@ -443,7 +453,6 @@ It always loads:
 When the user is logged in, it also loads:
 
 - `src/scripts/logged_in/growing-input.js`
-- `src/scripts/logged_in/confirm-delete.js`
 - `src/scripts/logged_in/link-edit-buttons.js`
 - `src/scripts/logged_in/upload-image.js`
 - `src/scripts/logged_in/paste-link.js`
@@ -590,6 +599,17 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
+An acceptance test that calls `haveStoredSettings()` writes the SQLite file from the
+test process, which fails against the external server `release-verify.yml` tests (it
+owns the file). Mark such a test `@group seeds-db`, on the method or the class:
+`release-verify.yml` passes `--skip-group seeds-db`, and `SeedsDbGroupGuardTest` fails
+the build when a test that seeds is not in the group.
+
+Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
+annotation for data providers. Codeception ignores PHPUnit's
+`#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
+no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
+
 ### JavaScript unit tests
 
 Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test runner (`node:test`) plus `jsdom` — no extra framework. Run them with `pnpm test` (`node --test "tests/js/**/*.test.mjs"`); CI runs the same via the `js-test` job.
@@ -729,7 +749,7 @@ When adding features, prefer the minimal implementation. Avoid adding configurat
 ### Running Acceptance Tests
 *~1,500 tokens/session saved*
 - `vendor/bin/codecept run Acceptance` needs `LAMB_LOGIN_PASSWORD` and `SITE_URL` in the environment. Source `.env` first: `set -a; . ./.env; set +a` then run. CI passes it via the acceptance suite server env (tests/Acceptance.suite.yml).
-- Kill stale dev servers on port 8747 before re-running (`pkill -f 'php -S 0.0.0.0:8747'`) or the run hangs/fails.
+- The acceptance server listens on `LAMB_TEST_PORT` from `.env`, which by default is not the dev server's 8747, and the suite frees that port before it starts.
 
 ### Editing Files
 *~1,200 tokens/session saved*

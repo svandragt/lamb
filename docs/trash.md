@@ -5,7 +5,7 @@ parent: Content
 
 # Trash
 
-When you delete a post, it is soft-deleted — moved to the trash rather than permanently removed. This lets you recover posts if you delete them by mistake.
+When you delete a post, it is soft-deleted — moved to the trash rather than permanently removed. This lets you recover posts if you delete them by mistake. Because the trash restores the post, deleting takes one click and Lamb does not ask you to confirm.
 
 ## Viewing the trash
 

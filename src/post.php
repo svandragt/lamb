@@ -10,6 +10,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
 
@@ -149,6 +150,50 @@ function split_frontmatter(string $body): array
 }
 
 /**
+ * Parses the YAML of a front-matter block (without its fences).
+ *
+ * PARSE_DATETIME keeps absolute dates as DateTime objects carrying the author's
+ * typed wall-clock time, instead of coercing them to UTC Unix timestamps (which
+ * would shift the time by the server's timezone offset).
+ *
+ * @param string $yaml The YAML between the fences.
+ * @return mixed The parsed value, normally an array.
+ * @throws ParseException When the YAML is not valid.
+ */
+function parse_yaml_block(string $yaml): mixed
+{
+    return Yaml::parse($yaml, Yaml::PARSE_DATETIME);
+}
+
+/**
+ * Returns the message to show when a body opens with a front-matter block that
+ * is not valid YAML, or null when the body has no such block or it parses.
+ *
+ * parse_matter() reads an invalid block as no front matter, so saving one drops
+ * every field in it — including `draft: true`, which publishes the post. Every
+ * path that saves text an author wrote calls this first and refuses on a message.
+ *
+ * @param string $body The raw post body.
+ * @return string|null The refusal message, or null when the front matter is fine.
+ */
+function front_matter_error(string $body): ?string
+{
+    // The same repairs parse_bean() makes before it reads the block, in its order.
+    [$yaml] = split_frontmatter(normalize_frontmatter_fence(normalize_utf8($body)));
+    if ($yaml === '') {
+        return null;
+    }
+
+    try {
+        parse_yaml_block($yaml);
+    } catch (ParseException $e) {
+        return 'Front matter is not valid YAML: ' . $e->getMessage();
+    }
+
+    return null;
+}
+
+/**
  * Parses a string body for YAML front matter and returns an associative array of the extracted metadata.
  *
  * @param string $body The string containing the content with optional YAML front matter delimited by '---'.
@@ -162,12 +207,10 @@ function parse_matter(string $body): array
     }
 
     try {
-        // PARSE_DATETIME keeps absolute dates as DateTime objects carrying the
-        // author's typed wall-clock time, instead of coercing them to UTC Unix
-        // timestamps (which would shift the time by the server's timezone offset).
-        $matter = Yaml::parse($yaml, Yaml::PARSE_DATETIME);
+        $matter = parse_yaml_block($yaml);
     } catch (ParseException) {
-        // Invalid YAML
+        // Invalid YAML. The save paths refuse it up front (front_matter_error());
+        // what reaches here is a body stored before that check existed.
         return [];
     }
 

@@ -14,6 +14,7 @@ use function Lamb\Response\respond_edit;
 use function Lamb\Response\safe_referer_path;
 use function Lamb\Response\store_slug_change_redirect;
 use function Lamb\Response\warn_if_manual_redirect;
+use function Lamb\Theme\preload_text;
 
 class ResponsePostsTest extends TestCase
 {
@@ -411,6 +412,54 @@ class ResponsePostsTest extends TestCase
         $this->submitCreateWithFailingSecondWrite();
 
         $this->assertCount(0, R::findAll('webmentionoutbox'));
+    }
+
+    // -------------------------------------------------------------------------
+    // Invalid front matter is refused, not saved with its fields dropped (#939)
+    // -------------------------------------------------------------------------
+
+    private const BROKEN_FRONT_MATTER = "---\ndraft: true\ntitle: a: b\n---\nHello";
+
+    private function assertFlashedInvalidFrontMatter(): void
+    {
+        $this->assertNotEmpty(array_filter(
+            $_SESSION['flash'] ?? [],
+            fn ($m) => str_starts_with((string) $m, 'Front matter is not valid YAML: ')
+        ));
+    }
+
+    public function testRedirectCreatedRefusesInvalidFrontMatterAndKeepsTheTypedText(): void
+    {
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'fmtok1';
+        $_POST[HIDDEN_CSRF_NAME]    = 'fmtok1';
+        $_POST['submit']            = SUBMIT_CREATE;
+        $_POST['contents']          = self::BROKEN_FRONT_MATTER;
+
+        redirect_created();
+
+        $this->assertFlashedInvalidFrontMatter();
+        $this->assertSame(0, R::count('post'));
+        $this->assertStringContainsString('title: a: b', preload_text());
+    }
+
+    public function testRedirectEditedRefusesInvalidFrontMatterAndKeepsTheTypedText(): void
+    {
+        $id = $this->seedEditablePost();
+        $_SESSION[SESSION_LOGIN]    = true;
+        $_SESSION[HIDDEN_CSRF_NAME] = 'fmtok2';
+        $_POST[HIDDEN_CSRF_NAME]    = 'fmtok2';
+        $_POST['submit']            = SUBMIT_EDIT;
+        $_POST['id']                = (string) $id;
+        $_POST['contents']          = self::BROKEN_FRONT_MATTER;
+
+        $post = respond_edit([(string) $id])['post'];
+
+        $this->assertFlashedInvalidFrontMatter();
+        $this->assertSame(self::BROKEN_FRONT_MATTER, $post->body);
+        $stored = R::load('post', $id);
+        $this->assertSame("# Original title\n\nsome text\n", $stored->body);
+        $this->assertSame('original-title', (string) $stored->slug);
     }
 
     // -------------------------------------------------------------------------

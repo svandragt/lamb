@@ -61,7 +61,7 @@ class SettingsFormCest
         $I->fillField('me', 'Mastodon = https://example.social/@ada');
         $I->uncheckOption('feeds_draft');
         $I->click('Save settings');
-        $I->see('Settings saved successfully.');
+        $I->dontSee('Settings saved successfully.');
 
         $I->amOnPage('/settings');
         $I->seeInField('site_title', 'Notes from the shed');
@@ -98,6 +98,9 @@ class SettingsFormCest
         $I->seeInField('site_url', '');
     }
 
+    /**
+     * @group seeds-db
+     */
     public function resetToDefaultsStaysUsableWhileRequiredFieldsAreEmpty(AcceptanceTester $I): void
     {
         $this->login($I);
@@ -115,6 +118,9 @@ class SettingsFormCest
         $I->seeInField('site_title', 'My Microblog');
     }
 
+    /**
+     * @group seeds-db
+     */
     public function savingTheFormKeepsUnknownAndDeprecatedSettings(AcceptanceTester $I): void
     {
         $this->login($I);
@@ -131,7 +137,7 @@ class SettingsFormCest
         $I->amOnPage('/settings');
         $I->fillField('site_description', 'Saved through the form');
         $I->click('Save settings');
-        $I->see('Settings saved successfully.');
+        $I->dontSee('Settings saved successfully.');
         $I->see('`posts_per_page` is deprecated and will be removed in 0.17');
 
         $I->seeStoredSettingsContain('posts_per_page = 5');

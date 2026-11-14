@@ -64,6 +64,57 @@ class MakePasswordTest extends TestCase
         $this->assertStringContainsString("SITE_URL='http://0.0.0.0:8747'", $contents);
     }
 
+    /**
+     * Parallel worktrees each run make-password.php in their own checkout, so
+     * the default port must differ per directory and stay off the dev
+     * server's 8747.
+     *
+     * @return void
+     */
+    public function testDefaultTestPortDependsOnTheCheckoutDirectory(): void
+    {
+        // Three sibling checkouts: two random paths can share a port, which the
+        // script accepts, but three sharing one is a one-in-a-million event.
+        $ports = [];
+        foreach (['one', 'two', 'three'] as $name) {
+            $dir = $this->workspace . '/worktree-' . $name;
+            mkdir($dir);
+            $process = new Process(
+                ['php', codecept_root_dir('make-password.php'), 'hackme'],
+                $dir,
+                ['PWD' => $dir, 'LAMB_TEST_PORT' => false]
+            );
+            $process->mustRun();
+            $contents = (string)file_get_contents($dir . '/.env');
+            $this->assertSame(1, preg_match("/LAMB_TEST_PORT='(\\d+)'/", $contents, $match));
+            $port = (int)$match[1];
+            $this->assertGreaterThan(8747, $port);
+            $this->assertLessThan(9748, $port);
+            $this->assertStringContainsString("SITE_URL='http://0.0.0.0:{$port}'", $contents);
+            $ports[] = $port;
+        }
+        $this->assertGreaterThan(1, count(array_unique($ports)));
+    }
+
+    /**
+     * The override must work under the stock variables_order, which leaves
+     * $_ENV empty.
+     *
+     * @return void
+     */
+    public function testTestPortOverrideIsReadFromProcessEnvNotVariablesOrder(): void
+    {
+        $process = new Process(
+            ['php', '-d', 'variables_order=GPCS', codecept_root_dir('make-password.php'), 'hackme'],
+            $this->workspace,
+            ['LAMB_TEST_PORT' => '9999']
+        );
+        $process->mustRun();
+
+        $contents = (string)file_get_contents($this->workspace . '/.env');
+        $this->assertStringContainsString("LAMB_TEST_PORT='9999'", $contents);
+    }
+
     public function testWeakPasswordWarnsOnStderr(): void
     {
         $process = $this->runProcess(['PWD' => $this->workspace], 'hackme');

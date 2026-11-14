@@ -14,6 +14,7 @@ use RedBeanPHP\RedException\SQL;
 use function Lamb\delete_redirect_for_slug;
 use function Lamb\Http\request_string;
 use function Lamb\parse_bean;
+use function Lamb\Post\front_matter_error;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\sanitize_explicit_slug;
 use function Lamb\Post\save;
@@ -36,6 +37,15 @@ function redirect_created(): void
     }
     $contents = trim(request_string($_POST['contents'] ?? null) ?? '');
     if (empty($contents)) {
+        return;
+    }
+
+    // Refuse before anything is built: the form re-renders with the typed text
+    // (see preload_text()) and the message.
+    $front_matter_error = front_matter_error($contents);
+    if ($front_matter_error !== null) {
+        $_SESSION['flash'][] = $front_matter_error;
+
         return;
     }
 
@@ -301,6 +311,14 @@ function redirect_edited(): void
         return;
     }
 
+    // Refuse before the bean is touched; respond_edit() shows the typed text.
+    $front_matter_error = front_matter_error($contents);
+    if ($front_matter_error !== null) {
+        $_SESSION['flash'][] = $front_matter_error;
+
+        return;
+    }
+
     $bean = R::load('post', (int)$id);
     $old_slug = $bean->slug;
 
@@ -489,7 +507,14 @@ function respond_edit(array $args): array
 
     $_SESSION['edit-referrer'] = $_SERVER['HTTP_REFERER'] ?? null;
 
-    return ['post' => R::load('post', (int)$id)];
+    $post = R::load('post', (int)$id);
+    // A POST that got this far was refused or failed to save: keep what the
+    // author typed in the editor instead of reverting to the stored body. Not stored.
+    if (!empty($_POST)) {
+        $post->body = request_string($_POST['contents'] ?? null) ?: $post->body;
+    }
+
+    return ['post' => $post];
 }
 
 /**

@@ -47,7 +47,7 @@ function action_delete(OODBBean $bean): string
         return '';
     }
 
-    return sprintf('<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete…"/><input type="hidden" name="csrf" value="%s" />
+    return sprintf('<form data-id="%s" class="form-delete" action="/delete/%s" method="post"><input type="submit" value="Delete"/><input type="hidden" name="csrf" value="%s" />
 </form>', $bean->id, $bean->id, csrf_token());
 }
 

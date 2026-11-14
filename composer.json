@@ -23,7 +23,7 @@
         "phiki/phiki": "^2.2",
         "simplepie/simplepie": "^1.8",
         "symfony/yaml": "^8.1",
-        "taproot/micropub-adapter": "^0.1.3"
+        "taproot/micropub-adapter": "^0.1.4"
     },
     "require-dev": {
         "codeception/codeception": "^5.1",
