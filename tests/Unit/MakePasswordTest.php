@@ -64,6 +64,34 @@ class MakePasswordTest extends TestCase
         $this->assertStringContainsString("SITE_URL='http://0.0.0.0:8747'", $contents);
     }
 
+    /**
+     * Parallel worktrees each run make-password.php in their own checkout, so
+     * the default port must differ per directory and stay off the dev
+     * server's 8747.
+     *
+     * @return void
+     */
+    public function testDefaultTestPortDependsOnTheCheckoutDirectory(): void
+    {
+        $other = $this->workspace . '/other-worktree';
+        mkdir($other);
+
+        $first = $this->runScript(['PWD' => $this->workspace, 'LAMB_TEST_PORT' => false]);
+        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $other, ['PWD' => $other, 'LAMB_TEST_PORT' => false]))->mustRun();
+        $second = (string)file_get_contents($other . '/.env');
+
+        preg_match("/LAMB_TEST_PORT='(\\d+)'/", $first, $a);
+        preg_match("/LAMB_TEST_PORT='(\\d+)'/", $second, $b);
+        $this->assertNotEmpty($a);
+        $this->assertNotEmpty($b);
+        $this->assertNotSame($a[1], $b[1]);
+        foreach ([(int)$a[1], (int)$b[1]] as $port) {
+            $this->assertGreaterThan(8747, $port);
+            $this->assertLessThan(9748, $port);
+        }
+        $this->assertStringContainsString("SITE_URL='http://0.0.0.0:{$a[1]}'", $first);
+    }
+
     public function testWeakPasswordWarnsOnStderr(): void
     {
         $process = $this->runProcess(['PWD' => $this->workspace], 'hackme');
