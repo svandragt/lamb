@@ -73,24 +73,6 @@ function local_datetime_from_rfc822(string $pub_date): string
 }
 
 /**
- * Removes executable / styling tags and any `on*` event-handler attributes.
- *
- * Imported body HTML is untrusted enough to warrant a defensive scrub before
- * it touches the Markdown converter. Tag removal is done at DOM level so
- * nested markup doesn't break the strip; event-handler attributes are walked
- * off every element regardless of case.
- */
-function sanitize_html(string $html): string
-{
-    if (trim($html) === '') {
-        return '';
-    }
-    $dom = load_html_fragment($html);
-    sanitize_html_in_dom($dom);
-    return dump_html_fragment($dom);
-}
-
-/**
  * In-place sanitisation pass: removes script/style/iframe nodes and any
  * `on*` event-handler attributes from every element. Extracted so {@see
  * prepare_imported_html} can chain it onto the same DOM as the image rewrite
