@@ -70,6 +70,8 @@ token_endpoint = https://token.example.com/token
 
 A Micropub `h-entry` with a `content` property creates a status post (no title, no slug). If a `name` property is also present, it creates a titled post with a slug derived from the title.
 
+A create or update whose `content` opens with a front-matter block that is not valid YAML is refused with a 400 `invalid_request` response. Its `error_description` carries the YAML parser's message, and Lamb does not save the post. This applies when the content's block is the post's front matter: a create with a `name`, `in-reply-to` or `mp-syndicate-to` property makes Lamb write its own block first, and a block in the content after it is plain text.
+
 ## Draft and scheduled post previews
 
 Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a secret preview token to the URL it returns (`?preview=…`). That link shows the unpublished post to anyone who has it — without logging in — and expires after 24 hours. The plain permalink (without the token) stays hidden until the post is published.

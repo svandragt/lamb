@@ -81,6 +81,8 @@ The full post body goes here.
 
 Front-matter keys are forgiving: they are matched case-insensitively, and underscores and dashes are interchangeable. So `Title`, `title`, `in_reply_to` and `in-reply-to` all work — handy on mobile keyboards that auto-capitalise the first letter of a line.
 
+If the front-matter is not valid YAML — a title with a colon in it, such as `title: a: b`, is the usual cause — Lamb refuses the save instead of dropping the block. The editor keeps your text and shows the YAML parser's message above it. Quote the value (`title: "a: b"`) and save again.
+
 > **iOS note:** iOS "Smart Punctuation" rewrites a typed `---` into em/en dashes (for example `—-`). Lamb recognises a mangled opening and closing fence and restores it to `---` automatically — whether you add the front-matter when first writing the post or by editing it later — so front-matter still works from an iPhone or iPad. If you'd rather type plain dashes everywhere, turn the feature off under _Settings → General → Keyboard → Smart Punctuation_.
 
 ### Home page
