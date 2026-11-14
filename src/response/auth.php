@@ -597,7 +597,8 @@ function respond_settings(): array
     ];
 
     // A save replaces a retired theme with its replacement, so the notice has to be on the page view.
-    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    // GET only: a HEAD request renders the page without a body and would use the notice up.
+    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $retired_theme = Config\retired_theme_warning($data['ini_text']);
         if ($retired_theme !== null) {
             $_SESSION['flash'][] = $retired_theme;

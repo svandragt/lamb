@@ -594,6 +594,17 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('`2024` theme was removed in 0.17', implode("\n", $_SESSION['flash'] ?? []));
     }
 
+    public function testRespondSettingsLeavesTheNoticeForTheNextGetOnAHeadRequest(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        $_SERVER['REQUEST_METHOD'] = 'HEAD';
+        save_ini_text("theme = 2024\n");
+
+        respond_settings();
+
+        $this->assertSame([], $_SESSION['flash'] ?? []);
+    }
+
     public function testRespondSettingsStaysQuietWhenTheStoredThemeExists(): void
     {
         $_SESSION[SESSION_LOGIN] = true;
