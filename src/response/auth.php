@@ -640,7 +640,8 @@ function respond_settings(): array
             // shape — a `[site_title]` section, a `feeds = <url>` line. Those
             // are ignored on read so they cannot break the site; say so here,
             // or the author is left with a setting that saved and did nothing.
-            foreach (Config\shape_warnings($submitted_ini) as $warning) {
+            // A removed setting is read from the stored INI: the form just dropped it.
+            foreach ([...Config\removed_setting_warnings($stored_ini), ...Config\shape_warnings($submitted_ini)] as $warning) {
                 $_SESSION['flash'][] = $warning;
             }
             redirect_uri('/settings');

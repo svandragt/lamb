@@ -27,6 +27,9 @@ if (PHP_SAPI === 'cli-server') {
 
 define('LOGIN_PASSWORD', \Lamb\Bootstrap\login_password());
 
+/** Posts per page in lists and feeds. */
+const POSTS_PER_PAGE = 10;
+
 // IMAGE_FILES is defined in constants.php
 
 /**
@@ -189,24 +192,18 @@ function public_posts_clause(): array
  * and DB query) need the same clamp-then-offset, and build_pagination_meta() needs
  * the same page count to derive prev/next from.
  *
- * A non-positive $per_page is treated as 1 rather than dividing by zero: it comes
- * from `posts_per_page` in the INI config, which nothing validates, so `= 0` would
- * otherwise fatal every listing page.
- *
  * @param int $total_posts Total number of matching posts.
  * @param int $page        Requested page (1-based).
- * @param int $per_page    Items per page.
  * @return array{page: int, offset: int, total_pages: int}
  */
-function pagination_window(int $total_posts, int $page, int $per_page): array
+function pagination_window(int $total_posts, int $page): array
 {
-    $per_page    = max(1, $per_page);
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / POSTS_PER_PAGE) : 1;
     $page        = min($page, $total_pages);
 
     return [
         'page'        => $page,
-        'offset'      => ($page - 1) * $per_page,
+        'offset'      => ($page - 1) * POSTS_PER_PAGE,
         'total_pages' => $total_pages,
     ];
 }
@@ -215,17 +212,16 @@ function pagination_window(int $total_posts, int $page, int $per_page): array
  * Builds the pagination metadata array from pre-computed values.
  *
  * @param int $page         Current page number (1-based).
- * @param int $per_page     Items per page.
  * @param int $total_posts  Total number of matching posts.
  * @param int $offset       Row offset for the current page.
  * @return array{current: int, per_page: int, total_posts: int, total_pages: int, prev_page: int|null, next_page: int|null, offset: int}
  */
-function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
+function build_pagination_meta(int $page, int $total_posts, int $offset): array
 {
-    $total_pages = pagination_window($total_posts, $page, $per_page)['total_pages'];
+    $total_pages = pagination_window($total_posts, $page)['total_pages'];
     return [
         'current'     => $page,
-        'per_page'    => $per_page,
+        'per_page'    => POSTS_PER_PAGE,
         'total_posts' => $total_posts,
         'total_pages' => $total_pages,
         'prev_page'   => $page > 1 ? $page - 1 : null,
@@ -235,38 +231,15 @@ function build_pagination_meta(int $page, int $per_page, int $total_posts, int $
 }
 
 /**
- * Redirects the user to a 404 page with the provided fallback URL.
- *
- * @param string $fallback The URL to redirect to if the 404 page is not available.
- * @return void
- */
-#[NoReturn]
-function redirect_404(string $fallback): void
-{
-    global $request_uri;
-    $location = \Lamb\Http\sanitize_location($fallback . $request_uri);
-    header("Location: $location");
-    die();
-}
-
-/**
  * Responds with a 404 error page.
  *
- * @param array<int, string> $_args   Unused.
- * @param bool  $use_fallback Whether to redirect to the configured fallback URL.
+ * @param array<int, string> $_args Unused.
  * @return array{title: string, intro: string, action: string, requested: string} The
  *         404 page's view data: the human title, intro, the action marker the
  *         router switches on, and the path the visitor actually asked for.
  */
-function respond_404(array $_args = [], bool $use_fallback = false): array
+function respond_404(array $_args = []): array
 {
-    global $config;
-    if ($use_fallback && isset($config['404_fallback'])) {
-        $fallback = $config['404_fallback'];
-        if (filter_var($fallback, FILTER_VALIDATE_URL)) {
-            redirect_404($fallback);
-        }
-    }
     header('HTTP/1.0 404 Not Found');
 
     return [
@@ -426,17 +399,16 @@ function upgrade_all_posts(bool $dry_run = false): array
  *
  * @param list<mixed> $values   Flat array of items to paginate.
  * @param int   $page     Current page (1-based, already clamped by caller).
- * @param int   $per_page Items per page.
  * @return array{items: list<mixed>, pagination: array<string, mixed>}
  */
-function paginate_array(array $values, int $page, int $per_page): array
+function paginate_array(array $values, int $page): array
 {
     $total_posts = count($values);
-    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page);
 
     return [
-        'items'      => array_slice($values, $offset, $per_page),
-        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+        'items'      => array_slice($values, $offset, POSTS_PER_PAGE),
+        'pagination' => build_pagination_meta($page, $total_posts, $offset),
     ];
 }
 
@@ -448,30 +420,29 @@ function paginate_array(array $values, int $page, int $per_page): array
  * @param string|null $where_sql       Optional WHERE clause.
  * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
  * @param int         $page            Current page (1-based, already clamped by caller).
- * @param int         $per_page        Items per page.
  * @return array{items: array<int, \RedBeanPHP\OODBBean>, pagination: array<string, mixed>}
  */
-function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page, int $per_page): array
+function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page): array
 {
     $total_posts = !empty($where_sql) ? R::count($bean_type, $where_sql, $params) : R::count($bean_type);
 
-    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page);
 
     if (!empty($where_sql)) {
         // When params are provided, use R::find with param binding and append offset/limit
         $find_params   = $params;
         $find_params[] = (int)$offset;
-        $find_params[] = (int)$per_page;
+        $find_params[] = POSTS_PER_PAGE;
         $items = R::find($bean_type, $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?', $find_params);
     } else {
         // No params: safe to use the simpler findAll with a constructed LIMIT
-        $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page);
+        $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . POSTS_PER_PAGE);
     }
 
     render_stale_posts($items);
     return [
         'items'      => $items,
-        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+        'pagination' => build_pagination_meta($page, $total_posts, $offset),
     ];
 }
 
@@ -482,27 +453,17 @@ function paginate_db(string $bean_type, string $order_by_clause, ?string $where_
  * @param string      $order_by_clause SQL ORDER BY expression (DB path only).
  * @param string|null $where_sql       Optional WHERE clause (DB path only).
  * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
- * @param int|null    $per_page        Items per page; falls back to config when null.
  * @param int|null    $page            Current page; falls back to $_GET['page'] when null.
  * @return array{items: array<int, mixed>, pagination: array<string, mixed>}
  */
-function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $page = null): array
 {
-    // Explicit $per_page avoids the global; fall back to config only when not provided.
-    if ($per_page === null) {
-        global $config;
-        $per_page = (int)($config['posts_per_page'] ?? 10);
-    }
-    // Clamped here as well as in pagination_window() so the page count, the row
-    // offset and the SQL LIMIT all agree on the same size (see that helper).
-    $per_page = max(1, $per_page);
-
     // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
 
     if (is_array($source)) {
-        return paginate_array(array_values($source), $page, $per_page);
+        return paginate_array(array_values($source), $page);
     }
 
-    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page, $per_page);
+    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page);
 }

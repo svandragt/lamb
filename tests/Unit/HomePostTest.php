@@ -24,9 +24,6 @@ use function Lamb\Response\respond_search;
  */
 class HomePostTest extends TestCase
 {
-    /** @var mixed */
-    private $originalConfig;
-
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -36,23 +33,12 @@ class HomePostTest extends TestCase
         R::nuke();
 
         global $config;
-        $this->originalConfig = $config;
-        $config = ['site_title' => 'Test Blog', 'posts_per_page' => 10, 'menu_items' => [], 'feeds' => []];
+        $config = ['site_title' => 'Test Blog', 'menu_items' => [], 'feeds' => []];
 
         $_SESSION = [];
         $_POST    = [];
         $_GET     = [];
         unset($_SERVER['REQUEST_URI']);
-    }
-
-    protected function tearDown(): void
-    {
-        // Menu items, $_GET['page'] and ['preview'] set by a test would otherwise reach the next one.
-        global $config;
-        $config = $this->originalConfig;
-        $_SESSION = [];
-        $_POST    = [];
-        $_GET     = [];
     }
 
     /**

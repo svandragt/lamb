@@ -307,7 +307,7 @@ function render_atom_feed(array $data, array $config): void
     }
 
     $author = $xml->addChild('author');
-    $author->addChild('name', \Lamb\Theme\escape_xml($config['author_name']));
+    $author->addChild('name', \Lamb\Theme\escape_xml(\Lamb\Config\author_display_name($config)));
     $author->addChild('uri', ROOT_URL);
 
     foreach ($data['posts'] as $bean) {
@@ -376,12 +376,7 @@ function render_json_feed(array $data, array $config): void
         'title'         => $data['title'] ?? $config['site_title'],
         'home_page_url' => ROOT_URL,
         'feed_url'      => $channel_link,
-        'authors'       => [
-            [
-                'name' => $config['author_name'] ?? '',
-                'url'  => ROOT_URL,
-            ],
-        ],
+        'authors'       => [['name' => \Lamb\Config\author_display_name($config), 'url' => ROOT_URL]],
         'items'         => [],
     ];
 

@@ -77,7 +77,7 @@ bin/lamb migrate
 
 It's safe to run at any time: each migration checks whether it still has anything to do and does nothing on a database that's already current.
 
-One of these migrations adds `draft: true` to the front matter of every [feed draft]({{ site.baseurl }}{% link drafts.md %}) that lacks it. Without the line, editing a feed draft in Lamb publishes it.
+One of these steps lists the settings 0.17 removed that your stored settings still hold, without changing them (see [Upgrading to 0.17](#upgrading-to-017)). Another migration adds `draft: true` to the front matter of every [feed draft]({{ site.baseurl }}{% link drafts.md %}) that lacks it. Without the line, editing a feed draft in Lamb publishes it.
 
 `bin/lamb migrate` also brings every stored post up to date, the same upgrade `bin/lamb upgrade-posts` runs on its own. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
 
@@ -124,10 +124,12 @@ The database and uploads live in the named volumes and survive the recreate.
 ## Upgrading to 0.16
 
 * The settings page is now a form. Site title, site URL and author name must be filled in the first time you save it.
-* Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import <source> <path> --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#deprecated-settings).
+* Five settings are deprecated and stop working in 0.17: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. Use `LAMB_MICROPUB_DEBUG` instead of `micropub_debug`, and `bin/lamb import <source> <path> --experimental` instead of `experimental_features`. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings).
 
 ## Upgrading to 0.17
 
+* Lamb removed the five settings that 0.16 deprecated: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. A leftover setting does nothing, and `bin/lamb migrate` lists each one you had set, with what replaces it, and does not change those settings. `bin/upgrade` runs `bin/lamb migrate`, so its output reports them; when `bin/upgrade` cannot run the migration (the ownership warning above), run `bin/lamb migrate` by hand to get the same report. Saving the settings page removes them. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings) for what replaces each one.
+* A site with no author name in its settings no longer shows `Joe Sheeple`. Both feeds name the site title as the author (the host of your site URL when there is no title either), and the pages have no `author` meta tag. Open the settings page and fill in the author name.
 * The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
 * If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.
 * If your site uses its own theme named `2024`, rename the theme directory and the `theme` setting. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.

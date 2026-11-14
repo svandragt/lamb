@@ -15,6 +15,7 @@ use RedBeanPHP\R;
 use RuntimeException;
 
 use function Lamb\get_tags;
+use function Lamb\Config\author_name;
 use function Lamb\Config\is_menu_item;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
@@ -161,7 +162,7 @@ function author_card(): string
 {
     global $config;
 
-    $name = trim((string) ($config['author_name'] ?? ''));
+    $name = author_name($config);
     if ($name === '') {
         return '';
     }

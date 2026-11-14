@@ -187,13 +187,27 @@ class SocialSpecTest extends TestCase
         $this->assertNull(contact_vcard(['author_email' => 'not-an-email'], 'https://example.com'));
     }
 
-    public function testContactVcardIgnoresThePlaceholderIdentityAFreshInstallGets(): void
+    public function testContactVcardNamesTheSiteWhenNoAuthorNameIsSet(): void
     {
         $fresh = compose_config('', get_default_ini_text());
         $this->assertNull(contact_vcard($fresh, 'https://example.com'));
 
         $emailOnly = compose_config("author_email = jo@example.com\nsite_title = Jo's notes", get_default_ini_text());
         $this->assertStringContainsString("\r\nFN:Jo's notes\r\n", (string) contact_vcard($emailOnly, 'https://example.com'));
+    }
+
+    public function testContactVcardNamesTheHostOfTheSiteUrlWhenThereIsNoAuthorNameOrSiteTitle(): void
+    {
+        $vcard = (string) contact_vcard(['author_email' => 'jo@example.com', 'site_url' => 'https://notes.example.com'], 'https://evil.example');
+
+        $this->assertStringContainsString("\r\nFN:notes.example.com\r\n", $vcard);
+    }
+
+    public function testContactVcardKeepsAnAuthorNamedZero(): void
+    {
+        $vcard = (string) contact_vcard(['author_name' => '0', 'author_email' => 'jo@example.com', 'site_title' => 'Notes'], 'https://example.com');
+
+        $this->assertStringContainsString("\r\nFN:0\r\n", $vcard);
     }
 
     public function testContactVcardCarriesNameEmailSiteAndMeLinks(): void

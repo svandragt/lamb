@@ -49,11 +49,13 @@ clamp from the offset-into-a-query step is what let the DB path and the
 array path stay in lock-step without either one reimplementing the other's
 arithmetic.
 
-`$per_page` and `$page` are optional parameters that fall back to config
-(`posts_per_page`) and `$_GET['page']` respectively, rather than reading the
-global/superglobal directly — callers that already know the values (tests,
-the tag-feed 20-item cap) pass them explicitly, and `paginate_posts()` itself
-never has to care which source they came from.
+The page size is the fixed `POSTS_PER_PAGE` (10), which the helpers read
+directly, so none of them takes a size. `$page` is an optional parameter that
+falls back to `$_GET['page']`, rather than reading the superglobal directly —
+callers that already know the page (tests) pass it explicitly, and
+`paginate_posts()` itself never has to care which source it came from. The tag
+feed does not paginate: `get_tag_feed_data()` scans the post ids for the tag in
+batches until it has the latest 20 by `updated`, then loads only those beans.
 
 ## Conditional GET, ETag, and 304 caching
 

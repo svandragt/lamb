@@ -4,8 +4,9 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\author_display_name;
+use function Lamb\Config\author_name;
 use function Lamb\Config\compose_config;
-use function Lamb\Config\experimental_features_enabled;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_menu_item;
@@ -13,6 +14,20 @@ use function Lamb\Config\is_menu_item;
 // Since we need to test a function that depends on global $config, we'll mock it or set it.
 class ConfigTest extends TestCase
 {
+    private string|false $site_url_env = false;
+
+    protected function setUp(): void
+    {
+        // canonical_site_url() lets this variable override the configured site URL.
+        $this->site_url_env = getenv('LAMB_SITE_URL');
+        putenv('LAMB_SITE_URL');
+    }
+
+    protected function tearDown(): void
+    {
+        putenv($this->site_url_env === false ? 'LAMB_SITE_URL' : 'LAMB_SITE_URL=' . $this->site_url_env);
+    }
+
     public function testGetMenuSlugs()
     {
         global $config;
@@ -138,7 +153,6 @@ class ConfigTest extends TestCase
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
 
         $this->assertSame('UTC', $parsed['timezone']);
-        $this->assertSame('10', $parsed['posts_per_page']);
         $this->assertSame('https://indieauth.com/auth', $parsed['authorization_endpoint']);
         $this->assertSame('https://tokens.indieauth.com/token', $parsed['token_endpoint']);
         $this->assertArrayHasKey('feeds_draft', $parsed);
@@ -148,11 +162,9 @@ class ConfigTest extends TestCase
     {
         $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
 
-        // Regression: these were previously commented inside [feeds]/[preconnect],
+        // Regression: these were previously commented inside [feeds],
         // so uncommenting them in place parsed as nested keys the code never read.
         $this->assertArrayNotHasKey('feeds_draft', $parsed['feeds'] ?? []);
-        $this->assertArrayNotHasKey('authorization_endpoint', $parsed['preconnect'] ?? []);
-        $this->assertArrayNotHasKey('token_endpoint', $parsed['preconnect'] ?? []);
     }
 
     public function testComposeConfigFillsRealDefaultsForMissingKeys(): void
@@ -160,7 +172,6 @@ class ConfigTest extends TestCase
         $config = compose_config("site_title = Mine\n", get_default_ini_text());
 
         $this->assertSame('UTC', $config['timezone']);
-        $this->assertSame('10', $config['posts_per_page']);
         $this->assertSame('https://indieauth.com/auth', $config['authorization_endpoint']);
     }
 
@@ -171,24 +182,15 @@ class ConfigTest extends TestCase
         $this->assertSame('Europe/London', $config['timezone']);
     }
 
-    public function testComposeConfigSuppliesIdentityPlaceholderFallback(): void
-    {
-        // author_name is kept commented in the seeded INI, so it must come from
-        // the in-code fallback for consumers (feed.php) that have no inline default.
-        $config = compose_config("site_title = Mine\n", get_default_ini_text());
-
-        $this->assertSame('Joe Sheeple', $config['author_name']);
-    }
-
     public function testComposeConfigNeverInheritsThemeFromDefaults(): void
     {
         // A stored config without a theme must not be silently re-themed by the
         // seeded default (Theme\resolve_theme() falls back to the base theme
         // for a missing theme instead).
-        $config = compose_config("site_title = Mine\n", "theme = 2026\nposts_per_page = 10\n");
+        $config = compose_config("site_title = Mine\n", "theme = 2026\ntimezone = UTC\n");
 
         $this->assertArrayNotHasKey('theme', $config);
-        $this->assertSame('10', $config['posts_per_page']);
+        $this->assertSame('UTC', $config['timezone']);
     }
 
     public function testComposeConfigHonorsTopLevelFeedsDraftFalse(): void
@@ -198,28 +200,87 @@ class ConfigTest extends TestCase
         $this->assertFalse(filter_var($config['feeds_draft'], FILTER_VALIDATE_BOOLEAN));
     }
 
-    public function testDefaultIniDisablesExperimentalFeaturesForNewInstalls(): void
+    public function testDefaultIniOmitsTheSettingsRemovedIn017(): void
     {
-        $parsed = parse_ini_string(get_default_ini_text(), true, INI_SCANNER_RAW);
+        $text = get_default_ini_text();
 
-        $this->assertArrayHasKey('experimental_features', $parsed);
-        $this->assertFalse(filter_var($parsed['experimental_features'], FILTER_VALIDATE_BOOLEAN));
+        foreach (['posts_per_page', '404_fallback', 'preconnect', 'micropub_debug', 'experimental_features'] as $key) {
+            $this->assertStringNotContainsString($key, $text);
+        }
     }
 
-    // experimental_features_enabled
-
-    public function testExperimentalFeaturesEnabledReturnsFalseWhenKeyMissing(): void
+    /**
+     * @dataProvider authorNameProvider
+     */
+    public function testAuthorNameReturnsTheTrimmedNameOrAnEmptyString(array $config, string $expected): void
     {
-        $this->assertFalse(experimental_features_enabled([]));
+        $this->assertSame($expected, author_name($config));
     }
 
-    public function testExperimentalFeaturesEnabledReturnsTrueWhenSetTrue(): void
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function authorNameProvider(): array
     {
-        $this->assertTrue(experimental_features_enabled(['experimental_features' => 'true']));
+        return [
+            'set' => [['author_name' => 'Ada Lovelace'], 'Ada Lovelace'],
+            'padded' => [['author_name' => '  Ada  '], 'Ada'],
+            'whitespace only counts as unset' => [['author_name' => " \t "], ''],
+            'empty' => [['author_name' => ''], ''],
+            'null' => [['author_name' => null], ''],
+            'missing' => [[], ''],
+        ];
     }
 
-    public function testExperimentalFeaturesEnabledReturnsFalseWhenSetFalse(): void
+    /**
+     * @dataProvider authorDisplayNameProvider
+     */
+    public function testAuthorDisplayNameFallsBackToTheSiteTitleThenTheSiteHost(array $config, string $expected): void
     {
-        $this->assertFalse(experimental_features_enabled(['experimental_features' => 'false']));
+        $this->assertSame($expected, author_display_name($config));
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function authorDisplayNameProvider(): array
+    {
+        return [
+            'author wins' => [['author_name' => 'Ada', 'site_title' => 'Notes'], 'Ada'],
+            'an author named 0 is kept' => [['author_name' => '0', 'site_title' => 'Notes'], '0'],
+            'whitespace author falls back' => [['author_name' => '  ', 'site_title' => ' Notes '], 'Notes'],
+            'missing author falls back' => [['site_title' => 'Notes'], 'Notes'],
+            'neither falls back to the host of the site URL' => [
+                ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com:8080/blog'],
+                'notes.example.com',
+            ],
+            'neither and no site URL' => [[], ''],
+        ];
+    }
+
+    public function testComposeConfigAlwaysHasAnAuthorNameAndEmail(): void
+    {
+        // Custom themes read $config['author_name'] directly; an unset one must not warn.
+        $fresh = compose_config('', get_default_ini_text());
+        $this->assertSame('', $fresh['author_name']);
+        $this->assertSame('', $fresh['author_email']);
+
+        $set = compose_config("author_name = Ada\nauthor_email = ada@example.com\n", get_default_ini_text());
+        $this->assertSame('Ada', $set['author_name']);
+        $this->assertSame('ada@example.com', $set['author_email']);
+
+        // Themes read the key as is, so it is stored trimmed.
+        $this->assertSame('Ada', compose_config("author_name = \"  Ada  \"\n", get_default_ini_text())['author_name']);
+        $this->assertSame('', compose_config("author_name = \"   \"\n", get_default_ini_text())['author_name']);
+    }
+
+    public function testDefaultIniExamplesUseNeutralPlaceholders(): void
+    {
+        $text = get_default_ini_text();
+
+        $this->assertStringNotContainsString('Joe Sheeple', $text);
+        $this->assertStringNotContainsString('joe.sheeple', $text);
+        $this->assertStringContainsString(';author_name = Your Name', $text);
+        $this->assertStringContainsString(';author_email = you@example.com', $text);
     }
 }

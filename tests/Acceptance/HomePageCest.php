@@ -136,16 +136,16 @@ class HomePageCest
     public function laterPagesDoNotShowTheHomePost(AcceptanceTester $I): void
     {
         $this->login($I);
-        $this->setIni($I, "theme = base\nposts_per_page = 2\n");
-        foreach (['First post', 'Second post', 'Third post'] as $body) {
-            $this->createPost($I, $body);
+        $this->setIni($I, "theme = base\n");
+        foreach (range(1, 11) as $number) {
+            $this->createPost($I, "Post $number");
         }
         $this->createHomePost($I);
         $I->amOnPage('/logout');
 
         $I->amOnPage('/');
         $I->see(self::HOME_BODY, '.home-post');
-        $I->seeNumberOfElements('article', 2);
+        $I->seeNumberOfElements('article', 10);
 
         // The home post is not a timeline entry, so it takes no place in the page count.
         $I->amOnPage('/page/2');

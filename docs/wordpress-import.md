@@ -7,7 +7,7 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [WordPress WXR export](https://wordpress.com/support/export/) and feeds each published post and page through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. Until 0.17, the deprecated `experimental_features = true` setting (see [Site Configuration](site-configuration.md#deprecated-settings)) also enables it. The importer refuses to run without either.
+**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. The importer refuses to run without it.
 
 ## What you get
 

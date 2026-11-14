@@ -48,7 +48,6 @@ class ResponseHandlersTest extends TestCase
         $this->originalConfig = $config;
         $config = [
             'site_title'    => 'Test Blog',
-            'posts_per_page' => 10,
             'menu_items'    => [],
             'feeds'         => [],
         ];

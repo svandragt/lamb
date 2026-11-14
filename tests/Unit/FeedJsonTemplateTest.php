@@ -127,6 +127,51 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedJsonWithoutAnAuthorNameNamesTheSiteAsTheAuthor(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => null]);
+
+        $this->assertSame('Test Blog', $json['authors'][0]['name']);
+        $this->assertSame('http://localhost', $json['authors'][0]['url']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonTreatsAWhitespaceOnlyAuthorNameAsUnset(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => '   ']);
+
+        $this->assertSame('Test Blog', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonNamesTheHostOfTheSiteUrlAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com']);
+
+        $this->assertSame('notes.example.com', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedJsonKeepsAnAuthorNamedZero(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => '0']);
+
+        $this->assertSame('0', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedJsonAbsolutisesRootRelativeImageUrls(): void
     {
         // Same syndication concern as the Atom feed: content_html must carry
@@ -183,6 +228,7 @@ class FeedJsonTemplateTest extends TestCase
             'author_name'  => 'Test Author',
             'author_email' => 'test@test.com',
         ], $extraConfig);
+        $config = array_filter($config, static fn ($value) => $value !== null);
         $data = [
             'posts'    => [$bean],
             'title'    => 'Test Blog',

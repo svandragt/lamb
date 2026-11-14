@@ -6,15 +6,17 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use Symfony\Component\Process\Process;
 
-use function Lamb\Config\deprecation_warnings;
 use function Lamb\Config\form_to_ini;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\parse_section_text;
+use function Lamb\Config\removed_setting_warnings;
 use function Lamb\Config\settings_form_errors;
 use function Lamb\Config\shape_warnings;
 use function Lamb\Config\write_ini;
 use function Lamb\Response\respond_settings;
+
+use const Lamb\Config\REMOVED_SETTINGS;
 
 /**
  * The /settings form posts fields instead of INI text. form_to_ini() turns
@@ -169,28 +171,27 @@ class ConfigFormTest extends TestCase
 
     // form_to_ini: carry-over
 
-    public function testFormToIniCarriesOverDeprecatedAndUnknownKeys(): void
+    public function testFormToIniDropsEveryRemovedSettingAndCarriesOverUnknownKeys(): void
     {
         $current = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
             . "experimental_features = true\nmystery_key = kept\ntheme = base\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(['theme' => '2026']), $current));
 
-        $this->assertSame('5', $parsed['posts_per_page']);
-        $this->assertSame('https://old.example', $parsed['404_fallback']);
-        $this->assertSame('true', $parsed['micropub_debug']);
-        $this->assertSame('true', $parsed['experimental_features']);
+        foreach (['posts_per_page', '404_fallback', 'micropub_debug', 'experimental_features'] as $key) {
+            $this->assertArrayNotHasKey($key, $parsed);
+        }
         $this->assertSame('kept', $parsed['mystery_key']);
         $this->assertSame('2026', $parsed['theme']);
     }
 
-    public function testFormToIniCarriesOverDeprecatedAndUnknownSections(): void
+    public function testFormToIniDropsTheRemovedPreconnectSectionAndCarriesOverUnknownSections(): void
     {
         $current = "[preconnect]\nfonts = https://fonts.googleapis.com\n\n[custom]\nOne = 1\nTwo = two words\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(), $current));
 
-        $this->assertSame(['fonts' => 'https://fonts.googleapis.com'], $parsed['preconnect']);
+        $this->assertArrayNotHasKey('preconnect', $parsed);
         $this->assertSame(['One' => '1', 'Two' => 'two words'], $parsed['custom']);
     }
 
@@ -474,58 +475,85 @@ class ConfigFormTest extends TestCase
         $this->assertSame(['Café' => '/café?a=b&c=d'], $parsed['menu_items']);
     }
 
-    // deprecation_warnings
+    // removed settings
 
     /**
-     * @dataProvider deprecatedKeyProvider
+     * @dataProvider removedScalarSettingProvider
      */
-    public function testDeprecationWarningsNamesEachDeprecatedKeyInUse(string $ini, string $key, string $advice): void
+    public function testShapeWarningsIsSilentAboutARemovedScalarSetting(string $ini): void
     {
-        $warnings = deprecation_warnings($ini);
+        $this->assertSame([], shape_warnings($ini));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function removedScalarSettingProvider(): array
+    {
+        return [
+            'posts_per_page' => ["posts_per_page = 5\n"],
+            '404_fallback' => ["404_fallback = https://old.example\n"],
+            'micropub_debug' => ["micropub_debug = true\n"],
+            'experimental_features' => ["experimental_features = true\n"],
+        ];
+    }
+
+    public function testShapeWarningsStillWarnsAboutAnEmptySectionThatShadowsASingleValueSetting(): void
+    {
+        // `[site_title]` with no keys drops the title: it is not a retired section.
+        $warnings = shape_warnings("[site_title]\n");
 
         $this->assertCount(1, $warnings);
-        $this->assertStringContainsString($key, $warnings[0]);
-        $this->assertStringContainsString($advice, $warnings[0]);
-        $this->assertStringContainsString('0.17', $warnings[0]);
+        $this->assertStringContainsString('`[site_title]` is not a section Lamb reads', $warnings[0]);
+    }
+
+    /**
+     * @dataProvider removedSettingInUseProvider
+     */
+    public function testRemovedSettingWarningsNameASettingInUseAndItsReplacement(string $ini, string $named, string $replacement): void
+    {
+        $warnings = removed_setting_warnings($ini);
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString($named, $warnings[0]);
+        $this->assertStringContainsString($replacement, $warnings[0]);
     }
 
     /**
      * @return array<string, array{string, string, string}>
      */
-    public static function deprecatedKeyProvider(): array
+    public static function removedSettingInUseProvider(): array
     {
         return [
-            'posts_per_page' => ["posts_per_page = 5\n", 'posts_per_page', 'Lamb will use 10'],
-            '404_fallback' => ["404_fallback = https://old.example\n", '404_fallback', '[redirections]'],
-            'preconnect' => [
-                "[preconnect]\nfonts = https://fonts.googleapis.com\n",
-                '[preconnect]',
-                'Lamb now adds preconnect hints for the sites your pages load from',
-            ],
-            'micropub_debug' => ["micropub_debug = true\n", 'micropub_debug', 'LAMB_MICROPUB_DEBUG'],
-            'experimental_features' => [
-                "experimental_features = true\n",
-                'experimental_features',
-                'bin/lamb import --experimental',
-            ],
+            'posts_per_page' => ["posts_per_page = 5\n", '`posts_per_page`', 'Lamb uses 10 posts per page.'],
+            '404_fallback' => ["404_fallback = https://old.example\n", '`404_fallback`', '`[redirections]` entry'],
+            'preconnect' => ["[preconnect]\nfonts = https://fonts.googleapis.com\n", '`[preconnect]`', 'adds preconnect hints'],
+            'micropub_debug' => ["micropub_debug = true\n", '`micropub_debug`', '`LAMB_MICROPUB_DEBUG`'],
+            'experimental_features' => ["experimental_features = true\n", '`experimental_features`', '`--experimental`'],
         ];
     }
 
-    public function testDeprecationWarningsIsEmptyForSettingsThatDoNothing(): void
+    public function testRemovedSettingWarningsIgnoreA404FallbackThatIsNotAUrl(): void
     {
-        // The seeded defaults carry these keys at their no-op values, so every
-        // existing install has them; warning about them would be noise.
-        $this->assertSame([], deprecation_warnings(get_default_ini_text()));
-        $this->assertSame([], deprecation_warnings(
-            "posts_per_page = 10\nmicropub_debug = false\nexperimental_features = false\n404_fallback =\n[preconnect]\n"
-        ));
+        // The old code only redirected to a value that passed FILTER_VALIDATE_URL.
+        $this->assertSame([], removed_setting_warnings("404_fallback = not a url\n"));
     }
 
-    public function testShapeWarningsIncludesTheDeprecationNotices(): void
+    public function testRemovedSettingWarningsAreSilentAboutTheValuesEarlierVersionsSeeded(): void
     {
-        $warnings = shape_warnings("posts_per_page = 5\n[preconnect]\nfonts = https://fonts.googleapis.com\n");
+        // Every install seeded before 0.17 stores these, whether or not the author set them.
+        $seeded = "posts_per_page = 10\nexperimental_features = false\nmicropub_debug = false\n[preconnect]\n\n[me]\n";
 
-        $this->assertCount(2, $warnings);
+        $this->assertSame([], removed_setting_warnings($seeded));
+    }
+
+    public function testRemovedSettingsReplacementsMatchTheSiteConfigurationDocs(): void
+    {
+        $docs = (string) file_get_contents(dirname(__DIR__, 2) . '/docs/site-configuration.md');
+
+        foreach (REMOVED_SETTINGS as $replacement) {
+            $this->assertStringContainsString("| {$replacement} |", $docs);
+        }
     }
 
     // respond_settings
@@ -549,20 +577,37 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('Author name', implode("\n", $_SESSION['flash']));
     }
 
-    public function testRespondSettingsSavesAFormPostAndFlashesDeprecationNotices(): void
+    public function testRespondSettingsSavesAFormPostAndKeepsUnknownSettingsQuietly(): void
     {
         $result = $this->runSettingsPost(
             $this->post(['menu_items' => 'Home = /', 'feeds_draft' => '1']),
-            "posts_per_page = 5\nmystery = kept\n"
+            "posts_per_page = 10\nmystery = kept\n[preconnect]\n\n[me]\n"
         );
 
         $parsed = parse_ini_safe($result['ini']);
         $this->assertSame('My Blog', $parsed['site_title']);
         $this->assertSame(['Home' => '/'], $parsed['menu_items']);
-        $this->assertSame('5', $parsed['posts_per_page']);
         $this->assertSame('kept', $parsed['mystery']);
-        $this->assertNotContains('Settings saved successfully.', $result['flash']);
-        $this->assertStringContainsString('posts_per_page', implode("\n", $result['flash']));
+        $this->assertSame([], $result['flash']);
+    }
+
+    public function testRespondSettingsSaveRemovesEachRemovedSettingAndSaysSoOnce(): void
+    {
+        $stored = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
+            . "experimental_features = true\n\n[preconnect]\nfonts = https://fonts.googleapis.com\n";
+
+        $first = $this->runSettingsPost($this->post(['menu_items' => 'Home = /']), $stored);
+
+        $parsed = parse_ini_safe($first['ini']);
+        foreach (['posts_per_page', '404_fallback', 'micropub_debug', 'experimental_features', 'preconnect'] as $key) {
+            $this->assertArrayNotHasKey($key, $parsed);
+        }
+        $this->assertCount(5, $first['flash']);
+        $this->assertStringContainsString('`[preconnect]`', implode("\n", $first['flash']));
+
+        $second = $this->runSettingsPost($this->post(['menu_items' => 'Home = /']), $first['ini']);
+
+        $this->assertSame([], $second['flash']);
     }
 
     public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void
