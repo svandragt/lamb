@@ -29,7 +29,7 @@ class WebmentionTest extends TestCase
         R::freeze(false);
 
         if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'https://example.com');
+            define('ROOT_URL', 'http://localhost');
         }
 
         R::exec('DELETE FROM post WHERE 1');

@@ -24,6 +24,8 @@ class MicropubAdapterTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+        // Posts a sibling test left behind would match the LIKE lookups below.
+        R::wipe('post');
 
         global $config;
         $config = $config ?? [];

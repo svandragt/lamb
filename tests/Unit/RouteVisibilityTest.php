@@ -31,7 +31,7 @@ class RouteVisibilityTest extends TestCase
     private function registerRoutes(): array
     {
         if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'https://example.com');
+            define('ROOT_URL', 'http://localhost');
         }
         $GLOBALS['routes'] = [];
         $GLOBALS['private_routes'] = [];

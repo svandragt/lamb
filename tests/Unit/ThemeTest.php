@@ -26,6 +26,12 @@ class ThemeTest extends TestCase
         }
     }
 
+    protected function tearDown(): void
+    {
+        // A logged-in session left behind makes every draft viewable to the next test.
+        $_SESSION = [];
+    }
+
     // the_preconnect
 
     public function testPreconnectOutputsNothingWhenNotConfigured()

@@ -429,6 +429,11 @@ class PostTest extends TestCase
         $schema->slug    = null;
         R::store($schema);
         R::exec('DELETE FROM post');
+
+        // The posts these tests store have no slug, and `slug NOT IN (menu slugs)`
+        // drops those, so a sibling test's menu items must not leak in.
+        global $config;
+        $config['menu_items'] = [];
     }
 
     /**

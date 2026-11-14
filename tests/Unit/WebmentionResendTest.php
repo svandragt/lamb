@@ -23,7 +23,7 @@ class WebmentionResendTest extends TestCase
         R::nuke();
 
         if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'https://example.com');
+            define('ROOT_URL', 'http://localhost');
         }
 
         $post = R::dispense('post');

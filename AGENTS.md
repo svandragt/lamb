@@ -603,7 +603,7 @@ Inline `//` rationale stays scarce — around **8% of non-docblock lines**.
 
 Tests use **Codeception 5** with PHPUnit underneath.
 
-- **Unit** (`tests/Unit/`): pure PHP, no HTTP.
+- **Unit** (`tests/Unit/`): pure PHP, no HTTP. CI runs it in random order and prints `[Seed] N`; reproduce a failure with `vendor/bin/codecept run Unit -o "settings: shuffle: true" --seed N` (`--seed` alone does not shuffle).
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` and `LAMB_TEST_PASSWORD` in `.env`. Generate it with `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` — `make-password.php` omits the cleartext `LAMB_TEST_PASSWORD` unless that flag is set.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
