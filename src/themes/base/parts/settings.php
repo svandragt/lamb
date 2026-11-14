@@ -8,6 +8,8 @@ use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\resolve_theme;
 
+use const Lamb\Theme\RETIRED_THEMES;
+
 $feed_statuses = $data['feed_statuses'] ?? [];
 $redirects     = $data['redirects'] ?? [];
 
@@ -16,7 +18,7 @@ $redirects     = $data['redirects'] ?? [];
 $form      = settings_form_prefill($data['ini_text'], $data['form_values'] ?? []);
 $fields    = $form['fields'];
 $theme     = resolve_theme($fields['theme']);
-$themes    = array_map('basename', glob(ROOT_DIR . '/themes/*', GLOB_ONLYDIR) ?: []);
+$themes    = array_diff(array_map('basename', glob(ROOT_DIR . '/themes/*', GLOB_ONLYDIR) ?: []), array_keys(RETIRED_THEMES));
 $timezones = DateTimeZone::listIdentifiers();
 
 $text_field = static function (

@@ -12,7 +12,7 @@ use function Lamb\Theme\is_hidden_menu_item;
  *
  * Before this, the same check — "skip this bean unless we're on its own
  * permalink" — was hand-copied into both the base theme's parts/_items.php
- * and Lamb\Theme\render_post_list() (used by the 2024/2026 themes). This
+ * and Lamb\Theme\render_post_list() (used by the 2026 theme). This
  * pins the one shared predicate both call sites now use; the rendering
  * behaviour itself stays covered by ThemeMenuItemsTest.
  */

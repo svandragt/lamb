@@ -62,7 +62,6 @@ class ThemeSyndicationPartTest extends TestCase
         return [
             'base' => ['base'],
             '2026' => ['2026'],
-            '2024' => ['2024'],
         ];
     }
 

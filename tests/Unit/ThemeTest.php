@@ -467,6 +467,35 @@ class ThemeTest extends TestCase
         return $dir;
     }
 
+    /**
+     * Runs $callback with the named theme directories present, then removes
+     * only the ones this call created.
+     *
+     * @param string[] $names Theme directory names under ROOT_DIR/themes.
+     * @param callable $callback The code to run.
+     * @return mixed What $callback returns.
+     */
+    private function withThemeDirs(array $names, callable $callback): mixed
+    {
+        $themes  = $this->themesDir();
+        $created = [];
+
+        try {
+            foreach ($names as $name) {
+                if (!is_dir($themes . '/' . $name)) {
+                    mkdir($themes . '/' . $name, 0777, true);
+                    $created[] = $themes . '/' . $name;
+                }
+            }
+
+            return $callback();
+        } finally {
+            foreach (array_reverse($created) as $dir) {
+                rmdir($dir);
+            }
+        }
+    }
+
     public function testResolveThemeReturnsBaseWhenNoThemeConfigured(): void
     {
         $this->assertSame('base', resolve_theme(null));
@@ -501,6 +530,35 @@ class ThemeTest extends TestCase
         } finally {
             rmdir($dir);
         }
+    }
+
+    // The 2024 theme was removed in 0.17: a stored `2024` renders as 2026, even
+    // when a tarball upgrade left the old src/themes/2024 directory behind.
+    public function testResolveThemeRendersARemovedThemeAsItsReplacement(): void
+    {
+        $this->assertSame('2026', $this->withThemeDirs(['2026'], fn () => resolve_theme('2024')));
+    }
+
+    public function testResolveThemeRendersARemovedThemeAsItsReplacementWhenItsOldDirectoryRemains(): void
+    {
+        $this->assertSame('2026', $this->withThemeDirs(['2026', '2024'], fn () => resolve_theme('2024')));
+    }
+
+    // A leftover src/themes/2024 would otherwise be offered as a choice that renders as 2026.
+    public function testSettingsThemeDropdownOmitsRemovedThemes(): void
+    {
+        global $data;
+        $data = ['ini_text' => "theme = 2024\n"];
+
+        $html = $this->withThemeDirs(['2026', '2024'], function (): string {
+            ob_start();
+            include dirname(__DIR__, 2) . '/src/themes/base/parts/settings.php';
+
+            return (string) ob_get_clean();
+        });
+
+        $this->assertStringContainsString('<option selected>2026</option>', $html);
+        $this->assertDoesNotMatchRegularExpression('/>2024<\/option>/', $html);
     }
 
     public function testResolveThemeFallsBackWhenConfiguredThemeHasNoDirectory(): void
