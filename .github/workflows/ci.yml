@@ -99,6 +99,8 @@ jobs:
         run: viv validate
 
       - name: Security audit
+        # An advisory warns on other PRs and blocks only a release: a PR into, or a push to, `release`.
+        continue-on-error: ${{ github.base_ref != 'release' && github.ref_name != 'release' }}
         run: viv audit
 
       - name: Run PHPCS
@@ -169,6 +171,8 @@ jobs:
       # threshold instead of viv audit's fail-on-anything. Dependabot
       # alerts still surface the lower-severity ones.
       - name: Security audit
+        # An advisory warns on other PRs and blocks only a release: a PR into, or a push to, `release`.
+        continue-on-error: ${{ github.base_ref != 'release' && github.ref_name != 'release' }}
         run: pnpm audit --audit-level=high
       - name: Run JS tests
         run: pnpm test

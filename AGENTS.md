@@ -96,7 +96,9 @@ composer, npm, github-actions, docker, devcontainers — and
 Dependabot parses `composer.json`/`composer.lock` directly, so the composer
 ecosystem is unaffected by installing dependencies with viv instead of
 Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
-audit` (js-test job).
+audit` (js-test job). An advisory only warns on a PR into `main`, so an
+unrelated PR can still merge. It fails the job on a PR into, or a push to,
+`release`, so it blocks a release until the dependency is fixed.
 
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
