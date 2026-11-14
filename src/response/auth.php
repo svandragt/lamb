@@ -596,6 +596,14 @@ function respond_settings(): array
         'redirects' => \Lamb\get_all_redirects(),
     ];
 
+    // A save replaces a retired theme with its replacement, so the notice has to be on the page view.
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        $retired_theme = Config\retired_theme_warning($data['ini_text']);
+        if ($retired_theme !== null) {
+            $_SESSION['flash'][] = $retired_theme;
+        }
+    }
+
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Security\require_csrf();
 

@@ -5,15 +5,14 @@ parent: Site customisation
 
 # Themes
 
-Lamb comes with three built-in themes: `base`, `2024`, and `2026`.
+Lamb comes with two built-in themes: `base` and `2026`.
 
 I'm not a designer.
 
 * _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog. **New installs use this theme by default.**
 * _Base_ is a traditional blog theme. It also acts as the fallback theme: any file an active theme does not provide is loaded from here.
-* _2024_ is a more open modern theme. It's built on top of base.
 
-Existing sites keep whatever theme they already use; only fresh installs start on `2026`.
+Existing sites keep whatever theme they already use; only fresh installs start on `2026`. The `2024` theme was removed in 0.17: a site that still has `theme = 2024` renders with `2026`, and `/settings` shows a notice until you save.
 
 To switch between themes, choose it in the **Theme** field at `/settings`.
 
@@ -29,11 +28,6 @@ Default:
 
 ---
 
-2024:
-![Screenshot of the 2024 Lamb theme](https://github.com/user-attachments/assets/b9f55c5c-9d48-4357-a41f-ed71d21c0b0c)
-
----
-
 2026:
 ![Screenshot of the 2026 Lamb theme]({{ site.baseurl }}/2026-theme.png)
 
@@ -45,7 +39,7 @@ Default:
 * `html.php` is only needed when you want to change the outer page layout.
 * The Atom and JSON feeds are rendered by Lamb itself (`Lamb\Response`), not by a theme part, so a theme needs no `feed.php` or `feed_json.php` to have working feeds. Neither file is read any more: a theme that still ships one can delete it.
 * Use the `part($basename)` function to load any other theme includes. This enables a fallback to the base theme's
-  files if the file does not exist in the theme. This makes the base theme a requirement for the 2024 theme.
+  files if the file does not exist in the theme. This makes the base theme a requirement for the 2026 theme.
 * CSS stylesheets must be saved in a subfolder of the theme called `styles/` and are loaded using `the_styles()`.
 * `the_styles()` takes no arguments and loads `styles/styles.css` from the active theme.
 * `the_scripts()` takes no arguments and loads application scripts from `src/scripts/`, not from the active theme directory.
@@ -53,7 +47,7 @@ Default:
 * Logged-in users additionally get the admin scripts in `src/scripts/logged_in/`.
 * Post bodies are stored at the author's literal heading levels (`#` → `<h1>`, `##` → `<h2>`, …). A theme decides where those headings sit in its own outline at render time with `anchor_headings($bean->transformed, $top)`: it shifts the body so its highest heading lands at level `$top`, keeping the rest relative (clamped at `<h6>`) so the outline stays in order for screen readers. The shift is signed — a body written deeper than `$top` is pulled up just as a shallower one is pushed down — so the level the author typed is immaterial. The built-in themes render the post title at `<h2>` and pass `$top = 3`, so the body's first heading always becomes `<h3>`. A theme that titles posts differently passes a different level, and one that wants the literal levels can echo `$bean->transformed` without anchoring.
 
-* Images inside `$bean->transformed` carry intrinsic `width` and `height` attributes (see [Media]({{ site.baseurl }}{% link media.md %})), so a theme's stylesheet **must** leave the aspect ratio free. If you constrain image width — the usual `img { max-width: 100% }` — pair it with `height: auto`, or images wider than their container will be squashed to the attribute's height. All three built-in themes set both.
+* Images inside `$bean->transformed` carry intrinsic `width` and `height` attributes (see [Media]({{ site.baseurl }}{% link media.md %})), so a theme's stylesheet **must** leave the aspect ratio free. If you constrain image width — the usual `img { max-width: 100% }` — pair it with `height: auto`, or images wider than their container will be squashed to the attribute's height. Both built-in themes set both.
 
 Have a look at the pre-existing themes for examples of the above.
 

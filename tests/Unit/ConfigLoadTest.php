@@ -72,7 +72,7 @@ class ConfigLoadTest extends TestCase
 
     public function testGetIniTextReturnsSavedTextOnSubsequentCall(): void
     {
-        $custom = "theme = 2024\n[menu_items]\nAbout = about\n";
+        $custom = "theme = base\n[menu_items]\nAbout = about\n";
         save_ini_text($custom);
 
         $text = get_ini_text();
@@ -132,7 +132,7 @@ class ConfigLoadTest extends TestCase
 
     public function testSaveIniTextPersistsText(): void
     {
-        $ini = "theme = 2024\nsite_title = Test Blog\n";
+        $ini = "theme = base\nsite_title = Test Blog\n";
         save_ini_text($ini);
 
         $text = get_ini_text();
@@ -154,7 +154,7 @@ class ConfigLoadTest extends TestCase
         // A byte pasted from a word processor reached json_encode() through the
         // JSON feed and the export manifest, and json_encode() refuses the whole
         // document over one — the feed came back empty and the export 500ed.
-        save_ini_text('theme = 2024' . "\n" . 'site_title = Caf' . chr(0xE9) . " Blog\n");
+        save_ini_text('theme = base' . "\n" . 'site_title = Caf' . chr(0xE9) . " Blog\n");
 
         $text = get_ini_text();
         $this->assertTrue(mb_check_encoding($text, 'UTF-8'));

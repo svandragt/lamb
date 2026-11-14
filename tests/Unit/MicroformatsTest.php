@@ -141,9 +141,9 @@ class MicroformatsTest extends TestCase
     /**
      * On a post page the h1 already shows the title, so the h2 that carries the
      * entry's p-name is hidden by CSS rather than skipped — the h-entry still
-     * needs a name for anything parsing the permalink. The 2024 and 2026
-     * templates skipped the element instead, so their stylesheets were hiding
-     * markup that was never emitted and their permalink pages published an
+     * needs a name for anything parsing the permalink. The 2026
+     * template skipped the element instead, so its stylesheet was hiding
+     * markup that was never emitted and its permalink pages published an
      * h-entry with no p-name at all.
      *
      * @dataProvider themeProvider
@@ -195,7 +195,6 @@ class MicroformatsTest extends TestCase
         return [
             'base' => ['base'],
             '2026' => ['2026'],
-            '2024' => ['2024'],
         ];
     }
 }

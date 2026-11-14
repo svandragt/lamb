@@ -11,6 +11,7 @@ use function Lamb\Config\form_to_ini;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\parse_section_text;
+use function Lamb\Config\save_ini_text;
 use function Lamb\Config\settings_form_errors;
 use function Lamb\Config\shape_warnings;
 use function Lamb\Config\write_ini;
@@ -70,7 +71,7 @@ class ConfigFormTest extends TestCase
         $ini = form_to_ini($this->post([
             'site_description' => 'Notes on engines',
             'timezone' => 'Europe/London',
-            'theme' => '2024',
+            'theme' => 'base',
             'author_email' => 'ada@example.com',
             'following_url' => 'https://reader.example/following.opml',
             'authorization_endpoint' => 'https://auth.example/auth',
@@ -84,7 +85,7 @@ class ConfigFormTest extends TestCase
         $this->assertSame('Ada Lovelace', $parsed['author_name']);
         $this->assertSame('Notes on engines', $parsed['site_description']);
         $this->assertSame('Europe/London', $parsed['timezone']);
-        $this->assertSame('2024', $parsed['theme']);
+        $this->assertSame('base', $parsed['theme']);
         $this->assertSame('ada@example.com', $parsed['author_email']);
         $this->assertSame('https://reader.example/following.opml', $parsed['following_url']);
         $this->assertSame('https://auth.example/auth', $parsed['authorization_endpoint']);
@@ -176,7 +177,7 @@ class ConfigFormTest extends TestCase
     public function testFormToIniCarriesOverDeprecatedAndUnknownKeys(): void
     {
         $current = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
-            . "experimental_features = true\nmystery_key = kept\ntheme = 2024\n";
+            . "experimental_features = true\nmystery_key = kept\ntheme = base\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(['theme' => '2026']), $current));
 
@@ -525,6 +526,21 @@ class ConfigFormTest extends TestCase
         ));
     }
 
+    public function testDeprecationWarningsNamesTheRemovedTheme(): void
+    {
+        $warnings = deprecation_warnings("theme = 2024\n");
+
+        $this->assertCount(1, $warnings);
+        $this->assertStringContainsString('`2024` theme was removed in 0.17', $warnings[0]);
+        $this->assertStringContainsString('renders your site with the `2026` theme', $warnings[0]);
+    }
+
+    public function testDeprecationWarningsIgnoresThemesThatStillExist(): void
+    {
+        $this->assertSame([], deprecation_warnings("theme = 2026\n"));
+        $this->assertSame([], deprecation_warnings("theme = base\n"));
+    }
+
     public function testShapeWarningsIncludesTheDeprecationNotices(): void
     {
         $warnings = shape_warnings("posts_per_page = 5\n[preconnect]\nfonts = https://fonts.googleapis.com\n");
@@ -551,6 +567,26 @@ class ConfigFormTest extends TestCase
         $this->assertSame($before, \Lamb\Config\get_ini_text());
         $this->assertSame('Typed but not saved', $result['form_values']['site_title']);
         $this->assertStringContainsString('Author name', implode("\n", $_SESSION['flash']));
+    }
+
+    public function testRespondSettingsWarnsWhenTheStoredThemeWasRemoved(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        save_ini_text("theme = 2024\n");
+
+        respond_settings();
+
+        $this->assertStringContainsString('`2024` theme was removed in 0.17', implode("\n", $_SESSION['flash'] ?? []));
+    }
+
+    public function testRespondSettingsStaysQuietWhenTheStoredThemeExists(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+        save_ini_text("theme = 2026\n");
+
+        respond_settings();
+
+        $this->assertSame([], $_SESSION['flash'] ?? []);
     }
 
     public function testRespondSettingsSavesAFormPostAndFlashesDeprecationNotices(): void

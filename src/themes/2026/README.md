@@ -10,7 +10,7 @@ That last phrase is the design constraint. Personality has to be quiet, and it h
 
 ## What it replaces
 
-The starting point was a token-cleanup of the original `2024` theme. That cleanup fixed inconsistencies (duplicate color tokens, mixed spacing units, hardcoded colors) but kept the visual shape: centered reading column with a left rule, yellow nav band, gray-on-white. A faintly 2000s blog template. The brief asked for a real visual modernization on top of that base.
+The starting point was a token-cleanup of the previous theme. That cleanup fixed inconsistencies (duplicate color tokens, mixed spacing units, hardcoded colors) but kept the visual shape: centered reading column with a left rule, yellow nav band, gray-on-white. A faintly 2000s blog template. The brief asked for a real visual modernization on top of that base.
 
 ## Register and reflex-checks
 

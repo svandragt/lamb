@@ -15,7 +15,7 @@ use function Lamb\set_option;
 function get_default_ini_text(): string
 {
     return <<<INI
-;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), 2024, base.
+;; Theme used to render the site. Bundled themes: 2026 (default, "Notes"), base.
 ;; Custom themes live in src/themes/<name>/ and only need to override the parts they change.
 theme = 2026
 
@@ -192,6 +192,13 @@ const IDENTITY_FALLBACK = [
     'author_email' => 'joe.sheeple@example.com',
     'author_name'  => 'Joe Sheeple',
 ];
+
+/**
+ * Themes that no longer ship, each mapped to the theme that renders in its place.
+ *
+ * Read by Theme\resolve_theme() and retired_theme_warning().
+ */
+const RETIRED_THEMES = ['2024' => '2026'];
 
 /**
  * The config keys written as `[section]` blocks of `label = value` entries.
@@ -646,7 +653,34 @@ function deprecation_warnings(string $ini_text): array
         $warnings[] = $notice('experimental_features', 'Use `bin/lamb import --experimental` instead.');
     }
 
+    $retired_theme = retired_theme_warning($ini_text);
+    if ($retired_theme !== null) {
+        $warnings[] = $retired_theme;
+    }
+
     return $warnings;
+}
+
+/**
+ * Warns when the stored `theme` names a theme that no longer ships, or null when it does not.
+ *
+ * Theme\resolve_theme() renders the replacement, so the site keeps working. The
+ * settings form then shows the replacement as selected, and saving writes it, so
+ * this notice only appears until the author saves.
+ *
+ * @param string $ini_text The raw INI text.
+ * @return string|null The warning, or null when the theme is not retired.
+ */
+function retired_theme_warning(string $ini_text): ?string
+{
+    $theme = parse_ini_safe($ini_text)['theme'] ?? null;
+    $replacement = is_scalar($theme) ? (RETIRED_THEMES[trim((string) $theme)] ?? null) : null;
+    if ($replacement === null) {
+        return null;
+    }
+
+    return "The `{$theme}` theme was removed in 0.17. Lamb renders your site with the `{$replacement}` theme "
+        . "instead. Save the settings to keep `{$replacement}`.";
 }
 
 /**

@@ -176,7 +176,6 @@ lamb/
 │   ├── images/           # Shipped static images (default social embed image)
 │   ├── themes/
 │   │   ├── base/         # Base theme + fallback library (HTML, parts, feeds, CSS)
-│   │   ├── 2024/         # Alternative theme (overrides parts as needed)
 │   │   └── 2026/         # "Notes" theme — default for new installs
 │   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
 ├── tests/
@@ -465,7 +464,7 @@ User-uploaded files live under `src/assets/`, not under theme directories.
 
 ### `.gitignore` exemption
 
-Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`base`, `2024`, `2026`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
+Unknown subdirectories under `src/themes/` are ignored so users can install a custom theme alongside their clone of the repo without it appearing in `git status`. The shipped themes (`base`, `2026`) are explicitly un-ignored at the directory level, so `git add` on their files works normally without `-f`.
 
 To ship a new theme as part of the repo, add one line to `.gitignore`:
 
@@ -751,6 +750,6 @@ When adding features, prefer the minimal implementation. Avoid adding configurat
 
 ### Theme Directory Names
 *~600 tokens/session saved*
-- The base theme directory is `src/themes/base/` (the old `default` was renamed in PR #289). Greps for `src/themes/default` return nothing — search `base`, `2024`, or `2026`.
+- The base theme directory is `src/themes/base/` (the old `default` was renamed in PR #289). Greps for `src/themes/default` return nothing — search `base` or `2026`.
 
 <!-- headroom:learn:end -->
