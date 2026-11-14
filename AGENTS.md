@@ -74,6 +74,15 @@ registers the PHPCompatibility standard for that checkout (handled on install
 by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
 without any global phpcs config.
 
+Generate each worktree's own `.env` with
+`LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` instead of copying
+one. By default the script picks the acceptance port from the checkout's
+path, so parallel worktrees almost always run their acceptance servers on
+different ports. A copied `.env` carries the other checkout's `LAMB_TEST_PORT`,
+and the suite's startup then kills the other worktree's server on that port.
+If two worktrees get the same port, set `LAMB_TEST_PORT` when you run
+`make-password.php` in one of them.
+
 ### Cloud sessions
 
 If the SessionStart hook warns that `viv install` is incomplete (a network that
@@ -734,7 +743,7 @@ When adding features, prefer the minimal implementation. Avoid adding configurat
 ### Running Acceptance Tests
 *~1,500 tokens/session saved*
 - `vendor/bin/codecept run Acceptance` needs `LAMB_LOGIN_PASSWORD` and `SITE_URL` in the environment. Source `.env` first: `set -a; . ./.env; set +a` then run. CI passes it via the acceptance suite server env (tests/Acceptance.suite.yml).
-- Kill stale dev servers on port 8747 before re-running (`pkill -f 'php -S 0.0.0.0:8747'`) or the run hangs/fails.
+- The acceptance server listens on `LAMB_TEST_PORT` from `.env`, which by default is not the dev server's 8747, and the suite frees that port before it starts.
 
 ### Editing Files
 *~1,200 tokens/session saved*
