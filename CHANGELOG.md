@@ -12,6 +12,44 @@ commit as the code. At release, the fragments become the version block (see
 
 Changes for the next release are in `changelog.d/` until the release assembles them here.
 
+## [0.16.0] - 2026-11-14
+
+### Added
+
+- Publish a page with `slug: home` to show it at the top of your home page ([#867](https://github.com/svandragt/lamb/issues/867)).
+- The `LAMB_MICROPUB_DEBUG` environment variable turns on Micropub diagnostic logging in place of the deprecated `micropub_debug` setting. ([#917](https://github.com/svandragt/lamb/issues/917))
+- `bin/lamb import --experimental` enables the experimental importers for one run, in place of the deprecated `experimental_features` setting. ([#917](https://github.com/svandragt/lamb/issues/917))
+- The Redirections tab on the settings page has a filter box that narrows the list as you type ([#918](https://github.com/svandragt/lamb/issues/918)).
+
+### Changed
+
+- Lamb now adds `preconnect` and `dns-prefetch` hints itself for the sites a page's posts load images and video from (your own site excluded; at most three per page, in order of first appearance), so the `[preconnect]` setting is no longer needed. Origins listed there still come first and count towards the three until 0.17.
+- `/settings` is a form with labelled fields instead of an INI text box. Site title, site URL and author name are required. Comments in the stored settings are not kept after the first save.
+- The settings page offers the site export as a "Download export" button instead of a text link ([#919](https://github.com/svandragt/lamb/issues/919)).
+
+### Deprecated
+
+- Saving the settings now tells you which of these keys your configuration still uses. Each one stops working in 0.17.
+- `posts_per_page`: Lamb will use 10 posts per page.
+- `404_fallback`: add a `[redirections]` entry for each old address you still want to forward.
+- `[preconnect]`: Lamb will add preconnect hints for the sites your pages load from.
+- `micropub_debug`: set the `LAMB_MICROPUB_DEBUG` environment variable instead.
+- `experimental_features`: pass `--experimental` to `bin/lamb import` instead.
+
+### Removed
+
+- Deleting a post no longer asks "Really delete status N?". The button reads "Delete" instead of "Delete…". The post moves to the trash in one click, and the trash restores it ([#940](https://github.com/svandragt/lamb/issues/940)).
+- Saving settings no longer shows "Settings saved successfully.". The form reloads with the saved values, and a deprecated or misplaced setting still shows its warning ([#940](https://github.com/svandragt/lamb/issues/940)).
+
+### Fixed
+
+- Links inside code in a blockquote on the about page are now kept as written in `/.well-known/about.md` ([#912](https://github.com/svandragt/lamb/issues/912)).
+- A feed post saved as a draft no longer goes live when the feed updates it ([#921](https://github.com/svandragt/lamb/issues/921)).
+- Editing a feed draft no longer publishes it, and `bin/lamb migrate` adds `draft: true` to existing feed drafts ([#924](https://github.com/svandragt/lamb/issues/924)).
+- A link whose address contains `/tag/`, such as a GitHub release, is no longer styled as a hashtag in the 2026 theme ([#925](https://github.com/svandragt/lamb/issues/925)).
+- Pasting a link copied on iOS over selected text now turns the selection into a link, as it does on desktop (#932).
+- A post whose front matter is not valid YAML is no longer saved with its front matter ignored, which published a post marked `draft: true`. The editor keeps your text and shows the parser's message, and Micropub answers 400 ([#939](https://github.com/svandragt/lamb/issues/939)).
+
 ## [0.15.1] - 2026-11-04
 
 ### Fixed
@@ -747,7 +785,8 @@ New in this release:
 Initial release!
 
 
-[Unreleased]: https://github.com/svandragt/lamb/compare/0.15.1...HEAD
+[Unreleased]: https://github.com/svandragt/lamb/compare/0.16.0...HEAD
+[0.16.0]: https://github.com/svandragt/lamb/compare/0.15.1...0.16.0
 [0.15.1]: https://github.com/svandragt/lamb/compare/0.15.0...0.15.1
 [0.15.0]: https://github.com/svandragt/lamb/compare/0.14.0...0.15.0
 [0.14.0]: https://github.com/svandragt/lamb/compare/0.13.0...0.14.0
