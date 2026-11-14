@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\author_display_name;
 use function Lamb\Config\author_name;
 use function Lamb\Config\compose_config;
 use function Lamb\Config\get_default_ini_text;
@@ -222,6 +223,29 @@ class ConfigTest extends TestCase
             'empty' => [['author_name' => ''], ''],
             'null' => [['author_name' => null], ''],
             'missing' => [[], ''],
+        ];
+    }
+
+    /**
+     * @dataProvider authorDisplayNameProvider
+     */
+    public function testAuthorDisplayNameFallsBackToTheSiteTitle(array $config, string $expected): void
+    {
+        $this->assertSame($expected, author_display_name($config));
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function authorDisplayNameProvider(): array
+    {
+        return [
+            'author wins' => [['author_name' => 'Ada', 'site_title' => 'Notes'], 'Ada'],
+            'an author named 0 is kept' => [['author_name' => '0', 'site_title' => 'Notes'], '0'],
+            'whitespace author falls back' => [['author_name' => '  ', 'site_title' => ' Notes '], 'Notes'],
+            'missing author falls back' => [['site_title' => 'Notes'], 'Notes'],
+            'neither' => [['author_name' => ' ', 'site_title' => ' '], ''],
+            'empty config' => [[], ''],
         ];
     }
 }

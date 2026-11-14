@@ -171,6 +171,22 @@ function author_name(array $config): string
 }
 
 /**
+ * Returns the name to publish for the author: the author name, else the site title.
+ *
+ * Compares with `!== ''` rather than testing truthiness, so an author named "0"
+ * is kept. Returns '' when neither is set.
+ *
+ * @param array<string, mixed> $config The effective configuration.
+ * @return string The author name, the trimmed site title, or ''.
+ */
+function author_display_name(array $config): string
+{
+    $name = author_name($config);
+
+    return $name !== '' ? $name : trim((string) ($config['site_title'] ?? ''));
+}
+
+/**
  * The config keys written as `[section]` blocks of `label = value` entries.
  *
  * Everything else is a single-value setting. This is the shape schema

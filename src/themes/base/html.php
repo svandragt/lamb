@@ -15,13 +15,15 @@ use function Lamb\Theme\the_styles;
 global $config;
 global $data;
 global $template;
+
+$author_name = author_name($config);
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
 <head>
     <meta charset="utf-8">
-    <?php if (author_name($config) !== '') : ?>
-    <meta name="author" content="<?= escape(author_name($config)) ?>">
+    <?php if ($author_name !== '') : ?>
+    <meta name="author" content="<?= escape($author_name) ?>">
     <?php endif; ?>
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">

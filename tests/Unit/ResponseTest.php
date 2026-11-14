@@ -134,7 +134,7 @@ class ResponseTest extends TestCase
 
     public function testPaginationWindowComputesOffsetForRequestedPage()
     {
-        $window = pagination_window(25, 3, 10);
+        $window = pagination_window(25, 3);
         $this->assertSame(3, $window['page']);
         $this->assertSame(20, $window['offset']);
         $this->assertSame(3, $window['total_pages']);
@@ -142,14 +142,14 @@ class ResponseTest extends TestCase
 
     public function testPaginationWindowClampsPageBeyondTheLastOne()
     {
-        $window = pagination_window(25, 99, 10);
+        $window = pagination_window(25, 99);
         $this->assertSame(3, $window['page']);
         $this->assertSame(20, $window['offset']);
     }
 
     public function testPaginationWindowIsSinglePageWhenThereAreNoPosts()
     {
-        $window = pagination_window(0, 4, 10);
+        $window = pagination_window(0, 4);
         $this->assertSame(1, $window['page']);
         $this->assertSame(0, $window['offset']);
         $this->assertSame(1, $window['total_pages']);
@@ -159,7 +159,7 @@ class ResponseTest extends TestCase
 
     public function testBuildPaginationMetaReturnsCorrectStructure()
     {
-        $meta = build_pagination_meta(1, 10, 25, 0);
+        $meta = build_pagination_meta(1, 25, 0);
         $this->assertArrayHasKey('current', $meta);
         $this->assertArrayHasKey('per_page', $meta);
         $this->assertArrayHasKey('total_posts', $meta);
@@ -171,38 +171,38 @@ class ResponseTest extends TestCase
 
     public function testBuildPaginationMetaTotalPagesCalculatedCorrectly()
     {
-        $meta = build_pagination_meta(1, 10, 25, 0);
+        $meta = build_pagination_meta(1, 25, 0);
         $this->assertSame(3, $meta['total_pages']);
     }
 
     public function testBuildPaginationMetaTotalPagesIsOneWhenNoPosts()
     {
-        $meta = build_pagination_meta(1, 10, 0, 0);
+        $meta = build_pagination_meta(1, 0, 0);
         $this->assertSame(1, $meta['total_pages']);
     }
 
     public function testBuildPaginationMetaPrevPageNullOnFirstPage()
     {
-        $meta = build_pagination_meta(1, 10, 25, 0);
+        $meta = build_pagination_meta(1, 25, 0);
         $this->assertNull($meta['prev_page']);
     }
 
     public function testBuildPaginationMetaNextPageNullOnLastPage()
     {
-        $meta = build_pagination_meta(3, 10, 25, 20);
+        $meta = build_pagination_meta(3, 25, 20);
         $this->assertNull($meta['next_page']);
     }
 
     public function testBuildPaginationMetaHasPrevAndNextOnMiddlePage()
     {
-        $meta = build_pagination_meta(2, 10, 25, 10);
+        $meta = build_pagination_meta(2, 25, 10);
         $this->assertSame(1, $meta['prev_page']);
         $this->assertSame(3, $meta['next_page']);
     }
 
     public function testBuildPaginationMetaPassthroughValues()
     {
-        $meta = build_pagination_meta(2, 10, 25, 10);
+        $meta = build_pagination_meta(2, 25, 10);
         $this->assertSame(2, $meta['current']);
         $this->assertSame(10, $meta['per_page']);
         $this->assertSame(25, $meta['total_posts']);

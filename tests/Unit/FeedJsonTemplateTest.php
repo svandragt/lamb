@@ -151,6 +151,17 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedJsonKeepsAnAuthorNamedZero(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => '0']);
+
+        $this->assertSame('0', $json['authors'][0]['name']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedJsonAbsolutisesRootRelativeImageUrls(): void
     {
         // Same syndication concern as the Atom feed: content_html must carry

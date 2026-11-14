@@ -196,6 +196,13 @@ class SocialSpecTest extends TestCase
         $this->assertStringContainsString("\r\nFN:Jo's notes\r\n", (string) contact_vcard($emailOnly, 'https://example.com'));
     }
 
+    public function testContactVcardKeepsAnAuthorNamedZero(): void
+    {
+        $vcard = (string) contact_vcard(['author_name' => '0', 'author_email' => 'jo@example.com', 'site_title' => 'Notes'], 'https://example.com');
+
+        $this->assertStringContainsString("\r\nFN:0\r\n", $vcard);
+    }
+
     public function testContactVcardCarriesNameEmailSiteAndMeLinks(): void
     {
         $vcf = contact_vcard([

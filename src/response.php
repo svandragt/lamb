@@ -191,17 +191,16 @@ function public_posts_clause(): array
  *
  * @param int $total_posts Total number of matching posts.
  * @param int $page        Requested page (1-based).
- * @param int $per_page    Items per page.
  * @return array{page: int, offset: int, total_pages: int}
  */
-function pagination_window(int $total_posts, int $page, int $per_page): array
+function pagination_window(int $total_posts, int $page): array
 {
-    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
+    $total_pages = $total_posts > 0 ? (int)ceil($total_posts / POSTS_PER_PAGE) : 1;
     $page        = min($page, $total_pages);
 
     return [
         'page'        => $page,
-        'offset'      => ($page - 1) * $per_page,
+        'offset'      => ($page - 1) * POSTS_PER_PAGE,
         'total_pages' => $total_pages,
     ];
 }
@@ -210,17 +209,16 @@ function pagination_window(int $total_posts, int $page, int $per_page): array
  * Builds the pagination metadata array from pre-computed values.
  *
  * @param int $page         Current page number (1-based).
- * @param int $per_page     Items per page.
  * @param int $total_posts  Total number of matching posts.
  * @param int $offset       Row offset for the current page.
  * @return array{current: int, per_page: int, total_posts: int, total_pages: int, prev_page: int|null, next_page: int|null, offset: int}
  */
-function build_pagination_meta(int $page, int $per_page, int $total_posts, int $offset): array
+function build_pagination_meta(int $page, int $total_posts, int $offset): array
 {
-    $total_pages = pagination_window($total_posts, $page, $per_page)['total_pages'];
+    $total_pages = pagination_window($total_posts, $page)['total_pages'];
     return [
         'current'     => $page,
-        'per_page'    => $per_page,
+        'per_page'    => POSTS_PER_PAGE,
         'total_posts' => $total_posts,
         'total_pages' => $total_pages,
         'prev_page'   => $page > 1 ? $page - 1 : null,
@@ -398,17 +396,16 @@ function upgrade_all_posts(bool $dry_run = false): array
  *
  * @param list<mixed> $values   Flat array of items to paginate.
  * @param int   $page     Current page (1-based, already clamped by caller).
- * @param int   $per_page Items per page.
  * @return array{items: list<mixed>, pagination: array<string, mixed>}
  */
-function paginate_array(array $values, int $page, int $per_page): array
+function paginate_array(array $values, int $page): array
 {
     $total_posts = count($values);
-    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page);
 
     return [
-        'items'      => array_slice($values, $offset, $per_page),
-        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+        'items'      => array_slice($values, $offset, POSTS_PER_PAGE),
+        'pagination' => build_pagination_meta($page, $total_posts, $offset),
     ];
 }
 
@@ -420,30 +417,29 @@ function paginate_array(array $values, int $page, int $per_page): array
  * @param string|null $where_sql       Optional WHERE clause.
  * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
  * @param int         $page            Current page (1-based, already clamped by caller).
- * @param int         $per_page        Items per page.
  * @return array{items: array<int, \RedBeanPHP\OODBBean>, pagination: array<string, mixed>}
  */
-function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page, int $per_page): array
+function paginate_db(string $bean_type, string $order_by_clause, ?string $where_sql, array $params, int $page): array
 {
     $total_posts = !empty($where_sql) ? R::count($bean_type, $where_sql, $params) : R::count($bean_type);
 
-    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page, $per_page);
+    ['page' => $page, 'offset' => $offset] = pagination_window($total_posts, $page);
 
     if (!empty($where_sql)) {
         // When params are provided, use R::find with param binding and append offset/limit
         $find_params   = $params;
         $find_params[] = (int)$offset;
-        $find_params[] = (int)$per_page;
+        $find_params[] = POSTS_PER_PAGE;
         $items = R::find($bean_type, $where_sql . ' ORDER BY ' . $order_by_clause . ' LIMIT ?, ?', $find_params);
     } else {
         // No params: safe to use the simpler findAll with a constructed LIMIT
-        $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . $per_page);
+        $items = R::findAll($bean_type, 'ORDER BY ' . $order_by_clause . ' LIMIT ' . (int)$offset . ', ' . POSTS_PER_PAGE);
     }
 
     render_stale_posts($items);
     return [
         'items'      => $items,
-        'pagination' => build_pagination_meta($page, $per_page, $total_posts, $offset),
+        'pagination' => build_pagination_meta($page, $total_posts, $offset),
     ];
 }
 
@@ -466,8 +462,8 @@ function paginate_posts(mixed $source, string $order_by_clause = 'created DESC',
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
 
     if (is_array($source)) {
-        return paginate_array(array_values($source), $page, POSTS_PER_PAGE);
+        return paginate_array(array_values($source), $page);
     }
 
-    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page, POSTS_PER_PAGE);
+    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page);
 }

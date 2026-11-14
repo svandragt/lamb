@@ -19,7 +19,7 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Symfony\Component\Yaml\Yaml;
 
-use function Lamb\Config\author_name;
+use function Lamb\Config\author_display_name;
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\feed_fetch_due;
@@ -194,7 +194,7 @@ function contact_vcard(array $config, string $root_url): ?string
     if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
         return null;
     }
-    $name = author_name($config) ?: trim((string) ($config['site_title'] ?? ''));
+    $name = author_display_name($config);
 
     $lines = ['BEGIN:VCARD', 'VERSION:4.0', 'FN:' . vcard_escape($name), 'EMAIL;PREF=1:' . $email, 'URL:' . rtrim($root_url, '/') . '/'];
     foreach ((array) ($config['me'] ?? []) as $url) {

@@ -355,6 +355,17 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedKeepsAnAuthorNamedZero(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => '0']);
+
+        $this->assertSame('0', (string) $xml->author->name);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedLeavesOutTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
     {
         $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => ' ', 'site_title' => ' ']);
