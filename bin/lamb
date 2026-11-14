@@ -265,7 +265,13 @@ $parsed_args = $args_fn($rest);
 $extra = array_slice($parsed_args, 3);
 
 if ($path === null) {
-    fwrite(STDERR, "Usage: bin/lamb import {$source['name']} <path> [--dry-run] [--replace]\n");
+    fwrite(STDERR, "Usage: bin/lamb import {$source['name']} <path> [--dry-run] [--replace] [--experimental]\n");
+    exit(1);
+}
+
+// Before open_data_dir(): a refused import must not create or open the database.
+if (!$experimental) {
+    fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: pass --experimental.\n");
     exit(1);
 }
 
@@ -274,11 +280,6 @@ $data_dir = open_data_dir();
 global $config;
 $config = Config\load();
 Config\apply_timezone($config);
-
-if (!$experimental) {
-    fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: pass --experimental.\n");
-    exit(1);
-}
 
 try {
     $parsed = ($source['parse'])($path);

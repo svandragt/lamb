@@ -366,11 +366,11 @@ class FeedTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedNamesTheSiteHostAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    public function testFeedNamesTheHostOfTheSiteUrlAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
     {
-        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => ' ', 'site_title' => ' ']);
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com']);
 
-        $this->assertSame('localhost', (string) $xml->author->name);
+        $this->assertSame('notes.example.com', (string) $xml->author->name);
     }
 
     /**

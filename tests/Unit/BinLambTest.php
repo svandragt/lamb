@@ -146,6 +146,37 @@ XML;
         $this->assertStringContainsString('experimental', $process->getErrorOutput());
     }
 
+    public function testARefusedImportDoesNotTouchTheDataDirectory(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+        $data_dir = "$this->tmp_dir/untouched";
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('--experimental', $process->getErrorOutput());
+        $this->assertDirectoryDoesNotExist($data_dir);
+    }
+
+    public function testTheMissingPathUsageLineMentionsTheExperimentalFlag(): void
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('bin/lamb import wordpress <path> [--dry-run] [--replace] [--experimental]', $process->getErrorOutput());
+    }
+
     public function testTheRemovedExperimentalFeaturesSettingNoLongerEnablesTheImporter(): void
     {
         $wxr = "$this->tmp_dir/export.xml";

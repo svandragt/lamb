@@ -135,7 +135,8 @@ function load(): array
  * real defaults (timezone, feeds_draft, IndieAuth endpoints), so they no longer
  * live in a parallel hardcoded array. Precedence (lowest to highest): seeded
  * defaults → stored config. An unset author_name or author_email is an empty
- * string rather than a placeholder, so themes can read both keys directly.
+ * string rather than a placeholder, and author_name is trimmed, so themes can
+ * read both keys directly.
  *
  * @param string $stored_ini  The raw stored INI text.
  * @param string $default_ini The seeded default INI text.
@@ -152,7 +153,10 @@ function compose_config(string $stored_ini, string $default_ini): array
     // existing sites.
     unset($defaults['theme']);
 
-    return array_merge(['author_name' => '', 'author_email' => ''], $defaults, $config);
+    $config = array_merge(['author_name' => '', 'author_email' => ''], $defaults, $config);
+    $config['author_name'] = author_name($config);
+
+    return $config;
 }
 
 /**
@@ -172,16 +176,16 @@ function author_name(array $config): string
 
 /**
  * Returns the name to publish for the author: the author name, else the site
- * title, else the host of the site URL.
+ * title, else the host of the canonical site URL. The host comes from canonical_site_url(),
+ * never from the request's Host header (ROOT_URL), which a client chooses and a cache could keep.
  *
  * Compares with `!== ''` rather than testing truthiness, so an author named "0"
  * is kept. Feeds name the same author, and the Atom feed needs one.
  *
- * @param array<string, mixed> $config   The effective configuration.
- * @param string               $root_url The site root, as in ROOT_URL.
- * @return string The author name, the trimmed site title, or the site host.
+ * @param array<string, mixed> $config The effective configuration.
+ * @return string The author name, the trimmed site title, the host of the site URL, or ''.
  */
-function author_display_name(array $config, string $root_url): string
+function author_display_name(array $config): string
 {
     foreach ([author_name($config), trim((string) ($config['site_title'] ?? ''))] as $name) {
         if ($name !== '') {
@@ -189,7 +193,7 @@ function author_display_name(array $config, string $root_url): string
         }
     }
 
-    return (string) parse_url($root_url, PHP_URL_HOST);
+    return (string) parse_url((string) canonical_site_url($config), PHP_URL_HOST);
 }
 
 /**
@@ -219,7 +223,7 @@ const CONFIG_SECTIONS = [
  * every key listed here, and removed_setting_warnings() reports the ones that
  * were in use.
  */
-const RETIRED_SETTINGS = [
+const REMOVED_SETTINGS = [
     'posts_per_page' => 'None. Lamb uses 10 posts per page.',
     '404_fallback' => 'Add a `[redirections]` entry for each old address you still want to forward.',
     'preconnect' => 'None. Lamb adds preconnect hints for the sites your posts load images and video from.',
@@ -557,7 +561,7 @@ function shape_warnings(string $ini_text): array
 /**
  * Reports the removed settings the stored INI still uses, and what replaces them.
  *
- * The settings form drops every RETIRED_SETTINGS key on save, so this reports
+ * The settings form drops every REMOVED_SETTINGS key on save, so this reports
  * each one once, on the save that drops it. It is given the stored INI because
  * the submitted one no longer has them. Only a setting that changed something is
  * reported: the INI seeded before 0.17 holds `posts_per_page = 10`,
@@ -587,8 +591,8 @@ function removed_settings_in_use(string $stored_ini): array
 {
     $in_use = [];
     foreach (parse_ini_safe($stored_ini) as $key => $value) {
-        if (isset(RETIRED_SETTINGS[$key]) && removed_setting_in_use((string) $key, $value)) {
-            $in_use[is_array($value) ? "[{$key}]" : (string) $key] = RETIRED_SETTINGS[$key];
+        if (isset(REMOVED_SETTINGS[$key]) && removed_setting_in_use((string) $key, $value)) {
+            $in_use[is_array($value) ? "[{$key}]" : (string) $key] = REMOVED_SETTINGS[$key];
         }
     }
 
@@ -598,7 +602,7 @@ function removed_settings_in_use(string $stored_ini): array
 /**
  * Whether a removed setting's stored value changed anything while Lamb read it.
  *
- * @param string $key   A RETIRED_SETTINGS key.
+ * @param string $key   A REMOVED_SETTINGS key.
  * @param mixed  $value The value parse_ini_safe() returned for it.
  * @return bool False for an empty section or a value that matches the default.
  */
@@ -612,6 +616,8 @@ function removed_setting_in_use(string $key, mixed $value): bool
     return match ($key) {
         'posts_per_page' => $text !== '' && $text !== '10',
         'micropub_debug', 'experimental_features' => filter_var($text, FILTER_VALIDATE_BOOLEAN),
+        // The old redirect only fired for a value that was a URL.
+        '404_fallback' => filter_var($text, FILTER_VALIDATE_URL) !== false,
         default => $text !== '',
     };
 }
@@ -693,7 +699,7 @@ const SETTINGS_FORM_SECTIONS = [
  * they are rebuilt from the post. Every other key and section in the current
  * INI (an author's own keys) is carried over unchanged, so
  * saving the form cannot drop a setting it does not show, except the
- * RETIRED_SETTINGS, which nothing reads any more. Comments in the
+ * REMOVED_SETTINGS, which nothing reads any more. Comments in the
  * current INI are not kept. An empty text field is left out so the default
  * applies; an owned section is always written, because an absent `[menu_items]`
  * brings back the default menu while an empty one means no menu.
@@ -723,7 +729,7 @@ function form_to_ini(array $post, string $current_ini): string
 
     $owned = [...SETTINGS_FORM_FIELDS, 'feeds_draft', ...SETTINGS_FORM_SECTIONS];
     foreach (parse_ini_safe($current_ini) as $key => $value) {
-        if (in_array((string) $key, $owned, true) || isset(RETIRED_SETTINGS[$key])) {
+        if (in_array((string) $key, $owned, true) || isset(REMOVED_SETTINGS[$key])) {
             continue;
         }
         if (is_array($value)) {

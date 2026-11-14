@@ -196,9 +196,9 @@ class SocialSpecTest extends TestCase
         $this->assertStringContainsString("\r\nFN:Jo's notes\r\n", (string) contact_vcard($emailOnly, 'https://example.com'));
     }
 
-    public function testContactVcardNamesTheSiteHostWhenThereIsNoAuthorNameOrSiteTitle(): void
+    public function testContactVcardNamesTheHostOfTheSiteUrlWhenThereIsNoAuthorNameOrSiteTitle(): void
     {
-        $vcard = (string) contact_vcard(['author_email' => 'jo@example.com'], 'https://notes.example.com');
+        $vcard = (string) contact_vcard(['author_email' => 'jo@example.com', 'site_url' => 'https://notes.example.com'], 'https://evil.example');
 
         $this->assertStringContainsString("\r\nFN:notes.example.com\r\n", $vcard);
     }

@@ -150,11 +150,11 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
-    public function testFeedJsonNamesTheSiteHostAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    public function testFeedJsonNamesTheHostOfTheSiteUrlAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
     {
-        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => ' ', 'site_title' => ' ']);
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com']);
 
-        $this->assertSame('localhost', $json['authors'][0]['name']);
+        $this->assertSame('notes.example.com', $json['authors'][0]['name']);
     }
 
     /**

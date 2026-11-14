@@ -223,7 +223,7 @@ class ConfigTest extends TestCase
      */
     public function testAuthorDisplayNameFallsBackToTheSiteTitleThenTheSiteHost(array $config, string $expected): void
     {
-        $this->assertSame($expected, author_display_name($config, 'https://notes.example.com:8080'));
+        $this->assertSame($expected, author_display_name($config));
     }
 
     /**
@@ -236,8 +236,11 @@ class ConfigTest extends TestCase
             'an author named 0 is kept' => [['author_name' => '0', 'site_title' => 'Notes'], '0'],
             'whitespace author falls back' => [['author_name' => '  ', 'site_title' => ' Notes '], 'Notes'],
             'missing author falls back' => [['site_title' => 'Notes'], 'Notes'],
-            'neither falls back to the site host' => [['author_name' => ' ', 'site_title' => ' '], 'notes.example.com'],
-            'empty config falls back to the site host' => [[], 'notes.example.com'],
+            'neither falls back to the host of the site URL' => [
+                ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com:8080/blog'],
+                'notes.example.com',
+            ],
+            'neither and no site URL' => [[], ''],
         ];
     }
 
@@ -251,6 +254,10 @@ class ConfigTest extends TestCase
         $set = compose_config("author_name = Ada\nauthor_email = ada@example.com\n", get_default_ini_text());
         $this->assertSame('Ada', $set['author_name']);
         $this->assertSame('ada@example.com', $set['author_email']);
+
+        // Themes read the key as is, so it is stored trimmed.
+        $this->assertSame('Ada', compose_config("author_name = \"  Ada  \"\n", get_default_ini_text())['author_name']);
+        $this->assertSame('', compose_config("author_name = \"   \"\n", get_default_ini_text())['author_name']);
     }
 
     public function testDefaultIniExamplesUseNeutralPlaceholders(): void

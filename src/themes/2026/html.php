@@ -1,6 +1,5 @@
 <?php
 
-use function Lamb\Config\author_name;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\li_footer_items;
 use function Lamb\Theme\li_menu_items;
@@ -17,14 +16,13 @@ global $config;
 global $data;
 global $template;
 
-$author_name = author_name($config);
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
 <head>
     <meta charset="utf-8">
-    <?php if ($author_name !== '') : ?>
-    <meta name="author" content="<?= escape($author_name) ?>">
+    <?php if ($config['author_name'] !== '') : ?>
+    <meta name="author" content="<?= escape($config['author_name']) ?>">
     <?php endif; ?>
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">

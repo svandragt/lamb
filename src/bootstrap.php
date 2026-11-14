@@ -576,12 +576,15 @@ function backfill_imported_post_identity(array $columns, bool $dry_run = false):
  */
 function drop_experimental_gate_stamp(bool $dry_run = false): int
 {
-    $count = (int) R::getCell('SELECT COUNT(*) FROM option WHERE name = ?', ['experimental_gate_version']);
-    if ($count > 0 && !$dry_run) {
-        R::exec('DELETE FROM option WHERE name = ?', ['experimental_gate_version']);
+    $stamp = R::findOne('option', ' name = ? ', ['experimental_gate_version']);
+    if ($stamp === null) {
+        return 0;
+    }
+    if (!$dry_run) {
+        R::trash($stamp);
     }
 
-    return $count;
+    return 1;
 }
 
 /**

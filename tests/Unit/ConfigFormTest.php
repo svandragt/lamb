@@ -16,7 +16,7 @@ use function Lamb\Config\shape_warnings;
 use function Lamb\Config\write_ini;
 use function Lamb\Response\respond_settings;
 
-use const Lamb\Config\RETIRED_SETTINGS;
+use const Lamb\Config\REMOVED_SETTINGS;
 
 /**
  * The /settings form posts fields instead of INI text. form_to_ini() turns
@@ -537,6 +537,12 @@ class ConfigFormTest extends TestCase
         ];
     }
 
+    public function testRemovedSettingWarningsIgnoreA404FallbackThatIsNotAUrl(): void
+    {
+        // The old code only redirected to a value that passed FILTER_VALIDATE_URL.
+        $this->assertSame([], removed_setting_warnings("404_fallback = not a url\n"));
+    }
+
     public function testRemovedSettingWarningsAreSilentAboutTheValuesEarlierVersionsSeeded(): void
     {
         // Every install seeded before 0.17 stores these, whether or not the author set them.
@@ -549,7 +555,7 @@ class ConfigFormTest extends TestCase
     {
         $docs = (string) file_get_contents(dirname(__DIR__, 2) . '/docs/site-configuration.md');
 
-        foreach (RETIRED_SETTINGS as $replacement) {
+        foreach (REMOVED_SETTINGS as $replacement) {
             $this->assertStringContainsString("| {$replacement} |", $docs);
         }
     }
