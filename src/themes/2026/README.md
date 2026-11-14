@@ -99,7 +99,7 @@ Small, deliberate touches that reward attention but don't ask for it:
 
 - `html.php`: overrides the default to add Geist Mono + Public Sans via Google Fonts and a slightly tightened nav.
 - `styles/styles.css`: full visual definition.
-- `parts/_items.php`: minimal override to move the author into `screen-reader-text`.
+- `parts/_items.php`: overrides the post list to move the author into `screen-reader-text`.
 
 Everything else falls back to `themes/base/`.
 
