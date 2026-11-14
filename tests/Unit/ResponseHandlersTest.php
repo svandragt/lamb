@@ -27,6 +27,9 @@ use const Lamb\SQL_IS_SCHEDULED;
 
 class ResponseHandlersTest extends TestCase
 {
+    /** @var mixed */
+    private $originalConfig;
+
     protected function setUp(): void
     {
         if (!R::testConnection()) {
@@ -46,6 +49,7 @@ class ResponseHandlersTest extends TestCase
         }
 
         global $config;
+        $this->originalConfig = $config;
         $config = [
             'site_title'    => 'Test Blog',
             'posts_per_page' => 10,
@@ -61,6 +65,8 @@ class ResponseHandlersTest extends TestCase
 
     protected function tearDown(): void
     {
+        global $config;
+        $config = $this->originalConfig;
         $_SESSION = [];
         $_POST    = [];
         $_GET     = [];

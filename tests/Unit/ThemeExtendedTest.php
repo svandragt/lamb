@@ -34,8 +34,6 @@ class ThemeExtendedTest extends TestCase
         }
 
         global $config;
-        // Slug-less posts match no `slug NOT IN (menu slugs)`, so drop any menu items a sibling test left.
-        $config['menu_items'] = [];
         $config['feeds'] = [
             'ExampleBlog' => 'https://example.com/feed',
             'AnotherFeed' => 'https://another.com/rss',

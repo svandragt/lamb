@@ -15,8 +15,20 @@ use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
 {
+    /** @var mixed */
+    private $originalConfig;
+
+    protected function setUp(): void
+    {
+        global $config;
+        $this->originalConfig = $config;
+    }
+
     protected function tearDown(): void
     {
+        // Two tests below replace the whole config; restore it for the next test.
+        global $config;
+        $config = $this->originalConfig;
         unset($_SERVER['HTTPS']);
         parent::tearDown();
     }
