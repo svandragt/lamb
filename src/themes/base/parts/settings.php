@@ -252,6 +252,11 @@ $list_field = static function (string $name, string $label, string $help, int $r
                     'Optional. A public OPML list of the feeds you follow. Lamb serves a copy at /.well-known/following.opml.',
                     'url'
                 );
+                $text_field(
+                    'microblog_username',
+                    'Micro.blog username',
+                    'Optional. When set, replies to your posts on Micro.blog are shown under each post.'
+                );
                 ?>
             </fieldset>
 

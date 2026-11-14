@@ -16,7 +16,7 @@ Fields marked "(required)" must be filled before the form saves. After a success
 | Site | Site title (required), site URL (required), description, timezone and theme. |
 | Author | Author name (required) and author email. |
 | Navigation | Menu links and footer links. |
-| Identity links | Profile links for IndieAuth, and the following list. |
+| Identity links | Profile links for IndieAuth, the following list, and your Micro.blog username ([Micro.blog replies]({{ site.baseurl }}{% link microblog-replies.md %})). |
 | Feeds | Feeds to publish, whether they save as drafts, and WebSub hubs. |
 | IndieWeb | Authorization endpoint, token endpoint and syndication targets. |
 | Redirections | Old addresses that forward to new ones. |

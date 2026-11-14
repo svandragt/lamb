@@ -318,6 +318,21 @@ const SCHEMA = [
         'item_count' => 'INTEGER',
         'error_message' => 'TEXT',
     ],
+    // Replies fetched from Micro.blog by /_cron (src/microblog.php).
+    'microblogreply' => [
+        'post_id' => 'INTEGER',
+        'wm_id' => 'INTEGER',
+        'url' => 'TEXT',
+        'author_name' => 'TEXT',
+        'author_url' => 'TEXT',
+        'content' => 'TEXT',
+        'published' => 'TEXT',
+    ],
+    // When each post's Micro.blog replies were last checked.
+    'microblogsync' => [
+        'post_id' => 'INTEGER',
+        'checked_at' => 'INTEGER',
+    ],
 ];
 
 /**

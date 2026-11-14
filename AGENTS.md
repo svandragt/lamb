@@ -169,6 +169,7 @@ lamb/
 │   ├── http.php          # get_request_uri(); shared HTTP client: fetch(), parse_status_line()
 │   ├── micropub.php      # Micropub endpoint (taproot/micropub-adapter subclass) + media endpoint
 │   ├── webmention.php    # Webmention receiving + outbound sending queue (via /_cron)
+│   ├── microblog.php     # Micro.blog replies: jf2 fetch via /_cron, local store, shown on status pages
 │   ├── websub.php        # WebSub hub pings on publish
 │   ├── highlight.php     # Syntax highlighting of fenced code blocks (Phiki)
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
@@ -219,6 +220,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
 | `micropub.php` | `Lamb\Micropub` |
+| `microblog.php` | `Lamb\Microblog` |
 | `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
 | `response.php` + `response/*.php` | `Lamb\Response` |
@@ -242,6 +244,8 @@ RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
+- `microblogreply` — public replies fetched from Micro.blog by `/_cron`; columns: `post_id`, `wm_id`, `url`, `author_name`, `author_url`, `content`, `published`
+- `microblogsync` — when each post's Micro.blog replies were last checked; columns: `post_id`, `checked_at`
 - `webmentionoutbox` — outbound webmention queue processed by `/_cron`; columns: `post_id`, `source`, `target`, `endpoint`, `status`, `attempts`, `created`, `processed_at`
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
@@ -282,6 +286,7 @@ On `main`/`release`, slugs are effectively immutable after creation: editing a p
 - `parts/_pagination.php` — pagination partial
 - `parts/_related.php` — related posts partial
 - `parts/_webmentions.php` — received-webmentions partial (status pages)
+- `parts/_microblog_replies.php` — public Micro.blog replies partial (status pages, when `microblog_username` is set)
 
 ---
 

@@ -709,6 +709,71 @@ article.related-posts h6 {
     }
 }
 
+/* Replies from Micro.blog: same quiet header as related posts, no cards. */
+
+.microblog-replies {
+    margin-top: var(--s-8);
+}
+
+.microblog-replies h2 {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    font-weight: normal;
+    color: var(--ink-faint);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin: 0 0 var(--s-4);
+}
+
+.microblog-replies ol {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.microblog-replies li {
+    margin: 0;
+    padding: var(--s-3) 0;
+}
+
+.microblog-reply__meta {
+    font-family: var(--font-mono);
+    font-size: var(--text-xs);
+    color: var(--ink-faint);
+    margin: 0 0 0.25rem;
+}
+
+.microblog-reply__meta a {
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+
+.microblog-reply__meta a + a::before {
+    content: "·";
+    margin: 0 0.5em;
+    color: var(--ink-faint);
+}
+
+.microblog-reply__meta a:hover { color: var(--accent-link); }
+
+.microblog-replies .p-content {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.microblog-replies__reply {
+    font-family: var(--font-mono);
+    font-size: var(--text-sm);
+    margin: var(--s-4) 0 0;
+}
+
+.microblog-replies__reply a {
+    color: var(--ink-soft);
+    text-decoration: none;
+}
+
+.microblog-replies__reply a:hover { color: var(--accent-link); }
+
 /* Entry form (logged-in only) — quiet, no panel */
 
 section.entry-form {

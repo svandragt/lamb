@@ -53,6 +53,11 @@ class SchemaFreezeTest extends TestCase
                 'last_item_date' => 1, 'last_attempt' => 1, 'last_error' => 0,
                 'item_count' => 0, 'error_message' => 'e',
             ],
+            'microblogreply' => [
+                'post_id' => 1, 'wm_id' => 2, 'url' => 'u', 'author_name' => 'a',
+                'author_url' => 'au', 'content' => 'c', 'published' => '2024-01-01',
+            ],
+            'microblogsync' => ['post_id' => 1, 'checked_at' => 1],
         ];
 
         foreach ($beans as $type => $columns) {

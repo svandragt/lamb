@@ -51,3 +51,4 @@ When you delete a post that already sent webmentions, Lamb re-sends them on the 
 * [Scheduling posts]({{ site.baseurl }}{% link scheduling.md %}): Scheduled posts send their webmentions when they go live.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Pull posts in from other feeds.
 * [Theme functions]({{ site.baseurl }}{% link theme-functions.md %}): The microformats2 (h-entry / h-card) markup the themes emit, which Webmention receivers parse.
+* [Micro.blog replies]({{ site.baseurl }}{% link microblog-replies.md %}): Public replies from Micro.blog, shown to every visitor.

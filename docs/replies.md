@@ -49,3 +49,4 @@ Replying to a page is the most common kind of [webmention]({{ site.baseurl }}{% 
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Send and receive mentions; replies are the most common webmention type.
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): Publish replies from a Micropub client with the `in-reply-to` property.
 * [Post types]({{ site.baseurl }}{% link post-types.md %}): Statuses, pages, and other post formats.
+* [Micro.blog replies]({{ site.baseurl }}{% link microblog-replies.md %}): Show replies people post on Micro.blog under your posts.

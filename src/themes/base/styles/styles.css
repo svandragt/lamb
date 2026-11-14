@@ -260,3 +260,26 @@ mark {
 .task-list-item input[type="checkbox"] {
     margin: 0 .4em 0 -1.4em;
 }
+/* Replies from Micro.blog */
+.microblog-replies ol {
+    list-style: none;
+    padding: 0;
+}
+
+.microblog-replies li + li {
+    margin-top: 1em;
+}
+
+.microblog-replies .p-content {
+    margin-top: 0.25em;
+    overflow-wrap: anywhere;
+}
+
+.microblog-reply__meta {
+    font-size: 0.85em;
+    margin: 0;
+}
+
+.microblog-reply__meta a + a {
+    margin-left: 0.5em;
+}

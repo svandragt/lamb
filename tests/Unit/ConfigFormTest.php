@@ -385,6 +385,15 @@ class ConfigFormTest extends TestCase
         $this->assertSame([], parse_ini_safe(form_to_ini($post, ''))['menu_items']);
     }
 
+    public function testSettingsFormErrorsChecksTheMicroblogUsername(): void
+    {
+        $this->assertSame([], settings_form_errors($this->post(['microblog_username' => '@lamb_1'])));
+        $this->assertSame(
+            ['Micro.blog username may only contain letters, digits and underscores.'],
+            settings_form_errors($this->post(['microblog_username' => 'not/a name']))
+        );
+    }
+
     public function testSettingsFormErrorsRejectsASingleValueSpanningLines(): void
     {
         $errors = settings_form_errors($this->post(['site_description' => "one\ntwo"]));
