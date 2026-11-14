@@ -12,11 +12,14 @@ use function Lamb\Import\build_post_body;
 use function Lamb\Import\default_media_downloader;
 use function Lamb\Import\normalize_html;
 use function Lamb\Import\parse_import_args;
+use function Lamb\Import\parse_rss_string;
 use function Lamb\Import\prepare_imported_html;
 use function Lamb\Import\response_is_media;
 use function Lamb\Import\run_import;
 use function Lamb\Import\rewrite_media_links;
-use function Lamb\Import\sanitize_html;
+use function Lamb\Import\dump_html_fragment;
+use function Lamb\Import\load_html_fragment;
+use function Lamb\Import\sanitize_html_in_dom;
 use function Lamb\Post\on;
 use function Lamb\Post\reset_subscribers;
 use function Lamb\Response\image_ext_for_bytes;
@@ -27,7 +30,6 @@ use function Lamb\WordPress\extract_items;
 use function Lamb\WordPress\html_to_markdown;
 use function Lamb\WordPress\import_item;
 use function Lamb\WordPress\parse_wxr_file;
-use function Lamb\WordPress\parse_wxr_string;
 use function Lamb\WordPress\should_import;
 use function Lamb\WordPress\skip_reason;
 use function Lamb\WordPress\wordpress_uuid;
@@ -125,30 +127,37 @@ XML;
         $this->assertSame(md5('wordpress-' . $guid), wordpress_uuid($guid));
     }
 
+    private function sanitizeFragment(string $html): string
+    {
+        $dom = load_html_fragment($html);
+        sanitize_html_in_dom($dom);
+        return dump_html_fragment($dom);
+    }
+
     public function testSanitizeHtmlStripsScriptTags(): void
     {
         $html = '<p>ok</p><script>alert(1)</script>';
-        $this->assertStringNotContainsString('<script', sanitize_html($html));
-        $this->assertStringNotContainsString('alert', sanitize_html($html));
+        $this->assertStringNotContainsString('<script', $this->sanitizeFragment($html));
+        $this->assertStringNotContainsString('alert', $this->sanitizeFragment($html));
     }
 
     public function testSanitizeHtmlStripsStyleTags(): void
     {
         $html = '<p>ok</p><style>body{color:red}</style>';
-        $this->assertStringNotContainsString('<style', sanitize_html($html));
-        $this->assertStringNotContainsString('color:red', sanitize_html($html));
+        $this->assertStringNotContainsString('<style', $this->sanitizeFragment($html));
+        $this->assertStringNotContainsString('color:red', $this->sanitizeFragment($html));
     }
 
     public function testSanitizeHtmlStripsIframeTags(): void
     {
         $html = '<p>ok</p><iframe src="https://evil"></iframe>';
-        $this->assertStringNotContainsString('<iframe', sanitize_html($html));
+        $this->assertStringNotContainsString('<iframe', $this->sanitizeFragment($html));
     }
 
     public function testSanitizeHtmlStripsOnEventAttributes(): void
     {
         $html = '<a href="x" onclick="alert(1)" ONLOAD="x">link</a>';
-        $clean = sanitize_html($html);
+        $clean = $this->sanitizeFragment($html);
         $this->assertStringNotContainsString('onclick', strtolower($clean));
         $this->assertStringNotContainsString('onload', strtolower($clean));
         $this->assertStringContainsString('href="x"', $clean);
@@ -162,7 +171,7 @@ XML;
      */
     public function testSanitizeHtmlPreservesContentAcrossRoundTrip(): void
     {
-        $clean = sanitize_html('<p>Hello <em>world</em>.</p>');
+        $clean = $this->sanitizeFragment('<p>Hello <em>world</em>.</p>');
         $this->assertStringNotContainsString('<meta', $clean);
         $this->assertStringContainsString('<p>', $clean);
         $this->assertStringContainsString('<em>world</em>', $clean);
@@ -170,7 +179,7 @@ XML;
 
     public function testSanitizeHtmlPreservesUtf8(): void
     {
-        $clean = sanitize_html('<p>Cliché — naïve façade. 日本語</p>');
+        $clean = $this->sanitizeFragment('<p>Cliché — naïve façade. 日本語</p>');
         $this->assertStringContainsString('Cliché', $clean);
         $this->assertStringContainsString('日本語', $clean);
     }
@@ -593,7 +602,7 @@ XML;
 
     public function testParseWxrStringReturnsRssElement(): void
     {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $this->assertInstanceOf(SimpleXMLElement::class, $rss);
         $this->assertSame('rss', $rss->getName());
     }
@@ -632,7 +641,7 @@ XML;
 
     public function testExtractItemsReturnsAllChannelItems(): void
     {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertCount(4, $items);
         $this->assertSame('Hello World', $items[0]['title']);
@@ -649,14 +658,14 @@ XML;
         // Running under UTC, the GMT value should win — the local field
         // is ambiguous (no offset emitted by WP) and would silently mis-stamp
         // when the WP site's timezone differs from the importer's.
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertSame('2024-03-03 10:00:00', $items[0]['created']);
     }
 
     public function testExtractItemsUsesPostModifiedGmtForUpdated(): void
     {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertSame('2024-03-05 11:30:00', $items[0]['updated']);
     }
@@ -664,7 +673,7 @@ XML;
     public function testExtractItemsFallsBackUpdatedToCreatedWhenModifiedMissing(): void
     {
         // The About item has no post_modified*; updated should mirror created.
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertSame($items[1]['created'], $items[1]['updated']);
     }
@@ -692,14 +701,14 @@ XML;
 </channel>
 </rss>
 XML;
-        $items = extract_items(parse_wxr_string($xml));
+        $items = extract_items(parse_rss_string($xml));
         // Falls through to the local field (treated as-is).
         $this->assertSame('2024-03-03 11:00:00', $items[0]['created']);
     }
 
     public function testExtractItemsReadsWordpressPostNameAsSlug(): void
     {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertSame('hello-world', $items[0]['slug']);
         $this->assertSame('about-us', $items[1]['slug']);
@@ -740,7 +749,7 @@ XML;
 
     public function testShouldImportPublishedPostsAndPages(): void
     {
-        $rss = parse_wxr_string(self::SAMPLE_WXR);
+        $rss = parse_rss_string(self::SAMPLE_WXR);
         $items = extract_items($rss);
         $this->assertTrue(should_import($items[0])); // published post
         $this->assertTrue(should_import($items[1])); // published page

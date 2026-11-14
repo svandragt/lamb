@@ -9,7 +9,7 @@ Lamb runs without any configuration. To change it, log in and open `/settings`. 
 
 ## Fieldsets
 
-Fields marked "(required)" must be filled before the form saves.
+Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a deprecated setting.
 
 | Fieldset | Holds |
 |---|---|

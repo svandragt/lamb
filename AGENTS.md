@@ -452,7 +452,6 @@ It always loads:
 When the user is logged in, it also loads:
 
 - `src/scripts/logged_in/growing-input.js`
-- `src/scripts/logged_in/confirm-delete.js`
 - `src/scripts/logged_in/link-edit-buttons.js`
 - `src/scripts/logged_in/upload-image.js`
 - `src/scripts/logged_in/paste-link.js`
