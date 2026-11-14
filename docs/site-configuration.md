@@ -45,7 +45,7 @@ Lamb stores the settings as text in the database. Saving the form rewrites that 
 
 ## Removed settings
 
-Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form warns about a `[preconnect]` section that still holds entries, and keeps it until you remove it.
+Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form reports a `[preconnect]` section that still holds entries as ignored, and keeps it.
 
 | Setting | Replacement |
 |---|---|

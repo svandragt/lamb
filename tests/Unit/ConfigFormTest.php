@@ -511,8 +511,8 @@ class ConfigFormTest extends TestCase
         $warnings = shape_warnings("[preconnect]\nfonts = https://fonts.googleapis.com\n");
 
         $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('`preconnect`', $warnings[0]);
-        $this->assertStringContainsString('ignored', $warnings[0]);
+        $this->assertStringContainsString('`[preconnect]` is not a section Lamb reads', $warnings[0]);
+        $this->assertStringNotContainsString('preconnect = ', $warnings[0]);
     }
 
     // respond_settings

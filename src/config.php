@@ -483,8 +483,8 @@ function shape_warnings(string $ini_text): array
         // An empty section ignores nothing: installs seeded before 0.17 store an
         // empty `[preconnect]` that no setting reads any more.
         if (!$expects_section && is_array($value) && $value !== []) {
-            $warnings[] = "`{$key}` takes one value: write it as `{$key} = ...`, not a "
-                . "`[{$key}]` section. The section was ignored.";
+            $warnings[] = "`[{$key}]` is not a section Lamb reads, so it was ignored. "
+                . 'A single-value setting is written as `name = value`, above the first section.';
             continue;
         }
 

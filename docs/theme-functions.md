@@ -99,7 +99,7 @@ logged in.
 
 When a post shows an image or video from another website, the browser has to open a connection to that site before it can load the file. A preconnect hint tells the browser to open the connection early, so the file arrives sooner. `the_preconnect()` also adds a [`dns-prefetch`](https://developer.mozilla.org/en-US/docs/Web/Performance/dns-prefetch) hint for browsers that do not support preconnect. Both bundled themes call it, and there is nothing to configure.
 
-The function looks at the posts on the page and adds hints for the websites they load images and video from. It reads addresses that start with `http://`, `https://` or `//`. An address such as `//images.example.com/photo.jpg` uses the same scheme as your site. A page of posts, a tag page, a search page and a single post all work this way. It leaves out your own site, and any image or video stored on it.
+The function looks at the posts in `$data['posts']` and adds hints for the websites they load images and video from. The first-page home post (`$data['home_post']`) is not included. It reads addresses that start with `http://`, `https://` or `//`. An address such as `//images.example.com/photo.jpg` uses the same scheme as your site. A page of posts, a tag page, a search page and a single post all work this way. It leaves out your own site, and any image or video stored on it.
 
 It adds at most three sites per page, in the order they first appear. Each hint opens a connection, and more than a few connections compete with the page's own files for bandwidth. For a post with an image on `https://images.example.com`, the page's `<head>` contains:
 
