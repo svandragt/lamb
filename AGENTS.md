@@ -590,6 +590,11 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 Config in `codeception.yml` reads env from `.env`.
 
+Use `#[\Codeception\Attribute\DataProvider('rows')]` or the `@dataProvider`
+annotation for data providers. Codeception ignores PHPUnit's
+`#[PHPUnit\Framework\Attributes\DataProvider]` and runs the test once with
+no rows, so `DataProviderAttributeGuardTest` fails the build when a test imports it.
+
 ### JavaScript unit tests
 
 Client-side scripts in `src/scripts/` are unit-tested with Node's built-in test runner (`node:test`) plus `jsdom` — no extra framework. Run them with `pnpm test` (`node --test "tests/js/**/*.test.mjs"`); CI runs the same via the `js-test` job.
