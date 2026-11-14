@@ -446,24 +446,6 @@ function reset_stale_experimental_flag(string $ini_text): string
 }
 
 /**
- * Rewrites a stored `theme = 2024` to `theme = 2026`, because the 2024 theme no
- * longer ships and a stored name without a directory renders as the base theme.
- *
- * Idempotent: once rewritten, the INI no longer names 2024.
- *
- * @param string $ini_text The raw INI configuration text.
- * @return string The INI text, with `theme` set to 2026 when it was 2024.
- */
-function migrate_removed_theme(string $ini_text): string
-{
-    if ((parse_ini_safe($ini_text)['theme'] ?? null) !== '2024') {
-        return $ini_text;
-    }
-
-    return (string) preg_replace('/^(\h*theme\h*=).*$/m', '${1} 2026', $ini_text, 1);
-}
-
-/**
  * Retrieves the raw INI text from the database or bootstraps it if not present.
  *
  * @return string The raw INI configuration text.
@@ -474,7 +456,7 @@ function get_ini_text(): string
     if ($option->id > 0) {
         // Force a re-opt-in to the experimental-features gate whenever the
         // set of features it covers has changed since this install last saw it.
-        $ini_text = migrate_removed_theme(reset_stale_experimental_flag($option->value));
+        $ini_text = reset_stale_experimental_flag($option->value);
         if ($ini_text !== $option->value) {
             save_ini_text($ini_text);
         }

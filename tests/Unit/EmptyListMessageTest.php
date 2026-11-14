@@ -37,7 +37,7 @@ class EmptyListMessageTest extends TestCase
         $template = 'search';
 
         ob_start();
-        \Lamb\Theme\render_post_list();
+        include dirname(__DIR__, 2) . '/src/themes/2026/parts/_items.php';
         return (string) ob_get_clean();
     }
 

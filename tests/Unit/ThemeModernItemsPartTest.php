@@ -11,8 +11,8 @@ use function Lamb\Theme\author_card;
 /**
  * Characterisation test for the 2026 theme's _items.php.
  *
- * These tests pin the exact rendered HTML of the markup that Lamb\Theme\render_post_list()
- * produces, so a change to it is verified byte-for-byte rather than eyeballed.
+ * These tests pin the exact rendered HTML of the part, so a change to it is
+ * verified byte-for-byte rather than eyeballed.
  *
  * Fixtures live in tests/Support/Data/theme-items/*.html, captured from the
  * theme's output with the per-post author line replaced by a
@@ -165,7 +165,7 @@ class ThemeModernItemsPartTest extends TestCase
     }
 
     /**
-     * render_post_list() decided Restore-vs-Delete with the raw
+     * The part decided Restore-vs-Delete with the raw
      * `$bean->deleted` truthy check instead of the canonical is_deleted()
      * predicate ((bean->deleted ?? null) == 1). A non-canonical truthy value
      * (deleted = 2) would previously still show Restore even though

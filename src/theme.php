@@ -417,9 +417,8 @@ function syndication_links(OODBBean $bean): string
  * ($template === 'status'): there the menu page *is* the requested post, so
  * hiding it would render an empty page.
  *
- * The single definition shared by render_post_list() (the 2026 theme) and
- * the base theme's parts/_items.php, which each hand-copied this check
- * before (#731).
+ * The single definition shared by the 2026 and base themes' parts/_items.php,
+ * which each hand-copied this check before (#731).
  *
  * @param string|null $template The current template name.
  * @param OODBBean    $bean     The post bean being considered for the listing.
@@ -428,86 +427,6 @@ function syndication_links(OODBBean $bean): string
 function is_hidden_menu_item(?string $template, OODBBean $bean): bool
 {
     return $template !== 'status' && is_menu_item((string) ($bean->slug ?? ''));
-}
-
-/**
- * Renders the post-list loop used by the 2026 theme's _items.php.
- *
- * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
- * outside their own permalink, and prints each post as an h-entry with the
- * per-post author kept screen-reader-only.
- *
- * @return void
- */
-function render_post_list(): void
-{
-    global $data;
-    global $template;
-
-    // Column positions below intentionally mirror the original per-theme
-    // _items.php templates: the leading whitespace of any line adjacent to a
-    // PHP tag is part of the rendered HTML, so it cannot be re-indented for
-    // being nested inside a function without changing the output.
-    if (empty($data['posts'])) :
-        // Search and tag pages set $data['intro'] ("No results found.") which
-        // already states the empty case; skip our own message then so the two
-        // don't double up.
-        if (empty($data['intro'])) :
-            ?><p>Sorry no items found.</p>
-    <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
-        endif;
-    else :
-        // Wrap the list in <ul>/<li> only when there is more than one post, so a
-        // single post renders as a bare <article>. Computed once; the menu-item
-        // skip below uses `continue`, so this matches the pre-extraction total.
-        $is_list = count($data['posts']) > 1;
-        if ($is_list) :
-            echo '<ul>';
-        endif;
-        foreach ($data['posts'] as $bean) :
-            /** @var \RedBeanPHP\OODBBean $bean */
-            if (is_hidden_menu_item($template, $bean)) :
-                continue;
-            endif;
-            if ($is_list) :
-                echo '<li>';
-            endif;
-
-            ?>
-
-        <article class="h-entry" data-post-id="<?= (int) $bean->id ?>" itemscope itemtype="https://schema.org/BlogPosting">
-            <header>
-                <?php // On a post page the h1 already shows the title, and the
-                      // stylesheet hides this h2 — but the h-entry still needs a
-                      // p-name, so the element is emitted and hidden rather than
-                      // skipped. Same expression as the base theme.
-                ?>
-                <?php if (!empty($bean->title)) : ?>
-                    <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
-                <?php endif; ?>
-                <div class="meta">
-                    <span itemprop="author" class="screen-reader-text"><?= author_card() ?></span>
-                    <?= date_created($bean) ?>
-                </div>
-            </header>
-            <?= the_reply_context($bean) ?>
-            <?php // List view renders the post title at h2, so the body's top heading sits at h3; otherwise h2 under the site h1. ?>
-            <div class="e-content"><?= anchor_headings($bean->transformed, ($template !== 'status' && !empty($bean->title)) ? 3 : 2) ?></div>
-            <?= syndication_links($bean) ?>
-
-            <?php if (isset($_SESSION[SESSION_LOGIN])) : ?>
-                <small><?= link_source($bean) ?> <?= action_preview($bean) ?> <?= action_edit($bean) ?> <?= \Lamb\is_deleted($bean) ? action_restore($bean) : action_delete($bean) ?></small>
-            <?php endif; ?>
-        </article>
-        <?php // phpcs:ignore Generic.WhiteSpace.ScopeIndent.Incorrect -- leading whitespace here is literal output, preserved from the pre-extraction template
-            if ($is_list) :
-                echo '</li>';
-            endif;
-        endforeach;
-        if ($is_list) :
-            echo '</ul>';
-        endif;
-    endif;
 }
 
 /**
@@ -603,6 +522,13 @@ function sanitize_filename($filename): string
 }
 
 /**
+ * Themes that no longer ship, each mapped to the theme that renders in its place.
+ *
+ * Read by resolve_theme().
+ */
+const RETIRED_THEMES = ['2024' => '2026'];
+
+/**
  * Resolves the configured theme to a name that actually has a directory under `src/themes/`.
  *
  * Falls back to $fallback for anything that doesn't resolve to a real theme
@@ -612,6 +538,10 @@ function sanitize_filename($filename): string
  * live check rather than a stored migration, so it also covers the historical
  * pre-#289 name (`default`, before `src/themes/default` was renamed to
  * `src/themes/base`) without needing to know that name specifically.
+ *
+ * A removed theme name (RETIRED_THEMES) whose own directory is missing resolves
+ * to its replacement instead. The stored setting is unchanged, and a site that
+ * installed a directory of that name keeps it.
  *
  * sanitize_filename() runs first and is what closes the path-traversal and
  * stored-XSS surface (see src/index.php) — this function only adds the
@@ -624,8 +554,16 @@ function sanitize_filename($filename): string
 function resolve_theme(mixed $configured, string $fallback = 'base'): string
 {
     $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
+    if ($name === '') {
+        return $fallback;
+    }
+    if (is_dir(ROOT_DIR . '/themes/' . $name)) {
+        return $name;
+    }
 
-    return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
+    $replacement = RETIRED_THEMES[$name] ?? null;
+
+    return $replacement !== null && is_dir(ROOT_DIR . '/themes/' . $replacement) ? $replacement : $fallback;
 }
 
 /**

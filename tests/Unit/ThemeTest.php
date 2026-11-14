@@ -503,6 +503,62 @@ class ThemeTest extends TestCase
         }
     }
 
+    private function isRealSrcRoot(): bool
+    {
+        $this->ensureRootDir();
+
+        return realpath(ROOT_DIR) === realpath(dirname(__DIR__, 2) . '/src');
+    }
+
+    // The 2024 theme was removed in 0.17: while its directory is missing, a stored `2024` renders as 2026.
+    public function testResolveThemeRendersARemovedThemeAsItsReplacementWhenItsDirectoryIsMissing(): void
+    {
+        $themes = $this->themesDir();
+        if (is_dir($themes . '/2024')) {
+            $this->markTestSkipped('ROOT_DIR already has a 2024 theme directory.');
+        }
+        $replacement = $themes . '/2026';
+        $created     = !is_dir($replacement);
+        if ($created) {
+            mkdir($replacement, 0777, true);
+        }
+
+        try {
+            $this->assertSame('2026', resolve_theme('2024'));
+        } finally {
+            if ($created) {
+                rmdir($replacement);
+            }
+        }
+    }
+
+    public function testResolveThemeFallsBackToBaseWhenTheRemovedThemesReplacementIsMissingToo(): void
+    {
+        $themes = $this->themesDir();
+        if (is_dir($themes . '/2024') || is_dir($themes . '/2026')) {
+            $this->markTestSkipped('ROOT_DIR already has a 2024 or 2026 theme directory.');
+        }
+
+        $this->assertSame('base', resolve_theme('2024'));
+    }
+
+    // A site that installed its own src/themes/2024 keeps it (see 430c5b9).
+    public function testResolveThemeKeepsARemovedThemeNameWhenTheSiteHasItsOwnDirectory(): void
+    {
+        $themes = $this->themesDir();
+        if ($this->isRealSrcRoot() || is_dir($themes . '/2024')) {
+            $this->markTestSkipped('Creating a 2024 directory needs a temporary ROOT_DIR.');
+        }
+        $dir = $themes . '/2024';
+        mkdir($dir, 0777, true);
+
+        try {
+            $this->assertSame('2024', resolve_theme('2024'));
+        } finally {
+            rmdir($dir);
+        }
+    }
+
     public function testResolveThemeFallsBackWhenConfiguredThemeHasNoDirectory(): void
     {
         $this->ensureRootDir();
