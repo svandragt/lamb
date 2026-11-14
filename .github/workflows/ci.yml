@@ -144,9 +144,12 @@ jobs:
           # Unit runs in random order so a test that only passes after another
           # one fails here. The run prints `[Seed] N`; reproduce it with `--seed N`.
           # Acceptance keeps its fixed order: it shares one server and database.
-          vendor/bin/codecept run Unit --steps -o "settings: shuffle: true"
-          vendor/bin/codecept run Acceptance --steps
-          vendor/bin/codecept run Functional --steps
+          # Every suite runs even when one fails, as a single `codecept run` did.
+          status=0
+          vendor/bin/codecept run Unit --steps -o "settings: shuffle: true" || status=1
+          vendor/bin/codecept run Acceptance --steps || status=1
+          vendor/bin/codecept run Functional --steps || status=1
+          exit $status
 
       - name: Check code coverage
         if: matrix.php-version == '8.5'
