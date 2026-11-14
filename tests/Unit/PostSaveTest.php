@@ -29,10 +29,6 @@ class PostSaveTest extends TestCase
         R::freeze(false);
         R::nuke();
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $config = ['websub_hubs' => ''];
 

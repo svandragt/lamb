@@ -3,7 +3,11 @@
 # Suite for unit or integration tests.
 
 actor: UnitTester
+bootstrap: _bootstrap.php
 modules:
     enabled:
         - Asserts
+extensions:
+    enabled:
+        - Tests\Support\Extension\RestoreGlobals
 step_decorators: ~

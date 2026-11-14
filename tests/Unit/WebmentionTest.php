@@ -28,10 +28,6 @@ class WebmentionTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         R::exec('DELETE FROM post WHERE 1');
         R::exec('DELETE FROM webmention WHERE 1');
     }
@@ -303,8 +299,7 @@ class WebmentionTest extends TestCase
 
     public function testIsExternalHttpUrlTrueForForeignHost(): void
     {
-        // Some other unit test may already have defined ROOT_URL; build the
-        // foreign URL from a host that cannot match it.
+        // Build the foreign URL from a host that cannot match ROOT_URL.
         $this->assertTrue(is_external_http_url('https://surely-not-our-host.example/post'));
     }
 

@@ -15,13 +15,6 @@ use PHPUnit\Framework\TestCase;
  */
 class Theme404PartTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-    }
-
     protected function tearDown(): void
     {
         global $data, $template;

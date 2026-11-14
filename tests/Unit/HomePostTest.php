@@ -35,10 +35,6 @@ class HomePostTest extends TestCase
         R::freeze(false);
         R::nuke();
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $this->originalConfig = $config;
         $config = ['site_title' => 'Test Blog', 'posts_per_page' => 10, 'menu_items' => [], 'feeds' => []];

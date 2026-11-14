@@ -44,10 +44,6 @@ class ResponseHandlersTest extends TestCase
         R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $this->originalConfig = $config;
         $config = [

@@ -38,9 +38,6 @@ class MicropubAdapterTest extends TestCase
         // site_url. Seed it to match ROOT_URL for the happy-path tests.
         $config['site_url'] = 'http://localhost';
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         if (!defined('ROOT_DIR')) {
             define('ROOT_DIR', sys_get_temp_dir() . '/lamb_test');
         }

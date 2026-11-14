@@ -17,9 +17,6 @@ class RobotsTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         // robots.txt is derived from the registered private routes, so register
         // the application's route table exactly as index.php does first.
         $GLOBALS['routes'] = [];

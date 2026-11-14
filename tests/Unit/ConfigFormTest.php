@@ -31,10 +31,6 @@ class ConfigFormTest extends TestCase
         R::freeze(false);
         R::exec('DELETE FROM option');
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         $_SESSION = [];
         $_POST    = [];
         $_SERVER['REQUEST_METHOD'] = 'GET';

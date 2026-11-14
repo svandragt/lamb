@@ -21,10 +21,6 @@ class ThemeTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         // Page data a sibling test left behind would feed media_origins() and the like.
         global $data;
         $data = [];

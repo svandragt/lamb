@@ -29,10 +29,6 @@ class ThemeExtendedTest extends TestCase
         R::store($seed);
         R::exec("DELETE FROM post");
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $config['feeds'] = [
             'ExampleBlog' => 'https://example.com/feed',

@@ -31,10 +31,6 @@ class PostVisibilityTest extends TestCase
         R::store($schema);
         R::exec('DELETE FROM post');
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $config = ['site_title' => 'Test Blog', 'posts_per_page' => 10];
 

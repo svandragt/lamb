@@ -26,10 +26,6 @@ class LambHelpersTest extends TestCase
         R::freeze(false);
         // A home post a sibling test left behind would make the root path resolve.
         R::wipe('post');
-
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
     }
 
     // now

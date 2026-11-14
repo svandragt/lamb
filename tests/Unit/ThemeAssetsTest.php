@@ -17,9 +17,6 @@ class ThemeAssetsTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         if (!defined('THEME_URL')) {
             define('THEME_URL', 'themes/base/');
         }

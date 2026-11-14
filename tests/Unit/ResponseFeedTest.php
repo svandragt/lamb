@@ -19,10 +19,6 @@ class ResponseFeedTest extends TestCase
         R::freeze(false);
         R::exec("DELETE FROM post");
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $config = ['site_title' => 'Test Blog'];
     }

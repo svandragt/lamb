@@ -22,9 +22,6 @@ class NoIndexTest extends TestCase
 {
     protected function setUp(): void
     {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         $GLOBALS['routes'] = [];
         $GLOBALS['private_routes'] = [];
         $GLOBALS['noindex'] = false;

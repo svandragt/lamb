@@ -22,10 +22,6 @@ class WebmentionResendTest extends TestCase
         R::freeze(false);
         R::nuke();
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         $post = R::dispense('post');
         $post->body = 'Hello';
         $post->transformed = '<p>Hello</p>';
