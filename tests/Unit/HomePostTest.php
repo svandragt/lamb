@@ -32,10 +32,6 @@ class HomePostTest extends TestCase
         R::freeze(false);
         R::nuke();
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         global $config;
         $config = ['site_title' => 'Test Blog', 'menu_items' => [], 'feeds' => []];
 

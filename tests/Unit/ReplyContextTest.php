@@ -19,10 +19,6 @@ class ReplyContextTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         R::exec('DELETE FROM post WHERE 1');
     }
 
@@ -319,9 +315,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';
@@ -357,9 +350,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';
@@ -393,9 +383,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';
@@ -426,9 +413,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';
@@ -466,9 +450,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';
@@ -505,9 +486,6 @@ class ReplyContextTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         $bean = R::dispense('post');
         $bean->title = '';

@@ -17,10 +17,6 @@ class PreviewTokenParityTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         $_SESSION = [];
     }
 

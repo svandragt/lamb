@@ -40,10 +40,6 @@ class ResponseAuthTest extends TestCase
         $_SERVER['SERVER_PROTOCOL'] = 'HTTP/1.1';
         $_SERVER['REQUEST_URI']     = '/';
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         $this->previousErrorLog = ini_get('error_log');
     }
 

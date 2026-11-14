@@ -24,10 +24,8 @@ class LambHelpersTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
+        // A home post a sibling test left behind would make the root path resolve.
+        R::wipe('post');
     }
 
     // now

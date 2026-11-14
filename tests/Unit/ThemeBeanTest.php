@@ -22,11 +22,6 @@ class ThemeBeanTest extends TestCase
         }
         R::freeze(false);
 
-        // Ensure ROOT_URL is defined for li_menu_items relative URL path
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         // Start with a clean session
         $_SESSION = [];
     }

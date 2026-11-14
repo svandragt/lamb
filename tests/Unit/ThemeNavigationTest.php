@@ -9,13 +9,6 @@ use function Lamb\Theme\li_menu_items;
 
 class ThemeNavigationTest extends TestCase
 {
-    protected function setUp(): void
-    {
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-    }
-
     public function testLiMenuItemsReturnsEmptyWhenNoItems(): void
     {
         global $config;

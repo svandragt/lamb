@@ -20,10 +20,6 @@ class FeedTemplateTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         $bean = R::dispense('post');
         $bean->title = '';
         $bean->description = 'My status post content here';
@@ -418,10 +414,6 @@ class FeedTemplateTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         // ROOT_DIR is a constant defined once per process (Codeception does not
         // isolate test methods) and other unit tests may have already pointed
         // it at their own temp dir, so operate on wherever it actually points
@@ -483,10 +475,6 @@ class FeedTemplateTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         // addChild() does not escape, so an unescaped `&` in the permalink used
         // to emit an empty <id/> and make the whole feed malformed.

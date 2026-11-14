@@ -19,10 +19,6 @@ class RedirectTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
-
         // Clean redirect table before each test
         R::exec('DELETE FROM redirect WHERE 1');
     }

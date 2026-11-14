@@ -28,9 +28,6 @@ class ThemeMenuItemsTest extends TestCase
         R::freeze(false);
         R::nuke();
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
         $_SESSION = [];
     }
 

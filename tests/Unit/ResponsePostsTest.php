@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Response\apply_checkbox_toggle;
 use function Lamb\Response\delete_return_path;
 use function Lamb\Response\lock_if_feed_sourced;
@@ -25,18 +26,13 @@ class ResponsePostsTest extends TestCase
         }
         R::freeze(false);
 
-        // Seed schema columns so WHERE filters work regardless of test order
-        $schema = R::dispense('post');
-        $schema->draft   = null;
-        $schema->deleted = null;
-        R::store($schema);
+        // Start from the real schema. A post table a sibling test created with narrower
+        // column types (`created` as NUMERIC) is rebuilt when an edit widens them, and the
+        // rebuild drops the trigger submitEditWithFailingWrite() relies on.
+        R::exec('DROP TABLE IF EXISTS post');
+        ensure_schema();
 
-        R::exec("DELETE FROM post");
         R::exec("DELETE FROM option");
-
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'http://localhost');
-        }
 
         global $config;
         $config = [

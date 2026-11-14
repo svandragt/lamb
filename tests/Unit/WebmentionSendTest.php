@@ -22,10 +22,6 @@ class WebmentionSendTest extends TestCase
         }
         R::freeze(false);
 
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'https://example.com');
-        }
-
         R::exec('DELETE FROM webmentionoutbox WHERE 1');
 
         $post = R::dispense('post');

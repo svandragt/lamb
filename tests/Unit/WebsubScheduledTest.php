@@ -18,10 +18,6 @@ class WebsubScheduledTest extends TestCase
         }
         R::freeze(false);
         R::nuke();
-
-        if (!defined('ROOT_URL')) {
-            define('ROOT_URL', 'https://example.com');
-        }
     }
 
     /** @var list<array{string,string}> */
