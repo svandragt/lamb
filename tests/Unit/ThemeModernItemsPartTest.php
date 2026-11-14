@@ -7,6 +7,7 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 
 use function Lamb\Theme\author_card;
+use function Lamb\Theme\render_post_list;
 
 /**
  * Characterisation test for the 2026 theme's _items.php.
@@ -142,18 +143,33 @@ class ThemeModernItemsPartTest extends TestCase
         $this->assertStringNotContainsString('</span> @', $html);
     }
 
-    // Custom themes copied from the 0.16 2026 theme still call render_post_list(true).
-    public function testRenderPostListIgnoresTheLegacyHideAuthorArgument(): void
+    // render_post_list() is a public theme helper: a custom theme copied from the
+    // 0.16 2026 theme calls it with true, one copied from the 0.16 2024 theme with
+    // false and expects the author to stay visible. Hardcoded literals, as above.
+    public function testRenderPostListHidesTheAuthorByDefaultAndWhenAskedTo(): void
     {
         $bean     = $this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00');
         $expected = $this->normalize($this->render('2026', 'tag', [$bean]));
 
-        ob_start();
-        \call_user_func('Lamb\Theme\render_post_list', true);
-        $html = $this->normalize((string) ob_get_clean());
+        foreach ([[], [true]] as $args) {
+            ob_start();
+            render_post_list(...$args);
+            $this->assertSame($expected, $this->normalize((string) ob_get_clean()));
+        }
+        $this->assertStringContainsString('<span itemprop="author" class="screen-reader-text">', $expected);
+    }
 
-        $this->assertSame($expected, $html);
-        $this->assertStringContainsString('<span itemprop="author" class="screen-reader-text">', $html);
+    public function testRenderPostListShowsTheAuthorInlineWithTrailingAtWhenAskedTo(): void
+    {
+        $this->render('2026', 'tag', [$this->makeBean('T', '<p>b</p>', '2024-01-01 12:00:00')]);
+
+        ob_start();
+        render_post_list(false);
+        $html = (string) ob_get_clean();
+
+        $this->assertStringContainsString('<span itemprop="author">', $html);
+        $this->assertStringContainsString('</span> @', $html);
+        $this->assertStringNotContainsString('screen-reader-text', $html);
     }
 
     public function testEmptyPostsRendersTheNoItemsMessage(): void

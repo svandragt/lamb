@@ -434,15 +434,15 @@ function is_hidden_menu_item(?string $template, OODBBean $bean): bool
  * Renders the post-list loop used by the 2026 theme's _items.php.
  *
  * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
- * outside their own permalink, and prints each post as an h-entry with the
- * per-post author kept screen-reader-only.
+ * outside their own permalink, and prints each post as an h-entry.
  *
- * Public theme helper: custom themes copied from the 0.16 2026 theme still call
- * it with a `true` argument, which PHP ignores.
+ * A stable theme helper: custom themes copied from the 0.16 2024 and 2026
+ * themes call it with `false` and `true`, so both behaviours stay.
  *
+ * @param bool $hide_author Hide the per-post author visually (the default) instead of showing it inline.
  * @return void
  */
-function render_post_list(): void
+function render_post_list(bool $hide_author = true): void
 {
     global $data;
     global $template;
@@ -489,7 +489,9 @@ function render_post_list(): void
                     <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
                 <?php endif; ?>
                 <div class="meta">
-                    <span itemprop="author" class="screen-reader-text"><?= author_card() ?></span>
+                    <?= ($hide_author
+                        ? '<span itemprop="author" class="screen-reader-text">' . author_card() . '</span>'
+                        : '<span itemprop="author">' . author_card() . '</span> @') . "\n" ?>
                     <?= date_created($bean) ?>
                 </div>
             </header>

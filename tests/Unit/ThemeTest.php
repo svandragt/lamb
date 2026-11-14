@@ -524,23 +524,62 @@ class ThemeTest extends TestCase
 
     public function testResolveThemeRendersARemovedThemeAsItsReplacementWhenItsOldDirectoryRemains(): void
     {
-        $themes      = $this->themesDir();
-        $replacement = $themes . '/2026';
-        $leftover    = $themes . '/2024';
-        $created     = !is_dir($replacement);
-        if ($created) {
+        $themes          = $this->themesDir();
+        $replacement     = $themes . '/2026';
+        $leftover        = $themes . '/2024';
+        $createdNew      = !is_dir($replacement);
+        $createdLeftover = !is_dir($leftover);
+        if ($createdNew) {
             mkdir($replacement, 0777, true);
         }
-        mkdir($leftover, 0777, true);
+        if ($createdLeftover) {
+            mkdir($leftover, 0777, true);
+        }
 
         try {
             $this->assertSame('2026', resolve_theme('2024'));
         } finally {
-            rmdir($leftover);
-            if ($created) {
+            if ($createdLeftover) {
+                rmdir($leftover);
+            }
+            if ($createdNew) {
                 rmdir($replacement);
             }
         }
+    }
+
+    // A leftover src/themes/2024 would otherwise be offered as a choice that renders as 2026.
+    public function testSettingsThemeDropdownOmitsRemovedThemes(): void
+    {
+        global $data;
+        $themes          = $this->themesDir();
+        $replacement     = $themes . '/2026';
+        $leftover        = $themes . '/2024';
+        $createdNew      = !is_dir($replacement);
+        $createdLeftover = !is_dir($leftover);
+        if ($createdNew) {
+            mkdir($replacement, 0777, true);
+        }
+        if ($createdLeftover) {
+            mkdir($leftover, 0777, true);
+        }
+        $data = ['ini_text' => "theme = 2024\n"];
+
+        try {
+            ob_start();
+            include dirname(__DIR__, 2) . '/src/themes/base/parts/settings.php';
+            $html = (string) ob_get_clean();
+        } finally {
+            if ($createdLeftover) {
+                rmdir($leftover);
+            }
+            if ($createdNew) {
+                rmdir($replacement);
+            }
+        }
+
+        $this->assertStringContainsString('<option selected>2026</option>', $html);
+        $this->assertStringNotContainsString('<option>2024</option>', $html);
     }
 
     public function testResolveThemeFallsBackWhenConfiguredThemeHasNoDirectory(): void

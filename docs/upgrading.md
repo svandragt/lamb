@@ -128,7 +128,7 @@ The database and uploads live in the named volumes and survive the recreate.
 
 ## Upgrading to 0.17
 
-* The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and the next save at `/settings` stores `2026`.
+* The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
 * If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.
 * If your site uses its own theme named `2024`, rename the theme directory and the `theme` setting. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.
 
