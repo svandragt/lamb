@@ -155,15 +155,6 @@ class ResponseTest extends TestCase
         $this->assertSame(1, $window['total_pages']);
     }
 
-    public function testPaginationWindowTreatsNonPositivePerPageAsOne()
-    {
-        // A per_page of 0 would otherwise divide by zero.
-        $window = pagination_window(3, 2, 0);
-        $this->assertSame(2, $window['page']);
-        $this->assertSame(1, $window['offset']);
-        $this->assertSame(3, $window['total_pages']);
-    }
-
     // build_pagination_meta
 
     public function testBuildPaginationMetaReturnsCorrectStructure()
@@ -218,27 +209,28 @@ class ResponseTest extends TestCase
         $this->assertSame(10, $meta['offset']);
     }
 
-    // paginate_posts: explicit $per_page avoids global $config
+    // paginate_posts: pages of POSTS_PER_PAGE (10)
 
-    public function testPaginatePostsArraySourceWithExplicitPerPage()
+    public function testPaginatePostsArraySourceSplitsIntoPagesOfTen()
     {
-        $items = range(1, 15);
-        $result = paginate_posts($items, 'created DESC', null, [], 5);
-        $this->assertCount(5, $result['items']);
+        $items = range(1, 25);
+        $result = paginate_posts($items);
+        $this->assertCount(10, $result['items']);
+        $this->assertSame(10, $result['pagination']['per_page']);
         $this->assertSame(3, $result['pagination']['total_pages']);
     }
 
     public function testPaginatePostsArraySourceReturnsFirstPageItems()
     {
         $items = array_map(fn($i) => "post$i", range(1, 12));
-        $result = paginate_posts($items, 'created DESC', null, [], 5);
-        $this->assertSame(['post1', 'post2', 'post3', 'post4', 'post5'], $result['items']);
+        $result = paginate_posts($items);
+        $this->assertSame(array_slice($items, 0, 10), $result['items']);
     }
 
-    public function testPaginatePostsArraySourceSinglePageWhenFewerItemsThanPerPage()
+    public function testPaginatePostsArraySourceSinglePageWhenFewerItemsThanAPage()
     {
         $items = range(1, 3);
-        $result = paginate_posts($items, 'created DESC', null, [], 10);
+        $result = paginate_posts($items);
         $this->assertCount(3, $result['items']);
         $this->assertSame(1, $result['pagination']['total_pages']);
         $this->assertNull($result['pagination']['next_page']);
@@ -246,7 +238,7 @@ class ResponseTest extends TestCase
 
     public function testPaginatePostsEmptyArrayReturnsEmptyItemsOnePage()
     {
-        $result = paginate_posts([], 'created DESC', null, [], 10);
+        $result = paginate_posts([]);
         $this->assertSame([], $result['items']);
         $this->assertSame(1, $result['pagination']['total_pages']);
         $this->assertSame(0, $result['pagination']['total_posts']);
@@ -254,15 +246,15 @@ class ResponseTest extends TestCase
 
     public function testPaginatePostsExplicitPageSelectsCorrectSlice()
     {
-        $items = array_map(fn($i) => "post$i", range(1, 15));
-        $result = paginate_posts($items, 'created DESC', null, [], 5, 2);
-        $this->assertSame(['post6', 'post7', 'post8', 'post9', 'post10'], $result['items']);
+        $items = array_map(fn($i) => "post$i", range(1, 25));
+        $result = paginate_posts($items, 'created DESC', null, [], 2);
+        $this->assertSame(array_slice($items, 10, 10), $result['items']);
     }
 
     public function testPaginatePostsExplicitPageReflectedInPaginationMeta()
     {
-        $items = range(1, 15);
-        $result = paginate_posts($items, 'created DESC', null, [], 5, 3);
+        $items = range(1, 25);
+        $result = paginate_posts($items, 'created DESC', null, [], 3);
         $this->assertSame(3, $result['pagination']['current']);
         $this->assertNull($result['pagination']['next_page']);
     }

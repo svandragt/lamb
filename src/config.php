@@ -156,6 +156,21 @@ function compose_config(string $stored_ini, string $default_ini): array
 }
 
 /**
+ * Returns the configured author name, trimmed, or '' when there is none.
+ *
+ * A whitespace-only name counts as unset, so every reader (feeds, page
+ * metadata, the h-card, the vCard) falls back or leaves the author out in the
+ * same cases.
+ *
+ * @param array<string, mixed> $config The effective configuration.
+ * @return string The author name, or ''.
+ */
+function author_name(array $config): string
+{
+    return trim((string) ($config['author_name'] ?? ''));
+}
+
+/**
  * The config keys written as `[section]` blocks of `label = value` entries.
  *
  * Everything else is a single-value setting. This is the shape schema
@@ -175,12 +190,20 @@ const CONFIG_SECTIONS = [
 ];
 
 /**
- * Sections earlier versions wrote that no setting reads any more.
+ * The settings Lamb 0.17 removed, each with what replaces it.
  *
- * Installs seeded before 0.17 store an empty `[preconnect]`. shape_warnings()
- * does not report an empty one, and form_to_ini() drops the section on save.
+ * The replacement text is the one in the "Removed settings" table of
+ * docs/site-configuration.md (a test keeps the two in step). form_to_ini() drops
+ * every key listed here, and removed_setting_warnings() reports the ones that
+ * were in use.
  */
-const RETIRED_SECTIONS = ['preconnect'];
+const RETIRED_SETTINGS = [
+    'posts_per_page' => 'None. Lamb uses 10 posts per page.',
+    '404_fallback' => 'Add a `[redirections]` entry for each old address you still want to forward.',
+    'preconnect' => 'None. Lamb adds preconnect hints for the sites your posts load images and video from.',
+    'micropub_debug' => 'Set the `LAMB_MICROPUB_DEBUG` environment variable.',
+    'experimental_features' => 'Pass `--experimental` to `bin/lamb import <source> <path>`.',
+];
 
 /**
  * Returns true when the named config key holds a section rather than a value.
@@ -488,8 +511,7 @@ function shape_warnings(string $ini_text): array
             continue;
         }
 
-        $is_empty_retired_section = $value === [] && in_array((string) $key, RETIRED_SECTIONS, true);
-        if (!$expects_section && is_array($value) && !$is_empty_retired_section) {
+        if (!$expects_section && is_array($value)) {
             $warnings[] = "`[{$key}]` is not a section Lamb reads, so it was ignored. "
                 . 'A single-value setting is written as `name = value`, above the first section.';
             continue;
@@ -508,6 +530,54 @@ function shape_warnings(string $ini_text): array
     }
 
     return $warnings;
+}
+
+/**
+ * Reports the removed settings the stored INI still uses, and what replaces them.
+ *
+ * The settings form drops every RETIRED_SETTINGS key on save, so this reports
+ * each one once, on the save that drops it. It is given the stored INI because
+ * the submitted one no longer has them. Only a setting that changed something is
+ * reported: the INI seeded before 0.17 holds `posts_per_page = 10`,
+ * `experimental_features = false` and an empty `[preconnect]`, so every install
+ * has those and a notice would greet authors who never set them.
+ *
+ * @param string $stored_ini The INI text stored before the save.
+ * @return list<string> Human-readable notices, empty when no removed setting was in use.
+ */
+function removed_setting_warnings(string $stored_ini): array
+{
+    $warnings = [];
+    foreach (parse_ini_safe($stored_ini) as $key => $value) {
+        if (!isset(RETIRED_SETTINGS[$key]) || !removed_setting_in_use((string) $key, $value)) {
+            continue;
+        }
+        $name = is_array($value) ? "[{$key}]" : (string) $key;
+        $warnings[] = "`{$name}` was removed, so saving the settings dropped it. Replacement: " . RETIRED_SETTINGS[$key];
+    }
+
+    return $warnings;
+}
+
+/**
+ * Whether a removed setting's stored value changed anything while Lamb read it.
+ *
+ * @param string $key   A RETIRED_SETTINGS key.
+ * @param mixed  $value The value parse_ini_safe() returned for it.
+ * @return bool False for an empty section or a value that matches the default.
+ */
+function removed_setting_in_use(string $key, mixed $value): bool
+{
+    if (is_array($value)) {
+        return $value !== [];
+    }
+    $text = trim((string) $value);
+
+    return match ($key) {
+        'posts_per_page' => $text !== '' && $text !== '10',
+        'micropub_debug', 'experimental_features' => filter_var($text, FILTER_VALIDATE_BOOLEAN),
+        default => $text !== '',
+    };
 }
 
 /**
@@ -587,7 +657,7 @@ const SETTINGS_FORM_SECTIONS = [
  * they are rebuilt from the post. Every other key and section in the current
  * INI (an author's own keys) is carried over unchanged, so
  * saving the form cannot drop a setting it does not show, except the
- * RETIRED_SECTIONS, which no setting reads. Comments in the
+ * RETIRED_SETTINGS, which nothing reads any more. Comments in the
  * current INI are not kept. An empty text field is left out so the default
  * applies; an owned section is always written, because an absent `[menu_items]`
  * brings back the default menu while an empty one means no menu.
@@ -617,7 +687,7 @@ function form_to_ini(array $post, string $current_ini): string
 
     $owned = [...SETTINGS_FORM_FIELDS, 'feeds_draft', ...SETTINGS_FORM_SECTIONS];
     foreach (parse_ini_safe($current_ini) as $key => $value) {
-        if (in_array((string) $key, [...$owned, ...RETIRED_SECTIONS], true)) {
+        if (in_array((string) $key, $owned, true) || isset(RETIRED_SETTINGS[$key])) {
             continue;
         }
         if (is_array($value)) {

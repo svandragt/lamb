@@ -1,5 +1,6 @@
 <?php
 
+use function Lamb\Config\author_name;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\page_title;
@@ -19,8 +20,8 @@ global $template;
 <html lang="en-GB">
 <head>
     <meta charset="utf-8">
-    <?php if (!empty($config['author_name'])) : ?>
-    <meta name="author" content="<?= escape($config['author_name']) ?>">
+    <?php if (author_name($config) !== '') : ?>
+    <meta name="author" content="<?= escape(author_name($config)) ?>">
     <?php endif; ?>
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">

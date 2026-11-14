@@ -306,9 +306,12 @@ function render_atom_feed(array $data, array $config): void
         $hub->addAttribute('href', $websub_hub);
     }
 
-    $author = $xml->addChild('author');
-    $author->addChild('name', \Lamb\Theme\escape_xml(($config['author_name'] ?? '') ?: $config['site_title']));
-    $author->addChild('uri', ROOT_URL);
+    $author_name = \Lamb\Config\author_name($config) ?: trim((string) ($config['site_title'] ?? ''));
+    if ($author_name !== '') {
+        $author = $xml->addChild('author');
+        $author->addChild('name', \Lamb\Theme\escape_xml($author_name));
+        $author->addChild('uri', ROOT_URL);
+    }
 
     foreach ($data['posts'] as $bean) {
         $entry = $xml->addChild('entry');
@@ -378,7 +381,7 @@ function render_json_feed(array $data, array $config): void
         'feed_url'      => $channel_link,
         'authors'       => [
             array_filter([
-                'name' => $config['author_name'] ?? '',
+                'name' => \Lamb\Config\author_name($config),
                 'url'  => ROOT_URL,
             ]),
         ],

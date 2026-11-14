@@ -341,6 +341,28 @@ class FeedTemplateTest extends TestCase
     }
 
     /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedTreatsAWhitespaceOnlyAuthorNameAsUnset(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => '   ']);
+
+        $this->assertSame('Test Blog', (string) $xml->author->name);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedLeavesOutTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => ' ', 'site_title' => ' ']);
+
+        $this->assertCount(0, $xml->author);
+    }
+
+    /**
      * @param array $fields        Post bean fields.
      * @param array $conventionFiles Names of web-root convention files to create (e.g. favicon.png).
      * @param array $extraConfig   Extra config keys merged into $config; a null value removes the key.

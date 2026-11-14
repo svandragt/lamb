@@ -52,7 +52,7 @@ class Acceptance extends Module
      * Asserts the settings INI the server has stored contains the text, read from a copy of the database.
      *
      * A save through the settings form rewrites the INI, so a test that checks what
-     * it kept (an unknown key, a deprecated one) has to look at the stored text itself.
+     * it kept (an unknown key) or dropped (a removed one) has to look at the stored text itself.
      */
     public function seeStoredSettingsContain(string $needle): void
     {
@@ -60,6 +60,19 @@ class Acceptance extends Module
             fn (\PDO $pdo) => $pdo->query('SELECT value FROM "option" WHERE name = \'site_config_ini\'')->fetchColumn()
         );
         $this->assertStringContainsString($needle, $ini);
+    }
+
+    /**
+     * Asserts the settings INI the server has stored does not contain the text.
+     *
+     * @param string $needle The text that must be absent.
+     */
+    public function dontSeeStoredSettingsContain(string $needle): void
+    {
+        $ini = (string) $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query('SELECT value FROM "option" WHERE name = \'site_config_ini\'')->fetchColumn()
+        );
+        $this->assertStringNotContainsString($needle, $ini);
     }
 
     /**

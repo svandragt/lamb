@@ -139,6 +139,18 @@ class FeedJsonTemplateTest extends TestCase
      * @runInSeparateProcess
      * @preserveGlobalState disabled
      */
+    public function testFeedJsonTreatsAWhitespaceOnlyAuthorNameAsUnset(): void
+    {
+        $json = $this->renderJsonFeedWithPost(['title' => 'Hello'], ['author_name' => '   ']);
+
+        $this->assertArrayNotHasKey('name', $json['authors'][0]);
+        $this->assertSame('http://localhost', $json['authors'][0]['url']);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
     public function testFeedJsonAbsolutisesRootRelativeImageUrls(): void
     {
         // Same syndication concern as the Atom feed: content_html must carry

@@ -47,4 +47,17 @@ class AuthorMetaCest
         $I->amOnPage('/');
         $I->dontSeeElement('meta[name=author]');
     }
+
+    /**
+     * @dataProvider themeProvider
+     * @group seeds-db
+     */
+    public function authorMetaIsLeftOutWhenTheAuthorNameIsOnlyWhitespace(AcceptanceTester $I, Example $example): void
+    {
+        $I->amOnPage('/');
+        $I->haveStoredSettings('theme = ' . $example['theme'] . "\nauthor_name = \"   \"\n");
+
+        $I->amOnPage('/');
+        $I->dontSeeElement('meta[name=author]');
+    }
 }

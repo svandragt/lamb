@@ -9,7 +9,7 @@ Lamb runs without any configuration. To change it, log in and open `/settings`. 
 
 ## Fieldsets
 
-Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a deprecated setting.
+Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a removed setting that the save dropped.
 
 | Fieldset | Holds |
 |---|---|
@@ -45,7 +45,7 @@ Lamb stores the settings as text in the database. Saving the form rewrites that 
 
 ## Removed settings
 
-Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form removes a leftover `[preconnect]` section.
+Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form removes the ones still in your configuration, and tells you which, once.
 
 | Setting | Replacement |
 |---|---|

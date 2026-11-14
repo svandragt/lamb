@@ -472,4 +472,84 @@ XML;
         $this->assertStringContainsString('[dry-run] migrate_feed_drafts: would add draft: true to 1 feed draft(s)', $process->getOutput());
         $this->assertSame($body, $this->storedPostBody($data_dir, $id));
     }
+
+    /**
+     * Runs PHP against the data dir's database in its own subprocess, for the
+     * same connection-isolation reason as seedPost().
+     *
+     * @param string $code PHP to run once the database is bootstrapped; may echo a result.
+     */
+    private function inDatabase(string $data_dir, string $code, array $env = []): string
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); " . $code,
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + $env + getenv(),
+        );
+        $process->mustRun();
+
+        return $process->getOutput();
+    }
+
+    private function seedGateStamp(string $data_dir): void
+    {
+        $this->inDatabase(
+            $data_dir,
+            '$bean = \RedBeanPHP\R::dispense("option"); $bean->name = "experimental_gate_version"; '
+            . '$bean->value = "1"; \RedBeanPHP\R::store($bean);'
+        );
+    }
+
+    private function gateStampCount(string $data_dir): int
+    {
+        return (int) $this->inDatabase(
+            $data_dir,
+            'echo \RedBeanPHP\R::count("option", " name = ? ", ["experimental_gate_version"]);'
+        );
+    }
+
+    /**
+     * The removed experimental_features gate left an `experimental_gate_version`
+     * row in every database that read config; nothing reads it any more.
+     */
+    public function testMigrateCommandDeletesTheUnusedExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+        $this->assertSame(1, $this->gateStampCount($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('drop_experimental_gate_stamp: deleted 1 unused option row(s)', $process->getOutput());
+        $this->assertSame(0, $this->gateStampCount($data_dir));
+    }
+
+    public function testMigrateDryRunKeepsTheUnusedExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
+        $this->assertSame(1, $this->gateStampCount($data_dir));
+    }
 }

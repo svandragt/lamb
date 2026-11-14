@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 
+use function Lamb\Config\author_name;
 use function Lamb\Config\compose_config;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
@@ -199,5 +200,28 @@ class ConfigTest extends TestCase
         foreach (['posts_per_page', '404_fallback', 'preconnect', 'micropub_debug', 'experimental_features'] as $key) {
             $this->assertStringNotContainsString($key, $text);
         }
+    }
+
+    /**
+     * @dataProvider authorNameProvider
+     */
+    public function testAuthorNameReturnsTheTrimmedNameOrAnEmptyString(array $config, string $expected): void
+    {
+        $this->assertSame($expected, author_name($config));
+    }
+
+    /**
+     * @return array<string, array{array<string, mixed>, string}>
+     */
+    public static function authorNameProvider(): array
+    {
+        return [
+            'set' => [['author_name' => 'Ada Lovelace'], 'Ada Lovelace'],
+            'padded' => [['author_name' => '  Ada  '], 'Ada'],
+            'whitespace only counts as unset' => [['author_name' => " \t "], ''],
+            'empty' => [['author_name' => ''], ''],
+            'null' => [['author_name' => null], ''],
+            'missing' => [[], ''],
+        ];
     }
 }

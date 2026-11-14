@@ -189,8 +189,6 @@ function public_posts_clause(): array
  * and DB query) need the same clamp-then-offset, and build_pagination_meta() needs
  * the same page count to derive prev/next from.
  *
- * A non-positive $per_page is treated as 1 rather than dividing by zero.
- *
  * @param int $total_posts Total number of matching posts.
  * @param int $page        Requested page (1-based).
  * @param int $per_page    Items per page.
@@ -198,8 +196,6 @@ function public_posts_clause(): array
  */
 function pagination_window(int $total_posts, int $page, int $per_page): array
 {
-    // The size is a caller argument, not a setting any more, so only a caller bug can make it non-positive.
-    $per_page    = max(1, $per_page);
     $total_pages = $total_posts > 0 ? (int)ceil($total_posts / $per_page) : 1;
     $page        = min($page, $total_pages);
 
@@ -461,20 +457,17 @@ const POSTS_PER_PAGE = 10;
  * @param string      $order_by_clause SQL ORDER BY expression (DB path only).
  * @param string|null $where_sql       Optional WHERE clause (DB path only).
  * @param array<int, mixed> $params    Bound parameters for the WHERE clause.
- * @param int|null    $per_page        Items per page; falls back to POSTS_PER_PAGE when null.
  * @param int|null    $page            Current page; falls back to $_GET['page'] when null.
  * @return array{items: array<int, mixed>, pagination: array<string, mixed>}
  */
-function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $per_page = null, ?int $page = null): array
+function paginate_posts(mixed $source, string $order_by_clause = 'created DESC', ?string $where_sql = null, array $params = [], ?int $page = null): array
 {
-    $per_page ??= POSTS_PER_PAGE;
-
     // Explicit $page avoids the superglobal; fall back to $_GET only when not provided.
     $page = $page ?? max(1, (int)($_GET['page'] ?? 1));
 
     if (is_array($source)) {
-        return paginate_array(array_values($source), $page, $per_page);
+        return paginate_array(array_values($source), $page, POSTS_PER_PAGE);
     }
 
-    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page, $per_page);
+    return paginate_db((string)$source, $order_by_clause, $where_sql, $params, $page, POSTS_PER_PAGE);
 }

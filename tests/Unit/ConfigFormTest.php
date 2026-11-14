@@ -10,10 +10,13 @@ use function Lamb\Config\form_to_ini;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\parse_section_text;
+use function Lamb\Config\removed_setting_warnings;
 use function Lamb\Config\settings_form_errors;
 use function Lamb\Config\shape_warnings;
 use function Lamb\Config\write_ini;
 use function Lamb\Response\respond_settings;
+
+use const Lamb\Config\RETIRED_SETTINGS;
 
 /**
  * The /settings form posts fields instead of INI text. form_to_ini() turns
@@ -172,17 +175,16 @@ class ConfigFormTest extends TestCase
 
     // form_to_ini: carry-over
 
-    public function testFormToIniCarriesOverRemovedAndUnknownKeys(): void
+    public function testFormToIniDropsEveryRemovedSettingAndCarriesOverUnknownKeys(): void
     {
         $current = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
             . "experimental_features = true\nmystery_key = kept\ntheme = 2024\n";
 
         $parsed = parse_ini_safe(form_to_ini($this->post(['theme' => '2026']), $current));
 
-        $this->assertSame('5', $parsed['posts_per_page']);
-        $this->assertSame('https://old.example', $parsed['404_fallback']);
-        $this->assertSame('true', $parsed['micropub_debug']);
-        $this->assertSame('true', $parsed['experimental_features']);
+        foreach (['posts_per_page', '404_fallback', 'micropub_debug', 'experimental_features'] as $key) {
+            $this->assertArrayNotHasKey($key, $parsed);
+        }
         $this->assertSame('kept', $parsed['mystery_key']);
         $this->assertSame('2026', $parsed['theme']);
     }
@@ -500,12 +502,6 @@ class ConfigFormTest extends TestCase
         ];
     }
 
-    public function testShapeWarningsIsSilentAboutTheEmptyPreconnectSectionOldInstallsStore(): void
-    {
-        // Every install seeded before 0.17 stores this empty section.
-        $this->assertSame([], shape_warnings("[preconnect]\n\n[me]\n"));
-    }
-
     public function testShapeWarningsStillWarnsAboutAnEmptySectionThatShadowsASingleValueSetting(): void
     {
         // `[site_title]` with no keys drops the title: it is not a retired section.
@@ -515,13 +511,47 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('`[site_title]` is not a section Lamb reads', $warnings[0]);
     }
 
-    public function testShapeWarningsNamesARemovedPreconnectSectionThatStillHoldsEntries(): void
+    /**
+     * @dataProvider removedSettingInUseProvider
+     */
+    public function testRemovedSettingWarningsNameASettingInUseAndItsReplacement(string $ini, string $named, string $replacement): void
     {
-        $warnings = shape_warnings("[preconnect]\nfonts = https://fonts.googleapis.com\n");
+        $warnings = removed_setting_warnings($ini);
 
         $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('`[preconnect]` is not a section Lamb reads', $warnings[0]);
-        $this->assertStringNotContainsString('preconnect = ', $warnings[0]);
+        $this->assertStringContainsString($named, $warnings[0]);
+        $this->assertStringContainsString($replacement, $warnings[0]);
+    }
+
+    /**
+     * @return array<string, array{string, string, string}>
+     */
+    public static function removedSettingInUseProvider(): array
+    {
+        return [
+            'posts_per_page' => ["posts_per_page = 5\n", '`posts_per_page`', 'Lamb uses 10 posts per page.'],
+            '404_fallback' => ["404_fallback = https://old.example\n", '`404_fallback`', '`[redirections]` entry'],
+            'preconnect' => ["[preconnect]\nfonts = https://fonts.googleapis.com\n", '`[preconnect]`', 'adds preconnect hints'],
+            'micropub_debug' => ["micropub_debug = true\n", '`micropub_debug`', '`LAMB_MICROPUB_DEBUG`'],
+            'experimental_features' => ["experimental_features = true\n", '`experimental_features`', '`--experimental`'],
+        ];
+    }
+
+    public function testRemovedSettingWarningsAreSilentAboutTheValuesEarlierVersionsSeeded(): void
+    {
+        // Every install seeded before 0.17 stores these, whether or not the author set them.
+        $seeded = "posts_per_page = 10\nexperimental_features = false\nmicropub_debug = false\n[preconnect]\n\n[me]\n";
+
+        $this->assertSame([], removed_setting_warnings($seeded));
+    }
+
+    public function testRemovedSettingsReplacementsMatchTheSiteConfigurationDocs(): void
+    {
+        $docs = (string) file_get_contents(dirname(__DIR__, 2) . '/docs/site-configuration.md');
+
+        foreach (RETIRED_SETTINGS as $replacement) {
+            $this->assertStringContainsString("| {$replacement} |", $docs);
+        }
     }
 
     // respond_settings
@@ -545,31 +575,37 @@ class ConfigFormTest extends TestCase
         $this->assertStringContainsString('Author name', implode("\n", $_SESSION['flash']));
     }
 
-    public function testRespondSettingsSavesAFormPostAndKeepsRemovedSettingsQuietly(): void
+    public function testRespondSettingsSavesAFormPostAndKeepsUnknownSettingsQuietly(): void
     {
         $result = $this->runSettingsPost(
             $this->post(['menu_items' => 'Home = /', 'feeds_draft' => '1']),
-            "posts_per_page = 5\nmystery = kept\n"
+            "posts_per_page = 10\nmystery = kept\n[preconnect]\n\n[me]\n"
         );
 
         $parsed = parse_ini_safe($result['ini']);
         $this->assertSame('My Blog', $parsed['site_title']);
         $this->assertSame(['Home' => '/'], $parsed['menu_items']);
-        $this->assertSame('5', $parsed['posts_per_page']);
         $this->assertSame('kept', $parsed['mystery']);
-        $this->assertNotContains('Settings saved successfully.', $result['flash']);
-        $this->assertStringNotContainsString('posts_per_page', implode("\n", $result['flash']));
+        $this->assertSame([], $result['flash']);
     }
 
-    public function testRespondSettingsSaveClearsARemovedPreconnectSectionWithoutWarning(): void
+    public function testRespondSettingsSaveRemovesEachRemovedSettingAndSaysSoOnce(): void
     {
-        $result = $this->runSettingsPost(
-            $this->post(['menu_items' => 'Home = /']),
-            "[preconnect]\nfonts = https://fonts.googleapis.com\n"
-        );
+        $stored = "posts_per_page = 5\n404_fallback = https://old.example\nmicropub_debug = true\n"
+            . "experimental_features = true\n\n[preconnect]\nfonts = https://fonts.googleapis.com\n";
 
-        $this->assertArrayNotHasKey('preconnect', parse_ini_safe($result['ini']));
-        $this->assertStringNotContainsString('preconnect', implode("\n", $result['flash']));
+        $first = $this->runSettingsPost($this->post(['menu_items' => 'Home = /']), $stored);
+
+        $parsed = parse_ini_safe($first['ini']);
+        foreach (['posts_per_page', '404_fallback', 'micropub_debug', 'experimental_features', 'preconnect'] as $key) {
+            $this->assertArrayNotHasKey($key, $parsed);
+        }
+        $this->assertCount(5, $first['flash']);
+        $this->assertStringContainsString('`[preconnect]`', implode("\n", $first['flash']));
+
+        $second = $this->runSettingsPost($this->post(['menu_items' => 'Home = /']), $first['ini']);
+
+        $this->assertSame([], $second['flash']);
     }
 
     public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void
