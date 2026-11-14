@@ -37,7 +37,7 @@ class EmptyListMessageTest extends TestCase
         $template = 'search';
 
         ob_start();
-        \Lamb\Theme\render_post_list(false);
+        \Lamb\Theme\render_post_list();
         return (string) ob_get_clean();
     }
 

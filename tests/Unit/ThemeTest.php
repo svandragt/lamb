@@ -503,37 +503,6 @@ class ThemeTest extends TestCase
         }
     }
 
-    // The 2024 theme was removed in 0.17; a site that still names it gets 2026.
-    public function testResolveThemeRendersTheRemoved2024ThemeAs2026(): void
-    {
-        $dir     = $this->themesDir() . '/2026';
-        $created = !is_dir($dir);
-        if ($created) {
-            mkdir($dir, 0777, true);
-        }
-
-        try {
-            $this->assertSame('2026', resolve_theme('2024'));
-        } finally {
-            if ($created) {
-                rmdir($dir);
-            }
-        }
-    }
-
-    // A site that adds its own src/themes/2024 keeps it.
-    public function testResolveThemeKeepsA2024ThemeTheSiteInstalledItself(): void
-    {
-        $dir = $this->themesDir() . '/2024';
-        mkdir($dir, 0777, true);
-
-        try {
-            $this->assertSame('2024', resolve_theme('2024'));
-        } finally {
-            rmdir($dir);
-        }
-    }
-
     public function testResolveThemeFallsBackWhenConfiguredThemeHasNoDirectory(): void
     {
         $this->ensureRootDir();

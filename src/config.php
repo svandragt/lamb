@@ -194,13 +194,6 @@ const IDENTITY_FALLBACK = [
 ];
 
 /**
- * Themes that no longer ship, each mapped to the theme that renders in its place.
- *
- * Read by retired_theme_replacement().
- */
-const RETIRED_THEMES = ['2024' => '2026'];
-
-/**
  * The config keys written as `[section]` blocks of `label = value` entries.
  *
  * Everything else is a single-value setting. This is the shape schema
@@ -453,6 +446,24 @@ function reset_stale_experimental_flag(string $ini_text): string
 }
 
 /**
+ * Rewrites a stored `theme = 2024` to `theme = 2026`, because the 2024 theme no
+ * longer ships and a stored name without a directory renders as the base theme.
+ *
+ * Idempotent: once rewritten, the INI no longer names 2024.
+ *
+ * @param string $ini_text The raw INI configuration text.
+ * @return string The INI text, with `theme` set to 2026 when it was 2024.
+ */
+function migrate_removed_theme(string $ini_text): string
+{
+    if ((parse_ini_safe($ini_text)['theme'] ?? null) !== '2024') {
+        return $ini_text;
+    }
+
+    return (string) preg_replace('/^(\h*theme\h*=).*$/m', '${1} 2026', $ini_text, 1);
+}
+
+/**
  * Retrieves the raw INI text from the database or bootstraps it if not present.
  *
  * @return string The raw INI configuration text.
@@ -463,7 +474,7 @@ function get_ini_text(): string
     if ($option->id > 0) {
         // Force a re-opt-in to the experimental-features gate whenever the
         // set of features it covers has changed since this install last saw it.
-        $ini_text = reset_stale_experimental_flag($option->value);
+        $ini_text = migrate_removed_theme(reset_stale_experimental_flag($option->value));
         if ($ini_text !== $option->value) {
             save_ini_text($ini_text);
         }
@@ -653,54 +664,7 @@ function deprecation_warnings(string $ini_text): array
         $warnings[] = $notice('experimental_features', 'Use `bin/lamb import --experimental` instead.');
     }
 
-    $retired_theme = retired_theme_warning($ini_text);
-    if ($retired_theme !== null) {
-        $warnings[] = $retired_theme;
-    }
-
     return $warnings;
-}
-
-/**
- * Returns the theme that renders in place of a retired one, or null when $name is not retired.
- *
- * A site that added its own directory under `src/themes/` with a retired name
- * keeps it, so that directory also returns null.
- *
- * @param string $name The configured theme name.
- * @return string|null The replacement theme, or null when $name renders as itself.
- */
-function retired_theme_replacement(string $name): ?string
-{
-    $replacement = RETIRED_THEMES[$name] ?? null;
-    if ($replacement === null || (defined('ROOT_DIR') && is_dir(ROOT_DIR . '/themes/' . $name))) {
-        return null;
-    }
-
-    return $replacement;
-}
-
-/**
- * Warns when the stored `theme` names a theme that no longer ships, or null when it does not.
- *
- * Theme\resolve_theme() renders the replacement, so the site keeps working. The
- * settings form then shows the replacement as selected, and saving writes it, so
- * this notice only appears until the author saves.
- *
- * @param string $ini_text The raw INI text.
- * @return string|null The warning, or null when the theme is not retired.
- */
-function retired_theme_warning(string $ini_text): ?string
-{
-    $theme = parse_ini_safe($ini_text)['theme'] ?? null;
-    $theme = is_scalar($theme) ? trim((string) $theme) : '';
-    $replacement = retired_theme_replacement($theme);
-    if ($replacement === null) {
-        return null;
-    }
-
-    return "The `{$theme}` theme was removed in 0.17. Lamb renders your site with the `{$replacement}` theme "
-        . "instead. Save the settings to keep `{$replacement}`.";
 }
 
 /**

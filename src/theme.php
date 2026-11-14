@@ -16,7 +16,6 @@ use RuntimeException;
 
 use function Lamb\get_tags;
 use function Lamb\Config\is_menu_item;
-use function Lamb\Config\retired_theme_replacement;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
@@ -435,13 +434,12 @@ function is_hidden_menu_item(?string $template, OODBBean $bean): bool
  * Renders the post-list loop used by the 2026 theme's _items.php.
  *
  * Wraps the posts in <ul>/<li> when there is more than one, skips menu pages
- * outside their own permalink, and prints each post as an h-entry. $hide_author
- * controls whether the per-post author is shown inline or kept screen-reader-only.
+ * outside their own permalink, and prints each post as an h-entry with the
+ * per-post author kept screen-reader-only.
  *
- * @param bool $hide_author Hide the per-post author visually instead of showing it inline.
  * @return void
  */
-function render_post_list(bool $hide_author): void
+function render_post_list(): void
 {
     global $data;
     global $template;
@@ -488,9 +486,7 @@ function render_post_list(bool $hide_author): void
                     <h2><?= $template !== 'status' ? title_link($bean) : '<span class="p-name">' . escape($bean->title) . '</span>' ?></h2>
                 <?php endif; ?>
                 <div class="meta">
-                    <?= ($hide_author
-                        ? '<span itemprop="author" class="screen-reader-text">' . author_card() . '</span>'
-                        : '<span itemprop="author">' . author_card() . '</span> @') . "\n" ?>
+                    <span itemprop="author" class="screen-reader-text"><?= author_card() ?></span>
                     <?= date_created($bean) ?>
                 </div>
             </header>
@@ -617,8 +613,6 @@ function sanitize_filename($filename): string
  * pre-#289 name (`default`, before `src/themes/default` was renamed to
  * `src/themes/base`) without needing to know that name specifically.
  *
- * A removed theme (`2024`) resolves to its replacement unless the site has its own directory of that name.
- *
  * sanitize_filename() runs first and is what closes the path-traversal and
  * stored-XSS surface (see src/index.php) — this function only adds the
  * existence check on top of it.
@@ -630,7 +624,6 @@ function sanitize_filename($filename): string
 function resolve_theme(mixed $configured, string $fallback = 'base'): string
 {
     $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
-    $name = retired_theme_replacement($name) ?? $name;
 
     return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
 }

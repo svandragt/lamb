@@ -596,15 +596,6 @@ function respond_settings(): array
         'redirects' => \Lamb\get_all_redirects(),
     ];
 
-    // A save replaces a retired theme with its replacement, so the notice has to be on the page view.
-    // GET only: a HEAD request renders the page without a body and would use the notice up.
-    if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        $retired_theme = Config\retired_theme_warning($data['ini_text']);
-        if ($retired_theme !== null) {
-            $_SESSION['flash'][] = $retired_theme;
-        }
-    }
-
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         Security\require_csrf();
 

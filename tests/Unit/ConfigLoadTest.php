@@ -91,6 +91,29 @@ class ConfigLoadTest extends TestCase
         $this->assertSame($text, get_ini_text());
     }
 
+    public function testGetIniTextRewritesAStoredRemovedThemeToItsReplacementAndSavesIt(): void
+    {
+        save_ini_text("site_title = Example\ntheme = 2024\n[menu_items]\nAbout = about\n");
+
+        $parsed = parse_ini_string(get_ini_text(), true, INI_SCANNER_RAW);
+
+        $this->assertSame('2026', $parsed['theme']);
+        $this->assertSame('Example', $parsed['site_title']);
+        $this->assertSame('about', $parsed['menu_items']['About']);
+        $stored = R::getCell("SELECT value FROM option WHERE name = 'site_config_ini'");
+        $this->assertSame('2026', parse_ini_string($stored, true, INI_SCANNER_RAW)['theme']);
+    }
+
+    public function testGetIniTextLeavesOtherStoredThemesAlone(): void
+    {
+        foreach (["theme = base\n", "theme = 2026\n", "theme = 20240\n", ";theme = 2024\n"] as $ini) {
+            R::exec("DELETE FROM option WHERE name = 'experimental_gate_version'");
+            save_ini_text($ini);
+
+            $this->assertSame($ini, get_ini_text());
+        }
+    }
+
     // reset_stale_experimental_flag
 
     public function testResetStaleExperimentalFlagRewritesTrueToFalseWhenStampBehind(): void

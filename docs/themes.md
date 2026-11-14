@@ -12,7 +12,7 @@ I'm not a designer.
 * _2026_ is a worklog-style theme: light, warm-tinted, deep-amber accent, mono headings on a humanist sans body. Designed for a calm, attention-respecting personal microblog. **New installs use this theme by default.**
 * _Base_ is a traditional blog theme. It also acts as the fallback theme: any file an active theme does not provide is loaded from here.
 
-Existing sites keep whatever theme they already use; only fresh installs start on `2026`. The `2024` theme was removed in 0.17: a site that still has `theme = 2024` renders with `2026`, and `/settings` shows a notice until you save.
+Existing sites keep whatever theme they already use; only fresh installs start on `2026`. The `2024` theme was removed in 0.17: a site that still has `theme = 2024` now uses `2026`.
 
 To switch between themes, choose it in the **Theme** field at `/settings`.
 
