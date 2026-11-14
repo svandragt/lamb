@@ -73,11 +73,19 @@ class MakePasswordTest extends TestCase
      */
     public function testDefaultTestPortDependsOnTheCheckoutDirectory(): void
     {
-        $other = $this->workspace . '/other-worktree';
+        // Fixed paths, not the random workspace: two random paths can hash to
+        // the same port, which the script accepts.
+        $root = sys_get_temp_dir() . '/lamb-make-password-port-test';
+        (new Process(['rm', '-rf', $root]))->mustRun();
+        $one   = $root . '/worktree-one';
+        $other = $root . '/worktree-two';
+        mkdir($one, 0777, true);
         mkdir($other);
 
-        $first = $this->runScript(['PWD' => $this->workspace, 'LAMB_TEST_PORT' => false]);
-        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $other, ['PWD' => $other, 'LAMB_TEST_PORT' => false]))->mustRun();
+        $env = ['LAMB_TEST_PORT' => false];
+        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $one, $env + ['PWD' => $one]))->mustRun();
+        (new Process(['php', codecept_root_dir('make-password.php'), 'hackme'], $other, $env + ['PWD' => $other]))->mustRun();
+        $first  = (string)file_get_contents($one . '/.env');
         $second = (string)file_get_contents($other . '/.env');
 
         preg_match("/LAMB_TEST_PORT='(\\d+)'/", $first, $a);
@@ -90,6 +98,7 @@ class MakePasswordTest extends TestCase
             $this->assertLessThan(9748, $port);
         }
         $this->assertStringContainsString("SITE_URL='http://0.0.0.0:{$a[1]}'", $first);
+        (new Process(['rm', '-rf', $root]))->run();
     }
 
     public function testWeakPasswordWarnsOnStderr(): void

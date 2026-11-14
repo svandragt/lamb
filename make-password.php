@@ -41,7 +41,8 @@ $hash = base64_encode(password_hash($password, PASSWORD_DEFAULT));
 // One port per checkout, so acceptance runs in parallel worktrees don't share a
 // server, and none of them kills the dev server on 8747.
 // shortcut: 1000 ports, so two of five worktrees collide about 1% of the time; set LAMB_TEST_PORT if they do.
-$test_port = $_ENV['LAMB_TEST_PORT'] ?? (string)(8748 + crc32((string)getcwd()) % 1000);
+// abs(): crc32() is negative on 32-bit PHP.
+$test_port = $_ENV['LAMB_TEST_PORT'] ?? (string)(8748 + abs(crc32((string)getcwd()) % 1000));
 $site_url  = $_ENV['DDEV_PRIMARY_URL'] ?? "http://0.0.0.0:{$test_port}";
 if (($_ENV['PWD'] ?? '') === '/srv/app') {
     // Inside the Docker dev container FrankenPHP serves the site locally.
