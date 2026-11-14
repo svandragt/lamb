@@ -541,6 +541,21 @@ class ConfigFormTest extends TestCase
         $this->assertSame([], deprecation_warnings("theme = base\n"));
     }
 
+    public function testDeprecationWarningsStaysQuietWhenTheSiteInstalledItsOwn2024Theme(): void
+    {
+        if (!defined('ROOT_DIR')) {
+            define('ROOT_DIR', sys_get_temp_dir() . '/lamb_config_form_test_' . getmypid());
+        }
+        $dir = ROOT_DIR . '/themes/2024';
+        mkdir($dir, 0777, true);
+
+        try {
+            $this->assertSame([], deprecation_warnings("theme = 2024\n"));
+        } finally {
+            rmdir($dir);
+        }
+    }
+
     public function testShapeWarningsIncludesTheDeprecationNotices(): void
     {
         $warnings = shape_warnings("posts_per_page = 5\n[preconnect]\nfonts = https://fonts.googleapis.com\n");

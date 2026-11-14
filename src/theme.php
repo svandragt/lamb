@@ -16,6 +16,7 @@ use RuntimeException;
 
 use function Lamb\get_tags;
 use function Lamb\Config\is_menu_item;
+use function Lamb\Config\retired_theme_replacement;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\get_feeds;
 use function Lamb\permalink;
@@ -23,8 +24,6 @@ use function Lamb\permalink_path;
 use function Lamb\Post\body_has_tag;
 use function Lamb\Post\get_tag_search_conditions;
 use function Lamb\Response\public_posts_clause;
-
-use const Lamb\Config\RETIRED_THEMES;
 
 /**
  * Returns true when the user is authenticated and the bean has an ID.
@@ -618,7 +617,7 @@ function sanitize_filename($filename): string
  * pre-#289 name (`default`, before `src/themes/default` was renamed to
  * `src/themes/base`) without needing to know that name specifically.
  *
- * A theme in RETIRED_THEMES (the removed `2024`) resolves to its replacement.
+ * A removed theme (`2024`) resolves to its replacement unless the site has its own directory of that name.
  *
  * sanitize_filename() runs first and is what closes the path-traversal and
  * stored-XSS surface (see src/index.php) — this function only adds the
@@ -631,7 +630,7 @@ function sanitize_filename($filename): string
 function resolve_theme(mixed $configured, string $fallback = 'base'): string
 {
     $name = is_scalar($configured) ? sanitize_filename((string) $configured) : '';
-    $name = RETIRED_THEMES[$name] ?? $name;
+    $name = retired_theme_replacement($name) ?? $name;
 
     return $name !== '' && is_dir(ROOT_DIR . '/themes/' . $name) ? $name : $fallback;
 }

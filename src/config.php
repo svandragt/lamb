@@ -196,7 +196,7 @@ const IDENTITY_FALLBACK = [
 /**
  * Themes that no longer ship, each mapped to the theme that renders in its place.
  *
- * Read by Theme\resolve_theme() and retired_theme_warning().
+ * Read by retired_theme_replacement().
  */
 const RETIRED_THEMES = ['2024' => '2026'];
 
@@ -662,6 +662,25 @@ function deprecation_warnings(string $ini_text): array
 }
 
 /**
+ * Returns the theme that renders in place of a retired one, or null when $name is not retired.
+ *
+ * A site that added its own directory under `src/themes/` with a retired name
+ * keeps it, so that directory also returns null.
+ *
+ * @param string $name The configured theme name.
+ * @return string|null The replacement theme, or null when $name renders as itself.
+ */
+function retired_theme_replacement(string $name): ?string
+{
+    $replacement = RETIRED_THEMES[$name] ?? null;
+    if ($replacement === null || (defined('ROOT_DIR') && is_dir(ROOT_DIR . '/themes/' . $name))) {
+        return null;
+    }
+
+    return $replacement;
+}
+
+/**
  * Warns when the stored `theme` names a theme that no longer ships, or null when it does not.
  *
  * Theme\resolve_theme() renders the replacement, so the site keeps working. The
@@ -674,7 +693,8 @@ function deprecation_warnings(string $ini_text): array
 function retired_theme_warning(string $ini_text): ?string
 {
     $theme = parse_ini_safe($ini_text)['theme'] ?? null;
-    $replacement = is_scalar($theme) ? (RETIRED_THEMES[trim((string) $theme)] ?? null) : null;
+    $theme = is_scalar($theme) ? trim((string) $theme) : '';
+    $replacement = retired_theme_replacement($theme);
     if ($replacement === null) {
         return null;
     }
