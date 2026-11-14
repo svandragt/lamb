@@ -85,6 +85,19 @@ class FeedDraftMigrationTest extends TestCase
         $this->assertSame(1, substr_count($migrated, 'draft:'));
     }
 
+    public function testASecondRunCountsNothingForAFeedDraftWithBrokenFrontMatter(): void
+    {
+        // parse_matter() reads invalid YAML as no front matter, so the draft flag
+        // written on the first run is not seen on the second.
+        $id = $this->seed("---\ntitle: a: b\n---\n\nFeed content");
+
+        $this->assertSame(1, migrate_feed_drafts());
+        $migrated = $this->body($id);
+
+        $this->assertSame(0, migrate_feed_drafts());
+        $this->assertSame($migrated, $this->body($id));
+    }
+
     public function testDryRunCountsTheDraftsButWritesNothing(): void
     {
         $body = "---\ntitle: Hello feed\n---\n\nFeed content";

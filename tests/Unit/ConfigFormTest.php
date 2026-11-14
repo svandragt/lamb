@@ -627,7 +627,7 @@ class ConfigFormTest extends TestCase
         $this->assertSame(['Home' => '/'], $parsed['menu_items']);
         $this->assertSame('5', $parsed['posts_per_page']);
         $this->assertSame('kept', $parsed['mystery']);
-        $this->assertContains('Settings saved successfully.', $result['flash']);
+        $this->assertNotContains('Settings saved successfully.', $result['flash']);
         $this->assertStringContainsString('posts_per_page', implode("\n", $result['flash']));
     }
 
@@ -639,7 +639,6 @@ class ConfigFormTest extends TestCase
 
         $this->assertSame($broken, $result['ini']);
         $this->assertStringContainsString("can't be read", implode("\n", $result['flash']));
-        $this->assertNotContains('Settings saved successfully.', $result['flash']);
     }
 
     public function testRespondSettingsRefusesAPostThatCarriesNoFormMarker(): void

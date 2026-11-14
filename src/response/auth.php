@@ -645,7 +645,6 @@ function respond_settings(): array
 
         if ($validation['valid']) {
             Config\save_ini_text($submitted_ini);
-            $_SESSION['flash'][] = "Settings saved successfully.";
             // Syntactically valid INI can still hold a setting in the wrong
             // shape — a `[site_title]` section, a `feeds = <url>` line. Those
             // are ignored on read so they cannot break the site; say so here,

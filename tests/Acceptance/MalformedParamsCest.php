@@ -82,9 +82,18 @@ class MalformedParamsCest
         $I->seeResponseCodeIs(200);
         $I->dontSee('Fatal error');
     }
+
+    /**
+     * @group seeds-db
+     */
     public function anArraySettingsFieldDoesNotWipeTheConfiguration(AcceptanceTester $I)
     {
         $this->login($I);
+        // Seed values that differ from the defaults, or a wipe back to the defaults would pass.
+        $I->haveStoredSettings(
+            "site_title = Seeded title\nsite_url = https://example.com\nauthor_name = Ada\ntheme = base\n"
+            . "\n[menu_items]\nSeeded = /seeded\n"
+        );
         $I->amOnPage('/settings');
         $token = $I->grabAttributeFrom('input[name=csrf]', 'value');
 
@@ -103,7 +112,7 @@ class MalformedParamsCest
 
         $I->amOnPage('/settings');
         $I->seeResponseCodeIs(200);
-        $I->seeInField('site_title', 'My Microblog');
-        $I->seeInField('menu_items', "Home = /\nFeed = /feed");
+        $I->seeInField('site_title', 'Seeded title');
+        $I->seeInField('menu_items', 'Seeded = /seeded');
     }
 }

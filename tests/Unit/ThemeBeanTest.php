@@ -124,6 +124,16 @@ class ThemeBeanTest extends TestCase
         $this->assertStringContainsString('/delete/' . $bean->id, $result);
     }
 
+    public function testActionDeleteButtonHasNoEllipsisBecauseNothingAsksForConfirmation(): void
+    {
+        $bean = R::dispense('post');
+        R::store($bean);
+
+        $_SESSION[SESSION_LOGIN] = true;
+        $result = action_delete($bean);
+        $this->assertStringContainsString('value="Delete"', $result);
+    }
+
     // action_edit
 
     public function testActionEditReturnsEmptyWhenNotLoggedIn(): void

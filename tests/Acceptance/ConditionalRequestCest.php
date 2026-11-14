@@ -89,7 +89,7 @@ class ConditionalRequestCest
         $I->fillField('site_url', 'http://localhost');
         $I->fillField('author_name', 'Test Author');
         $I->click('Save settings');
-        $I->see('Settings saved successfully.');
+        $I->seeInField('site_title', 'Changed Title');
         $I->amOnPage('/logout');
 
         // The validator the client held before the edit must no longer match.

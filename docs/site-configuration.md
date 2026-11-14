@@ -9,7 +9,7 @@ Lamb runs without any configuration. To change it, log in and open `/settings`. 
 
 ## Fieldsets
 
-Fields marked "(required)" must be filled before the form saves.
+Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a deprecated setting.
 
 | Fieldset | Holds |
 |---|---|
@@ -45,11 +45,11 @@ Lamb stores the settings as text in the database. Saving the form rewrites that 
 
 ## Deprecated settings
 
-These settings stop working in Lamb 0.17. Saving the form lists the ones your configuration still uses.
+These settings still work in Lamb 0.16 and stop working in Lamb 0.17. Saving the form lists the ones your configuration still uses.
 
 | Setting | Replacement |
 |---|---|
-| `posts_per_page` | None. Lamb uses 10 posts per page. |
+| `posts_per_page` | None. Lamb reads your value until 0.17, then uses 10 posts per page. |
 | `404_fallback` | Add a `[redirections]` entry for each old address you still want to forward. |
 | `[preconnect]` | None. Lamb adds preconnect hints for the sites your posts load images and video from. Sites you listed keep working until 0.17. |
 | `micropub_debug` | Set the `LAMB_MICROPUB_DEBUG` environment variable. |
