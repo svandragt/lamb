@@ -121,7 +121,7 @@ class SettingsFormCest
     /**
      * @group seeds-db
      */
-    public function savingTheFormKeepsUnknownAndDeprecatedSettings(AcceptanceTester $I): void
+    public function savingTheFormDropsRemovedSettingsOnceAndKeepsUnknownOnes(AcceptanceTester $I): void
     {
         $this->login($I);
         $I->haveStoredSettings(
@@ -138,17 +138,20 @@ class SettingsFormCest
         $I->fillField('site_description', 'Saved through the form');
         $I->click('Save settings');
         $I->dontSee('Settings saved successfully.');
-        $I->see('`posts_per_page` is deprecated and will be removed in 0.17');
+        $I->see('`posts_per_page` was removed');
 
-        $I->seeStoredSettingsContain('posts_per_page = 5');
+        $I->dontSeeStoredSettingsContain('posts_per_page');
         $I->seeStoredSettingsContain('mystery_key = kept');
         $I->seeStoredSettingsContain('answer = 42');
         $I->seeStoredSettingsContain('site_description = Saved through the form');
 
-        // The deprecated page size still applies.
+        // The second save has nothing left to report.
+        $I->click('Save settings');
+        $I->dontSee('was removed');
+
+        // The removed page size no longer applies: all six posts fit on the one page of ten.
         $I->amOnPage('/');
-        $I->seeNumberOfElements('article', 5);
-        $I->amOnPage('/page/2');
-        $I->seeNumberOfElements('article', 1);
+        $I->seeNumberOfElements('article', 6);
+        $I->dontSeeElement('nav.pagination a.next');
     }
 }

@@ -19,13 +19,12 @@ use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use Symfony\Component\Yaml\Yaml;
 
+use function Lamb\Config\author_display_name;
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\Network\feed_fetch_due;
 use function Lamb\Post\parse_matter;
 use function Lamb\Post\split_frontmatter;
-
-use const Lamb\Config\IDENTITY_FALLBACK;
 
 /** Slug of the post served as /.well-known/about.md. */
 const ABOUT_SLUG = 'about';
@@ -183,8 +182,7 @@ function vcard_fold(string $line): string
 /**
  * Builds the ContactSpec vCard, or null when no valid author_email is set.
  *
- * The email is the opt-in: without one there is nothing to contact. The
- * placeholder identity a fresh install falls back to counts as unset.
+ * The email is the opt-in: without one there is nothing to contact.
  *
  * @param array<string, mixed> $config
  * @param string               $root_url Site root without trailing slash.
@@ -193,13 +191,10 @@ function vcard_fold(string $line): string
 function contact_vcard(array $config, string $root_url): ?string
 {
     $email = trim((string) ($config['author_email'] ?? ''));
-    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false || $email === IDENTITY_FALLBACK['author_email']) {
+    if (filter_var($email, FILTER_VALIDATE_EMAIL) === false) {
         return null;
     }
-    $name = trim((string) ($config['author_name'] ?? ''));
-    if ($name === '' || $name === IDENTITY_FALLBACK['author_name']) {
-        $name = trim((string) ($config['site_title'] ?? ''));
-    }
+    $name = author_display_name($config);
 
     $lines = ['BEGIN:VCARD', 'VERSION:4.0', 'FN:' . vcard_escape($name), 'EMAIL;PREF=1:' . $email, 'URL:' . rtrim($root_url, '/') . '/'];
     foreach ((array) ($config['me'] ?? []) as $url) {

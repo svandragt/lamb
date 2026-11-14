@@ -477,7 +477,7 @@ function respond_status(array $args): array
     [$id] = $args;
     $bean = R::load('post', (int)$id);
     if (!\Lamb\is_viewable($bean) && !\Lamb\preview_token_valid($bean, request_string($_GET['preview'] ?? null))) {
-        return respond_404([], true);
+        return respond_404([]);
     }
 
     $posts = [$bean];

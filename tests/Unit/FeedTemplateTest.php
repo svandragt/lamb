@@ -327,9 +327,56 @@ class FeedTemplateTest extends TestCase
     }
 
     /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedWithoutAnAuthorNameNamesTheSiteAsTheAuthor(): void
+    {
+        // An old config can lack author_name; the feed used to read the placeholder
+        // Config\compose_config() filled in, which is gone.
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => null]);
+
+        $this->assertSame('Test Blog', (string) $xml->author->name);
+        $this->assertSame('http://localhost', (string) $xml->author->uri);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedTreatsAWhitespaceOnlyAuthorNameAsUnset(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => '   ']);
+
+        $this->assertSame('Test Blog', (string) $xml->author->name);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedKeepsAnAuthorNamedZero(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => '0']);
+
+        $this->assertSame('0', (string) $xml->author->name);
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testFeedNamesTheHostOfTheSiteUrlAsTheAuthorWhenNeitherAnAuthorNameNorASiteTitleIsSet(): void
+    {
+        $xml = $this->renderFeedWithPost(['title' => 'Post'], [], ['author_name' => ' ', 'site_title' => ' ', 'site_url' => 'https://notes.example.com']);
+
+        $this->assertSame('notes.example.com', (string) $xml->author->name);
+    }
+
+    /**
      * @param array $fields        Post bean fields.
      * @param array $conventionFiles Names of web-root convention files to create (e.g. favicon.png).
-     * @param array $extraConfig   Extra config keys merged into $config.
+     * @param array $extraConfig   Extra config keys merged into $config; a null value removes the key.
      */
     /**
      * @runInSeparateProcess
@@ -409,6 +456,7 @@ class FeedTemplateTest extends TestCase
             'author_name'  => 'Test Author',
             'author_email' => 'test@test.com',
         ], $extraConfig);
+        $config = array_filter($config, static fn ($value) => $value !== null);
         $data = [
             'posts'    => [$bean],
             'title'    => 'Test Blog',

@@ -17,8 +17,7 @@
  * --replace     Re-apply every already-imported item over its existing post
  *               instead of skipping it. Local edits made since the import
  *               are lost. For re-running an export after a conversion fix.
- * --experimental  Enable the experimental importers for this run, without
- *               setting experimental_features (deprecated) in Settings.
+ * --experimental  Enable the experimental importers for this run.
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
@@ -29,7 +28,9 @@
  *
  * migrate runs the one-time data migrations that used to run implicitly on
  * every boot (backfill_post_version(), backfill_imported_post_identity(),
- * migrate_feed_watermarks()), the one-time migrate_feed_drafts() (#924), plus
+ * migrate_feed_watermarks()), the one-time migrate_feed_drafts() (#924), the
+ * one-time drop_experimental_gate_stamp() for the removed gate's option row,
+ * a report of the settings 0.17 removed that the stored settings still hold, plus
  * the same post upgrade as upgrade-posts (#814, reusing
  * Response\upgrade_all_posts() rather than duplicating its
  * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
@@ -211,6 +212,19 @@ if ($command === 'migrate') {
     $draft_count = Network\migrate_feed_drafts($dry_run);
     echo "{$prefix}migrate_feed_drafts: $verb draft: true to $draft_count feed draft(s)\n";
 
+    $verb = $dry_run ? 'would delete' : 'deleted';
+    $stamp_count = Bootstrap\drop_experimental_gate_stamp($dry_run);
+    echo "{$prefix}drop_experimental_gate_stamp: $verb $stamp_count unused option row(s)\n";
+
+    // Report only: the settings page is the one place that drops a removed setting.
+    $stored_ini = Config\get_ini_text();
+    if (!Config\validate_ini($stored_ini)['valid']) {
+        echo "{$prefix}check_removed_settings: the stored settings do not parse, so removed settings could not be checked\n";
+    }
+    foreach (Config\removed_settings_in_use($stored_ini) as $setting => $replacement) {
+        echo "{$prefix}check_removed_settings: `$setting` was removed and is ignored; saving the settings page drops it. Replacement: $replacement\n";
+    }
+
     // Must run after backfill_post_version() above: that's what gives a
     // pre-versioning post a `version` at all, so upgrade_all_posts()'s
     // `WHERE version < ?` sees it in the same pass instead of on a second
@@ -251,7 +265,13 @@ $parsed_args = $args_fn($rest);
 $extra = array_slice($parsed_args, 3);
 
 if ($path === null) {
-    fwrite(STDERR, "Usage: bin/lamb import {$source['name']} <path> [--dry-run] [--replace]\n");
+    fwrite(STDERR, "Usage: bin/lamb import {$source['name']} <path> [--dry-run] [--replace] [--experimental]\n");
+    exit(1);
+}
+
+// Before open_data_dir(): a refused import must not create or open the database.
+if (!$experimental) {
+    fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: pass --experimental.\n");
     exit(1);
 }
 
@@ -260,11 +280,6 @@ $data_dir = open_data_dir();
 global $config;
 $config = Config\load();
 Config\apply_timezone($config);
-
-if (!$experimental && !Config\experimental_features_enabled($config)) {
-    fwrite(STDERR, "The {$source['name']} importer is experimental. Enable it first: pass --experimental.\n");
-    exit(1);
-}
 
 try {
     $parsed = ($source['parse'])($path);

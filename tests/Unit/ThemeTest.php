@@ -28,74 +28,13 @@ class ThemeTest extends TestCase
 
     // the_preconnect
 
-    public function testPreconnectOutputsNothingWhenNotConfigured()
-    {
-        global $config;
-        $original = $config;
-        $config['preconnect'] = [];
-
-        ob_start();
-        the_preconnect();
-        $output = ob_get_clean();
-
-        $this->assertSame('', $output);
-        $config = $original;
-    }
-
-    public function testPreconnectOutputsPreconnectAndDnsPrefetchLinks()
-    {
-        global $config;
-        $original = $config;
-        $config['preconnect'] = ['google-fonts' => 'https://fonts.googleapis.com'];
-
-        ob_start();
-        the_preconnect();
-        $output = ob_get_clean();
-
-        $this->assertStringContainsString('<link rel="preconnect" href="https://fonts.googleapis.com">', $output);
-        $this->assertStringContainsString('<link rel="dns-prefetch" href="https://fonts.googleapis.com">', $output);
-        $config = $original;
-    }
-
-    public function testPreconnectOutputsAllConfiguredOrigins()
-    {
-        global $config;
-        $original = $config;
-        $config['preconnect'] = [
-            'fonts' => 'https://fonts.googleapis.com',
-            'static' => 'https://fonts.gstatic.com',
-        ];
-
-        ob_start();
-        the_preconnect();
-        $output = ob_get_clean();
-
-        $this->assertStringContainsString('fonts.googleapis.com', $output);
-        $this->assertStringContainsString('fonts.gstatic.com', $output);
-        $config = $original;
-    }
-
-    public function testPreconnectEscapesOrigins()
-    {
-        global $config;
-        $original = $config;
-        $config['preconnect'] = ['xss' => 'https://example.com"><script>alert(1)</script>'];
-
-        ob_start();
-        the_preconnect();
-        $output = ob_get_clean();
-
-        $this->assertStringNotContainsString('<script>', $output);
-        $config = $original;
-    }
-
     // the_preconnect: origins derived from the posts on the page
 
     /**
      * Renders the_preconnect() for a page showing the given post bodies.
      *
      * @param list<string> $bodies Rendered post HTML, one entry per post on the page; `{ROOT_URL}` stands for the site's own URL.
-     * @param array<string, string> $configured The deprecated [preconnect] setting.
+     * @param array<string, string> $configured The removed [preconnect] setting, set to show it has no effect.
      * @return string The emitted <link> tags.
      */
     private function preconnectFor(array $bodies, array $configured = []): string
@@ -224,30 +163,14 @@ class ThemeTest extends TestCase
         $this->assertSame(3, substr_count($output, 'rel="dns-prefetch"'));
     }
 
-    public function testPreconnectPutsConfiguredOriginsFirstWithoutDuplicates()
+    public function testPreconnectIgnoresTheRemovedPreconnectSetting()
     {
         $output = $this->preconnectFor(
-            ['<img src="https://a.example.net/1.jpg"><img src="https://fonts.example.net/1.jpg">'],
+            ['<img src="https://a.example.net/1.jpg">'],
             ['fonts' => 'https://fonts.example.net']
         );
 
-        $this->assertSame(
-            ['https://fonts.example.net', 'https://a.example.net'],
-            $this->preconnectHrefs($output)
-        );
-    }
-
-    public function testPreconnectCapsConfiguredAndDerivedTogether()
-    {
-        $output = $this->preconnectFor(
-            ['<img src="https://c.example.net/1.jpg">'],
-            ['a' => 'https://a.example.net', 'b' => 'https://b.example.net', 'x' => 'https://x.example.net']
-        );
-
-        $this->assertSame(
-            ['https://a.example.net', 'https://b.example.net', 'https://x.example.net'],
-            $this->preconnectHrefs($output)
-        );
+        $this->assertSame(['https://a.example.net'], $this->preconnectHrefs($output));
     }
 
     public function testPreconnectSkipsPostsHiddenFromTheListing()
@@ -257,7 +180,7 @@ class ThemeTest extends TestCase
             R::setup('sqlite::memory:');
         }
         $original = [$config, $data, $template];
-        $config = ['menu_items' => ['About' => '/about'], 'preconnect' => []];
+        $config = ['menu_items' => ['About' => '/about']];
         $template = 'home';
         $about = R::dispense('post');
         $about->slug = 'about';

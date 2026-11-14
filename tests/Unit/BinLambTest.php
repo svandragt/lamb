@@ -76,12 +76,11 @@ XML;
     }
 
     /**
-     * Seeds a fresh, file-backed data dir with `experimental_features = true`,
-     * mirroring LambRestoreTest's helper of the same purpose: the subprocess
-     * under test bootstraps its own SQLite file, a distinct connection from
-     * this test's in-memory DB.
+     * Seeds a fresh, file-backed data dir with the removed `experimental_features = true`
+     * setting: the subprocess under test bootstraps its own SQLite file, a distinct
+     * connection from this test's in-memory DB.
      */
-    private function enableExperimentalFeaturesInDataDir(string $data_dir): void
+    private function storeRemovedExperimentalFeaturesSetting(string $data_dir): void
     {
         mkdir($data_dir, 0777, true);
         $root = rtrim(codecept_root_dir(), '/');
@@ -100,24 +99,6 @@ XML;
         $setup->mustRun();
     }
 
-    public function testTheDriverRunsAWordpressImportEndToEnd(): void
-    {
-        $wxr = "$this->tmp_dir/export.xml";
-        file_put_contents($wxr, self::SAMPLE_WXR);
-        $data_dir = "$this->tmp_dir/data";
-        $this->enableExperimentalFeaturesInDataDir($data_dir);
-
-        $process = new Process(
-            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
-            codecept_root_dir(),
-            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
-        );
-        $process->run();
-
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
-    }
-
     public function testUnknownSourceExitsNonZeroListingTheValidSources(): void
     {
         $process = new Process(
@@ -133,7 +114,7 @@ XML;
         $this->assertStringContainsString('lamb', $process->getErrorOutput());
     }
 
-    public function testTheExperimentalFlagEnablesTheImporterWithTheConfigKeyOff(): void
+    public function testTheExperimentalFlagEnablesTheImporter(): void
     {
         $wxr = "$this->tmp_dir/export.xml";
         file_put_contents($wxr, self::SAMPLE_WXR);
@@ -149,7 +130,7 @@ XML;
         $this->assertStringContainsString('[dry-run] Done. created=1', $process->getOutput());
     }
 
-    public function testTheDriverRefusesWhenExperimentalFeaturesDisabled(): void
+    public function testTheDriverRefusesWithoutTheExperimentalFlag(): void
     {
         $wxr = "$this->tmp_dir/export.xml";
         file_put_contents($wxr, self::SAMPLE_WXR);
@@ -158,6 +139,55 @@ XML;
             ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
             codecept_root_dir(),
             ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('experimental', $process->getErrorOutput());
+    }
+
+    public function testARefusedImportDoesNotTouchTheDataDirectory(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+        $data_dir = "$this->tmp_dir/untouched";
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('--experimental', $process->getErrorOutput());
+        $this->assertDirectoryDoesNotExist($data_dir);
+    }
+
+    public function testTheMissingPathUsageLineMentionsTheExperimentalFlag(): void
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => "$this->tmp_dir/data"] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('bin/lamb import wordpress <path> [--dry-run] [--replace] [--experimental]', $process->getErrorOutput());
+    }
+
+    public function testTheRemovedExperimentalFeaturesSettingNoLongerEnablesTheImporter(): void
+    {
+        $wxr = "$this->tmp_dir/export.xml";
+        file_put_contents($wxr, self::SAMPLE_WXR);
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeRemovedExperimentalFeaturesSetting($data_dir);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'import', 'wordpress', $wxr, '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
         );
         $process->run();
 
@@ -472,5 +502,172 @@ XML;
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
         $this->assertStringContainsString('[dry-run] migrate_feed_drafts: would add draft: true to 1 feed draft(s)', $process->getOutput());
         $this->assertSame($body, $this->storedPostBody($data_dir, $id));
+    }
+
+    /**
+     * Runs PHP against the data dir's database in its own subprocess, for the
+     * same connection-isolation reason as seedPost().
+     *
+     * @param string $code PHP to run once the database is bootstrapped; may echo a result.
+     */
+    private function inDatabase(string $data_dir, string $code, array $env = []): string
+    {
+        $root = rtrim(codecept_root_dir(), '/');
+        $process = new Process(
+            [
+                'php',
+                '-r',
+                "define('ROOT_DIR', '$root/src'); require '$root/vendor/autoload.php'; "
+                . "\\Lamb\\Bootstrap\\bootstrap_db(getenv('LAMB_DATA_DIR')); " . $code,
+            ],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + $env + getenv(),
+        );
+        $process->mustRun();
+
+        return $process->getOutput();
+    }
+
+    private function seedGateStamp(string $data_dir): void
+    {
+        $this->inDatabase(
+            $data_dir,
+            '$bean = \RedBeanPHP\R::dispense("option"); $bean->name = "experimental_gate_version"; '
+            . '$bean->value = "1"; \RedBeanPHP\R::store($bean);'
+        );
+    }
+
+    private function gateStampCount(string $data_dir): int
+    {
+        return (int) $this->inDatabase(
+            $data_dir,
+            'echo \RedBeanPHP\R::count("option", " name = ? ", ["experimental_gate_version"]);'
+        );
+    }
+
+    /**
+     * The removed experimental_features gate left an `experimental_gate_version`
+     * row in every database that read config; nothing reads it any more.
+     */
+    public function testMigrateCommandDeletesTheUnusedExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+        $this->assertSame(1, $this->gateStampCount($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('drop_experimental_gate_stamp: deleted 1 unused option row(s)', $process->getOutput());
+        $this->assertSame(0, $this->gateStampCount($data_dir));
+    }
+
+    public function testMigrateCommandDeletesEveryDuplicateExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+        $this->seedGateStamp($data_dir);
+        $this->assertSame(2, $this->gateStampCount($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('drop_experimental_gate_stamp: deleted 2 unused option row(s)', $process->getOutput());
+        $this->assertSame(0, $this->gateStampCount($data_dir));
+    }
+
+    public function testMigrateDryRunKeepsTheUnusedExperimentalGateRow(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedGateStamp($data_dir);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', '--dry-run'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
+        $this->assertSame(1, $this->gateStampCount($data_dir));
+    }
+
+    private function storeSettings(string $data_dir, string $ini): void
+    {
+        $this->inDatabase(
+            $data_dir,
+            '\Lamb\Config\load(); \Lamb\Config\save_ini_text(getenv("SEED_INI"));',
+            ['SEED_INI' => $ini]
+        );
+    }
+
+    private function storedSettings(string $data_dir): string
+    {
+        return $this->inDatabase($data_dir, 'echo \Lamb\Config\get_ini_text();');
+    }
+
+    private function runMigrate(string $data_dir, array $args = []): Process
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate', ...$args],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+
+        return $process;
+    }
+
+    private const STORED_WITH_REMOVED_SETTINGS = "posts_per_page = 5\nexperimental_features = false\nmystery_key = kept\n\n"
+        . "[preconnect]\nfonts = https://fonts.googleapis.com\n";
+
+    public function testMigrateCommandReportsRemovedSettingsInUseWithoutChangingTheStoredSettings(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeSettings($data_dir, self::STORED_WITH_REMOVED_SETTINGS);
+
+        $output = $this->runMigrate($data_dir)->getOutput();
+
+        $this->assertStringContainsString('check_removed_settings: `posts_per_page` was removed and is ignored; saving the settings page drops it. Replacement: None. Lamb uses 10 posts per page.', $output);
+        $this->assertStringContainsString('check_removed_settings: `[preconnect]` was removed', $output);
+        // The seeded default `experimental_features = false` goes without a line.
+        $this->assertStringNotContainsString('`experimental_features`', $output);
+        $this->assertSame(self::STORED_WITH_REMOVED_SETTINGS, $this->storedSettings($data_dir));
+    }
+
+    public function testMigrateDryRunReportsTheSameRemovedSettings(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->storeSettings($data_dir, self::STORED_WITH_REMOVED_SETTINGS);
+
+        $output = $this->runMigrate($data_dir, ['--dry-run'])->getOutput();
+
+        $this->assertStringContainsString('[dry-run] check_removed_settings: `posts_per_page` was removed', $output);
+        $this->assertSame(self::STORED_WITH_REMOVED_SETTINGS, $this->storedSettings($data_dir));
+    }
+
+    public function testMigrateSaysWhenItCannotCheckForRemovedSettings(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $broken = "[unclosed\n=== not ini ===\nposts_per_page = 5\n";
+        $this->storeSettings($data_dir, $broken);
+
+        $output = $this->runMigrate($data_dir)->getOutput();
+
+        $this->assertStringContainsString('check_removed_settings: the stored settings do not parse, so removed settings could not be checked', $output);
+        $this->assertStringNotContainsString('`posts_per_page`', $output);
+        $this->assertSame($broken, $this->storedSettings($data_dir));
     }
 }

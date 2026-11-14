@@ -9,7 +9,7 @@ Lamb runs without any configuration. To change it, log in and open `/settings`. 
 
 ## Fieldsets
 
-Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a deprecated setting.
+Fields marked "(required)" must be filled before the form saves. After a successful save the form reloads with your values and shows no message. Lamb only reports a problem, such as a removed setting that the save dropped.
 
 | Fieldset | Holds |
 |---|---|
@@ -43,15 +43,15 @@ The Reset to defaults button replaces every setting with the built-in defaults. 
 
 Lamb stores the settings as text in the database. Saving the form rewrites that text. Comments in it are not kept, and keys the form has no field for, such as ones you added by hand, stay as they are.
 
-## Deprecated settings
+## Removed settings
 
-These settings still work in Lamb 0.16 and stop working in Lamb 0.17. Saving the form lists the ones your configuration still uses.
+Lamb 0.17 removed these settings. A site that still has one in its configuration keeps working: Lamb ignores the setting. Saving the form removes the ones still in your configuration and tells you which, once. `bin/lamb migrate` lists them without removing anything.
 
 | Setting | Replacement |
 |---|---|
-| `posts_per_page` | None. Lamb reads your value until 0.17, then uses 10 posts per page. |
+| `posts_per_page` | None. Lamb uses 10 posts per page. |
 | `404_fallback` | Add a `[redirections]` entry for each old address you still want to forward. |
-| `[preconnect]` | None. Lamb adds preconnect hints for the sites your posts load images and video from. Sites you listed keep working until 0.17. |
+| `[preconnect]` | None. Lamb adds preconnect hints for the sites your posts load images and video from. |
 | `micropub_debug` | Set the `LAMB_MICROPUB_DEBUG` environment variable. |
 | `experimental_features` | Pass `--experimental` to `bin/lamb import <source> <path>`. |
 
@@ -93,7 +93,6 @@ point `site_url` at that.
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
 * [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
-* [Preconnect]({{ site.baseurl }}{% link preconnect.md %}): Lamb adds the hints itself; the `[preconnect]` setting is deprecated.
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): `author_email`, `author_name`, `following_url` and `[me]` feed the `/.well-known/` profile files.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.

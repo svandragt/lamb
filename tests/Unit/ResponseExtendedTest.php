@@ -24,69 +24,69 @@ class ResponseExtendedTest extends TestCase
 
     public function testGetResultsIntroIsNoResultsFoundWhenZeroPosts(): void
     {
-        $result = get_results(['title' => 'Search'], [], build_pagination_meta(1, 10, 0, 0));
+        $result = get_results(['title' => 'Search'], [], build_pagination_meta(1, 0, 0));
         $this->assertSame('No results found.', $result['intro']);
     }
 
     public function testGetResultsIntroContainsCountWhenPostsFound(): void
     {
-        $result = get_results(['title' => 'Search'], [], build_pagination_meta(1, 10, 3, 0));
+        $result = get_results(['title' => 'Search'], [], build_pagination_meta(1, 3, 0));
         $this->assertStringContainsString('3', $result['intro']);
         $this->assertStringContainsString('found', $result['intro']);
     }
 
     public function testGetResultsSingularResultLabelForOnePost(): void
     {
-        $result = get_results([], [], build_pagination_meta(1, 10, 1, 0));
+        $result = get_results([], [], build_pagination_meta(1, 1, 0));
         $this->assertStringContainsString('result', $result['intro']);
     }
 
     public function testGetResultsPluralResultsLabelForManyPosts(): void
     {
-        $result = get_results([], [], build_pagination_meta(1, 10, 5, 0));
+        $result = get_results([], [], build_pagination_meta(1, 5, 0));
         $this->assertStringContainsString('results', $result['intro']);
     }
 
     public function testGetResultsPostsKeyEqualsProvidedPosts(): void
     {
-        $result = get_results([], [], build_pagination_meta(1, 10, 0, 0));
+        $result = get_results([], [], build_pagination_meta(1, 0, 0));
         $this->assertSame([], $result['posts']);
     }
 
     public function testGetResultsPreservesExtraDataKeys(): void
     {
-        $result = get_results(['title' => 'My Search', 'foo' => 'bar'], [], build_pagination_meta(1, 10, 0, 0));
+        $result = get_results(['title' => 'My Search', 'foo' => 'bar'], [], build_pagination_meta(1, 0, 0));
         $this->assertSame('My Search', $result['title']);
         $this->assertSame('bar', $result['foo']);
     }
 
     public function testGetResultsPaginationCurrentPage(): void
     {
-        $result = get_results([], [], build_pagination_meta(2, 10, 25, 10));
+        $result = get_results([], [], build_pagination_meta(2, 25, 10));
         $this->assertSame(2, $result['pagination']['current']);
     }
 
     public function testGetResultsPaginationPrevPage(): void
     {
-        $result = get_results([], [], build_pagination_meta(2, 10, 25, 10));
+        $result = get_results([], [], build_pagination_meta(2, 25, 10));
         $this->assertSame(1, $result['pagination']['prev_page']);
     }
 
     public function testGetResultsPaginationNextPage(): void
     {
-        $result = get_results([], [], build_pagination_meta(2, 10, 25, 10));
+        $result = get_results([], [], build_pagination_meta(2, 25, 10));
         $this->assertSame(3, $result['pagination']['next_page']);
     }
 
     public function testGetResultsPaginationNullPrevOnFirstPage(): void
     {
-        $result = get_results([], [], build_pagination_meta(1, 10, 25, 0));
+        $result = get_results([], [], build_pagination_meta(1, 25, 0));
         $this->assertNull($result['pagination']['prev_page']);
     }
 
     public function testGetResultsPaginationNullNextOnLastPage(): void
     {
-        $result = get_results([], [], build_pagination_meta(3, 10, 25, 20));
+        $result = get_results([], [], build_pagination_meta(3, 25, 20));
         $this->assertNull($result['pagination']['next_page']);
     }
 
@@ -170,7 +170,7 @@ class ResponseExtendedTest extends TestCase
         $bean->version = 1;
         R::store($bean);
 
-        get_results([], [$bean], build_pagination_meta(1, 10, 1, 0));
+        get_results([], [$bean], build_pagination_meta(1, 1, 0));
 
         $stored = R::getRow('SELECT version, transformed FROM post WHERE id = ?', [$bean->id]);
         $this->assertSame(1, (int) $stored['version']);
@@ -185,7 +185,7 @@ class ResponseExtendedTest extends TestCase
         $bean->version = 1;
         R::store($bean);
 
-        get_results([], [$bean], build_pagination_meta(1, 10, 1, 0));
+        get_results([], [$bean], build_pagination_meta(1, 1, 0));
 
         $this->assertStringContainsString('phiki', $bean->transformed);
     }

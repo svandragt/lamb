@@ -14,12 +14,15 @@ use function Lamb\Theme\the_styles;
 global $config;
 global $data;
 global $template;
+
 ?>
 <!DOCTYPE html>
 <html lang="en-GB">
 <head>
     <meta charset="utf-8">
-    <meta name="author" content="<?= escape($config['author_name'] ?? '') ?>">
+    <?php if ($config['author_name'] !== '') : ?>
+    <meta name="author" content="<?= escape($config['author_name']) ?>">
+    <?php endif; ?>
     <meta name="generator" content="Lamb">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title><?= escape(page_title('text')) ?></title>

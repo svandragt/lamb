@@ -52,7 +52,7 @@ class Acceptance extends Module
      * Asserts the settings INI the server has stored contains the text, read from a copy of the database.
      *
      * A save through the settings form rewrites the INI, so a test that checks what
-     * it kept (an unknown key, a deprecated one) has to look at the stored text itself.
+     * it kept (an unknown key) or dropped (a removed one) has to look at the stored text itself.
      */
     public function seeStoredSettingsContain(string $needle): void
     {
@@ -63,9 +63,22 @@ class Acceptance extends Module
     }
 
     /**
+     * Asserts the settings INI the server has stored does not contain the text.
+     *
+     * @param string $needle The text that must be absent.
+     */
+    public function dontSeeStoredSettingsContain(string $needle): void
+    {
+        $ini = (string) $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query('SELECT value FROM "option" WHERE name = \'site_config_ini\'')->fetchColumn()
+        );
+        $this->assertStringNotContainsString($needle, $ini);
+    }
+
+    /**
      * Replaces the stored settings INI, straight in the SQLite file the test server reads.
      *
-     * Some settings (posts_per_page, a key the form does not know) have no field
+     * Some settings (a key the form does not know) have no field
      * in the /settings form, so a test that needs them seeds them here. Make a
      * request first, so the server has created the database. The connection is
      * closed before returning, which checkpoints the WAL and removes the sidecar

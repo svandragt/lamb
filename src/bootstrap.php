@@ -564,10 +564,30 @@ function backfill_imported_post_identity(array $columns, bool $dry_run = false):
 }
 
 /**
+ * One-time migration: deletes the `experimental_gate_version` option row.
+ *
+ * The removed `experimental_features` gate stamped it on every config read, so
+ * every database that ever read config holds one. Nothing reads it any more.
+ * Deletes every row of that name, so a duplicate goes too. Idempotent: with no
+ * row there is nothing to delete.
+ *
+ * @param bool $dry_run When true, report the row count but delete nothing.
+ * @return int Number of rows deleted (or that dry-run would delete).
+ * @throws SQL When the option table cannot be read or written.
+ */
+function drop_experimental_gate_stamp(bool $dry_run = false): int
+{
+    $stamps = R::find('option', ' name = ? ', ['experimental_gate_version']);
+    if (!$dry_run) {
+        R::trashAll($stamps);
+    }
+
+    return count($stamps);
+}
+
+/**
  * Whether a one-time backfill has already recorded its probe as empty, via a
- * hidden row in the `option` table — the same mechanic EXPERIMENTAL_GATE_VERSION
- * uses to persist one-off state across boots (see config.php), reused here
- * rather than a new table or file.
+ * hidden row in the `option` table.
  *
  * Any failure to read — most notably a fresh install, or an upgrade from
  * before this marker existed, where the row (or the whole `option` table)
