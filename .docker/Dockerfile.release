@@ -74,7 +74,7 @@ COPY .docker/Caddyfile.release /etc/frankenphp/Caddyfile
 WORKDIR /app
 COPY composer.json make-password.php ./
 COPY src/ src/
-COPY bin/ bin/
+COPY bin/lamb bin/lamb
 COPY --from=vendor /app/vendor/ vendor/
 
 # SQLite database and uploads live outside the image.

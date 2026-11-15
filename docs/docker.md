@@ -52,13 +52,13 @@ Pass these with `-e` on `docker run`. Each links to the page that explains it.
 
 - `LAMB_LOGIN_PASSWORD`: the login hash. To change the password, recreate the container with the new hash. See [Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password).
 - `LAMB_SITE_URL`: the canonical address of your site, which overrides the saved setting. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#site-url).
-- `LAMB_DATA_DIR`: where the database lives. It defaults to `/app/data` in the image, so mount your volume there and leave this unset. See [Writable directories]({{ site.baseurl }}{% link index.md %}#writable-directories).
+- `LAMB_DATA_DIR`: where the database lives. It defaults to `/app/data` in the image. If you set another path, mount your volume there, and the entrypoint creates the directory and gives `www-data` ownership of it. See [Writable directories]({{ site.baseurl }}{% link index.md %}#writable-directories).
 - `LAMB_MAX_UPLOAD_PIXELS`: the largest image WebP conversion will decode. See [Pixel cap and memory]({{ site.baseurl }}{% link media.md %}#pixel-cap-and-memory).
 - `LAMB_MICROPUB_DEBUG`: logs Micropub requests. See [Micropub troubleshooting]({{ site.baseurl }}{% link micropub.md %}#troubleshooting).
 
 ### File ownership
 
-The server runs as `www-data`, and the entrypoint changes the owner of `/app/data` and `/app/src/assets` to `www-data` each time the container starts. Named volumes and bind mounts therefore both work, with no `chown` on the host.
+The server runs as `www-data`. Each time the container starts, the entrypoint changes the owner of the data directory (`/app/data`, or `LAMB_DATA_DIR`) and of `/app/src/assets` to `www-data`, including every file inside them. Named volumes and bind mounts therefore both work, with no `chown` on the host. A bind mount's files change owner on the host as well, so use named volumes if they must keep their owner.
 
 ### HTTPS
 
@@ -66,6 +66,8 @@ The image serves plain HTTP on port 80 and does not request certificates. Choose
 
 - **Put a TLS proxy in front.** Forward HTTPS from your proxy to the container's port 80. Lamb does not read `X-Forwarded-Proto`, so it sees plain HTTP: it does not mark its cookies `Secure`, and it builds absolute links with `http://` unless you set `LAMB_SITE_URL=https://example.com`.
 - **Let Caddy in the image handle it.** Copy `.docker/Caddyfile.release`, replace `:80` with your domain, and mount the copy over `/etc/frankenphp/Caddyfile`. Publish ports 80 and 443, and keep `/data` and `/config` in volumes so a new container reuses the certificates. [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) explains the automatic certificates.
+
+The image's health check requests `http://localhost/`. With your domain in the Caddyfile, that request gets a redirect, which `curl -f` counts as success, so the container reports healthy whether or not the site works. The recipe replaces the check with one that requests your domain over HTTPS. Replace `example.com` with your domain in both places.
 
 ```shell
 $ sed 's/^:80 {/example.com {/' .docker/Caddyfile.release > Caddyfile
@@ -76,6 +78,7 @@ $ docker run -d --name lamb -p 80:80 -p 443:443 -p 443:443/udp \
     -v lamb-caddy-data:/data \
     -v lamb-caddy-config:/config \
     -v "$PWD/Caddyfile:/etc/frankenphp/Caddyfile:ro" \
+    --health-cmd 'curl -fsS -o /dev/null --resolve example.com:443:127.0.0.1 https://example.com/' \
     lamb
 ```
 
@@ -100,8 +103,8 @@ $ cd .docker
 $ docker compose up --build -d
 
 # To enable the admin role, write a password hash to .env in the project root.
-# Replace hackme with your own password. -u www-data makes the file yours, not root's.
-$ docker exec -u www-data lamb-app php make-password.php hackme
+# Replace hackme with your own password. -u runs the command as you, so .env is yours.
+$ docker exec -u "$(id -u):$(id -g)" lamb-app php make-password.php hackme
 
 # Compose reads .env only when it creates the container, so recreate the app container
 $ docker compose up -d --force-recreate --no-deps app
@@ -109,7 +112,7 @@ $ docker compose up -d --force-recreate --no-deps app
 
 Your site is now ready at http://localhost
 
-The app container reads `.env` from the project root. The container starts without one, but nobody can log in until you have run `make-password.php`. The container's `www-data` user takes your user ID, so the file stays readable and writable by you on the host. To change the password later, run the same command with `--force` and recreate the container again.
+The app container reads `.env` from the project root. The container starts without one, but nobody can log in until you have run `make-password.php`. Running as your own user ID keeps `.env` readable by you on the host, also when root owns the checkout, and does not depend on the container having finished starting. To change the password later, run the same command with `--force` and recreate the container again.
 
 Uploaded images and video are stored under `src/assets/` inside the app container.
 
@@ -136,28 +139,16 @@ The `-d` flag is used to start the containers in the background (detached mode).
 Codeception runs inside the `lamb-app` container of the build-from-source setup. The whole project is mounted
 at `/srv/app`, so the test suites and configuration are available there.
 
-The test runner reads `.env` for its parameters. The acceptance suite also needs the
-cleartext `LAMB_TEST_PASSWORD`, which `make-password.php` leaves out of `.env` by
-default. The [Build from source](#build-from-source) steps already wrote `.env`, so
-rewrite it with `--force` and `LAMB_WRITE_TEST_PASSWORD=1`:
+The test runner reads `.env` for its parameters, and the [Build from source](#build-from-source) steps already wrote it. The acceptance suite also needs your cleartext password to log in. Pass it as `LAMB_TEST_PASSWORD` on the command instead of writing it to `.env`, because Compose copies `.env` into the container's environment each time you recreate it.
 
-```shell
-$ docker exec -u www-data -e LAMB_WRITE_TEST_PASSWORD=1 lamb-app php make-password.php hackme --force
-```
-
-The command writes a new hash with the same password. The running server keeps the
-old hash, which still accepts that password. If you choose a different password,
-recreate the container as in [Build from source](#build-from-source).
-
-The container's environment holds the login hash from `.env`, but three unit tests
-expect no login password. Clear it for the test runs with `-e LAMB_LOGIN_PASSWORD=`:
+The container's environment holds the login hash from `.env`, but three unit tests expect no login password, so the commands also clear it with `-e LAMB_LOGIN_PASSWORD=`. Replace `hackme` with the password you gave `make-password.php`:
 
 ```shell
 # Unit tests (fast, no server required)
-$ docker exec -u www-data -e LAMB_LOGIN_PASSWORD= lamb-app vendor/bin/codecept run Unit
+$ docker exec -u "$(id -u):$(id -g)" -e LAMB_LOGIN_PASSWORD= lamb-app vendor/bin/codecept run Unit
 
 # Full suite, including acceptance tests
-$ docker exec -u www-data -e LAMB_LOGIN_PASSWORD= lamb-app vendor/bin/codecept run
+$ docker exec -u "$(id -u):$(id -g)" -e LAMB_LOGIN_PASSWORD= -e LAMB_TEST_PASSWORD=hackme lamb-app vendor/bin/codecept run
 ```
 
 The acceptance suite starts its own PHP built-in server inside the container, on

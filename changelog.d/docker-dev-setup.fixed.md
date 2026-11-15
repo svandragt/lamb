@@ -1,0 +1,2 @@
+- The Docker development setup starts on a fresh clone and reads the project's own `.env`. Its password and test steps in the Docker docs now work as written ([#994](https://github.com/svandragt/lamb/pull/994)).
+- The Docker release image gives `www-data` ownership of the directory named by `LAMB_DATA_DIR`, so a custom data path no longer fails with a 500 error ([#994](https://github.com/svandragt/lamb/pull/994)).

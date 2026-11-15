@@ -51,7 +51,7 @@ Lamb can be run locally with the builtin PHP webserver, or with other tooling.
 
 ## Writable directories
 
-Lamb stores its SQLite database in `data/` and uploaded images and video in `src/assets/`. The user your webserver or PHP-FPM runs as must be able to write to both. Nothing else needs to be writable at runtime: theme CSS and application JavaScript live elsewhere. To keep the database somewhere else, set the `LAMB_DATA_DIR` environment variable to that directory. The [Nginx]({{ site.baseurl }}{% link nginx.md %}#writable-directories) page shows the commands.
+Lamb stores its SQLite database in the data directory and uploaded images and video in `src/assets/`. The data directory is `data/` unless the `LAMB_DATA_DIR` environment variable names another one. The user your webserver or PHP-FPM runs as must be able to write to both. Nothing else needs to be writable at runtime: theme CSS and application JavaScript live elsewhere. The [Nginx]({{ site.baseurl }}{% link nginx.md %}#writable-directories) page shows the commands.
 
 ## Verified setups
 

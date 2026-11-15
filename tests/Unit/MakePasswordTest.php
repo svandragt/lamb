@@ -46,13 +46,19 @@ class MakePasswordTest extends TestCase
         return (string)file_get_contents($this->workspace . '/.env');
     }
 
-    public function testContainerRunPointsSiteUrlAtLocalhost(): void
+    /**
+     * The acceptance suite starts its own `php -S` on LAMB_TEST_PORT, so a run in
+     * the dev container must not repoint SITE_URL at FrankenPHP on port 80.
+     *
+     * @return void
+     */
+    public function testDevContainerRunPointsSiteUrlAtTestPort(): void
     {
-        $env = ['PWD' => '/srv/app'];
+        $env = ['PWD' => '/srv/app', 'LAMB_TEST_PORT' => '8747'];
 
         $contents = $this->runScript($env);
 
-        $this->assertStringContainsString("SITE_URL='http://localhost'", $contents);
+        $this->assertStringContainsString("SITE_URL='http://0.0.0.0:8747'", $contents);
     }
 
     public function testHostRunPointsSiteUrlAtTestPort(): void
