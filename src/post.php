@@ -928,7 +928,7 @@ function register_default_subscribers(): void
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
  * @return void
- * @throws SQL When a write in the transaction fails, or a subscriber fails the database.
+ * @throws SQL When a write in the transaction fails.
  * @throws \LogicException When a transaction is already open.
  * @throws \RuntimeException When the transaction ended before the commit.
  */

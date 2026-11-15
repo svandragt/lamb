@@ -108,13 +108,19 @@ class PostSaveTest extends TestCase
     public function testACreateAndAnEditStillPersist(): void
     {
         $text = "---\nslug: shared\n---\nContent.";
+        // The first save creates the schema; the rest run frozen, as in production.
         save(populate_bean($text), ['finalize_slug' => true]);
-        $second = populate_bean($text);
-        save($second, ['finalize_slug' => true]);
+        R::freeze(true);
+        try {
+            $second = populate_bean($text);
+            save($second, ['finalize_slug' => true]);
 
-        $loaded = R::load('post', $second->id);
-        $loaded->body = "---\nslug: " . $loaded->slug . "\n---\nEdited.";
-        save($loaded);
+            $loaded = R::load('post', $second->id);
+            $loaded->body = "---\nslug: " . $loaded->slug . "\n---\nEdited.";
+            save($loaded);
+        } finally {
+            R::freeze(false);
+        }
 
         $this->assertSame(2, R::count('post'));
         $this->assertStringContainsString('Edited.', (string) R::load('post', $second->id)->body);
