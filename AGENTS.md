@@ -541,7 +541,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### IndieWeb Endpoints
 
-- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); bearer tokens are introspected against the configured `token_endpoint`
+- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); bearer tokens are introspected against the configured `token_endpoint`. No function in `micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
 - `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered by `parts/_webmentions.php`); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
 - `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
@@ -613,6 +613,7 @@ Inline `//` rationale stays scarce — around **8% of non-docblock lines**.
 Tests use **Codeception 5** with PHPUnit underneath.
 
 - **Unit** (`tests/Unit/`): pure PHP, no HTTP. CI runs it in random order and prints `[Seed] N`; reproduce a failure with `vendor/bin/codecept run Unit -o "settings: shuffle: true" --seed N` (`--seed` alone does not shuffle). `tests/Unit/_bootstrap.php` defines `ROOT_URL` once, so a test does not define it. The `RestoreGlobals` extension (`tests/Support/Extension/`) restores `$config`, `$data`, `$template`, `$_SESSION`, `$_GET` and `$_POST` after each Unit test, so a test needs no save and restore of its own for them.
+  A route handler that ends in `exit()` (`respond_micropub()`, `respond_micropub_media()`) runs through `Tests\Support\EndpointProbe`, which executes it in a child process and returns the status, headers and body it sent, with a fake token endpoint for the IndieAuth check. `MicropubEndpointTest` and `MicropubMediaEndpointTest` name each test after the micropub.rocks server test it mirrors.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` and `LAMB_TEST_PASSWORD` in `.env`. Generate it with `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` — `make-password.php` omits the cleartext `LAMB_TEST_PASSWORD` unless that flag is set.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 
