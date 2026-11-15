@@ -854,33 +854,46 @@ function http_date(int $ts): string
  * invalidate cached pages. Folding both in means either source moving (even
  * within the same second) yields a different ETag (issue #279).
  *
- * The code stamp is a third component: an upgrade that changes templates or
- * rendering code moves neither timestamp, so without it browsers and caches
- * would keep serving stale HTML that links old asset paths.
+ * The code hash is a third component: an upgrade that changes templates,
+ * scripts or rendering code moves neither timestamp, so without it browsers and
+ * caches would keep serving stale HTML that links old asset paths.
  *
- * @param int      $contentTs Unix timestamp of the most recent content change (the response's last-modified).
- * @param int      $configTs  Unix timestamp of the last config edit.
- * @param int|null $codeTs    Newest mtime of the rendering code; null reads code_stamp().
+ * @param int    $contentTs Unix timestamp of the most recent content change (the response's last-modified).
+ * @param int    $configTs  Unix timestamp of the last config edit.
+ * @param string $codeHash  The `hash` of code_stamp().
  * @return string A quoted ETag value.
- * @throws \RuntimeException Never; see code_stamp().
  */
-function content_etag(int $contentTs, int $configTs, ?int $codeTs = null): string
+function content_etag(int $contentTs, int $configTs, string $codeHash): string
 {
-    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '-' . dechex($codeTs ?? code_stamp()) . '"';
+    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '-' . $codeHash . '"';
 }
 
 /**
- * Newest modification time of the PHP and CSS files that render a page.
+ * Last-Modified timestamp: the newest of content, config and code changes, so
+ * clients that only send If-Modified-Since are invalidated by a code upgrade too.
  *
- * Fixed glob patterns keep this cheaper than a recursive walk. The default
- * directory (`src/`, which holds the themes and excludes `vendor/`) is read
- * once per request and cached.
- *
- * @param string|null $dir Directory to scan; null means `src/` and is cached.
- * @return int Unix timestamp, 0 when no file matches.
- * @throws \RuntimeException Never; unreadable files are skipped by glob().
+ * @param int $contentTs Unix timestamp of the most recent content change.
+ * @param int $configTs  Unix timestamp of the last config edit.
+ * @param int $codeTs    The `newest` of code_stamp().
+ * @return int Unix timestamp.
  */
-function code_stamp(?string $dir = null): int
+function last_modified_timestamp(int $contentTs, int $configTs, int $codeTs): int
+{
+    return max($contentTs, $configTs, $codeTs);
+}
+
+/**
+ * Fingerprint of the files that render a page: PHP and CSS under `src/`, its
+ * scripts, and `vendor/composer/installed.php` (which changes with dependencies).
+ *
+ * Fixed glob patterns keep this cheaper than a recursive walk. The hash covers
+ * every mtime, not just the newest, so a deploy that restores older files still
+ * changes it. The default directory is read once per request and cached.
+ *
+ * @param string|null $dir The `src/` directory to scan; null means this one, cached.
+ * @return array{newest: int, hash: string} Newest mtime (0 when no file matches) and a crc32 of all mtimes.
+ */
+function code_stamp(?string $dir = null): array
 {
     static $cached = null;
     if ($dir === null && $cached !== null) {
@@ -888,14 +901,22 @@ function code_stamp(?string $dir = null): int
     }
     $root = $dir ?? __DIR__;
     $files = [];
-    foreach (['*.php', '*/*.php', 'themes/*/*.php', 'themes/*/parts/*.php', 'themes/*/styles/*.css'] as $pattern) {
+    $patterns = [
+        '*.php', '*/*.php', 'themes/*/*.php', 'themes/*/parts/*.php', 'themes/*/styles/*.css',
+        'scripts/*.js', 'scripts/*/*.js', '../vendor/composer/installed.php',
+    ];
+    foreach ($patterns as $pattern) {
         $files = array_merge($files, glob($root . '/' . $pattern) ?: []);
     }
-    $newest = $files ? max(array_map(static fn(string $f): int => filemtime($f) ?: 0, $files)) : 0;
+    $mtimes = array_map(static fn(string $f): int => filemtime($f) ?: 0, $files);
+    $stamp = [
+        'newest' => $mtimes ? max($mtimes) : 0,
+        'hash' => dechex(crc32(implode(',', $mtimes))),
+    ];
     if ($dir === null) {
-        $cached = $newest;
+        $cached = $stamp;
     }
-    return $newest;
+    return $stamp;
 }
 
 /**

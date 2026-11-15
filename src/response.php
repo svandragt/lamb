@@ -127,11 +127,12 @@ function latest_content_timestamp(): int
  */
 function send_304_if_current(int $contentTs, int $configTs): void
 {
-    $lastModifiedTs = max($contentTs, $configTs);
-    if ($lastModifiedTs <= 0) {
+    if (max($contentTs, $configTs) <= 0) {
         return;
     }
-    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs);
+    $code = \Lamb\Bootstrap\code_stamp();
+    $lastModifiedTs = \Lamb\Bootstrap\last_modified_timestamp($contentTs, $configTs, $code['newest']);
+    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs, $code['hash']);
     header('ETag: ' . $etag);
     header('Last-Modified: ' . \Lamb\Bootstrap\http_date($lastModifiedTs));
     if (\Lamb\Bootstrap\client_has_current_version($_SERVER, $etag, $lastModifiedTs)) {

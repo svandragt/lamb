@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Bootstrap\http_date;
+use function Lamb\Bootstrap\last_modified_timestamp;
 use function Lamb\Bootstrap\code_stamp;
 use function Lamb\Bootstrap\content_etag;
 use function Lamb\Bootstrap\client_has_current_version;
@@ -26,15 +27,15 @@ class ConditionalRequestTest extends TestCase
 
     public function testContentEtagIsQuotedAndDeterministic(): void
     {
-        $etag = content_etag(1234567890, 100);
+        $etag = content_etag(1234567890, 100, 'h');
         $this->assertSame('"', $etag[0]);
         $this->assertSame('"', $etag[strlen($etag) - 1]);
-        $this->assertSame($etag, content_etag(1234567890, 100));
+        $this->assertSame($etag, content_etag(1234567890, 100, 'h'));
     }
 
     public function testContentEtagDiffersWhenContentTimestampChanges(): void
     {
-        $this->assertNotSame(content_etag(1000, 1), content_etag(1001, 1));
+        $this->assertNotSame(content_etag(1000, 1, 'h'), content_etag(1001, 1, 'h'));
     }
 
     public function testContentEtagDiffersWhenConfigChangesWithinSameSecond(): void
@@ -42,61 +43,116 @@ class ConditionalRequestTest extends TestCase
         // Same last-modified (content) timestamp, different config edit time: the
         // validator must still change so a settings edit invalidates caches even
         // when it lands in the same second as the latest post (issue #279).
-        $this->assertNotSame(content_etag(1000, 500), content_etag(1000, 1000));
+        $this->assertNotSame(content_etag(1000, 500, 'h'), content_etag(1000, 1000, 'h'));
     }
 
-    public function testCodeStampIsNewestMtimeUnderTheDirectory(): void
+    public function testCodeStampCoversPhpCssJsAndComposerManifest(): void
+    {
+        $base = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
+        $dir = $base . '/src';
+        mkdir($dir . '/themes/x', 0777, true);
+        mkdir($dir . '/scripts/logged_in', 0777, true);
+        mkdir($base . '/vendor/composer', 0777, true);
+        $files = [
+            $dir . '/a.php' => 1000,
+            $dir . '/themes/x/b.php' => 2000,
+            $dir . '/scripts/c.js' => 3000,
+            $dir . '/scripts/logged_in/d.js' => 4000,
+            $base . '/vendor/composer/installed.php' => 5000,
+        ];
+        try {
+            foreach ($files as $file => $mtime) {
+                touch($file, $mtime);
+            }
+            $this->assertSame(5000, code_stamp($dir)['newest']);
+
+            touch($dir . '/scripts/logged_in/d.js', 6000);
+            $this->assertSame(6000, code_stamp($dir)['newest']);
+        } finally {
+            foreach (array_keys($files) as $file) {
+                @unlink($file);
+            }
+            foreach (['/themes/x', '/themes', '/scripts/logged_in', '/scripts'] as $sub) {
+                @rmdir($dir . $sub);
+            }
+            @rmdir($dir);
+            @rmdir($base . '/vendor/composer');
+            @rmdir($base . '/vendor');
+            @rmdir($base);
+        }
+    }
+
+    public function testCodeStampHashChangesWhenAnMtimeMovesBackwards(): void
     {
         $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
-        mkdir($dir . '/themes/x', 0777, true);
-        touch($dir . '/a.php', 1000);
-        touch($dir . '/themes/x/b.php', 2000);
-        $this->assertSame(2000, code_stamp($dir));
+        mkdir($dir);
+        try {
+            touch($dir . '/a.php', 1000);
+            touch($dir . '/b.php', 2000);
+            $before = code_stamp($dir);
+            $this->assertSame($before, code_stamp($dir));
 
-        touch($dir . '/a.php', 3000);
-        $this->assertSame(3000, code_stamp($dir));
-
-        array_map('unlink', [$dir . '/a.php', $dir . '/themes/x/b.php']);
-        rmdir($dir . '/themes/x');
-        rmdir($dir . '/themes');
-        rmdir($dir);
+            // A deploy that restores an older file leaves the newest mtime alone.
+            touch($dir . '/a.php', 500);
+            $after = code_stamp($dir);
+            $this->assertSame($before['newest'], $after['newest']);
+            $this->assertNotSame($before['hash'], $after['hash']);
+        } finally {
+            @unlink($dir . '/a.php');
+            @unlink($dir . '/b.php');
+            @rmdir($dir);
+        }
     }
 
-    public function testContentEtagDiffersWhenCodeStampChanges(): void
+    public function testDefaultCodeStampIsCachedWithinTheRequest(): void
     {
-        $this->assertNotSame(content_etag(1000, 1, 10), content_etag(1000, 1, 11));
-        $this->assertSame(content_etag(1000, 1, 10), content_etag(1000, 1, 10));
+        $file = dirname(__DIR__, 2) . '/src/constants.php';
+        $mtime = filemtime($file);
+        try {
+            $first = code_stamp();
+            touch($file, $mtime + 100);
+            $this->assertSame($first, code_stamp());
+        } finally {
+            touch($file, $mtime);
+        }
     }
 
-    public function testContentEtagIsStableAcrossCallsWithNoChange(): void
+    public function testContentEtagDiffersWhenCodeHashChanges(): void
     {
-        $this->assertSame(content_etag(1000, 1), content_etag(1000, 1));
+        $this->assertNotSame(content_etag(1000, 1, 'a'), content_etag(1000, 1, 'b'));
+        $this->assertSame(content_etag(1000, 1, 'a'), content_etag(1000, 1, 'a'));
+    }
+
+    public function testLastModifiedIncludesNewestCodeMtime(): void
+    {
+        $this->assertSame(5000, last_modified_timestamp(1000, 2000, 5000));
+        $this->assertSame(2000, last_modified_timestamp(1000, 2000, 500));
     }
 
     public function testNoConditionalHeadersIsNotAMatch(): void
     {
         $ts = 1234567890;
-        $this->assertFalse(client_has_current_version([], content_etag($ts, 0), $ts));
+        $this->assertFalse(client_has_current_version([], content_etag($ts, 0, 'h'), $ts));
     }
 
     public function testMatchingIfNoneMatchIsCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts, 0);
+        $etag = content_etag($ts, 0, 'h');
         $this->assertTrue(client_has_current_version(['HTTP_IF_NONE_MATCH' => $etag], $etag, $ts));
     }
 
     public function testNonMatchingIfNoneMatchIsNotCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts, 0);
+        $etag = content_etag($ts, 0, 'h');
         $this->assertFalse(client_has_current_version(['HTTP_IF_NONE_MATCH' => '"stale"'], $etag, $ts));
     }
 
     public function testIfModifiedSinceAtOrAfterLastModifiedIsCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts, 0);
+        $etag = content_etag($ts, 0, 'h');
         $server = ['HTTP_IF_MODIFIED_SINCE' => http_date($ts)];
         $this->assertTrue(client_has_current_version($server, $etag, $ts));
 
@@ -107,7 +163,7 @@ class ConditionalRequestTest extends TestCase
     public function testIfModifiedSinceBeforeLastModifiedIsNotCurrent(): void
     {
         $ts = 1234567890;
-        $etag = content_etag($ts, 0);
+        $etag = content_etag($ts, 0, 'h');
         $server = ['HTTP_IF_MODIFIED_SINCE' => http_date($ts - 60)];
         $this->assertFalse(client_has_current_version($server, $etag, $ts));
     }
@@ -129,11 +185,11 @@ class ConditionalRequestTest extends TestCase
         $cachedTs = $ts;
         $nowTs    = $ts - 86400;
         $server = [
-            'HTTP_IF_NONE_MATCH'     => content_etag($cachedTs, 0),
+            'HTTP_IF_NONE_MATCH'     => content_etag($cachedTs, 0, 'h'),
             'HTTP_IF_MODIFIED_SINCE' => http_date($cachedTs),
         ];
 
-        $this->assertFalse(client_has_current_version($server, content_etag($nowTs, 0), $nowTs));
+        $this->assertFalse(client_has_current_version($server, content_etag($nowTs, 0, 'h'), $nowTs));
     }
 
     public function testAMatchingEtagIsStillCurrentWhenADateIsAlsoSent(): void
@@ -141,7 +197,7 @@ class ConditionalRequestTest extends TestCase
         // The other half of the precedence rule: sending both headers must not
         // stop an unchanged response from being a 304.
         $ts = 1234567890;
-        $etag = content_etag($ts, 0);
+        $etag = content_etag($ts, 0, 'h');
         $server = [
             'HTTP_IF_NONE_MATCH'     => $etag,
             'HTTP_IF_MODIFIED_SINCE' => http_date($ts - 86400),
