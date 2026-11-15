@@ -761,6 +761,19 @@ function set_option(OODBBean $bean, mixed $value): void
 }
 
 /**
+ * Reports whether the database connection has an open transaction.
+ *
+ * Impure because $fn can end the transaction, so static analysis must not reuse an earlier answer.
+ *
+ * @phpstan-impure
+ * @return bool
+ */
+function in_write_transaction(): bool
+{
+    return R::getPDO()?->inTransaction() ?? false;
+}
+
+/**
  * Runs $fn in one write transaction: BEGIN IMMEDIATE, $fn, COMMIT.
  *
  * SQLite has no nested transactions and a caller that joined an outer one could
@@ -778,20 +791,24 @@ function set_option(OODBBean $bean, mixed $value): void
  * @param callable(): T $fn The writes to make atomic.
  * @return T Whatever $fn returns.
  * @throws \LogicException When a transaction is already open.
- * @throws \RuntimeException When the transaction ended before the COMMIT.
+ * @throws SQL When the BEGIN did not open a transaction, or it ended before the COMMIT.
  * @throws \Throwable Whatever $fn or the COMMIT throws.
  */
 function with_write_transaction(callable $fn): mixed
 {
-    if (R::getPDO()?->inTransaction()) {
+    if (in_write_transaction()) {
         throw new \LogicException('with_write_transaction() cannot run inside an open transaction.');
     }
 
     R::exec('BEGIN IMMEDIATE');
+    // Fluid mode swallows some failed R::exec() calls, so $fn must never run in autocommit mode.
+    if (!in_write_transaction()) {
+        throw new SQL('The transaction did not begin');
+    }
     try {
         $result = $fn();
-        if (!R::getPDO()?->inTransaction()) {
-            throw new \RuntimeException('The transaction ended before commit');
+        if (!in_write_transaction()) {
+            throw new SQL('The transaction ended before commit');
         }
         R::exec('COMMIT');
 

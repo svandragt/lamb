@@ -928,9 +928,8 @@ function register_default_subscribers(): void
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
  * @return void
- * @throws SQL When a write in the transaction fails.
+ * @throws SQL When a write in the transaction fails, the transaction did not begin or it ended before the commit.
  * @throws \LogicException When a transaction is already open.
- * @throws \RuntimeException When the transaction ended before the commit.
  */
 function save(OODBBean $bean, array $context = []): void
 {
@@ -959,9 +958,7 @@ function save(OODBBean $bean, array $context = []): void
                 R::store($bean);
             }
 
-            // save() is the write funnel, so it advances the content high-water mark
-            // itself (#669). Without this, posts saved through save() (the #692 site
-            // and every #717 conversion) would never move latest_content_timestamp().
+            // save() is the only post write path, so it bumps the content mark itself (#669).
             \Lamb\Response\bump_content_timestamp();
 
             // Inside the transaction (#685): a failed store must never leave a 301

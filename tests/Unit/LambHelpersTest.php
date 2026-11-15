@@ -420,7 +420,7 @@ class LambHelpersTest extends TestCase
 
                 return 'done';
             });
-        } catch (\RuntimeException $e) {
+        } catch (SQL $e) {
             $thrown = $e;
         }
 
