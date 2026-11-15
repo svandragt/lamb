@@ -958,7 +958,7 @@ function save(OODBBean $bean, array $context = []): void
                 R::store($bean);
             }
 
-            // save() is the only post write path, so it bumps the content mark itself (#669).
+            // A saved post changes the content, so move the content mark (#669).
             \Lamb\Response\bump_content_timestamp();
 
             // Inside the transaction (#685): a failed store must never leave a 301

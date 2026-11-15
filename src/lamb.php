@@ -791,7 +791,7 @@ function in_write_transaction(): bool
  * @param callable(): T $fn The writes to make atomic.
  * @return T Whatever $fn returns.
  * @throws \LogicException When a transaction is already open.
- * @throws SQL When the BEGIN did not open a transaction, or it ended before the COMMIT.
+ * @throws SQL When the BEGIN did not open a transaction, it ended before the COMMIT, or the COMMIT failed.
  * @throws \Throwable Whatever $fn or the COMMIT throws.
  */
 function with_write_transaction(callable $fn): mixed
@@ -811,6 +811,10 @@ function with_write_transaction(callable $fn): mixed
             throw new SQL('The transaction ended before commit');
         }
         R::exec('COMMIT');
+        // Fluid mode can swallow a failed COMMIT, which leaves the transaction open.
+        if (in_write_transaction()) {
+            throw new SQL('The commit failed');
+        }
 
         return $result;
     } catch (\Throwable $e) {
