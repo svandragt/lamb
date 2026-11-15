@@ -2,6 +2,7 @@
 
 namespace Tests\Acceptance;
 
+use Codeception\Example;
 use PHPUnit\Framework\Assert;
 use Tests\Support\AcceptanceTester;
 
@@ -157,13 +158,25 @@ class SettingsFormCest
     }
 
     /**
+     * @return array<string, array{theme: string}>
+     */
+    protected function themeProvider(): array
+    {
+        return [
+            'base theme' => ['theme' => 'base'],
+            '2026 theme' => ['theme' => '2026'],
+        ];
+    }
+
+    /**
+     * @dataProvider themeProvider
      * @group seeds-db
      */
-    public function theIndieauthMetadataFieldPublishesItsLinkTagUntilCleared(AcceptanceTester $I): void
+    public function theIndieauthMetadataFieldPublishesItsLinkTagUntilCleared(AcceptanceTester $I, Example $example): void
     {
         $this->login($I);
         $I->haveStoredSettings(
-            "site_title = Seeded\nsite_url = https://example.com\nauthor_name = Ada\ntheme = base\n"
+            "site_title = Seeded\nsite_url = https://example.com\nauthor_name = Ada\ntheme = {$example['theme']}\n"
         );
         $metadata = 'https://indiekey.id/.well-known/oauth-authorization-server/s/abc123';
 
@@ -185,5 +198,8 @@ class SettingsFormCest
 
         $I->amOnPage('/');
         $I->dontSeeElement('link[rel="indieauth-metadata"]');
+
+        // Later tests in the run expect the default theme.
+        $I->haveStoredSettings("theme = base\n");
     }
 }

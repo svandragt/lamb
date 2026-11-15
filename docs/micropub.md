@@ -61,7 +61,7 @@ Point your client at your site URL. It will auto-discover the endpoints from you
 
 To use a different authorization or token server, open `/settings` and fill in the **Authorization endpoint** and **Token endpoint** fields in the IndieWeb group. Leave a field empty to use its default.
 
-If your server gives you a metadata URL, as IndieKey does, enter it in the **IndieAuth metadata** field. Lamb then adds a `<link rel="indieauth-metadata">` tag to your home page. Leave the field empty if your server does not use one.
+If your server gives you a metadata URL, as IndieKey does, enter it in the **IndieAuth metadata** field. Lamb then adds a `<link rel="indieauth-metadata">` tag to your home page, as long as the value is a full `http://` or `https://` address. Leave the field empty if your server does not use one.
 
 ### Moving to IndieKey
 
@@ -141,6 +141,6 @@ Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's impl
 ## Related
 
 * [Media]({{ site.baseurl }}{% link media.md %}): Uploaded photos are stored under `src/assets/` and JPEG/PNG are converted to WebP.
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `indieauth_metadata` settings.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings, and the optional `indieauth_metadata` setting.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Send a future `published` date or `post-status: scheduled` to schedule a post.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Receive notifications when other sites link to your posts.

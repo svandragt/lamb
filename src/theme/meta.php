@@ -230,7 +230,7 @@ function the_meta_description(): void
 
 /**
  * Emits <link rel="indieauth-metadata"> for the `indieauth_metadata` setting.
- * Outputs nothing when it is unset or empty.
+ * Outputs nothing when it is unset, empty or not an absolute http(s) URL.
  *
  * IndieAuth servers such as IndieKey read this link from the home page to
  * confirm the domain belongs to your account there.
@@ -242,7 +242,7 @@ function the_indieauth_metadata(): void
     global $config;
 
     $url = (string) ($config['indieauth_metadata'] ?? '');
-    if ($url === '') {
+    if (!\Lamb\Http\is_valid_http_url($url)) {
         return;
     }
 

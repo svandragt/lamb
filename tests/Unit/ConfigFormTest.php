@@ -89,7 +89,6 @@ class ConfigFormTest extends TestCase
         $this->assertSame('https://auth.example/auth', $parsed['authorization_endpoint']);
         $this->assertSame('https://auth.example/token', $parsed['token_endpoint']);
         $this->assertSame('https://auth.example/metadata', $parsed['indieauth_metadata']);
-        $this->assertSame('https://auth.example/metadata', $parsed['indieauth_metadata']);
         $this->assertSame('https://hub.example/, https://hub2.example/', $parsed['websub_hubs']);
     }
 

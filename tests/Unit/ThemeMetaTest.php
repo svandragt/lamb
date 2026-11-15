@@ -311,6 +311,35 @@ class ThemeMetaTest extends TestCase
         $output = ob_get_clean();
 
         $this->assertStringNotContainsString('<script>', $output);
+        $this->assertStringContainsString(
+            'href="https://example.com/m&quot;&gt;&lt;script&gt;bad&lt;/script&gt;"',
+            $output
+        );
+    }
+
+    /**
+     * @dataProvider nonHttpMetadataUrls
+     */
+    public function testIndieauthMetadataOutputsNothingForAValueThatIsNotAnHttpUrl(string $value): void
+    {
+        global $config;
+        $config['indieauth_metadata'] = $value;
+
+        ob_start();
+        the_indieauth_metadata();
+        $output = ob_get_clean();
+
+        $this->assertSame('', $output);
+    }
+
+    /** @return array<string, array{string}> */
+    public static function nonHttpMetadataUrls(): array
+    {
+        return [
+            'javascript scheme' => ['javascript:alert(1)'],
+            'mailto scheme'     => ['mailto:x'],
+            'relative path'     => ['/metadata'],
+        ];
     }
 
     // -------------------------------------------------------------------------

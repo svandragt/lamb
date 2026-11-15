@@ -92,7 +92,8 @@ point `site_url` at that.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): The `feeds_draft` setting controls whether ingested posts are published or saved as drafts.
 * [Feeds]({{ site.baseurl }}{% link feeds.md %}): The `websub_hubs` setting enables real-time push to feed subscribers.
 * [Menu Items]({{ site.baseurl }}{% link menu-items.md %})
-* [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, `indieauth_metadata`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}): The `[me]`, `authorization_endpoint`, `token_endpoint`, and `[syndicate_to]` settings enable Micropub publishing and POSSE syndication.
+* [Micropub]({{ site.baseurl }}{% link micropub.md %}#moving-to-indiekey): The optional `indieauth_metadata` setting publishes the metadata link that IndieAuth servers such as IndieKey read from your home page. Leave it empty if your server does not use one.
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): `author_email`, `author_name`, `following_url` and `[me]` feed the `/.well-known/` profile files.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
