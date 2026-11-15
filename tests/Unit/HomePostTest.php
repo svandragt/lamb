@@ -150,6 +150,20 @@ class HomePostTest extends TestCase
         $this->assertCount(1, R::find('post', $clause['sql'], $clause['params']));
     }
 
+    public function testTimelineKeepsPostsWithoutASlugWhenAMenuSlugIsConfigured(): void
+    {
+        global $config;
+        $config['menu_items'] = ['About' => '/about'];
+        $bean = $this->makePost(['body' => 'Legacy post with a NULL slug']);
+        R::exec('UPDATE post SET slug = NULL WHERE id = ?', [$bean->id]);
+        $this->makePost(['body' => 'The About page', 'slug' => 'about']);
+
+        $posts = respond_home()['posts'];
+
+        $this->assertCount(1, $posts);
+        $this->assertSame((int) $bean->id, (int) array_key_first($posts));
+    }
+
     public function testHomePostIsNotInTheTimeline(): void
     {
         $this->makePost(['body' => 'Timeline entry']);

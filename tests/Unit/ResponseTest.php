@@ -84,8 +84,7 @@ class ResponseTest extends TestCase
     public function testBuildExcludeSlugClauseReturnsSqlForSingleSlug()
     {
         $result = build_exclude_slugs_clause(['about']);
-        $this->assertStringContainsString('slug NOT IN', $result['sql']);
-        $this->assertStringContainsString('?', $result['sql']);
+        $this->assertSame(' (slug IS NULL OR slug NOT IN (?)) ', $result['sql']);
     }
 
     public function testBuildExcludeSlugClauseReturnsSqlForMultipleSlugs()
@@ -113,7 +112,7 @@ class ResponseTest extends TestCase
         $this->assertStringContainsString('draft', $clause['sql']);
         $this->assertStringContainsString('deleted', $clause['sql']);
         $this->assertStringContainsString('created', $clause['sql']);
-        $this->assertStringNotContainsString('slug NOT IN', $clause['sql']);
+        $this->assertSame(['home'], array_slice($clause['params'], 1));
     }
 
     public function testPublicPostsClauseExcludesMenuItemSlugs()
@@ -123,11 +122,11 @@ class ResponseTest extends TestCase
 
         $clause = public_posts_clause();
 
-        $this->assertStringContainsString('slug NOT IN', $clause['sql']);
+        $this->assertStringContainsString('(slug IS NULL OR slug NOT IN (?, ?, ?))', $clause['sql']);
         // Params must line up with the placeholders: the visibility clause's
-        // "created > ?" comes first, then the excluded slugs in order.
+        // "created > ?" comes first, then the home slug and menu slugs in order.
         $this->assertSame(substr_count($clause['sql'], '?'), count($clause['params']));
-        $this->assertSame(['about', 'contact'], array_slice($clause['params'], 1));
+        $this->assertSame(['home', 'about', 'contact'], array_slice($clause['params'], 1));
     }
 
     // pagination_window
