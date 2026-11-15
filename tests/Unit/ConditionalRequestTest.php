@@ -45,10 +45,62 @@ class ConditionalRequestTest extends TestCase
         $this->assertNotSame(content_etag(1000, 500, 'h'), content_etag(1000, 1000, 'h'));
     }
 
-    public function testCodeStampIsTheInstalledRootPackageReference(): void
+    public function testCodeStampIsTheInstalledRootPackageReferenceWithoutGit(): void
+    {
+        $root = $this->fakeRoot([]);
+        $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
+        $this->assertSame(substr((string) $reference, 0, 8), code_stamp($root));
+    }
+
+    public function testCodeStampFollowsTheCheckedOutCommit(): void
+    {
+        $sha = 'abcdef0123456789abcdef0123456789abcdef01';
+        $this->assertSame('abcdef01', code_stamp($this->fakeRoot(['HEAD' => "$sha\n"])));
+        $this->assertSame('abcdef01', code_stamp($this->fakeRoot([
+            'HEAD' => "ref: refs/heads/x\n",
+            'refs/heads/x' => "$sha\n",
+        ])));
+        $this->assertSame('abcdef01', code_stamp($this->fakeRoot([
+            'HEAD' => "ref: refs/heads/x\n",
+            'packed-refs' => "# pack-refs with: peeled\n1111111111111111111111111111111111111111 refs/heads/y\n$sha refs/heads/x\n",
+        ])));
+    }
+
+    public function testCodeStampFallsBackWhenTheGitRefCannotBeResolved(): void
     {
         $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
-        $this->assertSame(substr((string) $reference, 0, 8), code_stamp());
+        $root = $this->fakeRoot(['HEAD' => "ref: refs/heads/gone\n"]);
+        $this->assertSame(substr((string) $reference, 0, 8), code_stamp($root));
+    }
+
+    /**
+     * Builds a temp repo root whose `.git` holds the given files.
+     *
+     * @param array<string, string> $gitFiles Path under `.git` to contents.
+     * @return string The root path, removed at the end of the test.
+     */
+    private function fakeRoot(array $gitFiles): string
+    {
+        $root = sys_get_temp_dir() . '/lamb-root-' . uniqid();
+        mkdir($root);
+        foreach ($gitFiles as $path => $contents) {
+            $file = "$root/.git/$path";
+            @mkdir(dirname($file), 0777, true);
+            file_put_contents($file, $contents);
+        }
+        $this->roots[] = $root;
+        return $root;
+    }
+
+    /** @var list<string> */
+    private array $roots = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->roots as $root) {
+            exec('rm -rf ' . escapeshellarg($root));
+        }
+        $this->roots = [];
     }
 
     public function testContentEtagDiffersWhenCodeHashChanges(): void

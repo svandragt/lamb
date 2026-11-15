@@ -870,19 +870,42 @@ function content_etag(int $contentTs, int $configTs, string $codeHash): string
 }
 
 /**
- * Identity of the installed release, for the ETag (see content_etag()).
+ * Identity of the installed code, for the ETag (see content_etag()).
  *
- * This is the first 8 characters of the root package's `reference` in
- * `vendor/composer/installed.php`: the git commit recorded when the installer
- * last ran, so it changes on every upgrade that runs the installer. A git
- * checkout updated without `bin/upgrade` keeps the old stamp. Composer's
- * InstalledVersions already holds the data in memory, so this reads no files.
+ * A git install follows the checked-out commit, read from `.git/HEAD` (a sha,
+ * or a ref found loose or in `packed-refs`), so a pull changes it even without
+ * `bin/upgrade`. viv's no-op install does not rewrite `installed.php` when only
+ * code changes (svandragt/vivace#408), so that file alone would go stale. A
+ * tarball install has no `.git` and falls back to the root package `reference`
+ * in `vendor/composer/installed.php`, the commit recorded by the installer. A
+ * git worktree has a `.git` file rather than a directory, so it uses the
+ * fallback too. Clients that send only If-Modified-Since are not covered.
  *
- * @return string Up to 8 characters, or '' when no reference is recorded.
+ * @param string|null $root Repository root; null means this install's own.
+ * @return string Up to 8 characters, or '' when no commit is known.
  */
-function code_stamp(): string
+function code_stamp(?string $root = null): string
 {
-    return substr((string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? ''), 0, 8);
+    $git = ($root ?? dirname(__DIR__)) . '/.git';
+    $sha = '';
+    $head = trim((string) @file_get_contents($git . '/HEAD'));
+    if (str_starts_with($head, 'ref: ')) {
+        $ref = substr($head, 5);
+        $sha = trim((string) @file_get_contents($git . '/' . $ref));
+        if ($sha === '') {
+            foreach (explode("\n", (string) @file_get_contents($git . '/packed-refs')) as $line) {
+                if (str_ends_with($line, ' ' . $ref)) {
+                    $sha = strtok($line, ' ');
+                }
+            }
+        }
+    } else {
+        $sha = $head;
+    }
+    if (!preg_match('/^[0-9a-f]{40}$/', $sha)) {
+        $sha = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
+    }
+    return substr($sha, 0, 8);
 }
 
 /**
