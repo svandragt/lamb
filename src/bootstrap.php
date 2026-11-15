@@ -275,6 +275,7 @@ const SCHEMA = [
         'feed_locked' => 'INTEGER',
         'preview_token' => 'TEXT',
         'preview_token_expires' => 'TEXT',
+        'webmentions_pending' => 'INTEGER',
     ],
     'option' => [
         'name' => 'TEXT',

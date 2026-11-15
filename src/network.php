@@ -215,7 +215,7 @@ function run_feed_cycle(
     echo count_line(prune_feed_status(), 'Pruned %d stale feed status row(s).');
     echo count_line(\Lamb\flatten_redirects(), 'Flattened %d redirect(s).');
     // Before the drain in run_feed_cycle(), so a post queued here is sent in this run.
-    echo count_line(\Lamb\Webmention\enqueue_for_recent_posts(), 'Queued webmentions for %d recent post(s).');
+    echo count_line(\Lamb\Webmention\enqueue_pending_posts(), 'Queued webmentions for %d post(s).');
 
     // Reuse the option bean already fetched for the rate-limit check rather than
     // re-reading it, and keep date('U') as the run timestamp (== time()).

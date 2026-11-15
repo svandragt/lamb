@@ -168,6 +168,62 @@ class PostDeleteRestoreAtomicTest extends TestCase
         $this->assertSame(1, $result['deleted']);
     }
 
+    public function testAFailedDeleteReturnsToThePostsOwnPageNotTheHomePage(): void
+    {
+        // The post is still live, so the page the author pressed delete on still exists.
+        $result = $this->submitWithFailingContentMark('redirect_deleted', false, 'http://localhost/status/1');
+
+        if ($result['location'] === null) {
+            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
+        }
+        $this->assertSame('Location: /status/1', $result['location']);
+    }
+
+    public function testAFailedDeleteReturnsToTheListingItWasPressedOn(): void
+    {
+        $result = $this->submitWithFailingContentMark('redirect_deleted', false, 'http://localhost/tag/php?page=2');
+
+        if ($result['location'] === null) {
+            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
+        }
+        $this->assertSame('Location: /tag/php?page=2', $result['location']);
+    }
+
+    public function testAFailedDeleteRestoresTheBeansFields(): void
+    {
+        $post = $this->seedPost();
+        $this->seedOptionTable();
+        $this->failNextWrite('option', 'INSERT');
+
+        try {
+            soft_delete_post($post);
+            $this->fail('The content mark write should have thrown.');
+        } catch (SQL) {
+            $this->dropFailure();
+        }
+
+        // A caller that reuses the bean must not see a deleted post that is live in the database.
+        $this->assertEmpty($post->deleted);
+        $this->assertEmpty($post->deleted_at);
+    }
+
+    public function testAFailedRestoreRestoresTheBeansFields(): void
+    {
+        $post = $this->seedPost(true);
+        $this->seedOptionTable();
+        $this->failNextWrite('option', 'INSERT');
+
+        try {
+            restore_post($post);
+            $this->fail('The content mark write should have thrown.');
+        } catch (SQL) {
+            $this->dropFailure();
+        }
+
+        $this->assertSame(1, (int) $post->deleted);
+        $this->assertSame('2026-01-02 00:00:00', $post->deleted_at);
+    }
+
     /**
      * Posts the delete or restore form for one post while the content mark write fails.
      *
@@ -176,10 +232,11 @@ class PostDeleteRestoreAtomicTest extends TestCase
      *
      * @param string $handler Which Lamb\Response handler to call.
      * @param bool   $deleted Whether the post starts in the trash.
-     * @return array{flash: list<string>, deleted: int}
+     * @param string $referer The request Referer, or '' for none.
+     * @return array{flash: list<string>, deleted: int, location: ?string} The Location header line, null without Xdebug.
      * @throws \JsonException When the subprocess prints something that is not JSON.
      */
-    private function submitWithFailingContentMark(string $handler, bool $deleted): array
+    private function submitWithFailingContentMark(string $handler, bool $deleted, string $referer = ''): array
     {
         $script = <<<'PHP'
         use RedBeanPHP\R;
@@ -200,11 +257,17 @@ class PostDeleteRestoreAtomicTest extends TestCase
         $_SERVER['REQUEST_METHOD'] = 'POST';
         $_SESSION = [SESSION_LOGIN => true, HIDDEN_CSRF_NAME => 'tok'];
         $_POST = [HIDDEN_CSRF_NAME => 'tok'];
+        if ($argv[4] !== '') {
+            $_SERVER['HTTP_REFERER'] = $argv[4];
+        }
 
         register_shutdown_function(function () use ($id) {
+            // headers_list() is empty under the CLI SAPI; Xdebug reads the emitted headers.
+            $headers = function_exists('xdebug_get_headers') ? xdebug_get_headers() : null;
             echo json_encode([
                 'flash' => $_SESSION['flash'] ?? [],
                 'deleted' => (int) R::load('post', $id)->deleted,
+                'location' => $headers === null ? null : (array_values(preg_grep('/^Location:/', $headers))[0] ?? ''),
             ]);
         });
         ('\Lamb\Response\\' . $argv[2])([(string) $id]);
@@ -215,10 +278,11 @@ class PostDeleteRestoreAtomicTest extends TestCase
             dirname(__DIR__, 2) . '/vendor/autoload.php',
             $handler,
             $deleted ? '1' : '0',
+            $referer,
         ]);
         $process->run();
 
-        /** @var array{flash: list<string>, deleted: int} */
+        /** @var array{flash: list<string>, deleted: int, location: ?string} */
         return json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
     }
 }

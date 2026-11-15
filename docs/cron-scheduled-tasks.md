@@ -13,7 +13,7 @@ The following tasks run periodically:
 
 1. **Purging trash.** Posts in the [trash]({{ site.baseurl }}{% link trash.md %}) are permanently deleted once they have been there for 30 days.
 2. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
-3. **Queueing missed webmentions.** Posts published or edited in the last 24 hours that have no queued [webmention]({{ site.baseurl }}{% link webmentions.md %}) are queued, in case saving the post could not do it.
+3. **Queueing missed webmentions.** If saving a post could not queue its [webmentions]({{ site.baseurl }}{% link webmentions.md %}), the next run queues them.
 4. **Sending webmentions.** Any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts are delivered.
 
 Note that the feed system has its own rate limiting system to prevent sending too many requests to the feed provider, so checking more often than every 30 minutes or so is not typically useful.

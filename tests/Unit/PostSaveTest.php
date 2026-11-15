@@ -415,4 +415,42 @@ class PostSaveTest extends TestCase
             \Lamb\Post\event_subscribers()['post.published'] ?? []
         );
     }
+
+    public function testANotifySaveMarksWebmentionsPendingWithoutQueueingAnything(): void
+    {
+        // No subscriber is registered: save() only writes the column, it does not call the webmention module.
+        $bean = populate_bean('A status.');
+
+        save($bean, ['notify' => true]);
+
+        $this->assertSame(1, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testASaveWithoutNotifyDoesNotMarkWebmentionsPending(): void
+    {
+        $bean = populate_bean('A status.');
+
+        save($bean, ['finalize_slug' => true]);
+
+        $this->assertSame(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testAFailedNotifySaveLeavesTheMarkAsItWas(): void
+    {
+        $bean = populate_bean('A status.');
+        save($bean);
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            save($bean, ['notify' => true]);
+            $this->fail('The store should have thrown.');
+        } catch (SQL) {
+            // Expected.
+        } finally {
+            R::exec('DROP TRIGGER post_block_update');
+        }
+
+        $this->assertSame(0, (int) $bean->webmentions_pending);
+        $this->assertSame(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
 }

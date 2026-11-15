@@ -909,7 +909,10 @@ function register_default_subscribers(): void
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
  *    into the front matter (the step every create path runs after its first store).
- *  - `notify` — emit `post.published` after a successful store.
+ *  - `notify` — emit `post.published` after a successful store, and set the
+ *    row's `webmentions_pending` column in the same transaction. The webmention
+ *    subscriber clears it after queueing; a failed queueing leaves it set for
+ *    /_cron to retry (Webmention\enqueue_pending_posts()).
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
  *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
@@ -951,6 +954,13 @@ function save(OODBBean $bean, array $context = []): void
     // Before the store: feed_locked is a column on the row being written.
     if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
         $bean->feed_locked = 1;
+    }
+
+    // Written with the row, so it commits and rolls back with the save. The
+    // post.published subscriber clears it once the webmentions are queued;
+    // /_cron queues the posts it is still set on.
+    if ($context['notify']) {
+        $bean->webmentions_pending = 1;
     }
 
     try {

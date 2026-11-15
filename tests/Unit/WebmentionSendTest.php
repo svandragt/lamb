@@ -6,6 +6,7 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Webmention\discover_endpoint;
 use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_outbound;
@@ -22,6 +23,8 @@ class WebmentionSendTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+        // enqueue_outbound() clears the post's `webmentions_pending` column, so the post table needs it.
+        ensure_schema();
 
         R::exec('DELETE FROM webmentionoutbox WHERE 1');
 
@@ -115,13 +118,11 @@ class WebmentionSendTest extends TestCase
 
     public function testEnqueueQueuesNoTargetWhenALaterInsertFails(): void
     {
-        // A partly queued post would have rows, so the /_cron sweep that retries
-        // posts without rows would never queue the targets that failed.
+        // The rows and the cleared `webmentions_pending` mark commit together, so
+        // a failure keeps the post marked and /_cron queues every target again.
         $source = ROOT_URL . '/status/1';
         $html = '<a href="https://other.example/a">a</a><a href="https://other.example/b">b</a>';
-        // Creates the table so the trigger can name it.
-        enqueue_outbound($this->postId, $source, '<a href="https://other.example/seed">seed</a>');
-        R::exec('DELETE FROM webmentionoutbox');
+        R::exec('UPDATE post SET webmentions_pending = 1 WHERE id = ?', [$this->postId]);
         R::exec("CREATE TRIGGER outbox_block_insert BEFORE INSERT ON webmentionoutbox WHEN NEW.target LIKE '%/b' BEGIN SELECT RAISE(ABORT, 'boom'); END");
 
         try {
@@ -132,6 +133,12 @@ class WebmentionSendTest extends TestCase
         }
 
         $this->assertSame(0, R::count('webmentionoutbox'));
+        $this->assertSame(1, (int) R::load('post', $this->postId)->webmentions_pending);
+
+        enqueue_outbound($this->postId, $source, $html);
+
+        $this->assertSame(2, R::count('webmentionoutbox'));
+        $this->assertSame(0, (int) R::load('post', $this->postId)->webmentions_pending);
     }
 
     public function testEnqueueRetriesFailedRow(): void
@@ -317,6 +324,31 @@ class WebmentionSendTest extends TestCase
         $kept = R::findOne('webmentionoutbox', ' target = ? ', ['https://third.example/b']);
         $this->assertSame('cancelled', $removed->status);
         $this->assertSame('pending', $kept->status);
+    }
+
+    public function testEnqueueCancelsPendingRowsWhenEveryLinkIsRemoved(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a>');
+
+        enqueue_outbound($this->postId, $source, '<p>no links</p>');
+
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testEnqueueOpensNoTransactionForAPostWithNothingToWrite(): void
+    {
+        $source = ROOT_URL . '/status/1';
+
+        $logger = R::debug(true, 1);
+        try {
+            $created = enqueue_outbound($this->postId, $source, '<p>no links</p>');
+        } finally {
+            R::debug(false);
+        }
+
+        $this->assertSame(0, $created);
+        $this->assertSame([], $logger->grep('BEGIN'));
     }
 
     public function testEnqueueLeavesSentRowsForRemovedLinks(): void

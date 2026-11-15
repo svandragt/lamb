@@ -159,6 +159,15 @@ class ImportItemTest extends TestCase
         $this->assertCount(1, R::findAll('post'));
     }
 
+    public function testAnImportedPostIsNotMarkedForWebmentions(): void
+    {
+        // An import never notifies, so /_cron must not queue webmentions for it.
+        $bean = import_item($this->sampleItem(), $this->fakeSource(), fn(): ?string => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
     public function testAFailedRedirectWriteLeavesNoPostBehind(): void
     {
         // Creates the table so the trigger can name it.

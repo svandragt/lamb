@@ -208,15 +208,18 @@ function redirect_deleted(mixed $args): void
     [$id] = $args;
     $post = R::load('post', (int)$id);
     $own_path = (string) parse_url(\Lamb\permalink($post), PHP_URL_PATH);
+    $return_path = delete_return_path($_SERVER['HTTP_REFERER'] ?? null, $own_path);
     if ($post->id) {
         try {
             soft_delete_post($post);
         } catch (SQL $e) {
-            // The transaction rolled back, so the post is still live.
+            // The transaction rolled back, so the post is still live and its own
+            // page, where the delete may have been pressed, still exists.
             $_SESSION['flash'][] = 'Failed to delete: ' . $e->getMessage();
+            $return_path = safe_referer_path($_SERVER['HTTP_REFERER'] ?? null);
         }
     }
-    redirect_uri(delete_return_path($_SERVER['HTTP_REFERER'] ?? null, $own_path));
+    redirect_uri($return_path);
 }
 
 /**
@@ -261,19 +264,27 @@ function redirect_restored(mixed $args): void
  */
 function soft_delete_post(OODBBean $post): void
 {
-    \Lamb\with_write_transaction(function () use ($post): void {
-        $post->deleted    = 1;
-        $post->deleted_at = \Lamb\now();
-        R::store($post);
+    $before = ['deleted' => $post->deleted, 'deleted_at' => $post->deleted_at];
 
-        // Re-send any webmentions this post previously sent so receivers re-fetch
-        // the now-gone source and drop the displayed mention (#331).
-        \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
+    try {
+        \Lamb\with_write_transaction(function () use ($post): void {
+            $post->deleted    = 1;
+            $post->deleted_at = \Lamb\now();
+            R::store($post);
 
-        // Trashing can remove the post currently holding MAX(updated); bump the
-        // monotonic mark so latest_content_timestamp() can't fall backwards (#669).
-        bump_content_timestamp();
-    });
+            // Re-send any webmentions this post previously sent so receivers re-fetch
+            // the now-gone source and drop the displayed mention (#331).
+            \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
+
+            // Trashing can remove the post currently holding MAX(updated); bump the
+            // monotonic mark so latest_content_timestamp() can't fall backwards (#669).
+            bump_content_timestamp();
+        });
+    } catch (\Throwable $e) {
+        // The rollback restored the row, not the bean: a caller that reuses it must not see a trashed post.
+        $post->import($before);
+        throw $e;
+    }
 }
 
 /**
@@ -289,20 +300,28 @@ function soft_delete_post(OODBBean $post): void
  */
 function restore_post(OODBBean $post): void
 {
-    \Lamb\with_write_transaction(function () use ($post): void {
-        $post->deleted    = null;
-        $post->deleted_at = null;
-        R::store($post);
+    $before = ['deleted' => $post->deleted, 'deleted_at' => $post->deleted_at];
 
-        // The post is back: abandon deletion re-sends /_cron has not yet drained,
-        // and re-queue any it already delivered so receivers re-display the mention
-        // (#331).
-        \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
+    try {
+        \Lamb\with_write_transaction(function () use ($post): void {
+            $post->deleted    = null;
+            $post->deleted_at = null;
+            R::store($post);
 
-        // A restore is a content mutation too; keep the monotonic mark moving
-        // forward so latest_content_timestamp() reflects it (#669).
-        bump_content_timestamp();
-    });
+            // The post is back: abandon deletion re-sends /_cron has not yet drained,
+            // and re-queue any it already delivered so receivers re-display the mention
+            // (#331).
+            \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
+
+            // A restore is a content mutation too; keep the monotonic mark moving
+            // forward so latest_content_timestamp() reflects it (#669).
+            bump_content_timestamp();
+        });
+    } catch (\Throwable $e) {
+        // The rollback restored the row, not the bean: a caller that reuses it must not see a restored post.
+        $post->import($before);
+        throw $e;
+    }
 }
 
 /**
