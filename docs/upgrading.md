@@ -132,7 +132,7 @@ The database and uploads live in the named volumes and survive the recreate.
 * A site with no author name in its settings no longer shows `Joe Sheeple`. Both feeds name the site title as the author (the host of your site URL when there is no title either), and the pages have no `author` meta tag. Open the settings page and fill in the author name.
 * The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
 * If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.
-* If your site uses its own theme named `2024`, rename the theme directory and the `theme` setting. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.
+* If your site uses its own theme named `2024`, rename the theme directory and pick it again in the **Theme** dropdown at `/settings`. Lamb renders `2024` with `2026` even when a `src/themes/2024` directory exists.
 
 ## Related
 

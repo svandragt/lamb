@@ -44,12 +44,9 @@ included when its file exists, so the feed never points at a missing image.
 Feed readers normally poll for changes. With [WebSub](https://www.w3.org/TR/websub/),
 subscribers can instead be pushed new posts the moment you publish.
 
-Set one or more hubs (comma-separated) in the
-[site configuration]({{ site.baseurl }}{% link site-configuration.md %}):
-
-```
-websub_hubs = https://hub.example.com/
-```
+Enter one or more hubs, comma-separated, in the **WebSub hubs** field of the **Feeds** group on the
+**Configuration** tab at `/settings` (see [site configuration]({{ site.baseurl }}{% link site-configuration.md %})),
+for example `https://hub.example.com/`.
 
 With a hub configured, Lamb:
 

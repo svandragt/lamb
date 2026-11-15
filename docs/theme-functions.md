@@ -145,5 +145,5 @@ The classes coexist with the schema.org markup the themes also emit, and can be 
 
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): how Lamb sends and receives mentions — the microformats2 markup above is what receivers parse.
 * [Themes]({{ site.baseurl }}{% link themes.md %}): how themes are structured, the fallback to `base`, and the part resolution rules.
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): the `theme` key and the config values exposed in `$config`.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): the **Theme** dropdown and the config values exposed in `$config`.
 * [Post Types]({{ site.baseurl }}{% link post-types.md %}): how status posts and page-style posts differ, which affects `$bean->slug` and permalinks.
