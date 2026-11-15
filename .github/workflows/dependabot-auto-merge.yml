@@ -22,3 +22,19 @@ jobs:
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Cubic's review can land before auto-merge is enabled, and
+      # dependabot-resolve-bot-threads.yml then skips it, so resolve here too.
+      # Run the script from the default branch, not the PR's merge commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Resolve existing cubic threads
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        run: scripts/resolve-cubic-threads.sh "$OWNER" "$REPO" "$PR_NUMBER"
+        env:
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

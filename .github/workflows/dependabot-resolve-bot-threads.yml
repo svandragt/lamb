@@ -19,35 +19,22 @@ jobs:
       github.event.review.user.login == 'cubic-dev-ai[bot]'
 
     steps:
+      # Run the script from the default branch, not the PR's merge commit.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
       - name: Resolve cubic threads when auto-merge is enabled
         run: |
           set -euo pipefail
-          # shellcheck disable=SC2016 # $vars are GraphQL variables, not shell
-          query='query($owner: String!, $name: String!, $number: Int!) {
-            repository(owner: $owner, name: $name) {
-              pullRequest(number: $number) {
-                autoMergeRequest { enabledAt }
-                reviewThreads(first: 100) {
-                  nodes { id isResolved comments(first: 1) { nodes { author { login } } } }
-                }
-              }
-            }
-          }'
-          pr=$(gh api graphql -f query="$query" -F owner="$OWNER" -F name="$REPO" -F number="$PR_NUMBER")
-          if [ "$(jq '.data.repository.pullRequest.autoMergeRequest == null' <<<"$pr")" = true ]; then
+          if [ "$(gh pr view "$PR_NUMBER" --json autoMergeRequest --jq '.autoMergeRequest == null')" = true ]; then
             echo "Auto-merge is not enabled (major update); leaving threads for a person."
             exit 0
           fi
-          ids=$(jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
-            | select(.isResolved == false and .comments.nodes[0].author.login == "cubic-dev-ai")
-            | .id' <<<"$pr")
-          for id in $ids; do
-            # shellcheck disable=SC2016
-            gh api graphql -f query='mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { id } } }' -F id="$id" >/dev/null
-            echo "Resolved thread $id"
-          done
+          scripts/resolve-cubic-threads.sh "$OWNER" "$REPO" "$PR_NUMBER"
         env:
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          GH_REPO: ${{ github.repository }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
