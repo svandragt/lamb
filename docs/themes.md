@@ -93,4 +93,4 @@ $accent = $config['theme_news']['accent_colour'] ?? '#0a7';
 
 * [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %}): reference for the helper functions theme parts call.
 * [Media]({{ site.baseurl }}{% link media.md %}): rendered images carry intrinsic dimensions a theme's CSS has to accommodate.
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Set the `theme` key in the config to activate a theme.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): Pick a theme in the **Theme** dropdown of the **Site** group on the **Configuration** tab at `/settings` to activate it.

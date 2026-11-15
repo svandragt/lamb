@@ -96,4 +96,4 @@ point `site_url` at that.
 * [Redirections]({{ site.baseurl }}{% link redirections.md %})
 * [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): `author_email`, `author_name`, `following_url` and `[me]` feed the `/.well-known/` profile files.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): The `timezone` setting determines when scheduled posts go live.
-* [Themes]({{ site.baseurl }}{% link themes.md %}): The `theme` key selects the active theme, and a theme can add its own fields on a Theme tab.
+* [Themes]({{ site.baseurl }}{% link themes.md %}): The **Theme** dropdown selects the active theme, and a theme can add its own fields on a Theme tab.

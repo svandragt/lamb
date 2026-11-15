@@ -15,11 +15,7 @@ Lamb exposes a `/micropub` endpoint. Clients discover it via a `<link rel="micro
 
 ### 1. Set your site URL
 
-Add your canonical site URL to your site configuration at `/settings`:
-
-```ini
-site_url = https://example.com
-```
+Enter your canonical site URL, such as `https://example.com`, in the **Site URL** field of the **Site** group on the **Configuration** tab at `/settings`, then save.
 
 Lamb compares the identity in an IndieAuth token against this value to confirm the
 token was issued for *your* site and not someone else's. Until it is set, the
