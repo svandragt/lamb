@@ -36,7 +36,7 @@ class ConfigTypesTest extends TestCase
     {
         $config = $this->withConfig("[author_name]\nanswer = 42\n");
 
-        $this->assertFalse(is_array($config['author_name'] ?? null));
+        $this->assertSame('', $config['author_name']);
     }
 
     public function testAnAuthorsOwnSectionReachesTheConfig(): void
