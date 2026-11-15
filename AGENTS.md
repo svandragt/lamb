@@ -97,6 +97,11 @@ blocks GitHub downloads but allows git), run `bash .claude/hooks/cloud-fallback.
 Dependabot (`.github/dependabot.yml`) watches all five ecosystems weekly —
 composer, npm, github-actions, docker, devcontainers — and
 `dependabot-auto-merge.yml` merges patch and minor bumps once CI is green.
+The branch rulesets block merging while a review thread is unresolved, so both
+`dependabot-auto-merge.yml` and `dependabot-resolve-bot-threads.yml` run
+`scripts/resolve-cubic-threads.sh` on those PRs: the first right after it tries
+to enable auto-merge, the second whenever cubic submits a review. Majors are
+left for a person.
 Dependabot parses `composer.json`/`composer.lock` directly, so the composer
 ecosystem is unaffected by installing dependencies with viv instead of
 Composer. Vulnerabilities are caught by `viv audit` (quality job) and `pnpm
