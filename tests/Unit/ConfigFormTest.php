@@ -504,7 +504,12 @@ class ConfigFormTest extends TestCase
         $warnings = shape_warnings("[site_title]\n");
 
         $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('`[site_title]` is not a section Lamb reads', $warnings[0]);
+        $this->assertStringContainsString('`[site_title]` is a single-value setting', $warnings[0]);
+    }
+
+    public function testShapeWarningsIsSilentAboutAnAuthorsOwnSection(): void
+    {
+        $this->assertSame([], shape_warnings("[mystery_section]\nanswer = 42\n"));
     }
 
     /**

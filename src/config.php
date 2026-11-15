@@ -537,9 +537,13 @@ function shape_warnings(string $ini_text): array
             continue;
         }
 
-        if (!$expects_section && is_array($value)) {
-            $warnings[] = "`[{$key}]` is not a section Lamb reads, so it was ignored. "
-                . 'A single-value setting is written as `name = value`, above the first section.';
+        // An author's own section is valid: custom themes read it. Only a
+        // section named like a single-value setting is a mistake.
+        $is_scalar_setting = in_array($key, [...SETTINGS_FORM_FIELDS, 'feeds_draft'], true)
+            || (isset($defaults[$key]) && !is_array($defaults[$key]));
+        if (!$expects_section && $is_scalar_setting && is_array($value)) {
+            $warnings[] = "`[{$key}]` is a single-value setting, so the section was ignored. "
+                . 'Write it as `name = value`, above the first section.';
             continue;
         }
 
