@@ -51,6 +51,10 @@ feeds_draft = true
 authorization_endpoint = https://indieauth.com/auth
 token_endpoint = https://tokens.indieauth.com/token
 
+;; The metadata URL your IndieAuth server gives you, for servers that use one
+;; (IndieKey does). Lamb publishes it as a <link rel="indieauth-metadata"> tag.
+;indieauth_metadata = https://indiekey.id/.well-known/oauth-authorization-server/s/SITE_ID
+
 ;; WebSub hubs used to push new posts to feed subscribers in real time.
 ;; Hubs are advertised in the Atom and JSON feeds, and pinged when you publish.
 ;; Separate multiple hubs with commas.
@@ -687,6 +691,7 @@ const SETTINGS_FORM_FIELDS = [
     'following_url',
     'authorization_endpoint',
     'token_endpoint',
+    'indieauth_metadata',
     'websub_hubs',
 ];
 

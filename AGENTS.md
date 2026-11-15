@@ -545,6 +545,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered by `parts/_webmentions.php`); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
 - `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
+- The theme `html.php` files emit the same endpoints as `<link>` tags, plus `rel="indieauth-metadata"` from the optional `indieauth_metadata` setting (`the_indieauth_metadata()` in `theme/meta.php`)
 
 ### Pagination
 
