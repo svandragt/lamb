@@ -37,6 +37,8 @@ When you publish or edit a post, Lamb scans its rendered HTML for links to **oth
 
 Each source/target pair is sent once — re-editing a post does not re-notify targets it already reached, so receivers are not spammed. Drafts and posts ingested from other feeds do not send webmentions.
 
+If Lamb cannot queue a post's webmentions when you publish or edit it, for example because the database is busy, the next `/_cron` run queues them. The post stays marked until its webmentions are queued, so the retry also covers a link you added in an edit. Importing posts and ticking a task-list checkbox do not queue webmentions.
+
 [Scheduled posts]({{ site.baseurl }}{% link scheduling.md %}) are queued when you save them, but nothing is sent until the publication time has passed — the first `/_cron` run after the post goes live delivers its webmentions, once the post is publicly reachable for receivers to verify. Editing a scheduled post before it publishes updates the queue (removed links are dropped), and deleting it cancels the queued mentions entirely.
 
 ### Deleting a post that sent webmentions

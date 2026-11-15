@@ -5,7 +5,9 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Bootstrap\migrate_post_table;
+use function Lamb\Webmention\pending_posts_query;
 
 use const Lamb\Bootstrap\POST_INDEXES;
 
@@ -82,7 +84,7 @@ class PostIndexesTest extends TestCase
     {
         $this->createPostTable([
             'slug TEXT', 'updated TEXT', 'version INTEGER', 'feed_name TEXT',
-            'draft INTEGER', 'deleted INTEGER',
+            'draft INTEGER', 'deleted INTEGER', 'webmentions_pending INTEGER',
         ]);
 
         migrate_post_table();
@@ -90,6 +92,24 @@ class PostIndexesTest extends TestCase
         $expected = array_keys(POST_INDEXES);
         sort($expected);
         $this->assertSame($expected, $this->postIndexes());
+    }
+
+    public function testThePendingWebmentionsSweepIsAnIndexProbe(): void
+    {
+        // enqueue_pending_posts() runs this predicate on every /_cron run, and almost
+        // every post is unmarked, so it must not scan the table.
+        ensure_schema();
+        migrate_post_table();
+
+        // The statement the sweep runs, with its ORDER BY and visibility predicates: an
+        // ORDER BY id alone makes SQLite walk the table in id order instead of probing.
+        $query = pending_posts_query();
+        $plan = implode(' ', array_column(
+            R::getAll('EXPLAIN QUERY PLAN ' . $query['sql'], $query['params']),
+            'detail'
+        ));
+
+        $this->assertStringContainsString('idx_post_webmentions_pending', $plan);
     }
 
     public function testVersionAndFeedNameAreNotIndexedEvenWhenPresent(): void

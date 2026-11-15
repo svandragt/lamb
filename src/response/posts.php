@@ -208,10 +208,18 @@ function redirect_deleted(mixed $args): void
     [$id] = $args;
     $post = R::load('post', (int)$id);
     $own_path = (string) parse_url(\Lamb\permalink($post), PHP_URL_PATH);
+    $return_path = delete_return_path($_SERVER['HTTP_REFERER'] ?? null, $own_path);
     if ($post->id) {
-        soft_delete_post($post);
+        try {
+            soft_delete_post($post);
+        } catch (SQL $e) {
+            // The transaction rolled back, so the post is still live and its own
+            // page, where the delete may have been pressed, still exists.
+            $_SESSION['flash'][] = 'Failed to delete: ' . $e->getMessage();
+            $return_path = safe_referer_path($_SERVER['HTTP_REFERER'] ?? null);
+        }
     }
-    redirect_uri(delete_return_path($_SERVER['HTTP_REFERER'] ?? null, $own_path));
+    redirect_uri($return_path);
 }
 
 /**
@@ -232,7 +240,12 @@ function redirect_restored(mixed $args): void
     [$id] = $args;
     $post = R::load('post', (int)$id);
     if ($post->id) {
-        restore_post($post);
+        try {
+            restore_post($post);
+        } catch (SQL $e) {
+            // The transaction rolled back, so the post is still in the trash.
+            $_SESSION['flash'][] = 'Failed to restore: ' . $e->getMessage();
+        }
     }
     redirect_uri('/trash');
 }
@@ -240,44 +253,85 @@ function redirect_restored(mixed $args): void
 /**
  * Soft-delete a post by setting its deleted flag and recording the deletion timestamp.
  *
+ * The store, the webmention re-sends and the content mark commit together, so a
+ * failure in a later step leaves the post live instead of trashed with its
+ * receivers never told.
+ *
  * @param OODBBean $post
  * @return void
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
 function soft_delete_post(OODBBean $post): void
 {
-    $post->deleted    = 1;
-    $post->deleted_at = \Lamb\now();
-    R::store($post);
-
     // Re-send any webmentions this post previously sent so receivers re-fetch
     // the now-gone source and drop the displayed mention (#331).
-    \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
-
-    // Trashing can remove the post currently holding MAX(updated); bump the
-    // monotonic mark so latest_content_timestamp() can't fall backwards (#669).
-    bump_content_timestamp();
+    change_post_state(
+        $post,
+        ['deleted' => 1, 'deleted_at' => \Lamb\now()],
+        \Lamb\Webmention\enqueue_deletion_resends(...)
+    );
 }
 
 /**
  * Restore a soft-deleted post by clearing its deleted flags.
  *
+ * The store, the re-send reconciliation and the content mark commit together,
+ * so a failure in a later step leaves the post in the trash.
+ *
  * @param OODBBean $post
  * @return void
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
 function restore_post(OODBBean $post): void
 {
-    $post->deleted    = null;
-    $post->deleted_at = null;
-    R::store($post);
-
     // The post is back: abandon deletion re-sends /_cron has not yet drained,
     // and re-queue any it already delivered so receivers re-display the mention
     // (#331).
-    \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
+    change_post_state(
+        $post,
+        ['deleted' => null, 'deleted_at' => null],
+        \Lamb\Webmention\reconcile_resends_on_restore(...)
+    );
+}
 
-    // A restore is a content mutation too; keep the monotonic mark moving
-    // forward so latest_content_timestamp() reflects it (#669).
-    bump_content_timestamp();
+/**
+ * Stores a post's trash state, its webmention writes and the content mark in one transaction.
+ *
+ * Trashing can remove the post currently holding MAX(updated), and a restore is
+ * a content mutation too, so both move the monotonic mark forward so
+ * latest_content_timestamp() cannot fall backwards (#669).
+ *
+ * The rollback restores the row, not the bean, so on failure the fields are put
+ * back: a caller that reuses the bean must not see a trashed post that is live
+ * in the database.
+ *
+ * @param OODBBean             $post              The post to change.
+ * @param array<string, mixed> $fields            The fields to set.
+ * @param callable(int): mixed $webmention_writes Called with the post id after the store, inside the transaction.
+ * @return void
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
+ */
+function change_post_state(OODBBean $post, array $fields, callable $webmention_writes): void
+{
+    $before = [];
+    foreach (array_keys($fields) as $name) {
+        $before[$name] = $post->$name;
+    }
+
+    try {
+        \Lamb\with_write_transaction(function () use ($post, $fields, $webmention_writes): void {
+            $post->import($fields);
+            R::store($post);
+            $webmention_writes((int) $post->id);
+            bump_content_timestamp();
+        });
+    } catch (\Throwable $e) {
+        $post->import($before);
+        throw $e;
+    }
 }
 
 /**

@@ -5,8 +5,10 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Import\import_item;
+use function Lamb\Import\store_redirect;
 
 /**
  * Covers Lamb\Import\import_item(), the pipeline body shared by every
@@ -155,5 +157,36 @@ class ImportItemTest extends TestCase
         $this->assertSame($id, (int) $replaced->id);
         $this->assertSame('slug-Updated', (string) $replaced->slug);
         $this->assertCount(1, R::findAll('post'));
+    }
+
+    public function testAnImportedPostIsNotMarkedForWebmentions(): void
+    {
+        // An import never notifies, so /_cron must not queue webmentions for it.
+        $bean = import_item($this->sampleItem(), $this->fakeSource(), fn(): ?string => null, false);
+
+        $this->assertNotNull($bean);
+        $this->assertSame(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testAFailedRedirectWriteLeavesNoPostBehind(): void
+    {
+        // Creates the table so the trigger can name it.
+        store_redirect('seed', '/elsewhere');
+        R::exec("CREATE TRIGGER redirect_block_insert BEFORE INSERT ON redirect BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        $source = $this->fakeSource();
+        $source['store_redirects'] = static function (array $item, OODBBean $bean): void {
+            store_redirect('old/path', '/' . $bean->slug);
+        };
+
+        try {
+            import_item($this->sampleItem(), $source, fn(): ?string => null, false);
+            $this->fail('The redirect write should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER redirect_block_insert');
+        }
+
+        // A re-run matches on import_uuid, so a post left behind would never get its redirects.
+        $this->assertSame(0, R::count('post'));
+        $this->assertSame(1, R::count('redirect'));
     }
 }

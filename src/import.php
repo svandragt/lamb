@@ -993,8 +993,12 @@ function import_item(array $item, array $source, callable $downloader, bool $dry
         return $bean;
     }
 
-    save($bean, ['finalize_slug' => true]);
-    ($source['store_redirects'])($item, $bean);
+    // The redirects join the save's transaction: a post left without them is
+    // never revisited, because a re-run matches its import_uuid and returns early.
+    save($bean, [
+        'finalize_slug' => true,
+        'extra_writes'  => static fn(OODBBean $stored) => ($source['store_redirects'])($item, $stored),
+    ]);
     return $bean;
 }
 

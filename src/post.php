@@ -11,6 +11,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\is_notifiable;
 use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
@@ -909,15 +910,23 @@ function register_default_subscribers(): void
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
  *    into the front matter (the step every create path runs after its first store).
- *  - `notify` — emit `post.published` after a successful store.
+ *  - `notify` — emit `post.published` after a successful store, and, for a post
+ *    that sends webmentions (not a draft or a feed item), write a random token to
+ *    the row's `webmentions_pending` column in the same transaction. The webmention
+ *    subscriber clears it after queueing, only while the row still holds the
+ *    token; a failed queueing leaves it set for /_cron to retry
+ *    (Webmention\enqueue_pending_posts()).
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
  *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
  *    different from `old_slug`, record a 301 from `old_slug` to the new one
  *    (the edit form's store_slug_change_redirect() call). The funnel has no
  *    pre-edit slug of its own, so the caller passes it in.
+ *  - `extra_writes` — a callable that receives the stored bean and makes writes
+ *    that belong to the save (an importer's legacy-URL redirects), inside the
+ *    same transaction.
  *
- * The stores, the content mark and the slug-change redirect run in one
+ * The stores, the content mark, the slug-change redirect and the extra writes run in one
  * transaction, so a failed second store rolls the first back instead of leaving
  * a row behind for a resubmit to duplicate (#970). The rollback does not catch
  * the failure: each call site flashes its own message and decides what to do, so
@@ -926,7 +935,7 @@ function register_default_subscribers(): void
  * to be saved again. The events run after the commit.
  *
  * @param OODBBean $bean A populated post bean.
- * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string, extra_writes?: ?callable(OODBBean): void} $context
  * @return void
  * @throws SQL When a write in the transaction fails, the transaction did not begin or it ended before the commit.
  * @throws \LogicException When a transaction is already open.
@@ -939,6 +948,7 @@ function save(OODBBean $bean, array $context = []): void
         'lock_if_feed_sourced'    => false,
         'redirect_on_slug_change' => false,
         'old_slug'                => '',
+        'extra_writes'            => null,
     ];
 
     $is_new = empty($bean->id);
@@ -947,6 +957,17 @@ function save(OODBBean $bean, array $context = []): void
     // Before the store: feed_locked is a column on the row being written.
     if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
         $bean->feed_locked = 1;
+    }
+
+    // Written with the row, so it commits and rolls back with the save. A token
+    // of its own, not a flag: whoever queues the webmentions clears the mark only
+    // while it still holds this save's token, so a slow queueing of an earlier
+    // save cannot clear the mark a later save set. 31 bits, because fluid mode
+    // widens an INTEGER column for a larger value, and only two saves of one post
+    // within seconds of each other ever need telling apart. Only a post that will
+    // be queued is marked: nothing would ever clear the mark of a draft or a feed item.
+    if ($context['notify'] && is_notifiable($bean)) {
+        $bean->webmentions_pending = random_int(1, 2147483647);
     }
 
     try {
@@ -965,6 +986,10 @@ function save(OODBBean $bean, array $context = []): void
             // pointing at content that was never saved, nor a save without its 301.
             if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
                 \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
+            }
+
+            if ($context['extra_writes'] !== null) {
+                ($context['extra_writes'])($bean);
             }
         });
     } catch (\Throwable $e) {

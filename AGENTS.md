@@ -255,7 +255,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 RedBeanPHP on SQLite. Production freezes the schema at the end of `bootstrap_db()` (`R::freeze(true)`), so a write naming a column that `SCHEMA` in `src/bootstrap.php` does not list throws instead of adding the column. Unit tests run fluid unless a test freezes the schema. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`.
 
 **Tables used:**
-- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`
+- `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`, `webmentions_pending`
 - `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
@@ -540,7 +540,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### Feed Ingestion (Cron)
 
-`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication. The same run also drains the outbound webmention queue via `Webmention\process_outbound()`.
+`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication. Before the crawl, the run queues webmentions for posts still marked `webmentions_pending` (`Webmention\enqueue_pending_posts()`, at most `ENQUEUE_SWEEP_LIMIT` per run). `Post\save()` writes a random token to the column on a `notify` save of a post that sends webmentions (`is_notifiable()`: not a draft, not a feed item), in the same transaction as the row. `enqueue_for_post()` clears it, only while the row still holds the token its bean carries, in the same transaction as the rows it queues (`enqueue_outbound()`'s `$claim` callback, which also makes a call with a stale token write nothing), so a `post.published` queueing that failed (a publish or an edit) is retried and a slow queueing of an earlier save cannot clear a later save's mark. The sweep reads only the ids up front and each post just before queueing it. Imports and checkbox toggles do not notify, so they never set it. The same run also drains the outbound webmention queue via `Webmention\process_outbound()`.
 
 ### IndieWeb Endpoints
 

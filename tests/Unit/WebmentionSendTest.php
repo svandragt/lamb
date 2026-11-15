@@ -4,7 +4,9 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
+use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Webmention\discover_endpoint;
 use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_outbound;
@@ -21,6 +23,8 @@ class WebmentionSendTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
+        // enqueue_for_post() clears the post's `webmentions_pending` column, so the post table needs it.
+        ensure_schema();
 
         R::exec('DELETE FROM webmentionoutbox WHERE 1');
 
@@ -110,6 +114,46 @@ class WebmentionSendTest extends TestCase
         enqueue_outbound($this->postId, $source, $html);
         enqueue_outbound($this->postId, $source, $html);
         $this->assertSame(1, R::count('webmentionoutbox'));
+    }
+
+    public function testEnqueueQueuesNoTargetWhenALaterInsertFails(): void
+    {
+        // The rows and the cleared `webmentions_pending` mark commit together, so
+        // a failure keeps the post marked and /_cron queues every target again.
+        R::exec(
+            'UPDATE post SET webmentions_pending = 7, transformed = ? WHERE id = ?',
+            ['<a href="https://other.example/a">a</a><a href="https://other.example/b">b</a>', $this->postId]
+        );
+        R::exec("CREATE TRIGGER outbox_block_insert BEFORE INSERT ON webmentionoutbox WHEN NEW.target LIKE '%/b' BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            enqueue_for_post(R::load('post', $this->postId));
+            $this->fail('The second insert should have thrown.');
+        } catch (SQL) {
+            // Expected.
+        } finally {
+            R::exec('DROP TRIGGER outbox_block_insert');
+        }
+
+        $this->assertSame(0, R::count('webmentionoutbox'));
+        $this->assertSame(7, (int) R::load('post', $this->postId)->webmentions_pending);
+
+        enqueue_for_post(R::load('post', $this->postId));
+
+        $this->assertSame(2, R::count('webmentionoutbox'));
+        $this->assertSame(0, (int) R::load('post', $this->postId)->webmentions_pending);
+    }
+
+    public function testEnqueueOutboundNeverClearsAMarkOnItsOwn(): void
+    {
+        // Only enqueue_for_post() knows which save's mark it holds, so a caller of
+        // enqueue_outbound() cannot clear one by accident.
+        R::exec('UPDATE post SET webmentions_pending = 7 WHERE id = ?', [$this->postId]);
+
+        enqueue_outbound($this->postId, ROOT_URL . '/status/1', '<a href="https://other.example/a">a</a>');
+        enqueue_outbound($this->postId, ROOT_URL . '/status/2', '<p>no links</p>');
+
+        $this->assertSame(7, (int) R::load('post', $this->postId)->webmentions_pending);
     }
 
     public function testEnqueueRetriesFailedRow(): void
@@ -295,6 +339,31 @@ class WebmentionSendTest extends TestCase
         $kept = R::findOne('webmentionoutbox', ' target = ? ', ['https://third.example/b']);
         $this->assertSame('cancelled', $removed->status);
         $this->assertSame('pending', $kept->status);
+    }
+
+    public function testEnqueueCancelsPendingRowsWhenEveryLinkIsRemoved(): void
+    {
+        $source = ROOT_URL . '/status/1';
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/a">a</a>');
+
+        enqueue_outbound($this->postId, $source, '<p>no links</p>');
+
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testEnqueueOpensNoTransactionForAPostWithNothingToWrite(): void
+    {
+        $source = ROOT_URL . '/status/1';
+
+        $logger = R::debug(true, 1);
+        try {
+            $created = enqueue_outbound($this->postId, $source, '<p>no links</p>');
+        } finally {
+            R::debug(false);
+        }
+
+        $this->assertSame(0, $created);
+        $this->assertSame([], $logger->grep('BEGIN'));
     }
 
     public function testEnqueueLeavesSentRowsForRemovedLinks(): void

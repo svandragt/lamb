@@ -7,15 +7,19 @@ namespace Lamb\Webmention;
 use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_deleted;
 use function Lamb\is_draft;
+use function Lamb\is_notifiable;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 use function Lamb\Post\split_reply_targets;
+use function Lamb\visible_clause;
+use function Lamb\with_write_transaction;
 
 use const ROOT_URL;
 
@@ -48,6 +52,15 @@ const WEBMENTION_FETCH_MAX_BYTES = 2_000_000;
  * practice a run reaches deliverable rows long before this.
  */
 const OUTBOX_SCAN_LIMIT = 500;
+
+/**
+ * Most posts one /_cron run queues webmentions for in enqueue_pending_posts().
+ *
+ * Each post costs a write transaction, so a backlog (many failures in a row)
+ * must not make one run walk it end to end and hold the cron lock. The rest are
+ * still marked and wait for the next run.
+ */
+const ENQUEUE_SWEEP_LIMIT = 100;
 
 /**
  * Most webmentions rendered on a single post page.
@@ -552,28 +565,127 @@ function resolve_url(string $base, string $rel): string
 }
 
 /**
- * Queue outbound webmentions for a freshly saved post, if it is eligible.
+ * Queue outbound webmentions for a freshly saved post, if it is eligible, and
+ * clear the `webmentions_pending` mark its save set.
  *
  * Skips ingested feed items (third-party content) and drafts — neither should
  * notify external targets. Future-dated scheduled posts ARE queued: their rows
  * wait in the outbox until publication, because process_outbound() only sends
  * once the source post is publicly visible (#302).
  *
- * @param OODBBean $bean A stored post bean.
- * @return void
+ * The mark holds the token of the save that set it, and this clears it only
+ * while the row still holds the token $bean carries. If a later save has marked
+ * the post since, this call is stale: it writes nothing, and that save's own
+ * queueing (or /_cron) does the work from the newer content. Once the clear has
+ * committed, $bean's own copy of the token is zeroed too, so a later store of the
+ * bean does not write the old token back. A stale call leaves the bean alone.
+ *
+ * @param OODBBean $bean A stored post bean, carrying the token its save wrote.
+ * @return int Number of queue rows this call wrote.
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
-function enqueue_for_post(OODBBean $bean): void
+function enqueue_for_post(OODBBean $bean): int
 {
-    if (!$bean->id || !empty($bean->feed_name) || is_draft($bean)) {
-        return;
+    if (!$bean->id || !is_notifiable($bean)) {
+        return 0;
     }
 
-    enqueue_outbound(
-        (int) $bean->id,
+    $post_id = (int) $bean->id;
+    $token = (int) $bean->webmentions_pending;
+    $cleared = false;
+    $claim = static function () use ($post_id, $token, &$cleared): bool {
+        $cleared = $token !== 0 && clear_webmentions_pending($post_id, $token);
+
+        return $token === 0 || $cleared;
+    };
+
+    $written = enqueue_outbound(
+        $post_id,
         permalink($bean),
         (string) ($bean->transformed ?? ''),
-        (string) ($bean->in_reply_to ?? '')
+        (string) ($bean->in_reply_to ?? ''),
+        $claim
     );
+    if ($cleared) {
+        $bean->webmentions_pending = 0;
+    }
+
+    return $written;
+}
+
+/**
+ * The query that lists the ids enqueue_pending_posts() works on.
+ *
+ * Its own function so a test can ask SQLite how it plans exactly this statement.
+ * It orders by the indexed column first: with `ORDER BY id` alone SQLite walks the
+ * whole table in id order and filters, instead of probing the index.
+ *
+ * @return array{sql: string, params: list<mixed>}
+ */
+function pending_posts_query(): array
+{
+    $visible = visible_clause();
+
+    return [
+        'sql' => 'SELECT id FROM post WHERE webmentions_pending > 0 AND '
+            . $visible['sql']
+            . " AND (feed_name IS NULL OR feed_name = '') ORDER BY webmentions_pending, id LIMIT ?",
+        'params' => [...$visible['params'], ENQUEUE_SWEEP_LIMIT],
+    ];
+}
+
+/**
+ * Queue webmentions for the posts whose queueing did not finish, so a publish
+ * or edit that failed to queue is retried by /_cron.
+ *
+ * Post\save() sets `webmentions_pending` on a notify save and emits
+ * `post.published` after its commit. enqueue_for_post() clears the mark with the
+ * rows it queues, but emit() only logs a subscriber's SQL failure (a locked
+ * database), so a failed queueing leaves the mark set. This sweep takes the ids
+ * of the marked posts that are publicly visible (a scheduled post is picked up
+ * once its time has passed), at most ENQUEUE_SWEEP_LIMIT per run, and runs
+ * enqueue_for_post() on each. Saves that do not notify (an import, a checkbox
+ * toggle) never set the mark, so they are never queued here.
+ *
+ * Each post is read just before it is queued, not up front: a run over many posts
+ * would otherwise queue from content an edit has since replaced. Only the columns
+ * enqueue_for_post() reads are loaded. A post that fails is logged and the sweep
+ * carries on, so one bad post cannot stop the feed crawl and the drain that
+ * follow; the next run tries it again.
+ *
+ * @return int Number of posts whose queue changed: rows created, reset to pending or cancelled.
+ */
+function enqueue_pending_posts(): int
+{
+    // A locked database fails this query too, and /_cron has to go on to the feed
+    // crawl and the drains, so it is logged here like a failing post is below.
+    try {
+        $query = pending_posts_query();
+        $ids = R::getCol($query['sql'], $query['params']);
+    } catch (\Throwable $e) {
+        error_log('Webmention sweep could not list the marked posts: ' . $e->getMessage());
+
+        return 0;
+    }
+
+    $processed = 0;
+    foreach ($ids as $id) {
+        try {
+            $rows = R::getAll(
+                'SELECT id, slug, transformed, in_reply_to, feed_name, draft, webmentions_pending FROM post WHERE id = ?',
+                [$id]
+            );
+            // No row: the post was purged since the ids were read.
+            if ($rows !== [] && enqueue_for_post(array_values(R::convertToBeans('post', $rows))[0]) > 0) {
+                $processed++;
+            }
+        } catch (\Throwable $e) {
+            error_log(sprintf('Webmention sweep failed for post %d: %s', $id, $e->getMessage()));
+        }
+    }
+
+    return $processed;
 }
 
 /**
@@ -591,13 +703,23 @@ function enqueue_for_post(OODBBean $bean): void
  * parent gets notified. Each is subject to the same external-host filter as
  * body links.
  *
- * @param int    $post_id
- * @param string $source   This post's permalink.
- * @param string $html     The post's rendered HTML.
- * @param string $reply_to Optional `in-reply-to` target URL(s), space-separated.
- * @return int Number of newly created queue rows.
+ * All the writes commit together, so a failure part-way queues no target.
+ * $claim, when given, is the caller's own write: it runs first inside that
+ * transaction and returns whether the caller still owns the work. When it
+ * returns false nothing is written, and when a later write fails it rolls back
+ * with the rest. A post with nothing to write (no targets, no pending rows to
+ * cancel) opens no transaction: $claim alone runs, as a single statement.
+ *
+ * @param int           $post_id
+ * @param string        $source   This post's permalink.
+ * @param string        $html     The post's rendered HTML.
+ * @param string        $reply_to Optional `in-reply-to` target URL(s), space-separated.
+ * @param callable|null $claim    fn(): bool, run first in the transaction (see above).
+ * @return int Number of queue rows written: created, reset to pending or cancelled.
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
-function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
+function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = '', ?callable $claim = null): int
 {
     $targets = extract_outbound_links($html);
 
@@ -607,39 +729,71 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
         }
     }
 
-    // Cancel pending rows for links the post no longer contains.
-    $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
-    foreach ($stale as $row) {
-        if (!in_array((string) $row->target, $targets, true)) {
-            $row->status = 'cancelled';
-            R::store($row);
+    // A pending row for a link the post no longer has still needs cancelling, so
+    // "no targets" alone is not "nothing to write".
+    if ($targets === [] && R::count('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']) === 0) {
+        if ($claim !== null) {
+            $claim();
         }
+
+        return 0;
     }
 
-    $created = 0;
-    foreach ($targets as $target) {
-        $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
-        if ($row) {
-            if ($row->status === 'failed' || $row->status === 'cancelled') {
-                $row->status = 'pending';
+    return with_write_transaction(function () use ($post_id, $source, $targets, $claim): int {
+        if ($claim !== null && !$claim()) {
+            return 0;
+        }
+
+        $written = 0;
+
+        // Cancel pending rows for links the post no longer contains.
+        $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
+        foreach ($stale as $row) {
+            if (!in_array((string) $row->target, $targets, true)) {
+                $row->status = 'cancelled';
                 R::store($row);
+                $written++;
             }
-            continue;
         }
 
-        $row = R::dispense('webmentionoutbox');
-        $row->post_id = $post_id;
-        $row->source = $source;
-        $row->target = $target;
-        $row->status = 'pending';
-        $row->attempts = 0;
-        $row->created = \Lamb\now();
-        $row->processed_at = null;
-        R::store($row);
-        $created++;
-    }
+        foreach ($targets as $target) {
+            $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
+            if ($row) {
+                if ($row->status === 'failed' || $row->status === 'cancelled') {
+                    $row->status = 'pending';
+                    R::store($row);
+                    $written++;
+                }
+                continue;
+            }
 
-    return $created;
+            $row = R::dispense('webmentionoutbox');
+            $row->post_id = $post_id;
+            $row->source = $source;
+            $row->target = $target;
+            $row->status = 'pending';
+            $row->attempts = 0;
+            $row->created = \Lamb\now();
+            $row->processed_at = null;
+            R::store($row);
+            $written++;
+        }
+
+        return $written;
+    });
+}
+
+/**
+ * Clears a post's `webmentions_pending` mark, if it still holds $token.
+ *
+ * @param int $post_id The post's id.
+ * @param int $token   The token the caller's save wrote.
+ * @return bool Whether the mark was cleared: false when a later save has replaced the token, or it was already cleared.
+ * @throws SQL When the write fails.
+ */
+function clear_webmentions_pending(int $post_id, int $token): bool
+{
+    return R::exec('UPDATE post SET webmentions_pending = 0 WHERE id = ? AND webmentions_pending = ?', [$post_id, $token]) === 1;
 }
 
 /**

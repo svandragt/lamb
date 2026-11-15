@@ -415,4 +415,92 @@ class PostSaveTest extends TestCase
             \Lamb\Post\event_subscribers()['post.published'] ?? []
         );
     }
+
+    public function testANotifySaveMarksWebmentionsPendingWithoutQueueingAnything(): void
+    {
+        // No subscriber is registered: save() only writes the column, it does not call the webmention module.
+        $bean = populate_bean('A status.');
+
+        save($bean, ['notify' => true]);
+
+        $this->assertGreaterThan(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testEachNotifySaveMarksThePostWithItsOwnToken(): void
+    {
+        // The subscriber clears the mark only if it still holds the token its own save wrote,
+        // so a later save's mark survives an earlier save's slow subscriber.
+        $bean = populate_bean('A status.');
+
+        save($bean, ['notify' => true]);
+        $first = (int) $bean->webmentions_pending;
+        save($bean, ['notify' => true]);
+        $second = (int) $bean->webmentions_pending;
+
+        $this->assertGreaterThan(0, $first);
+        $this->assertGreaterThan(0, $second);
+        $this->assertNotSame($first, $second);
+        $this->assertSame($second, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testASaveWithoutNotifyDoesNotMarkWebmentionsPending(): void
+    {
+        $bean = populate_bean('A status.');
+
+        save($bean, ['finalize_slug' => true]);
+
+        $this->assertSame(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testAFailedNotifySaveLeavesTheMarkAsItWas(): void
+    {
+        // Store the column first: fluid mode would otherwise add it inside the save's
+        // transaction, and the rollback would remove it, so there would be no mark to keep.
+        $bean = populate_bean('A status.');
+        $bean->webmentions_pending = 0;
+        save($bean);
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            save($bean, ['notify' => true]);
+            $this->fail('The store should have thrown.');
+        } catch (SQL) {
+            // Expected.
+        } finally {
+            R::exec('DROP TRIGGER post_block_update');
+        }
+
+        // The rollback restored the row. The bean has to follow, or a retry would send a token
+        // that was never stored.
+        $this->assertSame(0, $bean->webmentions_pending);
+        $this->assertSame('0', R::getCell('SELECT webmentions_pending FROM post WHERE id = ?', [$bean->id]));
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>}>
+     */
+    public static function postsThatSendNoWebmentions(): array
+    {
+        return [
+            'draft' => [['draft' => 1]],
+            'feed-sourced post' => [['feed_name' => 'Some feed']],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @dataProvider postsThatSendNoWebmentions
+     */
+    public function testANotifySaveOfAPostThatSendsNoWebmentionsIsNotMarked(array $fields): void
+    {
+        // The edit form and Micropub always notify. A mark nobody will ever clear would stay set.
+        $bean = populate_bean('A status.');
+        foreach ($fields as $name => $value) {
+            $bean->$name = $value;
+        }
+
+        save($bean, ['notify' => true]);
+
+        $this->assertEmpty(R::load('post', $bean->id)->webmentions_pending);
+    }
 }

@@ -172,6 +172,30 @@ class MicropubEndpointTest extends TestCase
         $this->assertEmpty($result['posts'][0]['deleted']);
     }
 
+    public function testADeleteThatFailsToStoreReturns500AndDeletesNothing(): void
+    {
+        $result = $this->requestWithFailingContentMark(
+            ['action' => 'delete', 'url' => '%%%'],
+            ['seed' => $this->seed('This post must survive a failed delete.')]
+        );
+
+        $this->assertSame(500, $result['status']);
+        $this->assertSame('server_error', json_decode($result['body'], true)['error']);
+        $this->assertEmpty($result['posts'][0]['deleted']);
+    }
+
+    public function testAnUndeleteThatFailsToStoreReturns500AndRestoresNothing(): void
+    {
+        $result = $this->requestWithFailingContentMark(
+            ['action' => 'undelete', 'url' => '%%%'],
+            ['seed' => $this->seed('This post must stay deleted after a failed undelete.'), 'seed_deleted' => true]
+        );
+
+        $this->assertSame(500, $result['status']);
+        $this->assertSame('server_error', json_decode($result['body'], true)['error']);
+        $this->assertEquals(1, $result['posts'][0]['deleted']);
+    }
+
     public function testRocks600ConfigQueryReturnsTheMediaEndpoint(): void
     {
         $result = $this->query('/micropub?q=config');
@@ -370,6 +394,33 @@ class MicropubEndpointTest extends TestCase
         ];
 
         return $this->handle($seed === [] ? $request : $request + ['seed' => $seed]);
+    }
+
+    /**
+     * A form-encoded request whose post store succeeds and whose content mark write then fails.
+     *
+     * The seeded post's creation has already written the mark, so the trigger blocks the
+     * UPDATE that moves it. That is the last write of a delete or an undelete, so the
+     * post store before it has to be rolled back.
+     *
+     * @param array<string, mixed> $fields  The form fields.
+     * @param array<string, mixed> $request More of the request, as for EndpointProbe::run().
+     * @return array<string, mixed> The handler's response.
+     */
+    private function requestWithFailingContentMark(array $fields, array $request): array
+    {
+        $blockMarkWrites = <<<'PHP'
+        \RedBeanPHP\R::exec("CREATE TRIGGER block_write BEFORE UPDATE ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        PHP;
+
+        return EndpointProbe::run($blockMarkWrites . ' \Lamb\Micropub\respond_micropub();', $request + [
+            'server' => [
+                'CONTENT_TYPE' => 'application/x-www-form-urlencoded; charset=utf-8',
+                'HTTP_AUTHORIZATION' => 'Bearer test-token',
+            ],
+            'post' => $fields,
+            'token' => self::TOKEN,
+        ]);
     }
 
     /**
