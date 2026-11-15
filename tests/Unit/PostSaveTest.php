@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
+use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Post\on;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\register_default_subscribers;
@@ -94,6 +95,30 @@ class PostSaveTest extends TestCase
         $this->assertSame('shared', $first->slug);
         $this->assertSame('shared-' . $second->id, $second->slug);
         $this->assertStringContainsString('slug: shared-' . $second->id, (string) $second->body);
+    }
+
+    public function testACreateAndAnEditStillPersistWhenTheSchemaIsFrozen(): void
+    {
+        // Production runs frozen, which is the only mode where R::begin() opens a
+        // transaction, so this is the shape the save() transaction really runs in (#970).
+        R::nuke();
+        ensure_schema();
+        R::freeze(true);
+        try {
+            $text = "---\nslug: shared\n---\nContent.";
+            save(populate_bean($text), ['finalize_slug' => true]);
+            $second = populate_bean($text);
+            save($second, ['finalize_slug' => true]);
+
+            $loaded = R::load('post', $second->id);
+            $loaded->body = "---\nslug: " . $loaded->slug . "\n---\nEdited.";
+            save($loaded);
+        } finally {
+            R::freeze(false);
+        }
+
+        $this->assertSame(2, R::count('post'));
+        $this->assertStringContainsString('Edited.', (string) R::load('post', $second->id)->body);
     }
 
     public function testWithoutFinalizeSlugACollidingSlugIsLeftAsIs(): void

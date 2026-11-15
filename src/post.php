@@ -924,8 +924,10 @@ function register_default_subscribers(): void
  *    (the edit form's store_slug_change_redirect() call). The funnel has no
  *    pre-edit slug of its own, so the caller passes it in.
  *
- * The store is not caught here: each call site flashes its own message and
- * decides what to do on failure, so the RedException\SQL propagates.
+ * Both stores run in one transaction, so a failed second store rolls the first
+ * back instead of leaving a row behind for a resubmit to duplicate (#970). The
+ * rollback does not catch the failure: each call site flashes its own message
+ * and decides what to do, so the RedException\SQL propagates.
  *
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
@@ -949,11 +951,20 @@ function save(OODBBean $bean, array $context = []): void
         $bean->feed_locked = 1;
     }
 
-    R::store($bean);
-    // finalize_slug() needs the minted id for any dedup suffix, so it runs after
-    // the first store and re-stores only when it changed the slug or body.
-    if ($context['finalize_slug'] && finalize_slug($bean)) {
+    // R::begin() only opens a transaction on a frozen schema, which is what
+    // bootstrap_db() leaves the app in.
+    R::begin();
+    try {
         R::store($bean);
+        // finalize_slug() needs the minted id for any dedup suffix, so it runs after
+        // the first store and re-stores only when it changed the slug or body.
+        if ($context['finalize_slug'] && finalize_slug($bean)) {
+            R::store($bean);
+        }
+        R::commit();
+    } catch (\Throwable $e) {
+        R::rollback();
+        throw $e;
     }
 
     // save() is the write funnel, so the content high-water mark must advance

@@ -379,9 +379,12 @@ class ResponsePostsTest extends TestCase
         $_POST['contents']          = "---\nslug: taken\n---\n\nsee [elsewhere](https://other.example/a)\n";
 
         R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
+        // R::begin() is a no-op unless the schema is frozen, as it is in production.
+        R::freeze(true);
         try {
             redirect_created();
         } finally {
+            R::freeze(false);
             R::exec('DROP TRIGGER IF EXISTS post_block_update');
         }
     }
@@ -396,6 +399,17 @@ class ResponsePostsTest extends TestCase
             $_SESSION['flash'] ?? [],
             fn ($m) => str_contains((string) $m, 'Failed to save')
         ));
+    }
+
+    public function testRedirectCreatedLeavesNoRowWhenTheSecondStoreFails(): void
+    {
+        // The first store committed the INSERT, so the form said the save failed
+        // while the post existed, and a resubmit created a duplicate (#970).
+        $this->seedNotifyTables();
+
+        $this->submitCreateWithFailingSecondWrite();
+
+        $this->assertSame(1, R::count('post'), 'only the seeded post remains');
     }
 
     public function testRedirectCreatedDoesNotNotifySubscribersWhenTheSaveFails(): void
