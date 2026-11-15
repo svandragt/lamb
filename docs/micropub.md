@@ -66,6 +66,25 @@ authorization_endpoint = https://auth.example.com/auth
 token_endpoint = https://token.example.com/token
 ```
 
+### Moving to IndieKey
+
+[IndieKey](https://indiekey.id/) is an IndieAuth server that is replacing indieauth.com. As of 15 November 2026, indieauth.com has announced no shutdown date, and Lamb keeps the indieauth.com endpoints as its defaults. You can move to IndieKey now or wait.
+
+Lamb checks a Micropub token by sending a `GET` request to your `token_endpoint` with the token in an `Authorization: Bearer` header. That is the way older versions of IndieAuth worked. Lamb does not check IndieKey's newer token formats, which need a credential or a signature check.
+
+To move your site to IndieKey, follow [Moving from indieauth.com](https://indiekey.id/migrate) and set these two values in your site configuration at `/settings`:
+
+```ini
+authorization_endpoint = https://indiekey.id/s/SITE_ID/auth
+token_endpoint = https://indiekey.id/token
+```
+
+* Copy the `authorization_endpoint` value from your domain's page in IndieKey. Each website has its own, and `SITE_ID` stands for yours.
+* Turn on the old token check (IndieKey's legacy mode) for your domain, so IndieKey answers Lamb's `GET` request.
+* Lamb publishes both settings as `authorization_endpoint` and `token_endpoint` tags on your home page. It does not publish an `indieauth-metadata` tag.
+
+IndieKey calls the old token check a stopgap. Tokens issued under it never expire, and only disconnecting the app ends one.
+
 ## What gets created
 
 A Micropub `h-entry` with a `content` property creates a status post (no title, no slug). If a `name` property is also present, it creates a titled post with a slug derived from the title.
