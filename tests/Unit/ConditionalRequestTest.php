@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Bootstrap\http_date;
+use function Lamb\Bootstrap\code_stamp;
 use function Lamb\Bootstrap\content_etag;
 use function Lamb\Bootstrap\client_has_current_version;
 
@@ -42,6 +43,34 @@ class ConditionalRequestTest extends TestCase
         // validator must still change so a settings edit invalidates caches even
         // when it lands in the same second as the latest post (issue #279).
         $this->assertNotSame(content_etag(1000, 500), content_etag(1000, 1000));
+    }
+
+    public function testCodeStampIsNewestMtimeUnderTheDirectory(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
+        mkdir($dir . '/themes/x', 0777, true);
+        touch($dir . '/a.php', 1000);
+        touch($dir . '/themes/x/b.php', 2000);
+        $this->assertSame(2000, code_stamp($dir));
+
+        touch($dir . '/a.php', 3000);
+        $this->assertSame(3000, code_stamp($dir));
+
+        array_map('unlink', [$dir . '/a.php', $dir . '/themes/x/b.php']);
+        rmdir($dir . '/themes/x');
+        rmdir($dir . '/themes');
+        rmdir($dir);
+    }
+
+    public function testContentEtagDiffersWhenCodeStampChanges(): void
+    {
+        $this->assertNotSame(content_etag(1000, 1, 10), content_etag(1000, 1, 11));
+        $this->assertSame(content_etag(1000, 1, 10), content_etag(1000, 1, 10));
+    }
+
+    public function testContentEtagIsStableAcrossCallsWithNoChange(): void
+    {
+        $this->assertSame(content_etag(1000, 1), content_etag(1000, 1));
     }
 
     public function testNoConditionalHeadersIsNotAMatch(): void

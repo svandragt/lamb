@@ -854,13 +854,48 @@ function http_date(int $ts): string
  * invalidate cached pages. Folding both in means either source moving (even
  * within the same second) yields a different ETag (issue #279).
  *
- * @param int $contentTs Unix timestamp of the most recent content change (the response's last-modified).
- * @param int $configTs  Unix timestamp of the last config edit.
+ * The code stamp is a third component: an upgrade that changes templates or
+ * rendering code moves neither timestamp, so without it browsers and caches
+ * would keep serving stale HTML that links old asset paths.
+ *
+ * @param int      $contentTs Unix timestamp of the most recent content change (the response's last-modified).
+ * @param int      $configTs  Unix timestamp of the last config edit.
+ * @param int|null $codeTs    Newest mtime of the rendering code; null reads code_stamp().
  * @return string A quoted ETag value.
+ * @throws \RuntimeException Never; see code_stamp().
  */
-function content_etag(int $contentTs, int $configTs): string
+function content_etag(int $contentTs, int $configTs, ?int $codeTs = null): string
 {
-    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '"';
+    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '-' . dechex($codeTs ?? code_stamp()) . '"';
+}
+
+/**
+ * Newest modification time of the PHP and CSS files that render a page.
+ *
+ * Fixed glob patterns keep this cheaper than a recursive walk. The default
+ * directory (`src/`, which holds the themes and excludes `vendor/`) is read
+ * once per request and cached.
+ *
+ * @param string|null $dir Directory to scan; null means `src/` and is cached.
+ * @return int Unix timestamp, 0 when no file matches.
+ * @throws \RuntimeException Never; unreadable files are skipped by glob().
+ */
+function code_stamp(?string $dir = null): int
+{
+    static $cached = null;
+    if ($dir === null && $cached !== null) {
+        return $cached;
+    }
+    $root = $dir ?? __DIR__;
+    $files = [];
+    foreach (['*.php', '*/*.php', 'themes/*/*.php', 'themes/*/parts/*.php', 'themes/*/styles/*.css'] as $pattern) {
+        $files = array_merge($files, glob($root . '/' . $pattern) ?: []);
+    }
+    $newest = $files ? max(array_map(static fn(string $f): int => filemtime($f) ?: 0, $files)) : 0;
+    if ($dir === null) {
+        $cached = $newest;
+    }
+    return $newest;
 }
 
 /**
