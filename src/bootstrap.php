@@ -856,8 +856,7 @@ function http_date(int $ts): string
  *
  * The code stamp is a third component: an upgrade that changes templates,
  * scripts or rendering code moves neither timestamp, so without it browsers and
- * caches would keep serving stale HTML that links old asset paths. Clients that
- * send only If-Modified-Since are not covered.
+ * caches would keep serving stale HTML that links old asset paths.
  *
  * @param int    $contentTs Unix timestamp of the most recent content change (the response's last-modified).
  * @param int    $configTs  Unix timestamp of the last config edit.
@@ -870,19 +869,12 @@ function content_etag(int $contentTs, int $configTs, string $codeHash): string
 }
 
 /**
- * Identity of the installed code, for the ETag (see content_etag()).
- *
- * A git install follows the checked-out commit, read from `.git/HEAD` (a sha,
- * or a ref found loose or in `packed-refs`), so a pull changes it even without
- * `bin/upgrade`. viv's no-op install does not rewrite `installed.php` when only
- * code changes (svandragt/vivace#408), so that file alone would go stale. A
- * tarball install has no `.git` and falls back to the root package `reference`
- * in `vendor/composer/installed.php`, the commit recorded by the installer. A
- * git worktree has a `.git` file rather than a directory, so it uses the
- * fallback too. Clients that send only If-Modified-Since are not covered.
+ * Opaque 8-character stamp of the installed commit for the ETag, or '' when
+ * unknown. Hashed so the public header does not reveal the running version.
+ * Sources and known gaps: see AGENTS.md ("Conditional GET").
  *
  * @param string|null $root Repository root; null means this install's own.
- * @return string Up to 8 characters, or '' when no commit is known.
+ * @return string
  */
 function code_stamp(?string $root = null): string
 {
@@ -894,18 +886,20 @@ function code_stamp(?string $root = null): string
         $sha = trim((string) @file_get_contents($git . '/' . $ref));
         if ($sha === '') {
             foreach (explode("\n", (string) @file_get_contents($git . '/packed-refs')) as $line) {
+                $line = rtrim($line);
                 if (str_ends_with($line, ' ' . $ref)) {
-                    $sha = strtok($line, ' ');
+                    $sha = (string) strtok($line, ' ');
+                    break;
                 }
             }
         }
     } else {
         $sha = $head;
     }
-    if (!preg_match('/^[0-9a-f]{40}$/', $sha)) {
+    if (!preg_match('/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/', $sha)) {
         $sha = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
     }
-    return substr($sha, 0, 8);
+    return $sha === '' ? '' : substr(md5($sha), 0, 8);
 }
 
 /**

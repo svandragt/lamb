@@ -115,8 +115,7 @@ function latest_content_timestamp(): int
  * Emits ETag/Last-Modified validators for a cacheable response and short-circuits
  * with 304 Not Modified when the client already holds the current version.
  *
- * The ETag also carries the code stamp, so an upgrade invalidates caches; Last-Modified
- * does not, and RFC 9110 gives If-None-Match precedence over If-Modified-Since.
+ * The ETag also carries the code stamp; Last-Modified does not (AGENTS.md, "Conditional GET").
  *
  * No-ops when there is no content timestamp. Callers must only use this for
  * cacheable (anonymous, non-error) GET/HEAD responses, before any output.

@@ -70,10 +70,8 @@ content and config timestamps as distinct components while `Last-Modified`
 collapses them — is recorded in [AGENTS.md](../../AGENTS.md)'s "Conditional
 GET" note under Security; this module only wires the two call sites into it.
 
-The `ETag` also folds in `Bootstrap\code_stamp()`: the checked-out git commit on
-a git install (even without `bin/upgrade`), or the installed release's commit on
-a tarball install. `Last-Modified` does not carry it, so clients that send only
-`If-Modified-Since` are not covered.
+The `ETag` also folds in `Bootstrap\code_stamp()`; see AGENTS.md's "Conditional
+GET" note for what it covers and its known gaps.
 
 ## Login: a sessionless page with its own CSRF model
 

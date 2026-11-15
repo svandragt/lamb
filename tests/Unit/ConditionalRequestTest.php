@@ -18,6 +18,23 @@ use function Lamb\Bootstrap\client_has_current_version;
  */
 class ConditionalRequestTest extends TestCase
 {
+    private string $tempDir;
+
+    /** @var list<string> */
+    private array $roots = [];
+
+    protected function setUp(): void
+    {
+        $this->tempDir = sys_get_temp_dir() . '/lamb-etag-' . uniqid();
+        mkdir($this->tempDir);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->removeDirectory($this->tempDir);
+        $this->roots = [];
+    }
+
     public function testHttpDateFormatsAsRfc7231GmtString(): void
     {
         $this->assertSame('Thu, 01 Jan 1970 00:00:00 GMT', http_date(0));
@@ -49,39 +66,47 @@ class ConditionalRequestTest extends TestCase
     {
         $root = $this->fakeRoot([]);
         $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
-        $this->assertSame(substr((string) $reference, 0, 8), code_stamp($root));
+        $this->assertSame(substr(md5((string) $reference), 0, 8), code_stamp($root));
     }
 
-    public function testCodeStampFollowsTheCheckedOutCommit(): void
+    public function testCodeStampIsAHashOfTheCheckedOutCommitNotTheCommitItself(): void
     {
         $sha = 'abcdef0123456789abcdef0123456789abcdef01';
-        $this->assertSame('abcdef01', code_stamp($this->fakeRoot(['HEAD' => "$sha\n"])));
-        $this->assertSame('abcdef01', code_stamp($this->fakeRoot([
+        $expected = substr(md5($sha), 0, 8);
+        $this->assertNotSame('abcdef01', $expected);
+        $this->assertSame($expected, code_stamp($this->fakeRoot(['HEAD' => "$sha\n"])));
+        $this->assertSame($expected, code_stamp($this->fakeRoot([
             'HEAD' => "ref: refs/heads/x\n",
             'refs/heads/x' => "$sha\n",
         ])));
-        $this->assertSame('abcdef01', code_stamp($this->fakeRoot([
+        $this->assertSame($expected, code_stamp($this->fakeRoot([
             'HEAD' => "ref: refs/heads/x\n",
-            'packed-refs' => "# pack-refs with: peeled\n1111111111111111111111111111111111111111 refs/heads/y\n$sha refs/heads/x\n",
+            'packed-refs' => "# pack-refs with: peeled\r\n1111111111111111111111111111111111111111 refs/heads/y\r\n$sha refs/heads/x\r\n",
         ])));
+    }
+
+    public function testCodeStampAcceptsASha256Commit(): void
+    {
+        $sha = str_repeat('ab', 32);
+        $this->assertSame(substr(md5($sha), 0, 8), code_stamp($this->fakeRoot(['HEAD' => "$sha\n"])));
     }
 
     public function testCodeStampFallsBackWhenTheGitRefCannotBeResolved(): void
     {
         $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
         $root = $this->fakeRoot(['HEAD' => "ref: refs/heads/gone\n"]);
-        $this->assertSame(substr((string) $reference, 0, 8), code_stamp($root));
+        $this->assertSame(substr(md5((string) $reference), 0, 8), code_stamp($root));
     }
 
     /**
      * Builds a temp repo root whose `.git` holds the given files.
      *
      * @param array<string, string> $gitFiles Path under `.git` to contents.
-     * @return string The root path, removed at the end of the test.
+     * @return string The root path, removed in tearDown().
      */
     private function fakeRoot(array $gitFiles): string
     {
-        $root = sys_get_temp_dir() . '/lamb-root-' . uniqid();
+        $root = $this->tempDir . '/root-' . count($this->roots);
         mkdir($root);
         foreach ($gitFiles as $path => $contents) {
             $file = "$root/.git/$path";
@@ -92,15 +117,15 @@ class ConditionalRequestTest extends TestCase
         return $root;
     }
 
-    /** @var list<string> */
-    private array $roots = [];
-
-    protected function tearDown(): void
+    private function removeDirectory(string $path): void
     {
-        foreach ($this->roots as $root) {
-            exec('rm -rf ' . escapeshellarg($root));
+        foreach (scandir($path) ?: [] as $entry) {
+            if ($entry === '.' || $entry === '..') {
+                continue;
+            }
+            is_dir("$path/$entry") ? $this->removeDirectory("$path/$entry") : unlink("$path/$entry");
         }
-        $this->roots = [];
+        rmdir($path);
     }
 
     public function testContentEtagDiffersWhenCodeHashChanges(): void
