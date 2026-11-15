@@ -5,6 +5,7 @@ namespace Lamb\Post;
 use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -13,6 +14,7 @@ use function Lamb\Http\is_valid_http_url;
 use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
+use function Lamb\with_write_transaction;
 
 use const Lamb\HOME_SLUG;
 
@@ -803,29 +805,6 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
- * Stores a freshly populated post and pins its finalized slug.
- *
- * Every create path follows the same idiom: store once to mint an id (the id is
- * part of any dedup suffix), then finalize_slug() — which reserves/suffixes the
- * slug and pins it into the body's front matter — and re-store only when that
- * changed something. Centralising it keeps the create paths (web form, Micropub,
- * feed ingestion) from drifting apart.
- *
- * @param OODBBean $bean An unsaved or partially-saved post bean.
- * @return void
- */
-function finalize_and_store_post(OODBBean $bean): void
-{
-    R::store($bean);
-    if (finalize_slug($bean)) {
-        R::store($bean);
-    }
-    // Funnel point for every create/edit path: bumps the monotonic content
-    // high-water mark latest_content_timestamp() reads (#669).
-    \Lamb\Response\bump_content_timestamp();
-}
-
-/**
  * The registry of post-lifecycle event subscribers, keyed by event name.
  *
  * A by-reference accessor so on() and reset_subscribers() mutate the one static
@@ -860,6 +839,10 @@ function on(string $event, callable $subscriber): void
 /**
  * Calls every subscriber registered for an event, in registration order.
  *
+ * Events follow a committed write, so a subscriber that fails the database (a
+ * locked file while /_cron holds it) is logged and the remaining subscribers
+ * still run. Any other Throwable is a programming error and propagates.
+ *
  * @param string   $event The event name to emit.
  * @param OODBBean $bean  The stored post bean to hand each subscriber.
  * @return void
@@ -867,7 +850,18 @@ function on(string $event, callable $subscriber): void
 function emit(string $event, OODBBean $bean): void
 {
     foreach (event_subscribers()[$event] ?? [] as $subscriber) {
-        $subscriber($bean);
+        try {
+            $subscriber($bean);
+        } catch (SQL $e) {
+            error_log(sprintf(
+                '%s subscriber failed: %s: %s in %s:%d',
+                $event,
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+        }
     }
 }
 
@@ -914,8 +908,7 @@ function register_default_subscribers(): void
  * The context flags carry the behaviours each site used to express by omitting a
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
- *    into the front matter (what every create path used to get from
- *    finalize_and_store_post(), now superseded by this funnel).
+ *    into the front matter (the step every create path runs after its first store).
  *  - `notify` — emit `post.published` after a successful store.
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
@@ -924,13 +917,19 @@ function register_default_subscribers(): void
  *    (the edit form's store_slug_change_redirect() call). The funnel has no
  *    pre-edit slug of its own, so the caller passes it in.
  *
- * The store is not caught here: each call site flashes its own message and
- * decides what to do on failure, so the RedException\SQL propagates.
+ * The stores, the content mark and the slug-change redirect run in one
+ * transaction, so a failed second store rolls the first back instead of leaving
+ * a row behind for a resubmit to duplicate (#970). The rollback does not catch
+ * the failure: each call site flashes its own message and decides what to do, so
+ * the RedException\SQL propagates. The bean comes back with the properties it
+ * had before the call (a new one without the id the failed save gave it), ready
+ * to be saved again. The events run after the commit.
  *
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
  * @return void
- * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ * @throws SQL When a write in the transaction fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
 function save(OODBBean $bean, array $context = []): void
 {
@@ -943,31 +942,44 @@ function save(OODBBean $bean, array $context = []): void
     ];
 
     $is_new = empty($bean->id);
+    $before = $bean->export();
 
     // Before the store: feed_locked is a column on the row being written.
     if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
         $bean->feed_locked = 1;
     }
 
-    R::store($bean);
-    // finalize_slug() needs the minted id for any dedup suffix, so it runs after
-    // the first store and re-stores only when it changed the slug or body.
-    if ($context['finalize_slug'] && finalize_slug($bean)) {
-        R::store($bean);
+    try {
+        with_write_transaction(function () use ($bean, $context): void {
+            R::store($bean);
+            // finalize_slug() needs the minted id for any dedup suffix, so it runs after
+            // the first store and re-stores only when it changed the slug or body.
+            if ($context['finalize_slug'] && finalize_slug($bean)) {
+                R::store($bean);
+            }
+
+            // A saved post changes the content, so move the content mark (#669).
+            \Lamb\Response\bump_content_timestamp();
+
+            // Inside the transaction (#685): a failed store must never leave a 301
+            // pointing at content that was never saved, nor a save without its 301.
+            if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
+                \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
+            }
+        });
+    } catch (\Throwable $e) {
+        // The rollback restored the row, not the bean: put back what save() changed
+        // (feed_locked, the finalised slug and body, a new bean's minted id, which
+        // makes a retry insert instead of updating nothing).
+        foreach (array_keys(array_diff_key($bean->export(), $before)) as $name) {
+            unset($bean->$name);
+        }
+        $bean->import($before);
+        throw $e;
     }
 
-    // save() is the write funnel, so the content high-water mark must advance
-    // here too — not only in finalize_and_store_post(), which the funnel does
-    // not call (#669). Without this, posts saved through save() (the #692 site
-    // and every #717 conversion) would never move latest_content_timestamp().
-    \Lamb\Response\bump_content_timestamp();
-
-    // On the store's success path only (#685): a failed store must never leave
-    // a 301 pointing at content that was never saved.
-    if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
-        \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
-    }
-
+    // After the commit: a failing subscriber must not make a stored post report a
+    // failed save (emit() logs it).
     emit($is_new ? 'post.created' : 'post.updated', $bean);
     if ($context['notify']) {
         emit('post.published', $bean);

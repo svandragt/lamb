@@ -10,7 +10,6 @@ use Lamb\Network;
 use Lamb\Security;
 use Random\RandomException;
 use RedBeanPHP\R;
-use RedBeanPHP\RedException\SQL;
 
 /**
  * Handles the /login route without starting a session for anonymous visitors.
@@ -369,51 +368,33 @@ function login_throttle_retry_after(string $ip, int $now): int
  * behind the lock. See response/README.md ("Login: a sessionless page with its
  * own CSRF model").
  *
- * Any throw in the critical section rolls the transaction back in `finally`, so
- * the shared connection is never left mid-transaction to poison later queries.
- *
- * R::begin()/R::commit() are no-ops in this app's fluid mode (see
- * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement.
+ * Any throw in the critical section rolls the transaction back, so the shared
+ * connection is never left mid-transaction to poison later queries. See
+ * \Lamb\with_write_transaction().
  *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return int Seconds to wait before the client may attempt again (0 = reserved, go ahead).
+ * @throws \RedBeanPHP\RedException\SQL When the counter cannot be written, or the transaction did not begin, ended early or failed to commit.
+ * @throws \LogicException When a transaction is already open.
  */
 function reserve_login_attempt(string $ip, int $now): int
 {
     prune_login_throttle($now);
 
-    R::exec('BEGIN IMMEDIATE');
-    $committed = false;
-    try {
+    return \Lamb\with_write_transaction(function () use ($ip, $now): int {
         $bean  = \Lamb\get_option(login_throttle_key($ip), '');
         $state = decode_throttle_state($bean->value);
         $retry_after = throttle_retry_after($state, $now);
         if ($retry_after > 0) {
-            R::exec('COMMIT');
-            $committed = true;
             return $retry_after;
         }
 
         $count = $state['expires'] > $now ? $state['count'] + 1 : 1;
         \Lamb\set_option($bean, encode_throttle_state($count, $now + LOGIN_THROTTLE_WINDOW));
 
-        R::exec('COMMIT');
-        $committed = true;
-
         return 0;
-    } finally {
-        if (!$committed) {
-            try {
-                R::exec('ROLLBACK');
-            } catch (SQL) {
-                // A rollback that itself fails leaves later queries erroring
-                // loudly, the right signal for the genuine DB fault that is the
-                // only way to reach here now WAL keeps routine contention from
-                // throwing.
-            }
-        }
-    }
+    });
 }
 
 /**

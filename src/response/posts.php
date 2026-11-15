@@ -56,11 +56,11 @@ function redirect_created(): void
         save($bean, ['finalize_slug' => true, 'notify' => true]);
     } catch (SQL $e) {
         // Return, matching redirect_edited(): everything below is a consequence
-        // of the create having been saved. save()'s finalize_slug step stores
-        // twice, and if the second store throws (a locked SQLite file while
-        // /_cron holds it is the realistic case) the bean already has an id, so
-        // falling through announced the unsaved post to webmention receivers and
-        // the WebSub hub — a mention whose permalink 404s (#685).
+        // of the create having been saved. save() rolls the create back when
+        // either of its stores throws (a locked SQLite file while /_cron holds
+        // it is the realistic case), so falling through announced a post that
+        // was never saved to webmention receivers and the WebSub hub — a mention
+        // whose permalink 404s (#685).
         $_SESSION['flash'][] = 'Failed to save: ' . $e->getMessage();
 
         return;

@@ -746,17 +746,84 @@ function get_option(string $name, mixed $default_value): OODBBean
 /**
  * Persists the given value into an option bean.
  *
+ * A failed store propagates, so a caller inside with_write_transaction() rolls
+ * back instead of the request ending on a fatal error.
+ *
  * @param OODBBean $bean  The option bean to update.
  * @param mixed    $value New value to store.
  * @return void
+ * @throws SQL When the store fails.
  */
 function set_option(OODBBean $bean, mixed $value): void
 {
     $bean->value = $value;
+    R::store($bean);
+}
+
+/**
+ * Reports whether the database connection has an open transaction.
+ *
+ * Impure because $fn can end the transaction, so static analysis must not reuse an earlier answer.
+ *
+ * @phpstan-impure
+ * @return bool
+ */
+function in_write_transaction(): bool
+{
+    return R::getPDO()?->inTransaction() ?? false;
+}
+
+/**
+ * Runs $fn in one write transaction: BEGIN IMMEDIATE, $fn, COMMIT.
+ *
+ * SQLite has no nested transactions and a caller that joined an outer one could
+ * not know whether its writes were committed, so a transaction that is already
+ * open is a programming error. A throw rolls the transaction back and the
+ * original exception is rethrown, whatever the rollback does (it fails when the
+ * engine already ended the transaction). The same check runs before the COMMIT,
+ * because in fluid mode R::exec() swallows a failed COMMIT and the helper would
+ * report success for writes that were rolled back.
+ *
+ * Raw statements, not R::begin(): that is a no-op unless the schema is frozen,
+ * and the transaction must hold in either mode.
+ *
+ * @template T
+ * @param callable(): T $fn The writes to make atomic.
+ * @return T Whatever $fn returns.
+ * @throws \LogicException When a transaction is already open.
+ * @throws SQL When the BEGIN did not open a transaction, it ended before the COMMIT, or the COMMIT failed.
+ * @throws \Throwable Whatever $fn or the COMMIT throws.
+ */
+function with_write_transaction(callable $fn): mixed
+{
+    if (in_write_transaction()) {
+        throw new \LogicException('with_write_transaction() cannot run inside an open transaction.');
+    }
+
+    R::exec('BEGIN IMMEDIATE');
+    // Fluid mode swallows some failed R::exec() calls, so $fn must never run in autocommit mode.
+    if (!in_write_transaction()) {
+        throw new SQL('The transaction did not begin');
+    }
     try {
-        R::store($bean);
-    } catch (SQL $e) {
-        user_error($e->getMessage(), E_USER_ERROR);
+        $result = $fn();
+        if (!in_write_transaction()) {
+            throw new SQL('The transaction ended before commit');
+        }
+        R::exec('COMMIT');
+        // Fluid mode can swallow a failed COMMIT, which leaves the transaction open.
+        if (in_write_transaction()) {
+            throw new SQL('The commit failed');
+        }
+
+        return $result;
+    } catch (\Throwable $e) {
+        try {
+            R::exec('ROLLBACK');
+        } catch (SQL) {
+            // A failed rollback must not replace the failure the caller needs to see.
+        }
+        throw $e;
     }
 }
 

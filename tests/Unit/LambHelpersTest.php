@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\encode_path_segment;
 use function Lamb\find_post_by_path;
@@ -15,6 +16,7 @@ use function Lamb\permalink_path;
 use function Lamb\post_has_slug;
 use function Lamb\post_path;
 use function Lamb\set_option;
+use function Lamb\with_write_transaction;
 
 class LambHelpersTest extends TestCase
 {
@@ -309,6 +311,154 @@ class LambHelpersTest extends TestCase
             $this->assertSame($bean->slug, post_has_slug($bean->slug), 'Logged-in author must reach their slugged scheduled post');
         } finally {
             $_SESSION = [];
+        }
+    }
+
+    // with_write_transaction
+
+    private function inTransaction(): bool
+    {
+        return R::getPDO()->inTransaction();
+    }
+
+    /**
+     * Creates `writeprobe` (fluid mode only) and empties it, so a test can freeze the
+     * schema without the table missing and a count means "committed rows".
+     */
+    private function resetProbe(): void
+    {
+        R::store(R::dispense('writeprobe'));
+        R::wipe('writeprobe');
+    }
+
+    private function storeProbe(): void
+    {
+        R::store(R::dispense('writeprobe'));
+    }
+
+    public function testARawBeginImmediateOpensATransactionThePdoReports(): void
+    {
+        // with_write_transaction() asks the PDO whether a transaction is open, so a
+        // driver that does not report one for a raw BEGIN must fail here, not in production.
+        R::exec('BEGIN IMMEDIATE');
+        try {
+            $this->assertTrue($this->inTransaction());
+        } finally {
+            R::exec('ROLLBACK');
+        }
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testWithWriteTransactionCommitsAndReturnsTheResult(): void
+    {
+        $this->resetProbe();
+
+        $result = with_write_transaction(function (): string {
+            $this->storeProbe();
+
+            return 'done';
+        });
+
+        $this->assertSame('done', $result);
+        $this->assertSame(1, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testWithWriteTransactionRollsBackAndRethrowsTheOriginalException(): void
+    {
+        $this->resetProbe();
+        $thrown = new \RuntimeException('original');
+
+        try {
+            with_write_transaction(function () use ($thrown): void {
+                $this->storeProbe();
+                throw $thrown;
+            });
+            $this->fail('The exception should have propagated.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame($thrown, $e);
+        }
+
+        $this->assertSame(0, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testWithWriteTransactionRethrowsTheOriginalWhenTheCallableEndedTheTransaction(): void
+    {
+        $this->resetProbe();
+        // A frozen schema, as in production, is where a ROLLBACK with nothing to roll
+        // back raises; fluid mode swallows it.
+        R::freeze(true);
+
+        try {
+            with_write_transaction(function (): void {
+                $this->storeProbe();
+                R::exec('ROLLBACK');
+                throw new \RuntimeException('original');
+            });
+            $this->fail('The exception should have propagated.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('original', $e->getMessage());
+        } finally {
+            R::freeze(false);
+        }
+
+        $this->assertSame(0, R::count('writeprobe'));
+    }
+
+    public function testWithWriteTransactionDoesNotReportSuccessWhenTheTransactionEndedBeforeCommit(): void
+    {
+        $this->resetProbe();
+
+        // Fluid mode, where R::exec() swallows the COMMIT that follows: without the
+        // check the helper would return normally after the writes were rolled back.
+        $thrown = null;
+        try {
+            with_write_transaction(function (): string {
+                $this->storeProbe();
+                R::exec('ROLLBACK');
+
+                return 'done';
+            });
+        } catch (SQL $e) {
+            $thrown = $e;
+        }
+
+        $this->assertSame('The transaction ended before commit', $thrown?->getMessage());
+        $this->assertSame(0, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testSetOptionRethrowsAFailedStore(): void
+    {
+        set_option(get_option('probe_option', 1), 1);
+        R::exec("CREATE TRIGGER option_block_update BEFORE UPDATE ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            set_option(get_option('probe_option', 1), 2);
+            $this->fail('The failed store should have thrown.');
+        } catch (SQL $e) {
+            $this->assertStringContainsString('boom', $e->getMessage());
+        } finally {
+            R::exec('DROP TRIGGER option_block_update');
+        }
+    }
+
+    public function testWithWriteTransactionRefusesToRunInsideAnOpenTransaction(): void
+    {
+        $called = false;
+        R::exec('BEGIN IMMEDIATE');
+
+        try {
+            with_write_transaction(function () use (&$called): void {
+                $called = true;
+            });
+            $this->fail('A LogicException should have been thrown.');
+        } catch (\LogicException) {
+            $this->assertFalse($called);
+            $this->assertTrue($this->inTransaction(), 'The outer transaction is left to its owner.');
+        } finally {
+            R::exec('ROLLBACK');
         }
     }
 }

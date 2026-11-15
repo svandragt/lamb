@@ -137,9 +137,8 @@ class LatestContentTimestampTest extends TestCase
     }
 
     /**
-     * save() is the write funnel (#692) and does not route through
-     * finalize_and_store_post(), so it must advance the mark itself. Without
-     * this, the existing checkbox-toggle site and every #717 conversion would
+     * save() is the write funnel (#692), so it must advance the mark itself.
+     * Without this, the existing checkbox-toggle site and every #717 conversion would
      * write a post without moving the validator, serving stale 304s.
      */
     public function testSaveAdvancesTheMark(): void

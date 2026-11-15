@@ -145,9 +145,9 @@ Storage follows the existing `data/cache/` convention (already gitignored, alrea
 
 **Decision:** All post writes route through `Post\save(OODBBean $bean, array $context = [])`. The context flags carry the behaviours the write sites used to express by omission — `finalize_slug`, `notify`, `lock_if_feed_sourced`, `redirect_on_slug_change` — so a test can assert them instead of a convention holding by hand. Publication is an event: `save()` emits `post.created`/`post.updated`, and `post.published` when `notify` is set; subscribers register through `Post\on()` (`register_default_subscribers()` wires `Webmention\enqueue_for_post` and `Websub\ping_for_post` to `post.published`). Notification lives on the funnel's success path, so #685's fix is structural rather than a per-site habit.
 
-The conversion is deliberately incremental: this decision lands the funnel with a single call site converted (`Response\apply_checkbox_toggle()`, an existing post with an empty context, which must not notify). The other eight sites still call `finalize_and_store_post()`/`notify_post_subscribers()` directly and convert one commit at a time behind the same green suite; `post.deleted`/`post.restored` and `redirect_on_slug_change` arrive with the sites that need them. The exit criterion — `grep -rn 'notify_post_subscribers\|finalize_and_store_post' src/` hitting only `src/post.php` — is the end state of the whole conversion, not of this first step.
+Every save site now calls `save()`, and `finalize_and_store_post()` is deleted. `post.deleted`, `post.restored` and `redirect_on_slug_change` arrived with the sites that needed them. `grep -rn 'notify_post_subscribers\|finalize_and_store_post' src/` finds neither name.
 
-**Consequences:** The flag-to-event matrix is executable (`tests/Unit/PostSaveTest.php`) rather than a comment. Until every site is converted, two ways to save a post coexist, and the funnel's event set grows as sites move onto it. Part of #692 / #684 (D1).
+**Consequences:** The flag-to-event matrix is executable (`tests/Unit/PostSaveTest.php`) rather than a comment. Part of #692 / #684 (D1).
 
 ---
 

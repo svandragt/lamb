@@ -356,10 +356,9 @@ class ResponsePostsTest extends TestCase
      *
      * A post already owns the slug `taken`, so finalize_slug() suffixes the new
      * post's slug and pins the changed value into its body — the second of
-     * finalize_and_store_post()'s two R::store() calls. Blocking only UPDATE lets
-     * the first store (INSERT) mint the id and makes the second throw, which is
-     * the #685 shape: the bean already has an id, so the notify guards that
-     * early-return on `!id` do not fire.
+     * save()'s two R::store() calls. Blocking only UPDATE lets
+     * the first store (INSERT) succeed and makes the second throw, so save() has
+     * a stored row to roll back (#685, #970).
      */
     private function submitCreateWithFailingSecondWrite(): void
     {
@@ -396,6 +395,17 @@ class ResponsePostsTest extends TestCase
             $_SESSION['flash'] ?? [],
             fn ($m) => str_contains((string) $m, 'Failed to save')
         ));
+    }
+
+    public function testRedirectCreatedLeavesNoRowWhenTheSecondStoreFails(): void
+    {
+        // The first store committed the INSERT, so the form said the save failed
+        // while the post existed, and a resubmit created a duplicate (#970).
+        $this->seedNotifyTables();
+
+        $this->submitCreateWithFailingSecondWrite();
+
+        $this->assertSame(1, R::count('post'), 'only the seeded post remains');
     }
 
     public function testRedirectCreatedDoesNotNotifySubscribersWhenTheSaveFails(): void

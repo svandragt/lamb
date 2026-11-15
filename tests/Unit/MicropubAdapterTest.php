@@ -2597,9 +2597,8 @@ class MicropubAdapterTest extends TestCase
     }
 
     // --- Post\save() event matrix (#717) ---
-    // Both callbacks now route through Post\save() instead of calling
-    // finalize_and_store_post()/notify_post_subscribers() directly, so this
-    // proves the funnel's events fire the same way through the Micropub seam.
+    // Both callbacks route through Post\save(), so this proves the funnel's
+    // events fire the same way through the Micropub seam.
 
     public function testCreateCallbackEmitsCreatedThenPublished(): void
     {
