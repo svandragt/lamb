@@ -261,21 +261,18 @@ function the_preconnect(): void
 function media_origins(): array
 {
     global $data, $template;
-    $beans = $data['posts'] ?? [];
+    // The home post is always rendered; menu pages are skipped from listings, so their media never loads there.
+    $beans = array_filter(
+        $data['posts'] ?? [],
+        static fn($bean) => !is_hidden_menu_item($template, $bean)
+    );
     if (!empty($data['home_post'])) {
         array_unshift($beans, $data['home_post']);
-    }
-    if (empty($beans)) {
-        return [];
     }
 
     $own_origin = url_origin(ROOT_URL);
     $origins = [];
     foreach ($beans as $bean) {
-        // Menu pages are skipped from listings, so their media never loads there.
-        if (is_hidden_menu_item($template, $bean)) {
-            continue;
-        }
         foreach (media_urls((string) $bean->transformed) as $url) {
             // A protocol-relative URL loads over the page's own scheme.
             if (str_starts_with($url, '//')) {

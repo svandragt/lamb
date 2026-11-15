@@ -29,15 +29,16 @@ class ThemeTest extends TestCase
      * @param list<string> $bodies Rendered post HTML, one entry per post on the page; `{ROOT_URL}` stands for the site's own URL.
      * @param array<string, string> $configured The removed [preconnect] setting, set to show it has no effect.
      * @param string|null $homeBody Rendered HTML of the `home` post shown above the timeline, if any.
+     * @param list<string> $menuItems Menu item slugs or paths to configure.
      * @return string The emitted <link> tags.
      */
-    private function preconnectFor(array $bodies, array $configured = [], ?string $homeBody = null): string
+    private function preconnectFor(array $bodies, array $configured = [], ?string $homeBody = null, array $menuItems = []): string
     {
         global $config, $data, $template;
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
-        $config = ['preconnect' => $configured];
+        $config = ['preconnect' => $configured] + ($menuItems ? ['menu_items' => $menuItems] : []);
         $template = 'home';
         $data = ['posts' => array_map(static function (string $html) {
             $bean = R::dispense('post');
@@ -46,6 +47,7 @@ class ThemeTest extends TestCase
         }, $bodies)];
         if ($homeBody !== null) {
             $home = R::dispense('post');
+            $home->slug = 'home';
             $home->transformed = $homeBody;
             $data['home_post'] = $home;
         }
@@ -208,6 +210,13 @@ class ThemeTest extends TestCase
     public function testPreconnectScansTheHomePostWhenTheTimelineIsEmpty()
     {
         $output = $this->preconnectFor([], [], '<img src="https://home.example.net/a.jpg">');
+
+        $this->assertSame(['https://home.example.net'], $this->preconnectHrefs($output));
+    }
+
+    public function testPreconnectScansTheHomePostEvenWhenHomeIsAMenuItem()
+    {
+        $output = $this->preconnectFor([], [], '<img src="https://home.example.net/a.jpg">', ['/home']);
 
         $this->assertSame(['https://home.example.net'], $this->preconnectHrefs($output));
     }
