@@ -313,6 +313,10 @@ To activate a theme, pick it in the Theme field at `/settings` (the list is the 
 
 New installs are seeded with `theme = 2026` (the "Notes" theme) via `Config\get_default_ini_text()`. An install with no `theme` key set falls back to `theme = base` via `Theme\resolve_theme()` at read time — nothing is rewritten in storage.
 
+### Theme settings (`settings.php`)
+
+A theme declares its own settings fields in `src/themes/<name>/settings.php`, which returns `field key => ['label' => …, 'default' => …]`. `Config\theme_settings()` `require`s it for the active theme (`THEME_DIR`) when `/settings` loads; a missing file, or one that returns a non-array, declares no fields, and a syntax error fails like any other broken theme file. With fields, the base `parts/settings.php` shows a Theme tab of text inputs named `theme_settings[<key>]`, tied to the Configuration form with the `form` attribute so one save posts both. `Config\form_to_ini()` rebuilds the active theme's `[theme_<name>]` section from the declared keys only, leaves an empty field out, and carries over other themes' sections and stored keys the file no longer declares. Lamb does not merge the declared defaults into `$config`: the theme reads `$config['theme_<name>']['key'] ?? 'default'`, and the default is the form placeholder. `docs/themes.md` has the example.
+
 ### Part resolution (`Theme\part`)
 
 ```php
@@ -363,7 +367,7 @@ index.php
 | `tag` | `posts`, `pagination`, `title`, `intro`, `feed_url` | — |
 | `search` | `posts`, `pagination`, `title`, `intro` | — |
 | `drafts` | `posts`, `pagination`, `title` | — |
-| `settings` | `title`, `ini_text` (the stored INI, which the form is prefilled from via `Config\settings_form_prefill()`), `feed_statuses`, `redirects` | `form_values` (the typed fields, on a refused save) |
+| `settings` | `title`, `ini_text` (the stored INI, which the form is prefilled from via `Config\settings_form_prefill()`), `theme_settings` (what `Config\theme_settings()` read from the active theme's `settings.php`), `feed_statuses`, `redirects` | `form_values` (the typed fields, on a refused save) |
 | `404` | `action` | — |
 
 **`$data['posts']`** is an array of RedBeanPHP `OODBBean` objects. Each bean exposes:
@@ -610,7 +614,8 @@ Config in `codeception.yml` reads env from `.env`.
 
 An acceptance test that calls `haveStoredSettings()` writes the SQLite file from the
 test process, which fails against the external server `release-verify.yml` tests (it
-owns the file). Mark such a test `@group seeds-db`, on the method or the class:
+owns the file). A test that installs a fixture theme into `src/themes/` has the same problem, because
+the external server does not see it. Mark such a test `@group seeds-db`, on the method or the class:
 `release-verify.yml` passes `--skip-group seeds-db`, and `SeedsDbGroupGuardTest` fails
 the build when a test that seeds is not in the group.
 

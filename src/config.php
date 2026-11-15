@@ -711,6 +711,98 @@ const SETTINGS_FORM_SECTIONS = [
 ];
 
 /**
+ * The name of the posted array that holds the active theme's settings fields, keyed by field.
+ */
+const THEME_SETTINGS_FIELD = 'theme_settings';
+
+/**
+ * What theme_settings() returns for a theme that declares no fields.
+ */
+const NO_THEME_SETTINGS = ['section' => '', 'fields' => []];
+
+/**
+ * Returns the settings fields a theme declares in its `settings.php`.
+ *
+ * The file returns an array of field key => `['label' => …, 'default' => …]`. The label
+ * names the field on the /settings Theme tab, and the default is what the theme falls back to
+ * when the field is empty, shown as the placeholder. A missing label is the key, a missing
+ * default is empty, and an entry that is not an array, or whose key cannot be an INI key
+ * (see is_ini_label()), is skipped. A theme without the file, or one whose file returns
+ * something other than an array, declares no fields.
+ *
+ * @param string $theme_dir The theme directory, such as THEME_DIR. '' means no theme.
+ * @return array{section: string, fields: array<string, array{label: string, default: string}>}
+ *     The `[theme_<name>]` section the values are stored under, and the fields in declared order.
+ */
+function theme_settings(string $theme_dir): array
+{
+    $file = rtrim($theme_dir, '/') . '/settings.php';
+    if ($theme_dir === '' || !is_file($file)) {
+        return NO_THEME_SETTINGS;
+    }
+
+    $declared = require $file;
+    if (!is_array($declared)) {
+        return NO_THEME_SETTINGS;
+    }
+
+    $fields = [];
+    foreach ($declared as $key => $field) {
+        if (!is_array($field) || !is_ini_label((string) $key)) {
+            continue;
+        }
+        $label = is_scalar($field['label'] ?? null) ? (string) $field['label'] : '';
+        $fields[(string) $key] = [
+            'label' => $label !== '' ? $label : (string) $key,
+            'default' => is_scalar($field['default'] ?? null) ? (string) $field['default'] : '',
+        ];
+    }
+
+    return ['section' => 'theme_' . basename(rtrim($theme_dir, '/')), 'fields' => $fields];
+}
+
+/**
+ * Returns the posted values of the active theme's settings fields.
+ *
+ * @param array<string, mixed> $post The submitted form fields.
+ * @return array<string, mixed> The values keyed by field, or [] when the post carries none.
+ */
+function posted_theme_values(array $post): array
+{
+    $values = $post[THEME_SETTINGS_FIELD] ?? null;
+
+    return is_array($values) ? $values : [];
+}
+
+/**
+ * Returns the values the Theme tab shows for the active theme's fields.
+ *
+ * They come from the stored INI, so a field the author never set is empty and the
+ * theme's default applies (the form shows it as a placeholder, and a save leaves it out).
+ * Fields in $posted, a refused submission (see respond_settings()), replace the stored ones.
+ *
+ * @param array{section: string, fields: array<string, array{label: string, default: string}>} $theme_settings
+ *     What theme_settings() returned for the active theme.
+ * @param string               $stored_ini The INI text currently stored.
+ * @param array<string, mixed> $posted     The refused submission, or [] to show the stored values.
+ * @return array<string, string> The text of every declared field.
+ */
+function theme_settings_values(array $theme_settings, string $stored_ini, array $posted = []): array
+{
+    $stored = normalize_config_section(parse_ini_safe($stored_ini)[$theme_settings['section']] ?? null);
+    $typed = posted_theme_values($posted);
+    $values = [];
+
+    foreach (array_keys($theme_settings['fields']) as $key) {
+        $values[$key] = array_key_exists($key, $typed)
+            ? settings_form_value($typed, (string) $key)
+            : trim($stored[$key] ?? '');
+    }
+
+    return $values;
+}
+
+/**
  * Builds the stored INI text from the settings form fields.
  *
  * Storage stays one INI blob, so existing installs need no migration. The form
@@ -723,14 +815,20 @@ const SETTINGS_FORM_SECTIONS = [
  * applies; an owned section is always written, because an absent `[menu_items]`
  * brings back the default menu while an empty one means no menu.
  *
+ * The active theme's `[theme_<name>]` section is the one section rebuilt from the post, for the
+ * fields the theme declares. Other themes' sections, and keys the theme no longer declares, are
+ * carried over. A post without the theme fields leaves the section as stored.
+ *
  * Call settings_form_errors() first: lines it reports as malformed are skipped here.
  *
  * @param array<string, mixed> $post        The submitted form fields.
  * @param string               $current_ini The INI text currently stored.
+ * @param array{section: string, fields: array<string, array{label: string, default: string}>} $theme_settings
+ *     What theme_settings() returned for the active theme.
  * @return string The INI text to store.
  * @throws \InvalidArgumentException When a posted value spans lines (settings_form_errors() reports it).
  */
-function form_to_ini(array $post, string $current_ini): string
+function form_to_ini(array $post, string $current_ini, array $theme_settings = NO_THEME_SETTINGS): string
 {
     $values = [];
     foreach (SETTINGS_FORM_FIELDS as $key) {
@@ -760,6 +858,19 @@ function form_to_ini(array $post, string $current_ini): string
         $values[$key] = (string) $value;
     }
 
+    $typed = posted_theme_values($post);
+    if ($theme_settings['fields'] !== [] && $typed !== []) {
+        $entries = [];
+        foreach (array_keys($theme_settings['fields']) as $key) {
+            $value = settings_form_value($typed, (string) $key);
+            if ($value !== '') {
+                $entries[$key] = $value;
+            }
+        }
+        $stored = $sections[$theme_settings['section']] ?? [];
+        $sections[$theme_settings['section']] = $entries + array_diff_key($stored, $theme_settings['fields']);
+    }
+
     return write_ini($values, $sections);
 }
 
@@ -776,11 +887,15 @@ function form_to_ini(array $post, string $current_ini): string
  * drop every setting the form does not show. Comments-only or empty INI parses
  * fine and is not refused.
  *
+ * A value of the active theme's settings fields must fit on one line too, and is reported by its label.
+ *
  * @param array<string, mixed> $post        The submitted form fields.
  * @param string               $current_ini The INI text currently stored.
+ * @param array{section: string, fields: array<string, array{label: string, default: string}>} $theme_settings
+ *     What theme_settings() returned for the active theme.
  * @return list<string> Human-readable errors, empty when the form can be saved.
  */
-function settings_form_errors(array $post, string $current_ini = ''): array
+function settings_form_errors(array $post, string $current_ini = '', array $theme_settings = NO_THEME_SETTINGS): array
 {
     $errors = [];
 
@@ -810,6 +925,12 @@ function settings_form_errors(array $post, string $current_ini = ''): array
     foreach (SETTINGS_FORM_SECTIONS as $name) {
         foreach (parse_section_text(settings_form_value($post, $name, false))['errors'] as $error) {
             $errors[] = "`[{$name}]` {$error}";
+        }
+    }
+
+    foreach ($theme_settings['fields'] as $key => $field) {
+        if (preg_match('/[\r\n\0]/', settings_form_value(posted_theme_values($post), (string) $key)) === 1) {
+            $errors[] = "{$field['label']} must fit on one line.";
         }
     }
 
@@ -930,7 +1051,7 @@ function parse_section_text(string $text): array
         $label = trim(substr($line, 0, $split));
         if ($label === '') {
             $errors[] = "line {$number}: there is no label before the `=`.";
-        } elseif (parse_ini_safe("[s]\n{$label} = x\n") !== ['s' => [$label => 'x']]) {
+        } elseif (!is_ini_label($label)) {
             $errors[] = "line {$number}: `{$label}` cannot be used as a label.";
         } elseif (array_key_exists($label, $entries)) {
             $errors[] = "line {$number}: `{$label}` appears more than once.";
@@ -940,6 +1061,20 @@ function parse_section_text(string $text): array
     }
 
     return ['entries' => $entries, 'errors' => $errors];
+}
+
+/**
+ * Returns true when the INI file can hold the text as a key and read it back unchanged.
+ *
+ * A `[`, `"`, `&` or `=` cannot be a key, and neither can a word the parser reads as a
+ * value (`yes`, `no`, `on`, `off`, `true`, `false`, `null`, `none`).
+ *
+ * @param string $label The key or label.
+ * @return bool
+ */
+function is_ini_label(string $label): bool
+{
+    return parse_ini_safe("[s]\n{$label} = x\n") === ['s' => [$label => 'x']];
 }
 
 /**

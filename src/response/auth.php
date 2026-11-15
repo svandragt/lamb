@@ -582,16 +582,19 @@ function redirect_logout(): void
  * A POST carrying the hidden `settings_form` field saves the form fields (see
  * Config\form_to_ini()); `action=reset` restores the defaults. Any other POST is refused.
  *
- * @return array<string, mixed> An array containing the page title and the stored INI text, which the
- *     form is prefilled from. A refused form post also returns its typed fields as `form_values`.
+ * @return array<string, mixed> An array containing the page title, the stored INI text, which the
+ *     form is prefilled from, and the active theme's declared settings fields (`theme_settings`).
+ *     A refused form post also returns its typed fields as `form_values`.
  */
 function respond_settings(): array
 {
     Security\require_login();
 
+    $theme_settings = Config\theme_settings(defined('THEME_DIR') ? THEME_DIR : '');
     $data = [
         'title' => 'Settings',
         'ini_text' => Config\get_ini_text(),
+        'theme_settings' => $theme_settings,
         'feed_statuses' => Network\get_feed_statuses(),
         'redirects' => \Lamb\get_all_redirects(),
     ];
@@ -617,10 +620,10 @@ function respond_settings(): array
         // Typed content, kept when the save is refused.
         $form_values = array_intersect_key(
             $_POST,
-            array_flip([...Config\SETTINGS_FORM_SCALARS, ...Config\SETTINGS_FORM_SECTIONS])
+            array_flip([...Config\SETTINGS_FORM_SCALARS, ...Config\SETTINGS_FORM_SECTIONS, Config\THEME_SETTINGS_FIELD])
         );
 
-        $form_errors = Config\settings_form_errors($_POST, $stored_ini);
+        $form_errors = Config\settings_form_errors($_POST, $stored_ini, $theme_settings);
         if ($form_errors !== []) {
             $_SESSION['flash'][] = 'Settings not saved. Fix the following and save again.';
             foreach ($form_errors as $form_error) {
@@ -631,7 +634,7 @@ function respond_settings(): array
             return $data;
         }
 
-        $submitted_ini = Config\form_to_ini($_POST, $stored_ini);
+        $submitted_ini = Config\form_to_ini($_POST, $stored_ini, $theme_settings);
         $validation = Config\validate_ini($submitted_ini);
 
         if ($validation['valid']) {

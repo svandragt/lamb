@@ -53,6 +53,34 @@ Have a look at the pre-existing themes for examples of the above.
 
 Any suggestions to improve theming are welcomed.
 
+## Theme settings
+
+A theme can add settings fields of its own to `/settings`. Add a `settings.php` file to the theme directory that returns the fields, each with a label and a default:
+
+```php
+<?php
+// src/themes/news/settings.php
+return [
+    'accent_colour' => ['label' => 'Accent colour', 'default' => '#0a7'],
+    'tagline' => ['label' => 'Footer tagline', 'default' => ''],
+];
+```
+
+When the theme is active, `/settings` shows a **Theme** tab with one text field for each key. The label names the field and the default shows as its placeholder. The tab does not appear for a theme without `settings.php`, such as the built-in themes, or when the file returns something other than an array.
+
+Lamb stores the values in a `[theme_<name>]` section of the stored settings, where `<name>` is the theme directory name, and passes them to the theme in `$config`. An empty field is not stored. The theme falls back to its own default when a value is missing:
+
+```php
+<?php $accent = $config['theme_news']['accent_colour'] ?? '#0a7'; ?>
+<body style="--accent: <?= escape($accent) ?>">
+```
+
+* Escape every value you print, as you would any other setting.
+* Each theme keeps its own section, so switching themes keeps the values you set for each of them.
+* The Theme tab shows only the keys the file declares. A stored key the file no longer declares stays in the settings.
+* A key must work as a settings key: it cannot contain `[`, `"`, `&` or `=`, or be one of `yes`, `no`, `on`, `off`, `true`, `false`, `null` or `none`. Lamb skips a field whose key does not.
+* The fields are plain text inputs.
+
 ## Related
 
 * [Theme Functions]({{ site.baseurl }}{% link theme-functions.md %}): reference for the helper functions theme parts call.

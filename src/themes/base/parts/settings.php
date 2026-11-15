@@ -3,11 +3,14 @@
 global $data;
 
 use function Lamb\Config\settings_form_prefill;
+use function Lamb\Config\theme_settings_values;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\resolve_theme;
 
+use const Lamb\Config\NO_THEME_SETTINGS;
+use const Lamb\Config\THEME_SETTINGS_FIELD;
 use const Lamb\Theme\RETIRED_THEMES;
 
 $feed_statuses = $data['feed_statuses'] ?? [];
@@ -20,6 +23,11 @@ $fields    = $form['fields'];
 $theme     = resolve_theme($fields['theme']);
 $themes    = array_diff(array_map('basename', glob(ROOT_DIR . '/themes/*', GLOB_ONLYDIR) ?: []), array_keys(RETIRED_THEMES));
 $timezones = DateTimeZone::listIdentifiers();
+
+// The active theme's own fields (its settings.php), shown on the Theme tab.
+$theme_settings = $data['theme_settings'] ?? NO_THEME_SETTINGS;
+$theme_fields   = $theme_settings['fields'];
+$theme_values   = theme_settings_values($theme_settings, $data['ini_text'], $data['form_values'] ?? []);
 
 $text_field = static function (
     string $name,
@@ -96,6 +104,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
         display: none;
     }
     #settings-tab-config:checked ~ .settings-tabs__nav label[for="settings-tab-config"],
+    #settings-tab-theme:checked ~ .settings-tabs__nav label[for="settings-tab-theme"],
     #settings-tab-redirects:checked ~ .settings-tabs__nav label[for="settings-tab-redirects"],
     #settings-tab-export:checked ~ .settings-tabs__nav label[for="settings-tab-export"],
     #settings-tab-logs:checked ~ .settings-tabs__nav label[for="settings-tab-logs"] {
@@ -105,6 +114,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
         font-weight: bold;
     }
     #settings-tab-config:checked ~ #settings-panel-config,
+    #settings-tab-theme:checked ~ #settings-panel-theme,
     #settings-tab-redirects:checked ~ #settings-panel-redirects,
     #settings-tab-export:checked ~ #settings-panel-export,
     #settings-tab-logs:checked ~ #settings-panel-logs {
@@ -172,12 +182,18 @@ $list_field = static function (string $name, string $label, string $help, int $r
 
 <div class="settings-tabs">
     <input type="radio" name="settings-tab" id="settings-tab-config" checked>
+    <?php if ($theme_fields !== []) : ?>
+        <input type="radio" name="settings-tab" id="settings-tab-theme">
+    <?php endif; ?>
     <input type="radio" name="settings-tab" id="settings-tab-redirects">
     <input type="radio" name="settings-tab" id="settings-tab-export">
     <input type="radio" name="settings-tab" id="settings-tab-logs">
 
     <nav class="settings-tabs__nav">
         <label for="settings-tab-config">Configuration</label>
+        <?php if ($theme_fields !== []) : ?>
+            <label for="settings-tab-theme">Theme</label>
+        <?php endif; ?>
         <label for="settings-tab-redirects">Redirections</label>
         <label for="settings-tab-export">Export</label>
         <label for="settings-tab-logs">Logs</label>
@@ -322,6 +338,30 @@ $list_field = static function (string $name, string $label, string $help, int $r
             </div>
         </form>
     </section>
+
+    <?php if ($theme_fields !== []) : ?>
+        <section class="settings-tabs__panel" id="settings-panel-theme">
+            <p>
+                Settings the <?= escape(THEME) ?> theme provides. Leave a field empty to use the theme's own default.
+            </p>
+
+            <?php /* The fields belong to the form in the Configuration tab, so one save stores both. */ ?>
+            <div class="settings-form">
+                <?php $position = 0; ?>
+                <?php foreach ($theme_fields as $key => $field) : ?>
+                    <?php $id = 'theme-setting-' . $position++; ?>
+                    <div class="settings-form__field">
+                        <label for="<?= $id ?>"><?= escape($field['label']) ?></label>
+                        <input type="text" form="settingsform" id="<?= $id ?>"
+                            name="<?= escape(THEME_SETTINGS_FIELD . '[' . $key . ']') ?>"
+                            value="<?= escape($theme_values[$key]) ?>"
+                            <?= $field['default'] !== '' ? 'placeholder="' . escape($field['default']) . '"' : '' ?>>
+                    </div>
+                <?php endforeach; ?>
+                <button type="submit" form="settingsform" name="action" value="save">Save settings</button>
+            </div>
+        </section>
+    <?php endif; ?>
 
     <section class="settings-tabs__panel" id="settings-panel-redirects">
         <p>
