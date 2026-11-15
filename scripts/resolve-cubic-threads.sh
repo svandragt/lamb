@@ -14,16 +14,17 @@ repo="$2"
 number="$3"
 
 # shellcheck disable=SC2016 # $vars are GraphQL variables, not shell
-query='query($owner: String!, $name: String!, $number: Int!) {
+query='query($owner: String!, $name: String!, $number: Int!, $endCursor: String) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      reviewThreads(first: 100) {
+      reviewThreads(first: 100, after: $endCursor) {
+        pageInfo { hasNextPage endCursor }
         nodes { id isResolved comments(first: 1) { nodes { author { login } } } }
       }
     }
   }
 }'
-pr=$(gh api graphql -f query="$query" -F owner="$owner" -F name="$repo" -F number="$number")
+pr=$(gh api graphql --paginate -f query="$query" -F owner="$owner" -F name="$repo" -F number="$number")
 ids=$(jq -r '.data.repository.pullRequest.reviewThreads.nodes[]
 	| select(.isResolved == false and .comments.nodes[0].author.login == "cubic-dev-ai")
 	| .id' <<<"$pr")
