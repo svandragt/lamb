@@ -13,6 +13,7 @@ use function Lamb\Post\register_default_subscribers;
 use function Lamb\Post\reset_subscribers;
 use function Lamb\Post\save;
 use function Lamb\Response\apply_checkbox_toggle;
+use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_pending_posts;
 
 use const Lamb\Webmention\ENQUEUE_SWEEP_LIMIT;
@@ -104,7 +105,8 @@ class WebmentionSweepTest extends TestCase
         $this->whileQueueingFails(static fn() => save($bean, ['notify' => true]));
 
         $this->assertSame(0, $this->queued($bean));
-        $this->assertSame(1, $this->pending($bean), 'the failed queueing leaves the mark set');
+        $this->assertGreaterThan(0, $this->pending($bean), 'the failed queueing leaves the mark set');
+        $this->assertSame((int) $bean->webmentions_pending, $this->pending($bean));
 
         $this->assertSame(1, enqueue_pending_posts());
 
@@ -136,7 +138,7 @@ class WebmentionSweepTest extends TestCase
         $this->whileQueueingFails(static fn() => save($bean, ['notify' => true]));
 
         $this->assertSame(1, $this->queued($bean), 'only the first link made it');
-        $this->assertSame(1, $this->pending($bean));
+        $this->assertSame((int) $bean->webmentions_pending, $this->pending($bean));
 
         $this->assertSame(1, enqueue_pending_posts());
 
@@ -156,6 +158,113 @@ class WebmentionSweepTest extends TestCase
         $this->assertSame(0, $this->pending($bean));
         $this->assertSame(0, enqueue_pending_posts());
         $this->assertSame(0, $this->queued($bean));
+    }
+
+    public function testAStaleSnapshotDoesNotCancelTheRowsOfALaterEdit(): void
+    {
+        // The sweep reads a post, and an edit commits and queues its new link before the
+        // sweep enqueues from what it read. The stale content must not cancel that link.
+        $bean = populate_bean('See [a](https://other.example/a).');
+        save($bean, ['notify' => true]);
+        $snapshot = R::load('post', $bean->id);
+
+        register_default_subscribers();
+        $bean->body = 'See [a](https://other.example/a) and [b](https://other.example/b).';
+        parse_bean($bean);
+        save($bean, ['notify' => true]);
+        $this->assertSame(2, $this->queued($bean));
+
+        enqueue_for_post($snapshot);
+
+        $this->assertSame(2, R::count('webmentionoutbox', ' status = ? ', ['pending']));
+        $this->assertSame(0, $this->pending($bean));
+    }
+
+    public function testASlowSubscriberDoesNotClearTheMarkOfALaterEdit(): void
+    {
+        // Edit 1's subscriber is still running when edit 2 is saved, and edit 2's subscriber fails.
+        // Edit 1's subscriber then finishes: edit 2's mark has to survive it.
+        $bean = populate_bean('See [a](https://other.example/a).');
+        save($bean, ['notify' => true]);
+        $first_subscriber_bean = R::load('post', $bean->id);
+
+        register_default_subscribers();
+        $bean->body = 'See [a](https://other.example/a) and [b](https://other.example/b).';
+        parse_bean($bean);
+        $this->whileQueueingFails(static fn() => save($bean, ['notify' => true]));
+        $second_token = (int) $bean->webmentions_pending;
+
+        enqueue_for_post($first_subscriber_bean);
+
+        $this->assertSame($second_token, $this->pending($bean), 'edit 2 is still owed its webmentions');
+
+        $this->assertSame(1, enqueue_pending_posts());
+        $this->assertSame(2, $this->queued($bean), 'queued from edit 2\'s content');
+        $this->assertSame(0, $this->pending($bean));
+    }
+
+    /**
+     * @return array<string, array{0: array<string, mixed>}>
+     */
+    public static function postsNobodyNotifiesFor(): array
+    {
+        return [
+            'draft' => [['draft' => 1]],
+            'feed-sourced post' => [['feed_name' => 'Some feed']],
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $fields
+     * @dataProvider postsNobodyNotifiesFor
+     */
+    public function testNotifyingForAPostThatSendsNothingClearsItsMark(array $fields): void
+    {
+        // The edit form and Micropub always notify, so without this the mark stays set forever.
+        register_default_subscribers();
+        $bean = populate_bean('Secret [a](https://other.example/a).');
+        foreach ($fields as $name => $value) {
+            $bean->$name = $value;
+        }
+
+        save($bean, ['notify' => true]);
+
+        $this->assertSame(0, $this->queued($bean));
+        $this->assertSame(0, $this->pending($bean));
+    }
+
+    public function testTheSweepCountsAPostWhoseFailedRowWasRevived(): void
+    {
+        $post = $this->flaggedPost();
+        $row = R::dispense('webmentionoutbox');
+        $row->post_id = $post->id;
+        $row->source = ROOT_URL . '/status/' . $post->id;
+        $row->target = 'https://other.example/a';
+        $row->status = 'failed';
+        $row->attempts = 3;
+        $row->created = date('Y-m-d H:i:s');
+        R::store($row);
+
+        $this->assertSame(1, enqueue_pending_posts());
+
+        $this->assertSame('pending', R::findOne('webmentionoutbox')->status);
+    }
+
+    public function testTheSweepCountsAPostWhoseRemovedLinkWasCancelled(): void
+    {
+        $post = $this->flaggedPost(['transformed' => '<p>No links left.</p>']);
+        $row = R::dispense('webmentionoutbox');
+        $row->post_id = $post->id;
+        $row->source = ROOT_URL . '/status/' . $post->id;
+        $row->target = 'https://other.example/a';
+        $row->status = 'pending';
+        $row->attempts = 0;
+        $row->created = date('Y-m-d H:i:s');
+        R::store($row);
+
+        $this->assertSame(1, enqueue_pending_posts());
+
+        $this->assertSame('cancelled', R::findOne('webmentionoutbox')->status);
     }
 
     public function testAPostMarkedPendingIsQueuedOnlyOnce(): void

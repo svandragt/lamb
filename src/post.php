@@ -909,10 +909,11 @@ function register_default_subscribers(): void
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
  *    into the front matter (the step every create path runs after its first store).
- *  - `notify` — emit `post.published` after a successful store, and set the
- *    row's `webmentions_pending` column in the same transaction. The webmention
- *    subscriber clears it after queueing; a failed queueing leaves it set for
- *    /_cron to retry (Webmention\enqueue_pending_posts()).
+ *  - `notify` — emit `post.published` after a successful store, and write a
+ *    random token to the row's `webmentions_pending` column in the same
+ *    transaction. The webmention subscriber clears it after queueing, only while
+ *    the row still holds the token; a failed queueing leaves it set for /_cron
+ *    to retry (Webmention\enqueue_pending_posts()).
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
  *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
@@ -956,11 +957,14 @@ function save(OODBBean $bean, array $context = []): void
         $bean->feed_locked = 1;
     }
 
-    // Written with the row, so it commits and rolls back with the save. The
-    // post.published subscriber clears it once the webmentions are queued;
-    // /_cron queues the posts it is still set on.
+    // Written with the row, so it commits and rolls back with the save. A token
+    // of its own, not a flag: whoever queues the webmentions clears the mark only
+    // while it still holds this save's token, so a slow queueing of an earlier
+    // save cannot clear the mark a later save set. 31 bits, because fluid mode
+    // widens an INTEGER column for a larger value, and only two saves of one post
+    // within seconds of each other ever need telling apart.
     if ($context['notify']) {
-        $bean->webmentions_pending = 1;
+        $bean->webmentions_pending = random_int(1, 2147483647);
     }
 
     try {

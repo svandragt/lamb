@@ -173,20 +173,14 @@ class PostDeleteRestoreAtomicTest extends TestCase
         // The post is still live, so the page the author pressed delete on still exists.
         $result = $this->submitWithFailingContentMark('redirect_deleted', false, 'http://localhost/status/1');
 
-        if ($result['location'] === null) {
-            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
-        }
-        $this->assertSame('Location: /status/1', $result['location']);
+        $this->assertSame('/status/1', $result['location']);
     }
 
     public function testAFailedDeleteReturnsToTheListingItWasPressedOn(): void
     {
         $result = $this->submitWithFailingContentMark('redirect_deleted', false, 'http://localhost/tag/php?page=2');
 
-        if ($result['location'] === null) {
-            $this->markTestSkipped('needs xdebug_get_headers() to read emitted headers');
-        }
-        $this->assertSame('Location: /tag/php?page=2', $result['location']);
+        $this->assertSame('/tag/php?page=2', $result['location']);
     }
 
     public function testAFailedDeleteRestoresTheBeansFields(): void
@@ -233,44 +227,55 @@ class PostDeleteRestoreAtomicTest extends TestCase
      * @param string $handler Which Lamb\Response handler to call.
      * @param bool   $deleted Whether the post starts in the trash.
      * @param string $referer The request Referer, or '' for none.
-     * @return array{flash: list<string>, deleted: int, location: ?string} The Location header line, null without Xdebug.
+     * @return array{flash: list<string>, deleted: int, location: string} The Location the handler redirected to.
      * @throws \JsonException When the subprocess prints something that is not JSON.
      */
     private function submitWithFailingContentMark(string $handler, bool $deleted, string $referer = ''): array
     {
+        // The child defines Lamb\Response\header() before it starts: PHP resolves the
+        // unqualified header() call in redirect_uri() to the namespaced function first, so the
+        // redirect is captured without Xdebug (the CLI SAPI keeps no headers for headers_list()).
         $script = <<<'PHP'
-        use RedBeanPHP\R;
-
-        require $argv[1];
-        define('ROOT_URL', 'http://localhost');
-        R::setup('sqlite::memory:');
-        \Lamb\Bootstrap\ensure_schema();
-
-        $post = R::dispense('post');
-        $post->body = 'Hello';
-        $post->created = '2026-01-01 00:00:00';
-        $post->updated = '2026-01-01 00:00:00';
-        $post->deleted = $argv[3] === '1' ? 1 : null;
-        $id = R::store($post);
-        R::exec("CREATE TRIGGER block_write BEFORE INSERT ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
-
-        $_SERVER['REQUEST_METHOD'] = 'POST';
-        $_SESSION = [SESSION_LOGIN => true, HIDDEN_CSRF_NAME => 'tok'];
-        $_POST = [HIDDEN_CSRF_NAME => 'tok'];
-        if ($argv[4] !== '') {
-            $_SERVER['HTTP_REFERER'] = $argv[4];
+        namespace Lamb\Response {
+            function header(string $header, bool $replace = true, int $response_code = 0): void
+            {
+                $GLOBALS['sent'][] = $header;
+            }
         }
 
-        register_shutdown_function(function () use ($id) {
-            // headers_list() is empty under the CLI SAPI; Xdebug reads the emitted headers.
-            $headers = function_exists('xdebug_get_headers') ? xdebug_get_headers() : null;
-            echo json_encode([
-                'flash' => $_SESSION['flash'] ?? [],
-                'deleted' => (int) R::load('post', $id)->deleted,
-                'location' => $headers === null ? null : (array_values(preg_grep('/^Location:/', $headers))[0] ?? ''),
-            ]);
-        });
-        ('\Lamb\Response\\' . $argv[2])([(string) $id]);
+        namespace {
+            use RedBeanPHP\R;
+
+            require $argv[1];
+            define('ROOT_URL', 'http://localhost');
+            R::setup('sqlite::memory:');
+            \Lamb\Bootstrap\ensure_schema();
+
+            $post = R::dispense('post');
+            $post->body = 'Hello';
+            $post->created = '2026-01-01 00:00:00';
+            $post->updated = '2026-01-01 00:00:00';
+            $post->deleted = $argv[3] === '1' ? 1 : null;
+            $id = R::store($post);
+            R::exec("CREATE TRIGGER block_write BEFORE INSERT ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+            $_SERVER['REQUEST_METHOD'] = 'POST';
+            $_SESSION = [SESSION_LOGIN => true, HIDDEN_CSRF_NAME => 'tok'];
+            $_POST = [HIDDEN_CSRF_NAME => 'tok'];
+            if ($argv[4] !== '') {
+                $_SERVER['HTTP_REFERER'] = $argv[4];
+            }
+
+            register_shutdown_function(function () use ($id) {
+                $location = preg_grep('/^Location:/', $GLOBALS['sent'] ?? []);
+                echo json_encode([
+                    'flash' => $_SESSION['flash'] ?? [],
+                    'deleted' => (int) R::load('post', $id)->deleted,
+                    'location' => substr((string) (array_values($location)[0] ?? ''), strlen('Location: ')),
+                ]);
+            });
+            ('\Lamb\Response\\' . $argv[2])([(string) $id]);
+        }
         PHP;
 
         $process = new Process([
@@ -282,7 +287,7 @@ class PostDeleteRestoreAtomicTest extends TestCase
         ]);
         $process->run();
 
-        /** @var array{flash: list<string>, deleted: int, location: ?string} */
+        /** @var array{flash: list<string>, deleted: int, location: string} */
         return json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
     }
 }

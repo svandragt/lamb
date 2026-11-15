@@ -423,7 +423,24 @@ class PostSaveTest extends TestCase
 
         save($bean, ['notify' => true]);
 
-        $this->assertSame(1, (int) R::load('post', $bean->id)->webmentions_pending);
+        $this->assertGreaterThan(0, (int) R::load('post', $bean->id)->webmentions_pending);
+    }
+
+    public function testEachNotifySaveMarksThePostWithItsOwnToken(): void
+    {
+        // The subscriber clears the mark only if it still holds the token its own save wrote,
+        // so a later save's mark survives an earlier save's slow subscriber.
+        $bean = populate_bean('A status.');
+
+        save($bean, ['notify' => true]);
+        $first = (int) $bean->webmentions_pending;
+        save($bean, ['notify' => true]);
+        $second = (int) $bean->webmentions_pending;
+
+        $this->assertGreaterThan(0, $first);
+        $this->assertGreaterThan(0, $second);
+        $this->assertNotSame($first, $second);
+        $this->assertSame($second, (int) R::load('post', $bean->id)->webmentions_pending);
     }
 
     public function testASaveWithoutNotifyDoesNotMarkWebmentionsPending(): void

@@ -82,7 +82,7 @@ class PostIndexesTest extends TestCase
     {
         $this->createPostTable([
             'slug TEXT', 'updated TEXT', 'version INTEGER', 'feed_name TEXT',
-            'draft INTEGER', 'deleted INTEGER',
+            'draft INTEGER', 'deleted INTEGER', 'webmentions_pending INTEGER',
         ]);
 
         migrate_post_table();
@@ -90,6 +90,21 @@ class PostIndexesTest extends TestCase
         $expected = array_keys(POST_INDEXES);
         sort($expected);
         $this->assertSame($expected, $this->postIndexes());
+    }
+
+    public function testThePendingWebmentionsSweepIsAnIndexProbe(): void
+    {
+        // enqueue_pending_posts() runs this predicate on every /_cron run, and almost
+        // every post is unmarked, so it must not scan the table.
+        $this->createPostTable(['webmentions_pending INTEGER']);
+        migrate_post_table();
+
+        $plan = implode(' ', array_column(
+            R::getAll('EXPLAIN QUERY PLAN SELECT id FROM post WHERE webmentions_pending > 0 LIMIT 100'),
+            'detail'
+        ));
+
+        $this->assertStringContainsString('idx_post_webmentions_pending', $plan);
     }
 
     public function testVersionAndFeedNameAreNotIndexedEvenWhenPresent(): void

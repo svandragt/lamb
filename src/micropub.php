@@ -9,6 +9,7 @@ use Nyholm\Psr7\UploadedFile;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
+use RedBeanPHP\RedException\SQL;
 use Psr\Log\AbstractLogger;
 use Taproot\Micropub\MicropubAdapter;
 
@@ -515,9 +516,7 @@ class LambMicropubAdapter extends MicropubAdapter
 
         // Share the web delete path so a Micropub delete also stamps deleted_at
         // (for purging) and re-sends webmentions for the now-gone post (#331).
-        \Lamb\Response\soft_delete_post($bean);
-
-        return true;
+        return $this->changeTrashState(\Lamb\Response\soft_delete_post(...), $bean);
     }
 
     /**
@@ -543,7 +542,35 @@ class LambMicropubAdapter extends MicropubAdapter
 
         // Share the web restore path so a Micropub undelete also reconciles any
         // deletion webmention re-sends (#331).
-        \Lamb\Response\restore_post($bean);
+        return $this->changeTrashState(\Lamb\Response\restore_post(...), $bean);
+    }
+
+    /**
+     * Applies a delete or undelete to a post, answering 500 when its writes fail.
+     *
+     * The change is one transaction, so a failure leaves the post as it was: the
+     * client is told, and can try again.
+     *
+     * @param callable(OODBBean): void $change soft_delete_post() or restore_post().
+     * @param OODBBean                 $bean   The post to change.
+     * @return true|Response
+     */
+    private function changeTrashState(callable $change, OODBBean $bean): true|Response
+    {
+        try {
+            $change($bean);
+        } catch (SQL $e) {
+            error_log('Micropub could not change post ' . $bean->id . ': ' . $e->getMessage());
+
+            return new Response(
+                500,
+                ['content-type' => 'application/json'],
+                json_encode(
+                    ['error' => 'server_error', 'error_description' => 'The post could not be changed.'],
+                    JSON_INVALID_UTF8_SUBSTITUTE
+                ) ?: ''
+            );
+        }
 
         return true;
     }

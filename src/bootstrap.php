@@ -405,6 +405,9 @@ function migrate_post_table(): void
  * - `draft`,
  *   `deleted`   — the admin toolbar's drafts/trash counts, on every logged-in
  *                 page render.
+ * - `webmentions_pending` — enqueue_pending_posts() asks for the marked rows on
+ *                 every /_cron run. Almost every post is unmarked, so without
+ *                 the index each run would scan the whole table for none.
  *
  * `version` and `feed_name` are deliberately absent, both removed alongside
  * their backfills moving to `bin/lamb migrate` (#811):
@@ -431,6 +434,7 @@ const POST_INDEXES = [
     'idx_post_updated'   => 'updated',
     'idx_post_draft'     => 'draft',
     'idx_post_deleted'   => 'deleted',
+    'idx_post_webmentions_pending' => 'webmentions_pending',
 ];
 
 /**

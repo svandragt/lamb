@@ -264,27 +264,13 @@ function redirect_restored(mixed $args): void
  */
 function soft_delete_post(OODBBean $post): void
 {
-    $before = ['deleted' => $post->deleted, 'deleted_at' => $post->deleted_at];
-
-    try {
-        \Lamb\with_write_transaction(function () use ($post): void {
-            $post->deleted    = 1;
-            $post->deleted_at = \Lamb\now();
-            R::store($post);
-
-            // Re-send any webmentions this post previously sent so receivers re-fetch
-            // the now-gone source and drop the displayed mention (#331).
-            \Lamb\Webmention\enqueue_deletion_resends((int) $post->id);
-
-            // Trashing can remove the post currently holding MAX(updated); bump the
-            // monotonic mark so latest_content_timestamp() can't fall backwards (#669).
-            bump_content_timestamp();
-        });
-    } catch (\Throwable $e) {
-        // The rollback restored the row, not the bean: a caller that reuses it must not see a trashed post.
-        $post->import($before);
-        throw $e;
-    }
+    // Re-send any webmentions this post previously sent so receivers re-fetch
+    // the now-gone source and drop the displayed mention (#331).
+    change_post_state(
+        $post,
+        ['deleted' => 1, 'deleted_at' => \Lamb\now()],
+        \Lamb\Webmention\enqueue_deletion_resends(...)
+    );
 }
 
 /**
@@ -300,25 +286,49 @@ function soft_delete_post(OODBBean $post): void
  */
 function restore_post(OODBBean $post): void
 {
-    $before = ['deleted' => $post->deleted, 'deleted_at' => $post->deleted_at];
+    // The post is back: abandon deletion re-sends /_cron has not yet drained,
+    // and re-queue any it already delivered so receivers re-display the mention
+    // (#331).
+    change_post_state(
+        $post,
+        ['deleted' => null, 'deleted_at' => null],
+        \Lamb\Webmention\reconcile_resends_on_restore(...)
+    );
+}
+
+/**
+ * Stores a post's trash state, its webmention writes and the content mark in one transaction.
+ *
+ * Trashing can remove the post currently holding MAX(updated), and a restore is
+ * a content mutation too, so both move the monotonic mark forward so
+ * latest_content_timestamp() cannot fall backwards (#669).
+ *
+ * The rollback restores the row, not the bean, so on failure the fields are put
+ * back: a caller that reuses the bean must not see a trashed post that is live
+ * in the database.
+ *
+ * @param OODBBean             $post              The post to change.
+ * @param array<string, mixed> $fields            The fields to set.
+ * @param callable(int): mixed $webmention_writes Called with the post id after the store, inside the transaction.
+ * @return void
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
+ */
+function change_post_state(OODBBean $post, array $fields, callable $webmention_writes): void
+{
+    $before = [];
+    foreach (array_keys($fields) as $name) {
+        $before[$name] = $post->$name;
+    }
 
     try {
-        \Lamb\with_write_transaction(function () use ($post): void {
-            $post->deleted    = null;
-            $post->deleted_at = null;
+        \Lamb\with_write_transaction(function () use ($post, $fields, $webmention_writes): void {
+            $post->import($fields);
             R::store($post);
-
-            // The post is back: abandon deletion re-sends /_cron has not yet drained,
-            // and re-queue any it already delivered so receivers re-display the mention
-            // (#331).
-            \Lamb\Webmention\reconcile_resends_on_restore((int) $post->id);
-
-            // A restore is a content mutation too; keep the monotonic mark moving
-            // forward so latest_content_timestamp() reflects it (#669).
+            $webmention_writes((int) $post->id);
             bump_content_timestamp();
         });
     } catch (\Throwable $e) {
-        // The rollback restored the row, not the bean: a caller that reuses it must not see a restored post.
         $post->import($before);
         throw $e;
     }
