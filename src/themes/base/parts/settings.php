@@ -3,13 +3,11 @@
 global $data;
 
 use function Lamb\Config\settings_form_prefill;
-use function Lamb\Config\theme_settings_values;
 use function Lamb\Theme\csrf_token;
 use function Lamb\Theme\escape;
 use function Lamb\Theme\human_time;
 use function Lamb\Theme\resolve_theme;
 
-use const Lamb\Config\NO_THEME_SETTINGS;
 use const Lamb\Config\THEME_SETTINGS_FIELD;
 use const Lamb\Theme\RETIRED_THEMES;
 
@@ -18,16 +16,15 @@ $redirects     = $data['redirects'] ?? [];
 
 // Shows the stored settings, or what was typed when a save was refused. An
 // unset theme shows the one in use, so saving does not switch it.
-$form      = settings_form_prefill($data['ini_text'], $data['form_values'] ?? []);
+$form      = settings_form_prefill($data['ini_text'], $data['form_values'] ?? [], $data['theme_settings']);
 $fields    = $form['fields'];
 $theme     = resolve_theme($fields['theme']);
 $themes    = array_diff(array_map('basename', glob(ROOT_DIR . '/themes/*', GLOB_ONLYDIR) ?: []), array_keys(RETIRED_THEMES));
 $timezones = DateTimeZone::listIdentifiers();
 
 // The active theme's own fields (its settings.php), shown on the Theme tab.
-$theme_settings = $data['theme_settings'] ?? NO_THEME_SETTINGS;
-$theme_fields   = $theme_settings['fields'];
-$theme_values   = theme_settings_values($theme_settings, $data['ini_text'], $data['form_values'] ?? []);
+$theme_fields = $data['theme_settings']['fields'];
+$theme_values = $form['theme'];
 
 $text_field = static function (
     string $name,
@@ -65,6 +62,10 @@ $list_field = static function (string $name, string $label, string $help, int $r
 
 ?>
 <h1>Settings</h1>
+
+<?php if ($data['theme_settings']['error'] !== '') : ?>
+    <div class="flash">⚠️ <?= escape($data['theme_settings']['error']) ?></div>
+<?php endif; ?>
 
 <style>
     /* CSS-only tabs: hidden radios drive panel visibility via :checked, so the
@@ -358,7 +359,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
                             <?= $field['default'] !== '' ? 'placeholder="' . escape($field['default']) . '"' : '' ?>>
                     </div>
                 <?php endforeach; ?>
-                <button type="submit" form="settingsform" name="action" value="save">Save settings</button>
+                <button type="submit" form="settingsform" name="action" value="save" formnovalidate>Save settings</button>
             </div>
         </section>
     <?php endif; ?>

@@ -590,7 +590,7 @@ function respond_settings(): array
 {
     Security\require_login();
 
-    $theme_settings = Config\theme_settings(defined('THEME_DIR') ? THEME_DIR : '');
+    $theme_settings = Config\theme_settings(THEME_DIR);
     $data = [
         'title' => 'Settings',
         'ini_text' => Config\get_ini_text(),

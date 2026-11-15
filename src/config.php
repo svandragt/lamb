@@ -718,7 +718,7 @@ const THEME_SETTINGS_FIELD = 'theme_settings';
 /**
  * What theme_settings() returns for a theme that declares no fields.
  */
-const NO_THEME_SETTINGS = ['section' => '', 'fields' => []];
+const NO_THEME_SETTINGS = ['section' => '', 'fields' => [], 'error' => ''];
 
 /**
  * Returns the settings fields a theme declares in its `settings.php`.
@@ -730,18 +730,45 @@ const NO_THEME_SETTINGS = ['section' => '', 'fields' => []];
  * (see is_ini_label()), is skipped. A theme without the file, or one whose file returns
  * something other than an array, declares no fields.
  *
+ * A file that throws or does not parse also declares no fields, and `error` says so, because
+ * /settings is the way back from a broken theme and has to keep working. The file runs once
+ * per request: a second `require` of one that declares a function would be a fatal error.
+ *
  * @param string $theme_dir The theme directory, such as THEME_DIR. '' means no theme.
- * @return array{section: string, fields: array<string, array{label: string, default: string}>}
- *     The `[theme_<name>]` section the values are stored under, and the fields in declared order.
+ * @return array{section: string, fields: array<string, array{label: string, default: string}>, error: string}
+ *     The `[theme_<name>]` section the values are stored under, the fields in declared order, and
+ *     a message naming the file when it could not be loaded, otherwise ''.
  */
 function theme_settings(string $theme_dir): array
 {
+    static $loaded = [];
+
     $file = rtrim($theme_dir, '/') . '/settings.php';
     if ($theme_dir === '' || !is_file($file)) {
         return NO_THEME_SETTINGS;
     }
 
-    $declared = require $file;
+    return $loaded[$file] ??= read_theme_settings($file);
+}
+
+/**
+ * Loads a theme's `settings.php` and shapes what it returns, as theme_settings() describes.
+ *
+ * @param string $file The path of the theme's `settings.php`.
+ * @return array{section: string, fields: array<string, array{label: string, default: string}>, error: string}
+ */
+function read_theme_settings(string $file): array
+{
+    $theme = basename(dirname($file));
+
+    try {
+        $declared = require $file;
+    } catch (\Throwable $e) {
+        return [
+            ...NO_THEME_SETTINGS,
+            'error' => "`themes/{$theme}/settings.php` could not be loaded, so the Theme tab is hidden: {$e->getMessage()}",
+        ];
+    }
     if (!is_array($declared)) {
         return NO_THEME_SETTINGS;
     }
@@ -758,7 +785,7 @@ function theme_settings(string $theme_dir): array
         ];
     }
 
-    return ['section' => 'theme_' . basename(rtrim($theme_dir, '/')), 'fields' => $fields];
+    return ['section' => 'theme_' . $theme, 'fields' => $fields, 'error' => ''];
 }
 
 /**
@@ -775,34 +802,6 @@ function posted_theme_values(array $post): array
 }
 
 /**
- * Returns the values the Theme tab shows for the active theme's fields.
- *
- * They come from the stored INI, so a field the author never set is empty and the
- * theme's default applies (the form shows it as a placeholder, and a save leaves it out).
- * Fields in $posted, a refused submission (see respond_settings()), replace the stored ones.
- *
- * @param array{section: string, fields: array<string, array{label: string, default: string}>} $theme_settings
- *     What theme_settings() returned for the active theme.
- * @param string               $stored_ini The INI text currently stored.
- * @param array<string, mixed> $posted     The refused submission, or [] to show the stored values.
- * @return array<string, string> The text of every declared field.
- */
-function theme_settings_values(array $theme_settings, string $stored_ini, array $posted = []): array
-{
-    $stored = normalize_config_section(parse_ini_safe($stored_ini)[$theme_settings['section']] ?? null);
-    $typed = posted_theme_values($posted);
-    $values = [];
-
-    foreach (array_keys($theme_settings['fields']) as $key) {
-        $values[$key] = array_key_exists($key, $typed)
-            ? settings_form_value($typed, (string) $key)
-            : trim($stored[$key] ?? '');
-    }
-
-    return $values;
-}
-
-/**
  * Builds the stored INI text from the settings form fields.
  *
  * Storage stays one INI blob, so existing installs need no migration. The form
@@ -815,9 +814,9 @@ function theme_settings_values(array $theme_settings, string $stored_ini, array 
  * applies; an owned section is always written, because an absent `[menu_items]`
  * brings back the default menu while an empty one means no menu.
  *
- * The active theme's `[theme_<name>]` section is the one section rebuilt from the post, for the
- * fields the theme declares. Other themes' sections, and keys the theme no longer declares, are
- * carried over. A post without the theme fields leaves the section as stored.
+ * The active theme's `[theme_<name>]` section is rebuilt from the post for the declared fields the
+ * post carries. Other themes' sections, keys the theme no longer declares, and declared keys the
+ * post lacks keep their stored value, so a post without the theme fields leaves the section as stored.
  *
  * Call settings_form_errors() first: lines it reports as malformed are skipped here.
  *
@@ -859,16 +858,17 @@ function form_to_ini(array $post, string $current_ini, array $theme_settings = N
     }
 
     $typed = posted_theme_values($post);
-    if ($theme_settings['fields'] !== [] && $typed !== []) {
+    $posted_fields = array_intersect_key($theme_settings['fields'], $typed);
+    if ($posted_fields !== []) {
         $entries = [];
-        foreach (array_keys($theme_settings['fields']) as $key) {
+        foreach (array_keys($posted_fields) as $key) {
             $value = settings_form_value($typed, (string) $key);
             if ($value !== '') {
                 $entries[$key] = $value;
             }
         }
         $stored = $sections[$theme_settings['section']] ?? [];
-        $sections[$theme_settings['section']] = $entries + array_diff_key($stored, $theme_settings['fields']);
+        $sections[$theme_settings['section']] = $entries + array_diff_key($stored, $posted_fields);
     }
 
     return write_ini($values, $sections);
@@ -928,8 +928,9 @@ function settings_form_errors(array $post, string $current_ini = '', array $them
         }
     }
 
+    $typed = posted_theme_values($post);
     foreach ($theme_settings['fields'] as $key => $field) {
-        if (preg_match('/[\r\n\0]/', settings_form_value(posted_theme_values($post), (string) $key)) === 1) {
+        if (preg_match('/[\r\n\0]/', settings_form_value($typed, (string) $key)) === 1) {
             $errors[] = "{$field['label']} must fit on one line.";
         }
     }
@@ -952,12 +953,19 @@ function settings_form_errors(array $post, string $current_ini = '', array $them
  * stored ones, even when posted empty. A submission without `feeds_draft` means
  * the box was unchecked.
  *
- * @param string               $stored_ini The INI text currently stored.
- * @param array<string, mixed> $posted     The refused submission, or [] to show the stored settings.
- * @return array{fields: array<string, string>, feeds_draft: bool} The text of every field and
- *     section textarea (one `label = value` line per entry), and whether the checkbox is checked.
+ * The active theme's fields follow the same rule, from its `[theme_<name>]` section: one that was
+ * never set is empty, and the theme's default applies (the form shows it as a placeholder, and a
+ * save leaves it out).
+ *
+ * @param string               $stored_ini     The INI text currently stored.
+ * @param array<string, mixed> $posted         The refused submission, or [] to show the stored settings.
+ * @param array{section: string, fields: array<string, array{label: string, default: string}>} $theme_settings
+ *     What theme_settings() returned for the active theme.
+ * @return array{fields: array<string, string>, feeds_draft: bool, theme: array<string, string>} The text of
+ *     every field and section textarea (one `label = value` line per entry), whether the checkbox is
+ *     checked, and the text of every field the active theme declares.
  */
-function settings_form_prefill(string $stored_ini, array $posted = []): array
+function settings_form_prefill(string $stored_ini, array $posted = [], array $theme_settings = NO_THEME_SETTINGS): array
 {
     $stored = parse_ini_safe($stored_ini);
     $fields = [];
@@ -983,6 +991,15 @@ function settings_form_prefill(string $stored_ini, array $posted = []): array
         $fields[$name] = implode("\n", $lines);
     }
 
+    $theme = [];
+    $typed = posted_theme_values($posted);
+    $theme_stored = normalize_config_section($stored[$theme_settings['section']] ?? null);
+    foreach (array_keys($theme_settings['fields']) as $key) {
+        $theme[$key] = array_key_exists($key, $typed)
+            ? settings_form_value($typed, (string) $key)
+            : trim($theme_stored[$key] ?? '');
+    }
+
     $feeds_draft = is_scalar($stored['feeds_draft'] ?? null) ? $stored['feeds_draft'] : true;
 
     return [
@@ -990,6 +1007,7 @@ function settings_form_prefill(string $stored_ini, array $posted = []): array
         'feeds_draft' => $posted === []
             ? filter_var($feeds_draft, FILTER_VALIDATE_BOOLEAN)
             : array_key_exists('feeds_draft', $posted),
+        'theme' => $theme,
     ];
 }
 

@@ -9,8 +9,8 @@ use function Lamb\Config\form_to_ini;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\settings_form_errors;
+use function Lamb\Config\settings_form_prefill;
 use function Lamb\Config\theme_settings;
-use function Lamb\Config\theme_settings_values;
 
 use const Lamb\Config\NO_THEME_SETTINGS;
 
@@ -38,7 +38,7 @@ class ThemeSettingsTest extends TestCase
 
     /**
      * @param string $php The body of the theme's settings.php, after the opening tag.
-     * @return array{section: string, fields: array<string, array{label: string, default: string}>}
+     * @return array{section: string, fields: array<string, array{label: string, default: string}>, error: string}
      */
     private function declared(string $php): array
     {
@@ -48,7 +48,7 @@ class ThemeSettingsTest extends TestCase
     }
 
     /**
-     * @return array{section: string, fields: array<string, array{label: string, default: string}>}
+     * @return array{section: string, fields: array<string, array{label: string, default: string}>, error: string}
      */
     private function accentTheme(): array
     {
@@ -84,10 +84,60 @@ class ThemeSettingsTest extends TestCase
         $this->assertSame(NO_THEME_SETTINGS, theme_settings(''));
     }
 
-    public function testThemeSettingsIsEmptyWhenTheFileDoesNotReturnAnArray(): void
+    /**
+     * @dataProvider nonArrayReturnProvider
+     */
+    public function testThemeSettingsIsEmptyWhenTheFileDoesNotReturnAnArray(string $php): void
     {
-        $this->assertSame(NO_THEME_SETTINGS, $this->declared('return "accent_colour";'));
-        $this->assertSame(NO_THEME_SETTINGS, $this->declared('// returns nothing'));
+        $this->assertSame(NO_THEME_SETTINGS, $this->declared($php));
+    }
+
+    /**
+     * @return array<string, array{string}>
+     */
+    public static function nonArrayReturnProvider(): array
+    {
+        return ['a string' => ['return "accent_colour";'], 'nothing' => ['// returns nothing']];
+    }
+
+    /**
+     * @dataProvider brokenFileProvider
+     */
+    public function testThemeSettingsIsEmptyAndNamesTheFileWhenItCannotBeLoaded(string $php, string $reason): void
+    {
+        $settings = $this->declared($php);
+
+        $this->assertSame('', $settings['section']);
+        $this->assertSame([], $settings['fields']);
+        $this->assertStringContainsString('themes/mytheme/settings.php', $settings['error']);
+        $this->assertStringContainsString($reason, $settings['error']);
+    }
+
+    /**
+     * @return array<string, array{string, string}>
+     */
+    public static function brokenFileProvider(): array
+    {
+        return [
+            'a syntax error' => ['return [', "Unclosed '['"],
+            'an exception' => ['throw new \RuntimeException("boom");', 'boom'],
+            'a missing function' => ['return missing_lamb_function();', 'missing_lamb_function'],
+        ];
+    }
+
+    public function testThemeSettingsLoadsTheFileOnceSoItMayDeclareAFunction(): void
+    {
+        $name = 'lamb_theme_settings_helper_' . uniqid();
+        file_put_contents(
+            $this->themeDir . 'settings.php',
+            "<?php function {$name}() { return 'x'; } return ['accent_colour' => ['label' => {$name}()]];"
+        );
+
+        $first = theme_settings($this->themeDir);
+        $second = theme_settings($this->themeDir);
+
+        $this->assertSame('x', $first['fields']['accent_colour']['label']);
+        $this->assertSame($first, $second);
     }
 
     public function testThemeSettingsFallsBackToTheKeyForALabelAndEmptyForADefault(): void
@@ -159,6 +209,16 @@ class ThemeSettingsTest extends TestCase
         $this->assertSame(['accent_colour' => '#222', 'retired' => 'still here'], $saved['theme_mytheme']);
     }
 
+    public function testFormToIniKeepsADeclaredKeyThePostDoesNotCarry(): void
+    {
+        $current = "[theme_mytheme]\naccent_colour = #111\ntagline = Kept\n";
+        $post = ['theme_settings' => ['accent_colour' => '#222']];
+
+        $saved = parse_ini_safe(form_to_ini($post, $current, $this->accentTheme()));
+
+        $this->assertSame(['accent_colour' => '#222', 'tagline' => 'Kept'], $saved['theme_mytheme']);
+    }
+
     public function testFormToIniKeepsTheStoredValuesWhenThePostCarriesNoThemeFields(): void
     {
         $current = "[theme_mytheme]\naccent_colour = #111\n";
@@ -200,29 +260,33 @@ class ThemeSettingsTest extends TestCase
         $this->assertSame(['Accent colour must fit on one line.'], $errors);
     }
 
-    // theme_settings_values: what the form shows
+    // settings_form_prefill: what the Theme tab shows
 
-    public function testThemeSettingsValuesShowTheStoredValuesAndEmptyForAnUnsetField(): void
+    public function testPrefillShowsTheStoredThemeValuesAndEmptyForAnUnsetField(): void
     {
-        $values = theme_settings_values($this->accentTheme(), "[theme_mytheme]\naccent_colour = #c0ffee\nretired = x\n");
+        $form = settings_form_prefill("[theme_mytheme]\naccent_colour = #c0ffee\nretired = x\n", [], $this->accentTheme());
 
-        $this->assertSame(['accent_colour' => '#c0ffee', 'tagline' => ''], $values);
+        $this->assertSame(['accent_colour' => '#c0ffee', 'tagline' => ''], $form['theme']);
     }
 
-    public function testThemeSettingsValuesPreferWhatWasTypedInARefusedSave(): void
+    public function testPrefillPrefersWhatWasTypedInARefusedSave(): void
     {
         $posted = ['theme_settings' => ['accent_colour' => '', 'tagline' => 'Typed']];
 
-        $values = theme_settings_values($this->accentTheme(), "[theme_mytheme]\naccent_colour = #c0ffee\n", $posted);
+        $form = settings_form_prefill("[theme_mytheme]\naccent_colour = #c0ffee\n", $posted, $this->accentTheme());
 
-        $this->assertSame(['accent_colour' => '', 'tagline' => 'Typed'], $values);
+        $this->assertSame(['accent_colour' => '', 'tagline' => 'Typed'], $form['theme']);
     }
 
-    public function testThemeSettingsValuesSurviveAStoredSectionThatIsNotASection(): void
+    public function testPrefillSurvivesAStoredThemeSectionThatIsNotASection(): void
     {
-        $this->assertSame(
-            ['accent_colour' => '', 'tagline' => ''],
-            theme_settings_values($this->accentTheme(), "theme_mytheme = flat\n")
-        );
+        $form = settings_form_prefill("theme_mytheme = flat\n", [], $this->accentTheme());
+
+        $this->assertSame(['accent_colour' => '', 'tagline' => ''], $form['theme']);
+    }
+
+    public function testPrefillShowsNoThemeValuesForAThemeWithoutFields(): void
+    {
+        $this->assertSame([], settings_form_prefill("[theme_mytheme]\naccent_colour = #c0ffee\n")['theme']);
     }
 }

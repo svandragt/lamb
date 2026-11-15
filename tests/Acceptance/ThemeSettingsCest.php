@@ -21,14 +21,6 @@ class ThemeSettingsCest
         return dirname(__DIR__, 2) . '/src/themes/' . self::THEME;
     }
 
-    public function _before(AcceptanceTester $I): void
-    {
-        if (!is_dir($this->themeDir())) {
-            mkdir($this->themeDir());
-        }
-        copy(dirname(__DIR__) . '/Support/Data/theme-settings/settings.php', $this->themeDir() . '/settings.php');
-    }
-
     public function _after(AcceptanceTester $I): void
     {
         @unlink($this->themeDir() . '/settings.php');
@@ -43,10 +35,15 @@ class ThemeSettingsCest
     }
 
     /**
-     * Stores settings that use the fixture theme, plus any extra INI text.
+     * Installs the fixture theme, and stores settings that use it, plus any extra INI text.
      */
     private function useFixtureTheme(AcceptanceTester $I, string $extraIni = ''): void
     {
+        if (!is_dir($this->themeDir())) {
+            mkdir($this->themeDir());
+        }
+        copy(dirname(__DIR__) . '/Support/Data/theme-settings/settings.php', $this->themeDir() . '/settings.php');
+
         $this->login($I);
         $I->haveStoredSettings(
             "site_title = Seeded\nsite_url = https://example.com\nauthor_name = Ada\ntheme = " . self::THEME . "\n" . $extraIni
@@ -133,14 +130,38 @@ class ThemeSettingsCest
     /**
      * @group seeds-db
      */
+    public function aSettingsFileThatCannotBeLoadedNamesTheFileAndLeavesSettingsUsable(AcceptanceTester $I): void
+    {
+        $this->useFixtureTheme($I);
+        file_put_contents($this->themeDir() . '/settings.php', '<?php return [');
+
+        $I->amOnPage('/settings');
+
+        $I->see('themes/' . self::THEME . '/settings.php', '.flash');
+        $I->dontSeeElement('label[for=settings-tab-theme]');
+
+        // The way back from a broken theme is the Theme field on this page.
+        $I->selectOption('theme', 'base');
+        $I->click('#settingsform button[value=save]');
+        $I->dontSee('settings.php', '.flash');
+        $I->seeStoredSettingsContain('theme = base');
+    }
+
+    /**
+     * @group seeds-db
+     */
     public function aRefusedSaveKeepsTheTypedThemeValues(AcceptanceTester $I): void
     {
         $this->useFixtureTheme($I);
         $I->amOnPage('/settings');
 
+        // The Configuration panel's required fields are hidden while this tab is open, and a browser
+        // cannot show its own message for a hidden field. The server reports the problem instead.
+        $I->seeElement(self::SAVE_THEME_SETTINGS . '[formnovalidate]');
+
         $I->fillField('author_name', '');
         $I->fillField('theme_settings[accent_colour]', 'typed but unsaved');
-        $I->click('#settingsform button[value=save]');
+        $I->click(self::SAVE_THEME_SETTINGS);
 
         $I->see('Author name is required.');
         $I->seeInField('theme_settings[accent_colour]', 'typed but unsaved');

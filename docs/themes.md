@@ -71,7 +71,14 @@ When the theme is active, `/settings` shows a **Theme** tab with one text field 
 Lamb stores the values in a `[theme_<name>]` section of the stored settings, where `<name>` is the theme directory name, and passes them to the theme in `$config`. An empty field is not stored. The theme falls back to its own default when a value is missing:
 
 ```php
-<?php $accent = $config['theme_news']['accent_colour'] ?? '#0a7'; ?>
+<?php
+
+use function Lamb\Theme\escape;
+
+global $config;
+
+$accent = $config['theme_news']['accent_colour'] ?? '#0a7';
+?>
 <body style="--accent: <?= escape($accent) ?>">
 ```
 
@@ -79,6 +86,7 @@ Lamb stores the values in a `[theme_<name>]` section of the stored settings, whe
 * Each theme keeps its own section, so switching themes keeps the values you set for each of them.
 * The Theme tab shows only the keys the file declares. A stored key the file no longer declares stays in the settings.
 * A key must work as a settings key: it cannot contain `[`, `"`, `&` or `=`, or be one of `yes`, `no`, `on`, `off`, `true`, `false`, `null` or `none`. Lamb skips a field whose key does not.
+* If `settings.php` throws or has a syntax error, `/settings` hides the Theme tab and names the file in a notice, so you can still switch to another theme.
 * The fields are plain text inputs.
 
 ## Related
