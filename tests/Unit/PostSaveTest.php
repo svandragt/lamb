@@ -6,11 +6,13 @@ use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\get_option;
 use function Lamb\Post\on;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\register_default_subscribers;
 use function Lamb\Post\reset_subscribers;
 use function Lamb\Post\save;
+use function Lamb\set_option;
 
 /**
  * The executable half of the save() funnel: which events fire, with which
@@ -40,6 +42,12 @@ class PostSaveTest extends TestCase
                 $this->events[] = $event;
             });
         }
+    }
+
+    protected function tearDown(): void
+    {
+        // The registry is static: a throwing subscriber must not outlive its test.
+        reset_subscribers();
     }
 
     public function testExistingPostEmitsUpdated(): void
@@ -172,11 +180,11 @@ class PostSaveTest extends TestCase
         $this->assertSame('mine', R::load('post', $id)->slug);
     }
 
-    public function testASubscriberThatThrowsDoesNotFailACommittedSave(): void
+    public function testASubscriberThatFailsTheDatabaseDoesNotFailACommittedSave(): void
     {
         $later = [];
         on('post.created', function (): void {
-            throw new \RuntimeException('subscriber broke');
+            throw new SQL('subscriber broke');
         });
         on('post.published', function () use (&$later): void {
             $later[] = 'published';
@@ -197,9 +205,40 @@ class PostSaveTest extends TestCase
         $this->assertNotEmpty($bean->id);
         $this->assertSame(['published'], $later, 'The next subscriber still runs.');
         $this->assertStringContainsString('post.created', $logged);
-        $this->assertStringContainsString('RuntimeException', $logged);
+        $this->assertStringContainsString(SQL::class, $logged);
         $this->assertStringContainsString('subscriber broke', $logged);
-        $this->assertStringContainsString('PostSaveTest.php', $logged);
+        $this->assertStringContainsString('PostSaveTest.php:', $logged);
+    }
+
+    public function testASubscriberErrorThatIsNotADatabaseFailureSurfaces(): void
+    {
+        on('post.created', function (): void {
+            throw new \Error('programming error');
+        });
+
+        try {
+            save(populate_bean('A status.'));
+            $this->fail('The Error should have propagated.');
+        } catch (\Error $e) {
+            $this->assertSame('programming error', $e->getMessage());
+        }
+
+        $this->assertSame(1, R::count('post'), 'The save had already committed.');
+    }
+
+    public function testAFailedContentMarkWriteRollsTheSaveBack(): void
+    {
+        set_option(get_option('seed', 1), 1);
+        R::exec("CREATE TRIGGER option_block_insert BEFORE INSERT ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            save(populate_bean('A status.'));
+            $this->fail('The content mark write should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER option_block_insert');
+        }
+
+        $this->assertSame(0, R::count('post'));
     }
 
     public function testAFailedSaveRestoresEveryPropertyItSet(): void

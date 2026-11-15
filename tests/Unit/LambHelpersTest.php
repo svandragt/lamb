@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\encode_path_segment;
 use function Lamb\find_post_by_path;
@@ -403,6 +404,44 @@ class LambHelpersTest extends TestCase
         }
 
         $this->assertSame(0, R::count('writeprobe'));
+    }
+
+    public function testWithWriteTransactionDoesNotReportSuccessWhenTheTransactionEndedBeforeCommit(): void
+    {
+        $this->resetProbe();
+
+        // Fluid mode, where R::exec() swallows the COMMIT that follows: without the
+        // check the helper would return normally after the writes were rolled back.
+        $thrown = null;
+        try {
+            with_write_transaction(function (): string {
+                $this->storeProbe();
+                R::exec('ROLLBACK');
+
+                return 'done';
+            });
+        } catch (\RuntimeException $e) {
+            $thrown = $e;
+        }
+
+        $this->assertSame('The transaction ended before commit', $thrown?->getMessage());
+        $this->assertSame(0, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testSetOptionRethrowsAFailedStore(): void
+    {
+        set_option(get_option('probe_option', 1), 1);
+        R::exec("CREATE TRIGGER option_block_update BEFORE UPDATE ON option BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            set_option(get_option('probe_option', 1), 2);
+            $this->fail('The failed store should have thrown.');
+        } catch (SQL $e) {
+            $this->assertStringContainsString('boom', $e->getMessage());
+        } finally {
+            R::exec('DROP TRIGGER option_block_update');
+        }
     }
 
     public function testWithWriteTransactionRefusesToRunInsideAnOpenTransaction(): void

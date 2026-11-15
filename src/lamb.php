@@ -746,18 +746,18 @@ function get_option(string $name, mixed $default_value): OODBBean
 /**
  * Persists the given value into an option bean.
  *
+ * A failed store propagates, so a caller inside with_write_transaction() rolls
+ * back instead of the request ending on a fatal error.
+ *
  * @param OODBBean $bean  The option bean to update.
  * @param mixed    $value New value to store.
  * @return void
+ * @throws SQL When the store fails.
  */
 function set_option(OODBBean $bean, mixed $value): void
 {
     $bean->value = $value;
-    try {
-        R::store($bean);
-    } catch (SQL $e) {
-        user_error($e->getMessage(), E_USER_ERROR);
-    }
+    R::store($bean);
 }
 
 /**
@@ -767,7 +767,9 @@ function set_option(OODBBean $bean, mixed $value): void
  * not know whether its writes were committed, so a transaction that is already
  * open is a programming error. A throw rolls the transaction back and the
  * original exception is rethrown, whatever the rollback does (it fails when the
- * engine already ended the transaction).
+ * engine already ended the transaction). The same check runs before the COMMIT,
+ * because in fluid mode R::exec() swallows a failed COMMIT and the helper would
+ * report success for writes that were rolled back.
  *
  * Raw statements, not R::begin(): that is a no-op unless the schema is frozen,
  * and the transaction must hold in either mode.
@@ -776,6 +778,7 @@ function set_option(OODBBean $bean, mixed $value): void
  * @param callable(): T $fn The writes to make atomic.
  * @return T Whatever $fn returns.
  * @throws \LogicException When a transaction is already open.
+ * @throws \RuntimeException When the transaction ended before the COMMIT.
  * @throws \Throwable Whatever $fn or the COMMIT throws.
  */
 function with_write_transaction(callable $fn): mixed
@@ -787,6 +790,9 @@ function with_write_transaction(callable $fn): mixed
     R::exec('BEGIN IMMEDIATE');
     try {
         $result = $fn();
+        if (!R::getPDO()?->inTransaction()) {
+            throw new \RuntimeException('The transaction ended before commit');
+        }
         R::exec('COMMIT');
 
         return $result;

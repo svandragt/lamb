@@ -375,6 +375,9 @@ function login_throttle_retry_after(string $ip, int $now): int
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
  * @return int Seconds to wait before the client may attempt again (0 = reserved, go ahead).
+ * @throws \RedBeanPHP\RedException\SQL When the counter cannot be written.
+ * @throws \LogicException When a transaction is already open.
+ * @throws \RuntimeException When the transaction ended before the commit.
  */
 function reserve_login_attempt(string $ip, int $now): int
 {

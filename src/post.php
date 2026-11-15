@@ -5,6 +5,7 @@ namespace Lamb\Post;
 use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -838,8 +839,9 @@ function on(string $event, callable $subscriber): void
 /**
  * Calls every subscriber registered for an event, in registration order.
  *
- * Events follow a committed write, so a subscriber that throws is logged and
- * the remaining subscribers still run.
+ * Events follow a committed write, so a subscriber that fails the database (a
+ * locked file while /_cron holds it) is logged and the remaining subscribers
+ * still run. Any other Throwable is a programming error and propagates.
  *
  * @param string   $event The event name to emit.
  * @param OODBBean $bean  The stored post bean to hand each subscriber.
@@ -850,7 +852,7 @@ function emit(string $event, OODBBean $bean): void
     foreach (event_subscribers()[$event] ?? [] as $subscriber) {
         try {
             $subscriber($bean);
-        } catch (\Throwable $e) {
+        } catch (SQL $e) {
             error_log(sprintf(
                 '%s subscriber failed: %s: %s in %s:%d',
                 $event,
@@ -926,7 +928,9 @@ function register_default_subscribers(): void
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
  * @return void
- * @throws \RedBeanPHP\RedException\SQL When the store fails.
+ * @throws SQL When a write in the transaction fails, or a subscriber fails the database.
+ * @throws \LogicException When a transaction is already open.
+ * @throws \RuntimeException When the transaction ended before the commit.
  */
 function save(OODBBean $bean, array $context = []): void
 {
@@ -973,9 +977,7 @@ function save(OODBBean $bean, array $context = []): void
         foreach (array_keys(array_diff_key($bean->export(), $before)) as $name) {
             unset($bean->$name);
         }
-        foreach ($before as $name => $value) {
-            $bean->$name = $value;
-        }
+        $bean->import($before);
         throw $e;
     }
 
