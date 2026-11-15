@@ -7,6 +7,7 @@ use RedBeanPHP\R;
 
 use function Lamb\Theme\image_dimensions;
 use function Lamb\Theme\og_local_path;
+use function Lamb\Theme\the_indieauth_metadata;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 
@@ -259,6 +260,54 @@ class ThemeMetaTest extends TestCase
 
         ob_start();
         the_meta_description();
+        $output = ob_get_clean();
+
+        $this->assertStringNotContainsString('<script>', $output);
+    }
+
+    // -------------------------------------------------------------------------
+    // the_indieauth_metadata
+    // -------------------------------------------------------------------------
+
+    public function testIndieauthMetadataOutputsTheLinkTagWhenConfigured(): void
+    {
+        global $config;
+        $config['indieauth_metadata'] = 'https://indiekey.id/.well-known/oauth-authorization-server/s/abc123';
+
+        ob_start();
+        the_indieauth_metadata();
+        $output = ob_get_clean();
+
+        $this->assertStringContainsString(
+            '<link rel="indieauth-metadata" href="https://indiekey.id/.well-known/oauth-authorization-server/s/abc123">',
+            $output
+        );
+    }
+
+    public function testIndieauthMetadataOutputsNothingWhenUnsetOrEmpty(): void
+    {
+        global $config;
+
+        ob_start();
+        the_indieauth_metadata();
+        $unset = ob_get_clean();
+
+        $config['indieauth_metadata'] = '';
+        ob_start();
+        the_indieauth_metadata();
+        $empty = ob_get_clean();
+
+        $this->assertSame('', $unset);
+        $this->assertSame('', $empty);
+    }
+
+    public function testIndieauthMetadataEscapesTheUrl(): void
+    {
+        global $config;
+        $config['indieauth_metadata'] = 'https://example.com/m"><script>bad</script>';
+
+        ob_start();
+        the_indieauth_metadata();
         $output = ob_get_clean();
 
         $this->assertStringNotContainsString('<script>', $output);

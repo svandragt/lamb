@@ -155,4 +155,35 @@ class SettingsFormCest
         $I->seeNumberOfElements('article', 6);
         $I->dontSeeElement('nav.pagination a.next');
     }
+
+    /**
+     * @group seeds-db
+     */
+    public function theIndieauthMetadataFieldPublishesItsLinkTagUntilCleared(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $I->haveStoredSettings(
+            "site_title = Seeded\nsite_url = https://example.com\nauthor_name = Ada\ntheme = base\n"
+        );
+        $metadata = 'https://indiekey.id/.well-known/oauth-authorization-server/s/abc123';
+
+        $I->amOnPage('/');
+        $I->dontSeeElement('link[rel="indieauth-metadata"]');
+
+        $I->amOnPage('/settings');
+        $I->fillField('indieauth_metadata', $metadata);
+        $I->click('Save settings');
+        $I->dontSee('Settings saved successfully.');
+        $I->seeInField('indieauth_metadata', $metadata);
+
+        $I->amOnPage('/');
+        $I->seeElement("link[rel=\"indieauth-metadata\"][href=\"$metadata\"]");
+
+        $I->amOnPage('/settings');
+        $I->fillField('indieauth_metadata', '');
+        $I->click('Save settings');
+
+        $I->amOnPage('/');
+        $I->dontSeeElement('link[rel="indieauth-metadata"]');
+    }
 }
