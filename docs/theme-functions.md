@@ -128,6 +128,10 @@ It adds at most three sites per page, in the order they first appear. Each hint 
 | `redirect_to()` | `string` | The sanitised `?redirect_to=` query value (used by the login form). |
 | `preload_text()` | `string` | The escaped `?text=` query value, used to pre-fill the entry form. |
 
+## Your own settings
+
+A theme can read its own settings section from `$config`. Add a section to the settings, for example `[my_theme]` with `accent = teal`, and read it in the theme as `$config['my_theme']['accent'] ?? 'blue'`. Values are strings, and the section is absent until the author adds it, so give each read a fallback.
+
 ## Microformats2 (h-entry / h-card)
 
 The built-in themes mark each post up with [microformats2](https://microformats.org/wiki/h-entry) so Webmention receivers, readers, and other parsers can extract the author, content, permalink and timestamp. If you build a custom `_items.php`, mirror this markup so your outgoing mentions stay parseable:

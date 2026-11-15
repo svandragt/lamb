@@ -248,6 +248,21 @@ function is_config_section(string $key, array $defaults): bool
 }
 
 /**
+ * Returns true when the named config key is one of Lamb's single-value settings.
+ *
+ * A section the author invents is neither this nor a section Lamb defines.
+ *
+ * @param string $key The config key.
+ * @param array<string, mixed> $defaults The parsed seeded defaults.
+ * @return bool
+ */
+function is_scalar_setting(string $key, array $defaults): bool
+{
+    return in_array($key, [...SETTINGS_FORM_FIELDS, 'feeds_draft'], true)
+        || (isset($defaults[$key]) && !is_array($defaults[$key]));
+}
+
+/**
  * Coerces the parsed INI into the shapes its readers assume.
  *
  * `parse_ini_string()` is called with sections enabled, so the author picks
@@ -272,7 +287,7 @@ function is_config_section(string $key, array $defaults): bool
  * compose_config() means the seeded default applies — the same
  * fall-back-to-something-renderable stance parse_ini_safe() takes for INI that
  * does not parse at all. Keys the defaults do not mention (the author's own)
- * keep their value when scalar and are filtered to scalars when not.
+ * keep their value: a section is filtered to scalar entries.
  *
  * @param array<string, mixed> $config   The parsed stored config.
  * @param array<string, mixed> $defaults The parsed seeded defaults, used as the shape schema.
@@ -289,9 +304,12 @@ function normalize_config(array $config, array $defaults): array
         }
 
         if (is_array($value)) {
-            // A single-value setting written as a section, or a section the
-            // author invented that nothing reads. Neither has a meaning to any
-            // consumer, so drop it and let the default stand.
+            // A single-value setting written as a section has no meaning to any
+            // consumer, so drop it and let the default stand. Any other section
+            // is the author's own and is kept for custom themes to read.
+            if (!is_scalar_setting((string) $key, $defaults)) {
+                $normalized[$key] = normalize_config_section($value);
+            }
             continue;
         }
 
@@ -539,9 +557,7 @@ function shape_warnings(string $ini_text): array
 
         // An author's own section is valid: custom themes read it. Only a
         // section named like a single-value setting is a mistake.
-        $is_scalar_setting = in_array($key, [...SETTINGS_FORM_FIELDS, 'feeds_draft'], true)
-            || (isset($defaults[$key]) && !is_array($defaults[$key]));
-        if (!$expects_section && $is_scalar_setting && is_array($value)) {
+        if (!$expects_section && is_scalar_setting((string) $key, $defaults) && is_array($value)) {
             $warnings[] = "`[{$key}]` is a single-value setting, so the section was ignored. "
                 . 'Write it as `name = value`, above the first section.';
             continue;
