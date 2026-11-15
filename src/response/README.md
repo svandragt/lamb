@@ -70,9 +70,9 @@ content and config timestamps as distinct components while `Last-Modified`
 collapses them — is recorded in [AGENTS.md](../../AGENTS.md)'s "Conditional
 GET" note under Security; this module only wires the two call sites into it.
 
-Both validators also fold in the installed code: `send_304_if_current()` reads
-`Bootstrap\code_stamp()`, whose `hash` joins the `ETag` and whose `newest` mtime
-joins `Last-Modified`, so an upgrade invalidates cached pages.
+The `ETag` also folds in `Bootstrap\code_stamp()`, so an upgrade invalidates
+cached pages. `Last-Modified` does not carry it: `If-None-Match` takes
+precedence (RFC 9110), and a code mtime there would produce future dates.
 
 ## Login: a sessionless page with its own CSRF model
 

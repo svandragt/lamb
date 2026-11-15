@@ -5,7 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Bootstrap\http_date;
-use function Lamb\Bootstrap\last_modified_timestamp;
+use function Lamb\Bootstrap\scan_code_stamp;
 use function Lamb\Bootstrap\code_stamp;
 use function Lamb\Bootstrap\content_etag;
 use function Lamb\Bootstrap\client_has_current_version;
@@ -46,34 +46,41 @@ class ConditionalRequestTest extends TestCase
         $this->assertNotSame(content_etag(1000, 500, 'h'), content_etag(1000, 1000, 'h'));
     }
 
-    public function testCodeStampCoversPhpCssJsAndComposerManifest(): void
+    public function testCodeStampChangesWhenAnyCoveredFileChanges(): void
     {
         $base = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
         $dir = $base . '/src';
-        mkdir($dir . '/themes/x', 0777, true);
-        mkdir($dir . '/scripts/logged_in', 0777, true);
+        foreach (['themes/x/parts', 'themes/x/styles', 'scripts/logged_in', 'sub'] as $sub) {
+            mkdir($dir . '/' . $sub, 0777, true);
+        }
         mkdir($base . '/vendor/composer', 0777, true);
         $files = [
-            $dir . '/a.php' => 1000,
-            $dir . '/themes/x/b.php' => 2000,
-            $dir . '/scripts/c.js' => 3000,
-            $dir . '/scripts/logged_in/d.js' => 4000,
-            $base . '/vendor/composer/installed.php' => 5000,
+            $dir . '/a.php',
+            $dir . '/sub/s.php',
+            $dir . '/themes/x/b.php',
+            $dir . '/themes/x/parts/p.php',
+            $dir . '/themes/x/styles/s.css',
+            $dir . '/scripts/c.js',
+            $dir . '/scripts/logged_in/d.js',
+            $base . '/vendor/composer/installed.php',
         ];
         try {
-            foreach ($files as $file => $mtime) {
-                touch($file, $mtime);
+            foreach ($files as $file) {
+                touch($file, 1000);
             }
-            $this->assertSame(5000, code_stamp($dir)['newest']);
-
-            touch($dir . '/scripts/logged_in/d.js', 6000);
-            $this->assertSame(6000, code_stamp($dir)['newest']);
+            $before = scan_code_stamp($dir);
+            $this->assertSame($before, scan_code_stamp($dir));
+            foreach ($files as $file) {
+                touch($file, 2000);
+                $this->assertNotSame($before, scan_code_stamp($dir), "$file is not covered");
+                touch($file, 1000);
+            }
         } finally {
-            foreach (array_keys($files) as $file) {
+            foreach ($files as $file) {
                 @unlink($file);
             }
-            foreach (['/themes/x', '/themes', '/scripts/logged_in', '/scripts'] as $sub) {
-                @rmdir($dir . $sub);
+            foreach (['themes/x/parts', 'themes/x/styles', 'themes/x', 'themes', 'scripts/logged_in', 'scripts', 'sub'] as $sub) {
+                @rmdir($dir . '/' . $sub);
             }
             @rmdir($dir);
             @rmdir($base . '/vendor/composer');
@@ -82,21 +89,15 @@ class ConditionalRequestTest extends TestCase
         }
     }
 
-    public function testCodeStampHashChangesWhenAnMtimeMovesBackwards(): void
+    public function testCodeStampChangesWhenAFileIsRenamedWithTheSameMtime(): void
     {
         $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
         mkdir($dir);
         try {
             touch($dir . '/a.php', 1000);
-            touch($dir . '/b.php', 2000);
-            $before = code_stamp($dir);
-            $this->assertSame($before, code_stamp($dir));
-
-            // A deploy that restores an older file leaves the newest mtime alone.
-            touch($dir . '/a.php', 500);
-            $after = code_stamp($dir);
-            $this->assertSame($before['newest'], $after['newest']);
-            $this->assertNotSame($before['hash'], $after['hash']);
+            $before = scan_code_stamp($dir);
+            rename($dir . '/a.php', $dir . '/b.php');
+            $this->assertNotSame($before, scan_code_stamp($dir));
         } finally {
             @unlink($dir . '/a.php');
             @unlink($dir . '/b.php');
@@ -104,16 +105,19 @@ class ConditionalRequestTest extends TestCase
         }
     }
 
-    public function testDefaultCodeStampIsCachedWithinTheRequest(): void
+    public function testCodeStampIsCachedPerDirectoryWithinTheRequest(): void
     {
-        $file = dirname(__DIR__, 2) . '/src/constants.php';
-        $mtime = filemtime($file);
+        $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
+        mkdir($dir);
         try {
-            $first = code_stamp();
-            touch($file, $mtime + 100);
-            $this->assertSame($first, code_stamp());
+            touch($dir . '/a.php', 1000);
+            $first = code_stamp($dir);
+            touch($dir . '/a.php', 2000);
+            $this->assertSame($first, code_stamp($dir));
+            $this->assertNotSame($first, scan_code_stamp($dir));
         } finally {
-            touch($file, $mtime);
+            @unlink($dir . '/a.php');
+            @rmdir($dir);
         }
     }
 
@@ -121,12 +125,6 @@ class ConditionalRequestTest extends TestCase
     {
         $this->assertNotSame(content_etag(1000, 1, 'a'), content_etag(1000, 1, 'b'));
         $this->assertSame(content_etag(1000, 1, 'a'), content_etag(1000, 1, 'a'));
-    }
-
-    public function testLastModifiedIncludesNewestCodeMtime(): void
-    {
-        $this->assertSame(5000, last_modified_timestamp(1000, 2000, 5000));
-        $this->assertSame(2000, last_modified_timestamp(1000, 2000, 500));
     }
 
     public function testNoConditionalHeadersIsNotAMatch(): void

@@ -860,7 +860,7 @@ function http_date(int $ts): string
  *
  * @param int    $contentTs Unix timestamp of the most recent content change (the response's last-modified).
  * @param int    $configTs  Unix timestamp of the last config edit.
- * @param string $codeHash  The `hash` of code_stamp().
+ * @param string $codeHash  The code_stamp() value.
  * @return string A quoted ETag value.
  */
 function content_etag(int $contentTs, int $configTs, string $codeHash): string
@@ -869,54 +869,46 @@ function content_etag(int $contentTs, int $configTs, string $codeHash): string
 }
 
 /**
- * Last-Modified timestamp: the newest of content, config and code changes, so
- * clients that only send If-Modified-Since are invalidated by a code upgrade too.
+ * Fingerprint of the files that render a page, for the ETag (see content_etag()).
  *
- * @param int $contentTs Unix timestamp of the most recent content change.
- * @param int $configTs  Unix timestamp of the last config edit.
- * @param int $codeTs    The `newest` of code_stamp().
- * @return int Unix timestamp.
+ * Covers exactly these files, relative to `src/`: PHP files directly in it and
+ * one folder down; PHP files directly in a theme folder and in its `parts`
+ * folder; CSS files in a theme's `styles` folder; JS files in `scripts` and one
+ * folder down; and `../vendor/composer/installed.php` (which changes with
+ * dependencies). Files in deeper folders of a custom theme
+ * are not covered. Fixed globs are cheaper than a recursive walk.
+ *
+ * @param string $dir The `src/` directory to scan.
+ * @return string crc32 (hex) of every `path:mtime` pair, so a rename, a swapped
+ *                file or an older restored file still changes it.
  */
-function last_modified_timestamp(int $contentTs, int $configTs, int $codeTs): int
+function scan_code_stamp(string $dir): string
 {
-    return max($contentTs, $configTs, $codeTs);
-}
-
-/**
- * Fingerprint of the files that render a page: PHP and CSS under `src/`, its
- * scripts, and `vendor/composer/installed.php` (which changes with dependencies).
- *
- * Fixed glob patterns keep this cheaper than a recursive walk. The hash covers
- * every mtime, not just the newest, so a deploy that restores older files still
- * changes it. The default directory is read once per request and cached.
- *
- * @param string|null $dir The `src/` directory to scan; null means this one, cached.
- * @return array{newest: int, hash: string} Newest mtime (0 when no file matches) and a crc32 of all mtimes.
- */
-function code_stamp(?string $dir = null): array
-{
-    static $cached = null;
-    if ($dir === null && $cached !== null) {
-        return $cached;
-    }
-    $root = $dir ?? __DIR__;
-    $files = [];
     $patterns = [
         '*.php', '*/*.php', 'themes/*/*.php', 'themes/*/parts/*.php', 'themes/*/styles/*.css',
         'scripts/*.js', 'scripts/*/*.js', '../vendor/composer/installed.php',
     ];
+    $pairs = [];
     foreach ($patterns as $pattern) {
-        $files = array_merge($files, glob($root . '/' . $pattern) ?: []);
+        foreach (glob($dir . '/' . $pattern) ?: [] as $file) {
+            // A file deleted mid-deploy makes filemtime() warn; treat it as 0.
+            $pairs[] = $file . ':' . (@filemtime($file) ?: 0);
+        }
     }
-    $mtimes = array_map(static fn(string $f): int => filemtime($f) ?: 0, $files);
-    $stamp = [
-        'newest' => $mtimes ? max($mtimes) : 0,
-        'hash' => dechex(crc32(implode(',', $mtimes))),
-    ];
-    if ($dir === null) {
-        $cached = $stamp;
-    }
-    return $stamp;
+    return dechex(crc32(implode("\n", $pairs)));
+}
+
+/**
+ * The code stamp of `src/` (or another directory), scanned once per request.
+ *
+ * @param string|null $dir The `src/` directory; null means this one.
+ * @return string See scan_code_stamp().
+ */
+function code_stamp(?string $dir = null): string
+{
+    static $cache = [];
+    $dir ??= __DIR__;
+    return $cache[$dir] ??= scan_code_stamp($dir);
 }
 
 /**
