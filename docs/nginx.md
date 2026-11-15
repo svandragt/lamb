@@ -29,7 +29,7 @@ sudo chmod g+w src/assets -R
 
 This leaves `data/lamb.db` owned by your shell user, not `www-data`. Run `bin/lamb` (for example an [import]({{ site.baseurl }}{% link import-export.md %})) as the web server user instead of your own, as `sudo -u www-data bin/lamb <command>`.
 
-`bin/lamb` refuses to run as any other user and tells you so. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone changes the sidecars' owner. When that happens, Lamb stops with an error that names both files. To recover, change their owner to the web server user, then reload:
+`bin/lamb` refuses to run when `data/lamb.db` exists and is owned by another user, and tells you so. A fresh install has no database yet, so run the first command as the web server user. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone changes the sidecars' owner. When that happens, Lamb stops with an error that names both files. To recover, change their owner to the web server user, then reload:
 
 ```shell
 sudo chown www-data data/lamb.db-wal data/lamb.db-shm

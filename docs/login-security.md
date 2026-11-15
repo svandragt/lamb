@@ -56,7 +56,7 @@ per-visitor accuracy.
 
 ## Setting the password
 
-Run `make-password.php` from the Lamb directory, on any machine with PHP:
+Run `make-password.php` from the Lamb directory, on any machine with PHP and its `mbstring` extension:
 
 ```
 php make-password.php <your-password>
@@ -68,9 +68,11 @@ form `LAMB_LOGIN_PASSWORD` expects, so copy it as printed. If `.env` already
 exists, the script refuses to run; see
 [Changing the password later](#changing-the-password-later).
 
-Lamb reads `.env` only when its development dependencies are installed, as on a
-local setup. A production install reads only the server's environment, so set
-`LAMB_LOGIN_PASSWORD` there to the printed hash. Your server's page shows how:
+Lamb loads `.env` itself only under PHP's built-in server, and only when the
+development dependencies are installed, as in [Local PHP setup]({{ site.baseurl }}{% link local-php-setup.md %}).
+Any other server, including a production install, reads only the environment it
+gives PHP, so set `LAMB_LOGIN_PASSWORD` there to the printed hash. Your server's
+page shows how:
 [Nginx]({{ site.baseurl }}{% link nginx.md %}#logins),
 [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}#logins) or
 [Docker]({{ site.baseurl }}{% link docker.md %}#run-the-release-image).
@@ -102,8 +104,8 @@ site runs on, and an accidental second run — a test, a forgotten password —
 used to replace it silently, leaving logins failing for a reason nothing
 reported.
 
-A production install does not read `.env`, so after changing the password also
-update `LAMB_LOGIN_PASSWORD` where your server sets it, as described in
+Only PHP's built-in server reads `.env`, so on any other setup also update
+`LAMB_LOGIN_PASSWORD` where your server sets it, as described in
 [Setting the password](#setting-the-password).
 
 ## Related

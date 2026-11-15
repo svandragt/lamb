@@ -15,7 +15,7 @@ You need a working Docker setup and a checkout of the repository.
 
 ```shell
 # Clone the repository
-$ git clone https://github.com/svandragt/lamb && cd lamb
+$ git clone --branch release https://github.com/svandragt/lamb && cd lamb
 
 # Make the password hash with make-password.php (see Login security). With no PHP on
 # the host, run the script in a throwaway container; -w /tmp keeps the .env it writes there:

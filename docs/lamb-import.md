@@ -14,7 +14,7 @@ This importer is experimental. [Import & export]({{ site.baseurl }}{% link impor
 - Lamb restores every post in the manifest: its body, front matter, slug, `created` and `updated` timestamps, and draft or trash state, exactly as recorded.
 - Lamb writes every asset the manifest lists back to `src/assets/YYYY/MM/`, at the same path it was exported from.
 - Re-running the importer on the same archive doesn't create duplicates. Lamb tags each restored post with an `import_uuid`, the md5 of `'lamb-' + origin + '#' + id`, where the origin is the site the archive came from. It leaves an item alone when that uuid is already present.
-- Imported posts are silent: they send no webmentions or WebSub pings. See [Import & export]({{ site.baseurl }}{% link import-export.md %}#imported-posts-are-silent).
+- An import run is silent: it sends no webmentions or WebSub pings. See [Import & export]({{ site.baseurl }}{% link import-export.md %}#import-runs-are-silent).
 
 ## Run the importer
 
