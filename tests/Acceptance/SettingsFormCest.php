@@ -139,6 +139,7 @@ class SettingsFormCest
         $I->click('Save settings');
         $I->dontSee('Settings saved successfully.');
         $I->see('`posts_per_page` was removed');
+        $I->dontSee('mystery_section');
 
         $I->dontSeeStoredSettingsContain('posts_per_page');
         $I->seeStoredSettingsContain('mystery_key = kept');

@@ -32,6 +32,20 @@ class ConfigTypesTest extends TestCase
         return compose_config($ini, get_default_ini_text());
     }
 
+    public function testSectionNamedAfterAFormFieldTheDefaultsLeaveCommentedOutIsDropped(): void
+    {
+        $config = $this->withConfig("[author_name]\nanswer = 42\n");
+
+        $this->assertSame('', $config['author_name']);
+    }
+
+    public function testAnAuthorsOwnSectionReachesTheConfig(): void
+    {
+        $config = $this->withConfig("[mystery_section]\nanswer = 42\n");
+
+        $this->assertSame(['answer' => '42'], $config['mystery_section']);
+    }
+
     // normalize_config() — scalar settings
 
     public function testScalarSettingWrittenAsSectionIsDropped(): void
@@ -64,13 +78,12 @@ class ConfigTypesTest extends TestCase
         $this->assertSame('value', $config['custom']);
     }
 
-    public function testUnknownArrayKeyIsDropped(): void
+    public function testUnknownArrayKeyIsKeptAsAFlatSection(): void
     {
-        // Nothing reads it and it is not a documented section, so it cannot be
-        // handed on as an array.
-        $config = normalize_config(['custom' => ['a' => 'b']], []);
+        // An author's own section, read by custom themes.
+        $config = normalize_config(['custom' => ['a' => 'b', 'list' => ['x', 'y']]], []);
 
-        $this->assertArrayNotHasKey('custom', $config);
+        $this->assertSame(['a' => 'b'], $config['custom']);
     }
 
     /**
@@ -100,14 +113,6 @@ class ConfigTypesTest extends TestCase
             'site_url'         => ['site_url'],
             'websub_hubs'      => ['websub_hubs'],
         ];
-    }
-
-    public function testShapeWarningsNamesAScalarCommentedOutInTheDefaults(): void
-    {
-        $warnings = shape_warnings("[author_name]\nx = y\n");
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('author_name', $warnings[0]);
     }
 
     // normalize_config() — sections
@@ -197,15 +202,6 @@ class ConfigTypesTest extends TestCase
     public function testShapeWarningsIsEmptyForTheSeededDefaults(): void
     {
         $this->assertSame([], shape_warnings(get_default_ini_text()));
-    }
-
-    public function testShapeWarningsNamesAScalarWrittenAsASection(): void
-    {
-        $warnings = shape_warnings("[site_title]\nfoo = bar\n");
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('site_title', $warnings[0]);
-        $this->assertStringContainsString('ignored', $warnings[0]);
     }
 
     public function testShapeWarningsNamesAPathInTheSiteUrl(): void

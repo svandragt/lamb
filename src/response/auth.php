@@ -617,7 +617,7 @@ function respond_settings(): array
         // Typed content, kept when the save is refused.
         $form_values = array_intersect_key(
             $_POST,
-            array_flip([...Config\SETTINGS_FORM_FIELDS, 'feeds_draft', ...Config\SETTINGS_FORM_SECTIONS])
+            array_flip([...Config\SETTINGS_FORM_SCALARS, ...Config\SETTINGS_FORM_SECTIONS])
         );
 
         $form_errors = Config\settings_form_errors($_POST, $stored_ini);

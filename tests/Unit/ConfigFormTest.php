@@ -498,13 +498,9 @@ class ConfigFormTest extends TestCase
         ];
     }
 
-    public function testShapeWarningsStillWarnsAboutAnEmptySectionThatShadowsASingleValueSetting(): void
+    public function testShapeWarningsIsSilentAboutAnAuthorsOwnSection(): void
     {
-        // `[site_title]` with no keys drops the title: it is not a retired section.
-        $warnings = shape_warnings("[site_title]\n");
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('`[site_title]` is not a section Lamb reads', $warnings[0]);
+        $this->assertSame([], shape_warnings("[mystery_section]\nanswer = 42\n"));
     }
 
     /**
