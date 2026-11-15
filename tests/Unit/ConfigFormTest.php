@@ -653,6 +653,7 @@ class ConfigFormTest extends TestCase
 
         require $argv[1];
         define('ROOT_URL', 'http://localhost');
+        define('THEME_DIR', dirname($argv[1], 2) . '/src/themes/base/');
         R::setup('sqlite::memory:');
         \Lamb\Bootstrap\ensure_schema();
         \Lamb\Config\save_ini_text($argv[3]);

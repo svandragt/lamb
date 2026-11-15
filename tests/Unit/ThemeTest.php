@@ -494,7 +494,7 @@ class ThemeTest extends TestCase
     public function testSettingsThemeDropdownOmitsRemovedThemes(): void
     {
         global $data;
-        $data = ['ini_text' => "theme = 2024\n"];
+        $data = ['ini_text' => "theme = 2024\n", 'theme_settings' => \Lamb\Config\NO_THEME_SETTINGS];
 
         $html = $this->withThemeDirs(['2026', '2024'], function (): string {
             ob_start();
