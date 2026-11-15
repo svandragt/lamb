@@ -266,8 +266,38 @@ class MicropubEndpointTest extends TestCase
         );
 
         $this->assertSame(400, $result['status']);
-        $this->assertSame('invalid_request', json_decode($result['body'], true)['error']);
+        $body = json_decode($result['body'], true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringContainsString('both', $body['error_description']);
+        $this->assertArrayNotHasKey('www-authenticate', $result['headers']);
         $this->assertSame([], $result['posts']);
+    }
+
+    public function testABasicAuthorizationHeaderDoesNotStopABodyToken(): void
+    {
+        $this->assertSame(201, $this->bodyTokenBehind('Basic dXNlcjpwYXNz')['status']);
+    }
+
+    public function testAnEmptyAuthorizationHeaderDoesNotStopABodyToken(): void
+    {
+        $this->assertSame(201, $this->bodyTokenBehind('')['status']);
+    }
+
+    /**
+     * A form request with a body token and the given Authorization header value.
+     *
+     * @param string $authorization The Authorization header value.
+     * @return array<string, mixed> The handler's response.
+     */
+    private function bodyTokenBehind(string $authorization): array
+    {
+        return $this->handle([
+            'server' => [
+                'CONTENT_TYPE'       => 'application/x-www-form-urlencoded; charset=utf-8',
+                'HTTP_AUTHORIZATION' => $authorization,
+            ],
+            'post'   => ['h' => 'entry', 'content' => 'Body token behind a proxy header', 'access_token' => 'body-token'],
+        ]);
     }
 
     public function testRocks802TheAccessTokenIsNotStoredWithThePost(): void
