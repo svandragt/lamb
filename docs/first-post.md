@@ -30,7 +30,7 @@ You don't create tags anywhere — writing one is enough.
 
 Drag an image file from your desktop onto the text box. Lamb uploads it and drops a Markdown image link at your cursor, so you can keep typing around it. Pasting an image from the clipboard — a screenshot, say — does the same thing, as does the attach button next to the text box, which is the easiest way to add a photo from a phone.
 
-JPEG and PNG files are re-encoded to WebP on upload to keep them small; the link points at the converted file. GIF, WebP, and AVIF are kept as they are. For the full picture, including video and size limits, see [Media]({{ site.baseurl }}{% link media.md %}).
+Lamb converts JPEG and PNG files to WebP on upload, and the link points at the converted file. For the full picture, including other formats, video and size limits, see [Media]({{ site.baseurl }}{% link media.md %}).
 
 ## Turn a post into a page
 
@@ -58,7 +58,7 @@ draft: true
 Still thinking about this one.
 ```
 
-The post is saved but not shown on your blog. Every draft is listed at `/drafts` while you are logged in, each with an **Edit** link to finish it and a **Preview** link you can share with someone who isn't logged in. See [Drafts]({{ site.baseurl }}{% link drafts.md %}) for how previews and their expiring links work.
+The post is saved but not shown on your blog. Every draft is listed at `/drafts` while you are logged in, each with an **Edit** link to finish it and a **Preview** link you can share with someone who isn't logged in. See [Drafts]({{ site.baseurl }}{% link drafts.md %}#preview-links) for how previews and their expiring links work.
 
 ## Where to go next
 

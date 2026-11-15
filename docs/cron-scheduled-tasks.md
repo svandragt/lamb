@@ -11,7 +11,7 @@ Lamb has an scheduled task endpoint that can be called periodically to run tasks
 
 The following tasks run periodically:
 
-1. **Purging trash.** Posts in the [trash]({{ site.baseurl }}{% link trash.md %}) are permanently deleted once they have been there for 30 days.
+1. **Purging trash.** Posts that have been in the [trash]({{ site.baseurl }}{% link trash.md %}#permanent-deletion) long enough are permanently deleted.
 2. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
 3. **Sending webmentions.** Any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts are delivered.
 
@@ -31,7 +31,7 @@ For example the linux cron system can be setup as follows:
 ## Related
 
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
-* [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged after 30 days by the cron.
+* [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged by the cron.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions are sent during the cron run.
 * [SocialSpec]({{ site.baseurl }}{% link socialspec.md %}): The following list at `following_url` is refreshed during the cron run.
 * [Drafts]({{ site.baseurl }}{% link drafts.md %}): Feed-ingested posts are saved as drafts by default.

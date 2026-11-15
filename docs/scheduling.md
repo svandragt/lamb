@@ -41,11 +41,11 @@ Relative phrases are resolved **when you save**, then pinned: Lamb rewrites the 
 
 ## Timezone
 
-Servers are usually set to UTC, which may not be your timezone. Set yours once in the **Timezone** dropdown of the **Site** group on the **Configuration** tab at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock. The dropdown lists the [supported timezones](https://www.php.net/manual/en/timezones.php), for example `Europe/London`. It defaults to `UTC`.
+Set your timezone at `/settings` so post dates, scheduling, and relative phrases like `next friday` use your local clock rather than the server's, which is usually UTC. [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#timezone) explains the setting.
 
 ## Viewing scheduled posts
 
-When logged in and one or more posts are scheduled, a **Scheduled** link appears in the admin toolbar, listing future-dated posts soonest-first at `/scheduled`. You can still open a scheduled post directly via its `/status/<id>` URL to preview it before it goes live. Each scheduled post also shows a **Preview** link next to its Edit button — a shareable URL with an expiring 24-hour token that works without being logged in.
+When logged in and one or more posts are scheduled, a **Scheduled** link appears in the admin toolbar, listing future-dated posts soonest-first at `/scheduled`. You can still open a scheduled post directly via its `/status/<id>` URL to preview it before it goes live. Each scheduled post also shows a **Preview** link next to its Edit button, a shareable URL that works without being logged in. See [Drafts]({{ site.baseurl }}{% link drafts.md %}#preview-links).
 
 ## Via Micropub
 
