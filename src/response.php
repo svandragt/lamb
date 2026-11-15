@@ -169,19 +169,16 @@ function build_exclude_slugs_clause(array $slugs): ?array
  * "public" means.
  *
  * @return array{sql: string, params: array<int, mixed>}
+ * @throws \LogicException Never: the exclusion list always holds the home slug.
  */
 function public_posts_clause(): array
 {
     $visible = \Lamb\visible_clause();
     // The home post is a page shown above the timeline, never an entry in it.
-    $sql     = $visible['sql'] . ' AND' . \Lamb\SQL_NOT_HOME;
-    $params  = $visible['params'];
-
-    $exclude = build_exclude_slugs_clause(\Lamb\Config\get_menu_slugs());
-    if ($exclude !== null) {
-        $sql   .= ' AND ' . $exclude['sql'];
-        $params = array_merge($params, $exclude['params']);
-    }
+    $exclude = build_exclude_slugs_clause([\Lamb\HOME_SLUG, ...\Lamb\Config\get_menu_slugs()])
+        ?? throw new \LogicException('The home slug is always excluded.');
+    $sql     = $visible['sql'] . ' AND ' . $exclude['sql'];
+    $params  = array_merge($visible['params'], $exclude['params']);
 
     return ['sql' => $sql, 'params' => $params];
 }
