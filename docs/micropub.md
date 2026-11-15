@@ -55,12 +55,29 @@ Point your client at your site URL. It will auto-discover the endpoints from you
 
 ### Using your own IndieAuth server (optional)
 
-To use a different authorization or token server, add the following to your site configuration at `/settings`:
+To use a different authorization or token server, open `/settings` and fill in the **Authorization endpoint** and **Token endpoint** fields in the IndieWeb group. Leave a field empty to use its default.
 
-```ini
-authorization_endpoint = https://auth.example.com/auth
-token_endpoint = https://token.example.com/token
-```
+If your server gives you a metadata URL, as IndieKey does, enter it in the **IndieAuth metadata** field. Lamb then adds a `<link rel="indieauth-metadata">` tag to your home page, as long as the value is a full `http://` or `https://` address. Leave the field empty if your server does not use one.
+
+### Moving to IndieKey
+
+[IndieKey](https://indiekey.id/) is an IndieAuth server that is replacing indieauth.com. As of 15 November 2026, indieauth.com has announced no shutdown date, and Lamb keeps the indieauth.com endpoints as its defaults. You can move to IndieKey now or wait.
+
+Lamb checks a Micropub token by sending a `GET` request to your `token_endpoint` with the token in an `Authorization: Bearer` header. That is the way older versions of IndieAuth worked. Lamb does not check IndieKey's newer token formats, which need a credential or a signature check.
+
+To move your site to IndieKey, follow these steps. They match IndieKey's guide, [Moving from indieauth.com](https://indiekey.id/migrate).
+
+1. Create an account on IndieKey and add your domain. Your domain's page in IndieKey shows the values to copy in the next step. Each website has its own authorization endpoint and metadata URL.
+2. Open `/settings` and fill in these fields in the IndieWeb group:
+   * **Authorization endpoint**: the value from your domain's page, such as `https://indiekey.id/s/SITE_ID/auth`.
+   * **Token endpoint**: `https://indiekey.id/token`.
+   * **IndieAuth metadata**: the value from your domain's page, such as `https://indiekey.id/.well-known/oauth-authorization-server/s/SITE_ID`.
+3. Verify your domain in IndieKey. IndieKey reads the `indieauth-metadata` tag on your home page to confirm that the domain belongs to your account, and it checks the tag again from time to time. Keep the field filled in.
+4. Turn on the old token check on your domain's page, so IndieKey answers Lamb's `GET` request.
+
+Lamb publishes the three fields as `authorization_endpoint`, `token_endpoint` and `indieauth-metadata` tags on your home page.
+
+IndieKey calls the old token check a stopgap. Tokens issued under it never expire, and only disconnecting the app ends one.
 
 ## What gets created
 
@@ -120,6 +137,6 @@ Visit [MicroPub Rocks](https://micropub.rocks/) and enter your site. Lamb's impl
 ## Related
 
 * [Media]({{ site.baseurl }}{% link media.md %}): Uploaded photos are stored under `src/assets/` and JPEG/PNG are converted to WebP.
-* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings.
+* [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}): The `[me]`, `authorization_endpoint`, and `token_endpoint` settings, and the optional `indieauth_metadata` setting.
 * [Scheduling]({{ site.baseurl }}{% link scheduling.md %}): Send a future `published` date or `post-status: scheduled` to schedule a post.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Receive notifications when other sites link to your posts.

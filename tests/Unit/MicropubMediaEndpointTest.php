@@ -3,31 +3,40 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Support\EndpointProbe;
 
 /**
- * respond_micropub_media() (src/micropub.php) sets the response via
- * http_response_code()/header() and then exit()s — a shape PHPUnit's own
- * @runInSeparateProcess isolation cannot observe, because it relies on the
- * test method returning normally to hand its result back to the parent
- * process (exit() inside the child skips that entirely). So this spawns a
- * genuinely separate `php` process for the code under test, capturing its
- * response code/headers via Xdebug (xdebug_get_headers(), which — unlike
- * headers_list() — works under the CLI SAPI) from a shutdown function that
- * still runs after exit(), and asserts on that from the normal test process.
+ * respond_micropub_media() (src/micropub.php) against the requests micropub.rocks sends.
+ *
+ * It sets the response via http_response_code()/header() and then exit()s, a
+ * shape PHPUnit cannot observe in-process, so EndpointProbe runs it in a child
+ * process and reports what it sent. The probe's token endpoint answers the
+ * handler's introspection request, so every test goes through the same token
+ * check a real client does.
  */
 class MicropubMediaEndpointTest extends TestCase
 {
-    private string $tempDir;
+    private const TOKEN = '{"me":"https://example.com","scope":"create"}';
 
-    protected function setUp(): void
+    private const GIF = 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
+    private const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
+    private const JPEG = '/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    public function testRocks700JpegUploadReturns201WithTheFileUrl(): void
     {
-        $this->tempDir = sys_get_temp_dir() . '/lamb_micropub_media_test_' . uniqid();
-        mkdir($this->tempDir, 0777, true);
+        $this->assertStoredUpload($this->upload('sunset.jpg', self::JPEG));
     }
 
-    protected function tearDown(): void
+    public function testRocks701PngUploadReturns201WithTheFileUrl(): void
     {
-        $this->removeDirectory($this->tempDir);
+        $this->assertStoredUpload($this->upload('micropub-rocks.png', self::PNG));
+    }
+
+    public function testRocks702GifUploadReturns201WithTheFileUrl(): void
+    {
+        $this->assertStoredUpload($this->upload('w3c-socialwg.gif', self::GIF));
     }
 
     /**
@@ -40,130 +49,170 @@ class MicropubMediaEndpointTest extends TestCase
      */
     public function testStoreFailureReturns500WithNoLocationHeader(): void
     {
-        $result = $this->runProbe();
+        $result = $this->upload('x.gif', self::GIF, false);
 
-        $this->assertSame(
-            500,
-            $result['meta']['status'],
-            "Expected HTTP 500 when the file could not be stored.\nstderr: {$result['stderr']}"
-        );
-
-        foreach ($result['meta']['headers'] as $header) {
-            $this->assertStringStartsNotWithLocation($header);
-        }
-
-        $body = json_decode($result['body'], true);
-        $this->assertIsArray($body, "Response body was not valid JSON: {$result['body']}");
-        $this->assertSame('server_error', $body['error'] ?? null);
+        $this->assertSame(500, $result['status'], "Expected HTTP 500 when the file could not be stored.\n{$result['stderr']}");
+        $this->assertArrayNotHasKey('location', $result['headers'], 'No Location header may be sent for a file that was never stored.');
+        $this->assertSame('server_error', json_decode($result['body'], true)['error'] ?? null);
     }
 
-    private function assertStringStartsNotWithLocation(string $header): void
+    public function testRequestWithNoBearerTokenGets401AndABareChallenge(): void
     {
-        $this->assertStringStartsNotWith(
-            'Location:',
-            $header,
-            'No Location header may be sent for a file that was never stored.'
+        $result = EndpointProbe::run('\Lamb\Micropub\respond_micropub_media();', [
+            'server' => ['CONTENT_TYPE' => 'multipart/form-data; boundary=x'],
+            'files' => ['file' => [['x.gif', base64_decode(self::GIF)]]],
+        ]);
+
+        $this->assertSame(401, $result['status']);
+        $this->assertSame(['Bearer'], $result['headers']['www-authenticate'] ?? null);
+        $this->assertSame('unauthorized', json_decode($result['body'], true)['error']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testUnverifiableTokenGets401AndAnInvalidTokenChallenge(): void
+    {
+        $result = $this->upload('x.gif', self::GIF, true, '{}');
+
+        $this->assertSame(401, $result['status']);
+        $this->assertSame(
+            ['Bearer error="invalid_token", error_description="The access token is invalid or expired."'],
+            $result['headers']['www-authenticate'] ?? null
         );
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testTokenWithoutCreateScopeGets403InsufficientScope(): void
+    {
+        $result = $this->upload('x.gif', self::GIF, true, '{"me":"https://example.com","scope":"update"}');
+
+        $this->assertSame(403, $result['status']);
+        $this->assertSame(
+            ['Bearer error="insufficient_scope", scope="create"'],
+            $result['headers']['www-authenticate'] ?? null
+        );
+        $this->assertSame('insufficient_scope', json_decode($result['body'], true)['error']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testRequestWithoutAFileGets400(): void
+    {
+        $result = $this->probe([]);
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame(
+            'Expected a multipart/form-data POST with a file field.',
+            json_decode($result['body'], true)['error_description']
+        );
+    }
+
+    public function testGetRequestGets400(): void
+    {
+        $result = $this->probe(['file' => [['x.gif', base64_decode(self::GIF)]]], true, self::TOKEN, 'GET');
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testFailedUploadGets400(): void
+    {
+        $result = $this->probe(['file' => [['x.gif', base64_decode(self::GIF), UPLOAD_ERR_PARTIAL]]]);
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame('File upload failed.', json_decode($result['body'], true)['error_description']);
+    }
+
+    public function testUnsupportedFileTypeGets400(): void
+    {
+        $result = $this->probe(['file' => [['notes.txt', 'plain text']]]);
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame('Unsupported file type.', json_decode($result['body'], true)['error_description']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testFileWhoseBytesDoNotMatchItsExtensionGets400(): void
+    {
+        $result = $this->upload('x.png', self::GIF);
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame('File contents do not match its type.', json_decode($result['body'], true)['error_description']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testResponseIsPrivateAndUncacheable(): void
+    {
+        $result = $this->upload('x.gif', self::GIF);
+
+        $this->assertStringContainsString('no-store', $result['headers']['cache-control'][0] ?? '');
+    }
+
+    public function testDebugLoggingRecordsTheRequest(): void
+    {
+        $result = EndpointProbe::run('\Lamb\Micropub\respond_micropub_media();', [
+            'server' => ['REQUEST_METHOD' => 'POST', 'HTTP_AUTHORIZATION' => 'Bearer test-token'],
+            'files' => ['file' => [['x.gif', base64_decode(self::GIF)]]],
+            'token' => self::TOKEN,
+            'accept_uploads' => true,
+            'debug' => true,
+        ]);
+
+        $this->assertStringContainsString('"event":"media_request"', $result['log']);
+        $this->assertStringContainsString('"has_auth_header":true,"has_file":true', $result['log']);
     }
 
     /**
-     * Runs respond_micropub_media() in its own `php` process against a gif
-     * upload that store_upload_or_fallback() cannot store (see class docblock
-     * for why this needs a real subprocess rather than @runInSeparateProcess).
+     * Asserts the response micropub.rocks checks after an upload: HTTP 201 and a
+     * Location header, which is the URL of a file that was stored.
      *
-     * @return array{body: string, meta: array{status: int|false, headers: string[]}, stderr: string}
+     * @param array<string, mixed> $result The handler's response.
+     * @return void
      */
-    private function runProbe(): array
+    private function assertStoredUpload(array $result): void
     {
-        $tmpFile = $this->tempDir . '/upload.gif';
-        // GIF89a header + a 1x1 logical screen descriptor + trailer: enough for
-        // mime_content_type() to sniff image/gif, with no real pixel data needed.
-        file_put_contents($tmpFile, "GIF89a" . pack('vvC3', 1, 1, 0, 0, 0) . "\x3B");
-
-        $script = $this->tempDir . '/probe.php';
-        file_put_contents($script, $this->probeScript($tmpFile));
-
-        $descriptors = [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']];
-        $process = proc_open([PHP_BINARY, $script], $descriptors, $pipes);
-        $this->assertIsResource($process, 'Failed to spawn the probe subprocess.');
-
-        fclose($pipes[0]);
-        $stdout = (string) stream_get_contents($pipes[1]);
-        $stderr = (string) stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        proc_close($process);
-
-        [$body, $metaJson] = array_pad(explode('===META===', $stdout, 2), 2, '{}');
-
-        return [
-            'body' => trim($body),
-            'meta' => json_decode(trim($metaJson), true) ?? [],
-            'stderr' => $stderr,
-        ];
+        $this->assertSame(201, $result['status'], $result['body'] . $result['stderr']);
+        $location = $result['headers']['location'][0] ?? '';
+        $this->assertStringStartsWith('https://example.com/assets/', $location);
+        $this->assertSame(
+            ['url' => $location, 'preview' => $location, 'edit' => $location],
+            json_decode($result['body'], true)
+        );
+        $this->assertContains(parse_url($location, PHP_URL_PATH), $result['assets']);
     }
 
-    private function probeScript(string $tmpFile): string
+    /**
+     * Posts one file named $name to the media endpoint.
+     *
+     * @param string      $name          The client's filename.
+     * @param string      $base64        The file's bytes, base64-encoded.
+     * @param bool        $acceptUploads Whether move_uploaded_file() may move it, as it does for a real upload.
+     * @param string|null $token         The JSON the token endpoint answers with.
+     * @return array<string, mixed> The handler's response.
+     */
+    private function upload(string $name, string $base64, bool $acceptUploads = true, ?string $token = self::TOKEN): array
     {
-        $autoload = var_export(__DIR__ . '/../../vendor/autoload.php', true);
-        $rootDir = var_export($this->tempDir, true);
-        $tmpFileExport = var_export($tmpFile, true);
-
-        return <<<PHP
-<?php
-require {$autoload};
-
-if (!defined('ROOT_DIR')) {
-    define('ROOT_DIR', {$rootDir});
-}
-if (!defined('ROOT_URL')) {
-    define('ROOT_URL', 'https://example.com');
-}
-
-global \$config;
-\$config = ['site_url' => 'https://example.com'];
-
-\$_SERVER['REQUEST_METHOD'] = 'POST';
-\$_SERVER['HTTP_AUTHORIZATION'] = 'Bearer test-token-123';
-
-\$_FILES['file'] = [
-    'name'     => 'x.gif',
-    'type'     => 'image/gif',
-    'tmp_name' => {$tmpFileExport},
-    'error'    => UPLOAD_ERR_OK,
-    'size'     => filesize({$tmpFileExport}),
-];
-
-\$adapter = new \\Tests\\Support\\StubMicropubAdapter();
-\$adapter->stubResponse = ['me' => 'https://example.com', 'scope' => 'create'];
-
-register_shutdown_function(function () {
-    fwrite(STDOUT, "\\n===META===\\n" . json_encode([
-        'status'  => http_response_code(),
-        'headers' => function_exists('xdebug_get_headers') ? xdebug_get_headers() : [],
-    ]));
-});
-
-\\Lamb\\Micropub\\respond_micropub_media(null, \$adapter);
-PHP;
+        return $this->probe(['file' => [[$name, base64_decode($base64)]]], $acceptUploads, $token);
     }
 
-    private function removeDirectory(string $path): void
+    /**
+     * Runs respond_micropub_media() against a request carrying a bearer token.
+     *
+     * @param array<string, list<array{0: string, 1: string, 2?: int}>> $files As for EndpointProbe::run().
+     * @param bool        $acceptUploads As for EndpointProbe::run().
+     * @param string|null $token         The JSON the token endpoint answers with.
+     * @param string      $method        The request method.
+     * @return array<string, mixed> The handler's response.
+     */
+    private function probe(array $files, bool $acceptUploads = true, ?string $token = self::TOKEN, string $method = 'POST'): array
     {
-        if (!is_dir($path)) {
-            return;
-        }
-        foreach (scandir($path) as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $full = "$path/$entry";
-            if (is_dir($full)) {
-                $this->removeDirectory($full);
-            } else {
-                unlink($full);
-            }
-        }
-        rmdir($path);
+        return EndpointProbe::run('\Lamb\Micropub\respond_micropub_media();', [
+            'server' => [
+                'REQUEST_METHOD' => $method,
+                'CONTENT_TYPE' => 'multipart/form-data; boundary=x',
+                'HTTP_AUTHORIZATION' => 'Bearer test-token',
+            ],
+            'files' => $files,
+            'token' => $token,
+            'accept_uploads' => $acceptUploads,
+        ]);
     }
 }

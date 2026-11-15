@@ -311,6 +311,12 @@ $list_field = static function (string $name, string $label, string $help, int $r
                     false,
                     'https://tokens.indieauth.com/token'
                 );
+                $text_field(
+                    'indieauth_metadata',
+                    'IndieAuth metadata',
+                    'The metadata URL your IndieAuth server gives you, for example IndieKey. Leave empty if your server does not use one.',
+                    'url'
+                );
                 $list_field(
                     'syndicate_to',
                     'Syndication targets',

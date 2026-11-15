@@ -2,6 +2,7 @@
 
 namespace Tests\Acceptance;
 
+use Codeception\Example;
 use PHPUnit\Framework\Assert;
 use Tests\Support\AcceptanceTester;
 
@@ -154,5 +155,51 @@ class SettingsFormCest
         $I->amOnPage('/');
         $I->seeNumberOfElements('article', 6);
         $I->dontSeeElement('nav.pagination a.next');
+    }
+
+    /**
+     * @return array<string, array{theme: string}>
+     */
+    protected function themeProvider(): array
+    {
+        return [
+            'base theme' => ['theme' => 'base'],
+            '2026 theme' => ['theme' => '2026'],
+        ];
+    }
+
+    /**
+     * @dataProvider themeProvider
+     * @group seeds-db
+     */
+    public function theIndieauthMetadataFieldPublishesItsLinkTagUntilCleared(AcceptanceTester $I, Example $example): void
+    {
+        $this->login($I);
+        $I->haveStoredSettings(
+            "site_title = Seeded\nsite_url = https://example.com\nauthor_name = Ada\ntheme = {$example['theme']}\n"
+        );
+        $metadata = 'https://indiekey.id/.well-known/oauth-authorization-server/s/abc123';
+
+        $I->amOnPage('/');
+        $I->dontSeeElement('link[rel="indieauth-metadata"]');
+
+        $I->amOnPage('/settings');
+        $I->fillField('indieauth_metadata', $metadata);
+        $I->click('Save settings');
+        $I->dontSee('Settings saved successfully.');
+        $I->seeInField('indieauth_metadata', $metadata);
+
+        $I->amOnPage('/');
+        $I->seeElement("link[rel=\"indieauth-metadata\"][href=\"$metadata\"]");
+
+        $I->amOnPage('/settings');
+        $I->fillField('indieauth_metadata', '');
+        $I->click('Save settings');
+
+        $I->amOnPage('/');
+        $I->dontSeeElement('link[rel="indieauth-metadata"]');
+
+        // Later tests in the run expect the default theme.
+        $I->haveStoredSettings("theme = base\n");
     }
 }
