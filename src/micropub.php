@@ -6,6 +6,7 @@ use Nyholm\Psr7\Response;
 use Nyholm\Psr7\ServerRequest;
 use Nyholm\Psr7\Stream;
 use Nyholm\Psr7\UploadedFile;
+use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\UploadedFileInterface;
 use RedBeanPHP\OODBBean;
 use Psr\Log\AbstractLogger;
@@ -167,6 +168,36 @@ class LambMicropubAdapter extends MicropubAdapter
             return false;
         }
 
+        if (!$this->tokenIsForThisSite($data['me'], $token)) {
+            return false;
+        }
+
+        $scope = isset($data['scope']) ? explode(' ', $data['scope']) : [];
+
+        mp_log('token_verify', [
+            'reason' => 'ok',
+            'me'     => $data['me'],
+            'scope'  => $scope,
+            'token'  => token_fingerprint($token),
+        ]);
+
+        return [
+            'me'    => $data['me'],
+            'scope' => $scope,
+        ];
+    }
+
+    /**
+     * Whether the identity a token was issued for is this site, logging the reason when it is not.
+     *
+     * @param mixed  $me    The `me` the token endpoint reported for the token.
+     * @param string $token The token, logged as a fingerprint only.
+     * @return bool
+     */
+    private function tokenIsForThisSite(mixed $me, string $token): bool
+    {
+        global $config;
+
         // Compare against the *configured* canonical URL, never ROOT_URL: ROOT_URL
         // falls back to the client-supplied Host header, so an attacker holding a
         // token the endpoint issued for their own identity could send
@@ -186,29 +217,17 @@ class LambMicropubAdapter extends MicropubAdapter
             return false;
         }
 
-        if (rtrim($data['me'], '/') !== rtrim($expected, '/')) {
+        if (rtrim($me, '/') !== rtrim($expected, '/')) {
             mp_log('token_verify', [
                 'reason'   => 'me_mismatch',
-                'me'       => $data['me'],
+                'me'       => $me,
                 'expected' => $expected,
                 'token'    => token_fingerprint($token),
             ]);
             return false;
         }
 
-        $scope = isset($data['scope']) ? explode(' ', $data['scope']) : [];
-
-        mp_log('token_verify', [
-            'reason' => 'ok',
-            'me'     => $data['me'],
-            'scope'  => $scope,
-            'token'  => token_fingerprint($token),
-        ]);
-
-        return [
-            'me'    => $data['me'],
-            'scope' => $scope,
-        ];
+        return true;
     }
 
     /**
@@ -424,6 +443,18 @@ class LambMicropubAdapter extends MicropubAdapter
         // it is never a draft. Visibility is driven by the future `created` date set
         // above, so it stays hidden from public listings until that time arrives.
 
+        return $this->saveAndLocate($bean);
+    }
+
+    /**
+     * Store a created post and return the URL a client can fetch it from.
+     *
+     * @param OODBBean $bean The post to store.
+     * @return string The permalink, with a preview token when the post is unpublished.
+     * @throws \RedBeanPHP\RedException\SQL When the store fails.
+     */
+    private function saveAndLocate(OODBBean $bean): string
+    {
         // Unpublished posts 404 anonymously (#284), but clients GET the Location
         // URL we return to show the just-created post. Attach a short-lived
         // preview token so that URL works without a Lamb session (#285).
@@ -546,45 +577,8 @@ class LambMicropubAdapter extends MicropubAdapter
         // slug decides whether it is finalised below.
         $slug_before = (string) ($bean->slug ?? '');
 
-        foreach ($actions['replace'] ?? [] as $property => $values) {
-            if (!is_array($values) || !array_is_list($values)) {
-                return 'invalid_request';
-            }
-            if (!$this->applyReplace($bean, $property, $values)) {
-                return 'invalid_request';
-            }
-        }
-
-        foreach ($actions['add'] ?? [] as $property => $values) {
-            if (!is_array($values) || !array_is_list($values)) {
-                return 'invalid_request';
-            }
-            // Nothing is stored until the end of this method, so refusing here
-            // leaves the post exactly as it was — which is the point: a 200 for
-            // an add the storage cannot hold reads to the client as "saved".
-            if (!$this->applyAdd($bean, $property, $values)) {
-                return 'invalid_request';
-            }
-        }
-
-        $delete = $actions['delete'] ?? [];
-        if (array_is_list($delete)) {
-            // Indexed array: delete entire properties.
-            foreach ($delete as $property) {
-                if (!$this->applyDeleteProperty($bean, (string) $property)) {
-                    return 'invalid_request';
-                }
-            }
-        } else {
-            // Associative array: delete specific values from each property.
-            foreach ($delete as $property => $values) {
-                if (!is_array($values) || !array_is_list($values)) {
-                    return 'invalid_request';
-                }
-                if (!$this->applyDeleteValues($bean, $property, $values)) {
-                    return 'invalid_request';
-                }
-            }
+        if (!$this->applyActions($bean, $actions)) {
+            return 'invalid_request';
         }
 
         $rejection = $this->frontMatterRejection((string) ($bean->body ?? ''));
@@ -609,6 +603,60 @@ class LambMicropubAdapter extends MicropubAdapter
         // pre-edit state) rather than anything the store changes.
         $needs_slug = $slug_before === '';
         save($bean, ['finalize_slug' => $needs_slug, 'notify' => true]);
+
+        return true;
+    }
+
+    /**
+     * Apply an update request's replace, add and delete operations to a post bean, in that order.
+     *
+     * @param OODBBean             $bean
+     * @param array<string, mixed> $actions The update request, with any of `replace`, `add` and `delete`.
+     * @return bool False when an operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
+     */
+    private function applyActions(OODBBean $bean, array $actions): bool
+    {
+        foreach ($actions['replace'] ?? [] as $property => $values) {
+            if (!is_array($values) || !array_is_list($values)) {
+                return false;
+            }
+            if (!$this->applyReplace($bean, $property, $values)) {
+                return false;
+            }
+        }
+
+        foreach ($actions['add'] ?? [] as $property => $values) {
+            if (!is_array($values) || !array_is_list($values)) {
+                return false;
+            }
+            // Nothing is stored until updateCallback() saves the post, so refusing
+            // here leaves the post exactly as it was — which is the point: a 200 for
+            // an add the storage cannot hold reads to the client as "saved".
+            if (!$this->applyAdd($bean, $property, $values)) {
+                return false;
+            }
+        }
+
+        $delete = $actions['delete'] ?? [];
+        if (array_is_list($delete)) {
+            // Indexed array: delete entire properties.
+            foreach ($delete as $property) {
+                if (!$this->applyDeleteProperty($bean, (string) $property)) {
+                    return false;
+                }
+            }
+        } else {
+            // Associative array: delete specific values from each property.
+            foreach ($delete as $property => $values) {
+                if (!is_array($values) || !array_is_list($values)) {
+                    return false;
+                }
+                if (!$this->applyDeleteValues($bean, $property, $values)) {
+                    return false;
+                }
+            }
+        }
 
         return true;
     }
@@ -743,30 +791,7 @@ class LambMicropubAdapter extends MicropubAdapter
     private function applyReplace(OODBBean $bean, string $property, array $values): bool
     {
         if ($property === 'content') {
-            // An empty value list is Micropub's "replace with nothing".
-            if ($values === []) {
-                $bean->body = $this->rebuildBody($bean, '');
-                return true;
-            }
-            // extractContent(), not (string) $values[0]: a content value is
-            // legitimately `{"html": …}` or `{"value": …}`, which the create
-            // path has always unwrapped. Cast here instead, that object became
-            // the literal string "Array" (with an "Array to string conversion"
-            // warning) and rebuildBody() wrote it over the entire post — a
-            // spec-legal update from the same client that created the post
-            // destroyed its content.
-            ['content' => $newContent, 'is_html' => $isHtml] = $this->extractContent(['content' => $values]);
-            if ($newContent === null) {
-                // A value carrying no text at all (an object with neither key)
-                // is a replace the storage cannot honour; reporting success for
-                // it reads to the client as "saved", as applyAdd() notes.
-                return false;
-            }
-            // strip_tags() for the html shape, matching what createCallback()
-            // stores in the body. `transformed` is regenerated from the body by
-            // the parse_bean() at the end of updateCallback() either way.
-            $bean->body = $this->rebuildBody($bean, $isHtml ? strip_tags($newContent) : $newContent);
-            return true;
+            return $this->applyReplaceContent($bean, $values);
         }
 
         if ($property === 'category') {
@@ -780,30 +805,7 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         if ($property === 'in-reply-to') {
-            // An empty value list is Micropub's "replace with nothing", i.e. the
-            // post stops being a reply.
-            if ($values === []) {
-                $bean->body = set_reply_to($bean->body ?? '', '');
-                return true;
-            }
-
-            // A post may record several reply targets (#583): every value the
-            // client sent becomes the new (deduplicated) set.
-            $targets = [];
-            foreach ($values as $value) {
-                $target = $this->replyTargetUrl($value);
-                // A value carrying no URL is a replace that cannot be
-                // honoured; reporting success for it reads to the client as
-                // "saved", as the single-target path already guarded against.
-                if ($target === null) {
-                    return false;
-                }
-                if (!in_array($target, $targets, true)) {
-                    $targets[] = $target;
-                }
-            }
-            $bean->body = set_reply_to($bean->body ?? '', $targets);
-            return true;
+            return $this->applyReplaceReplyTo($bean, $values);
         }
 
         if (isset(self::MATTER_PROPERTIES[$property])) {
@@ -817,6 +819,78 @@ class LambMicropubAdapter extends MicropubAdapter
         }
 
         return false;
+    }
+
+    /**
+     * Apply a replace operation for the `content` property to a post bean.
+     *
+     * @param OODBBean    $bean
+     * @param list<mixed> $values
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
+     */
+    private function applyReplaceContent(OODBBean $bean, array $values): bool
+    {
+        // An empty value list is Micropub's "replace with nothing".
+        if ($values === []) {
+            $bean->body = $this->rebuildBody($bean, '');
+            return true;
+        }
+        // extractContent(), not (string) $values[0]: a content value is
+        // legitimately `{"html": …}` or `{"value": …}`, which the create
+        // path has always unwrapped. Cast here instead, that object became
+        // the literal string "Array" (with an "Array to string conversion"
+        // warning) and rebuildBody() wrote it over the entire post — a
+        // spec-legal update from the same client that created the post
+        // destroyed its content.
+        ['content' => $newContent, 'is_html' => $isHtml] = $this->extractContent(['content' => $values]);
+        if ($newContent === null) {
+            // A value carrying no text at all (an object with neither key)
+            // is a replace the storage cannot honour; reporting success for
+            // it reads to the client as "saved", as applyAdd() notes.
+            return false;
+        }
+        // strip_tags() for the html shape, matching what createCallback()
+        // stores in the body. `transformed` is regenerated from the body by
+        // the parse_bean() at the end of updateCallback() either way.
+        $bean->body = $this->rebuildBody($bean, $isHtml ? strip_tags($newContent) : $newContent);
+        return true;
+    }
+
+    /**
+     * Apply a replace operation for the `in-reply-to` property to a post bean.
+     *
+     * @param OODBBean    $bean
+     * @param list<mixed> $values
+     * @return bool False when the operation cannot be honoured (the caller turns
+     *              that into an invalid_request response).
+     */
+    private function applyReplaceReplyTo(OODBBean $bean, array $values): bool
+    {
+        // An empty value list is Micropub's "replace with nothing", i.e. the
+        // post stops being a reply.
+        if ($values === []) {
+            $bean->body = set_reply_to($bean->body ?? '', '');
+            return true;
+        }
+
+        // A post may record several reply targets (#583): every value the
+        // client sent becomes the new (deduplicated) set.
+        $targets = [];
+        foreach ($values as $value) {
+            $target = $this->replyTargetUrl($value);
+            // A value carrying no URL is a replace that cannot be
+            // honoured; reporting success for it reads to the client as
+            // "saved", as the single-target path already guarded against.
+            if ($target === null) {
+                return false;
+            }
+            if (!in_array($target, $targets, true)) {
+                $targets[] = $target;
+            }
+        }
+        $bean->body = set_reply_to($bean->body ?? '', $targets);
+        return true;
     }
 
     /**
@@ -1452,47 +1526,7 @@ function respond_micropub(): void
 
     $headers = getallheaders() ?: [];
     $rawBody = file_get_contents('php://input') ?: null;
-
-    $request = new ServerRequest(
-        $_SERVER['REQUEST_METHOD'] ?? 'GET',
-        ROOT_URL . ($_SERVER['REQUEST_URI'] ?? '/micropub'),
-        $headers,
-        $rawBody,
-        '1.1',
-        $_SERVER
-    );
-
-    if (!empty($_POST)) {
-        $request = $request->withParsedBody($_POST);
-    }
-
-    if (!empty($_FILES)) {
-        $psr7Files = [];
-        foreach ($_FILES as $field => $info) {
-            if (is_array($info['tmp_name'])) {
-                $fieldFiles = [];
-                foreach ($info['tmp_name'] as $i => $tmpName) {
-                    $fieldFiles[] = new UploadedFile(
-                        $tmpName,
-                        (int) $info['size'][$i],
-                        (int) $info['error'][$i],
-                        $info['name'][$i],
-                        $info['type'][$i]
-                    );
-                }
-                $psr7Files[$field] = $fieldFiles;
-            } else {
-                $psr7Files[$field] = new UploadedFile(
-                    $info['tmp_name'],
-                    (int) $info['size'],
-                    (int) $info['error'],
-                    $info['name'],
-                    $info['type']
-                );
-            }
-        }
-        $request = $request->withUploadedFiles($psr7Files);
-    }
+    $request = micropub_request($headers, $rawBody);
 
     $lcHeaders = array_change_key_case($headers, CASE_LOWER);
     mp_log('request', [
@@ -1510,8 +1544,96 @@ function respond_micropub(): void
     if (mp_debug_enabled()) {
         $adapter->logger = mp_adapter_logger();
     }
-    $response = $adapter->handleRequest($request);
+    $response = finalize_micropub_response($adapter->handleRequest($request));
+    $status = $response->getStatusCode();
 
+    mp_log('response', [
+        'status' => $status,
+        // Only echo the body into the log on failures — it carries the error reason.
+        // mb_substr(), not substr(): a response body is remote text, and cutting
+        // it mid-sequence at byte 300 produced the malformed byte above. 300
+        // characters is what "an excerpt" meant anyway.
+        'body'   => $status >= 400 ? mb_substr((string) $response->getBody(), 0, 300) : null,
+    ]);
+
+    emit_micropub_response($response);
+}
+
+/**
+ * Build the PSR-7 request for the current PHP request.
+ *
+ * @param array<string, string> $headers The request headers.
+ * @param string|null           $rawBody The raw request body, or null when it is empty.
+ * @return ServerRequest
+ */
+function micropub_request(array $headers, ?string $rawBody): ServerRequest
+{
+    $request = new ServerRequest(
+        $_SERVER['REQUEST_METHOD'] ?? 'GET',
+        ROOT_URL . ($_SERVER['REQUEST_URI'] ?? '/micropub'),
+        $headers,
+        $rawBody,
+        '1.1',
+        $_SERVER
+    );
+
+    if (!empty($_POST)) {
+        $request = $request->withParsedBody($_POST);
+    }
+
+    if (!empty($_FILES)) {
+        $request = $request->withUploadedFiles(micropub_uploaded_files($_FILES));
+    }
+
+    return $request;
+}
+
+/**
+ * Convert PHP's $_FILES into PSR-7 uploaded files.
+ *
+ * A field holds one file, or a list of them when the client names it `photo[]`.
+ *
+ * @param array<string, mixed> $files The $_FILES array.
+ * @return array<string, UploadedFile|list<UploadedFile>>
+ */
+function micropub_uploaded_files(array $files): array
+{
+    $psr7Files = [];
+    foreach ($files as $field => $info) {
+        if (is_array($info['tmp_name'])) {
+            $fieldFiles = [];
+            foreach ($info['tmp_name'] as $i => $tmpName) {
+                $fieldFiles[] = new UploadedFile(
+                    $tmpName,
+                    (int) $info['size'][$i],
+                    (int) $info['error'][$i],
+                    $info['name'][$i],
+                    $info['type'][$i]
+                );
+            }
+            $psr7Files[$field] = $fieldFiles;
+        } else {
+            $psr7Files[$field] = new UploadedFile(
+                $info['tmp_name'],
+                (int) $info['size'],
+                (int) $info['error'],
+                $info['name'],
+                $info['type']
+            );
+        }
+    }
+
+    return $psr7Files;
+}
+
+/**
+ * Add the headers and body Micropub clients expect to the adapter's response.
+ *
+ * @param ResponseInterface $response The response the adapter returned.
+ * @return ResponseInterface
+ */
+function finalize_micropub_response(ResponseInterface $response): ResponseInterface
+{
     // The adapter returns a bare 401 when no access token is supplied; RFC 6750 §3
     // requires a WWW-Authenticate: Bearer challenge on such responses. (Our own
     // insufficient_scope path is a 403 that already sets the header, so it is untouched.)
@@ -1535,16 +1657,18 @@ function respond_micropub(): void
             ]) ?: '{}'));
     }
 
-    mp_log('response', [
-        'status' => $status,
-        // Only echo the body into the log on failures — it carries the error reason.
-        // mb_substr(), not substr(): a response body is remote text, and cutting
-        // it mid-sequence at byte 300 produced the malformed byte above. 300
-        // characters is what "an excerpt" meant anyway.
-        'body'   => $status >= 400 ? mb_substr((string) $response->getBody(), 0, 300) : null,
-    ]);
+    return $response;
+}
 
-    http_response_code($status);
+/**
+ * Send a PSR-7 response to the client and end the request.
+ *
+ * @param ResponseInterface $response The response to send.
+ * @return never
+ */
+function emit_micropub_response(ResponseInterface $response): never
+{
+    http_response_code($response->getStatusCode());
     foreach ($response->getHeaders() as $name => $values) {
         foreach ($values as $value) {
             header("$name: $value", false);
@@ -1621,6 +1745,44 @@ function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapte
         'has_file'        => !empty($_FILES['file']),
     ]);
 
+    authorize_media_request($authHeader, $adapter);
+    [$file, $ext] = validated_media_upload();
+
+    $sub_path  = \Lamb\Response\upload_subpath();
+    $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
+    $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
+
+    // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
+    $filename = \Lamb\Response\store_upload_or_fallback($file['tmp_name'], $ext, $uploadDir, $seed);
+    if ($filename === null) {
+        // Same reasoning as the web upload endpoint (response/upload.php): a
+        // 201 with a Location the file was never written to would tell the
+        // client its upload durably succeeded when it didn't.
+        micropub_error(500, 'server_error', 'Failed to store the uploaded file.');
+    }
+
+    // The media endpoint hands this URL back to an external Micropub client, so
+    // it must be absolute (resolvable off-site); content URLs stay root-relative.
+    $url = ROOT_URL . \Lamb\Response\asset_url($sub_path, $filename);
+
+    http_response_code(201);
+    header('Location: ' . $url);
+    header('Content-Type: application/json');
+    echo json_encode(['url' => $url, 'preview' => $url, 'edit' => $url]);
+    exit;
+}
+
+/**
+ * Reject a media request unless its bearer token is valid and carries the create scope.
+ *
+ * Ends the request with a JSON error when it is not.
+ *
+ * @param string                   $authHeader The request's Authorization header, or ''.
+ * @param LambMicropubAdapter|null $adapter    The adapter to verify the token against; a new one when null.
+ * @return void
+ */
+function authorize_media_request(string $authHeader, ?LambMicropubAdapter $adapter): void
+{
     $token = null;
     if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
         $token = trim($m[1]);
@@ -1658,7 +1820,19 @@ function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapte
             bearer_challenge('insufficient_scope', 'create')
         );
     }
+}
 
+/**
+ * The uploaded file of a media request and its extension, once both are checked.
+ *
+ * Ends the request with a JSON error when the request is not a multipart POST
+ * with a file field, the upload failed, or the file is not an allowed image
+ * whose bytes agree with its extension.
+ *
+ * @return array{0: array<string, mixed>, 1: string} The $_FILES entry and its lower-case extension.
+ */
+function validated_media_upload(): array
+{
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || empty($_FILES['file'])) {
         micropub_error(400, 'invalid_request', 'Expected a multipart/form-data POST with a file field.');
     }
@@ -1679,26 +1853,5 @@ function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapte
         micropub_error(400, 'invalid_request', 'File contents do not match its type.');
     }
 
-    $sub_path  = \Lamb\Response\upload_subpath();
-    $uploadDir = \Lamb\Response\get_upload_dir($sub_path);
-    $seed      = sha1((\Lamb\Http\request_string($file['name'] ?? null) ?? '') . uniqid('', true));
-
-    // Re-encode JPEG/PNG to WebP, falling back to the original bytes on failure.
-    $filename = \Lamb\Response\store_upload_or_fallback($file['tmp_name'], $ext, $uploadDir, $seed);
-    if ($filename === null) {
-        // Same reasoning as the web upload endpoint (response/upload.php): a
-        // 201 with a Location the file was never written to would tell the
-        // client its upload durably succeeded when it didn't.
-        micropub_error(500, 'server_error', 'Failed to store the uploaded file.');
-    }
-
-    // The media endpoint hands this URL back to an external Micropub client, so
-    // it must be absolute (resolvable off-site); content URLs stay root-relative.
-    $url = ROOT_URL . \Lamb\Response\asset_url($sub_path, $filename);
-
-    http_response_code(201);
-    header('Location: ' . $url);
-    header('Content-Type: application/json');
-    echo json_encode(['url' => $url, 'preview' => $url, 'edit' => $url]);
-    exit;
+    return [$file, $ext];
 }
