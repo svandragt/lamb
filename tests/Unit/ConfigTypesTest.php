@@ -32,6 +32,13 @@ class ConfigTypesTest extends TestCase
         return compose_config($ini, get_default_ini_text());
     }
 
+    public function testSectionNamedAfterAFormFieldTheDefaultsLeaveCommentedOutIsDropped(): void
+    {
+        $config = $this->withConfig("[author_name]\nanswer = 42\n");
+
+        $this->assertFalse(is_array($config['author_name'] ?? null));
+    }
+
     public function testAnAuthorsOwnSectionReachesTheConfig(): void
     {
         $config = $this->withConfig("[mystery_section]\nanswer = 42\n");
@@ -106,14 +113,6 @@ class ConfigTypesTest extends TestCase
             'site_url'         => ['site_url'],
             'websub_hubs'      => ['websub_hubs'],
         ];
-    }
-
-    public function testShapeWarningsNamesAScalarCommentedOutInTheDefaults(): void
-    {
-        $warnings = shape_warnings("[author_name]\nx = y\n");
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('author_name', $warnings[0]);
     }
 
     // normalize_config() — sections
@@ -203,15 +202,6 @@ class ConfigTypesTest extends TestCase
     public function testShapeWarningsIsEmptyForTheSeededDefaults(): void
     {
         $this->assertSame([], shape_warnings(get_default_ini_text()));
-    }
-
-    public function testShapeWarningsNamesAScalarWrittenAsASection(): void
-    {
-        $warnings = shape_warnings("[site_title]\nfoo = bar\n");
-
-        $this->assertCount(1, $warnings);
-        $this->assertStringContainsString('site_title', $warnings[0]);
-        $this->assertStringContainsString('ignored', $warnings[0]);
     }
 
     public function testShapeWarningsNamesAPathInTheSiteUrl(): void

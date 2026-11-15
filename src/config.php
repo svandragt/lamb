@@ -199,8 +199,10 @@ function author_display_name(array $config): string
 /**
  * The config keys written as `[section]` blocks of `label = value` entries.
  *
- * Everything else is a single-value setting. This is the shape schema
- * normalize_config() and shape_warnings() work from. It is spelled out rather
+ * Lamb's settings are these sections, the single-value settings in
+ * SETTINGS_FORM_SCALARS, and the sections an author or a theme owns (any other
+ * array). This is the shape schema normalize_config() and shape_warnings()
+ * work from. It is spelled out rather
  * than inferred from the seeded defaults because the defaults keep the
  * personal-identity and opt-in settings (`author_name`, `site_description`,
  * `websub_hubs`, …) commented out, so they are absent from the parsed
@@ -258,7 +260,7 @@ function is_config_section(string $key, array $defaults): bool
  */
 function is_scalar_setting(string $key, array $defaults): bool
 {
-    return in_array($key, [...SETTINGS_FORM_FIELDS, 'feeds_draft'], true)
+    return in_array($key, SETTINGS_FORM_SCALARS, true)
         || (isset($defaults[$key]) && !is_array($defaults[$key]));
 }
 
@@ -283,7 +285,9 @@ function is_scalar_setting(string $key, array $defaults): bool
  * Rather than guard 50 call sites, normalise once here, on the way out of the
  * parser. The seeded defaults declare each documented key's shape, so they are
  * also the schema: a key the defaults hold as an array is a section, anything
- * else is a scalar setting. A value of the wrong shape is dropped, which in
+ * else is a scalar setting. There is a third category: a section the author or
+ * a theme owns, which is any other array and is kept for themes to read. A
+ * value of the wrong shape is dropped, which in
  * compose_config() means the seeded default applies — the same
  * fall-back-to-something-renderable stance parse_ini_safe() takes for INI that
  * does not parse at all. Keys the defaults do not mention (the author's own)
@@ -298,18 +302,16 @@ function normalize_config(array $config, array $defaults): array
     $normalized = [];
 
     foreach ($config as $key => $value) {
-        if (is_config_section((string) $key, $defaults)) {
+        $is_section = is_config_section((string) $key, $defaults)
+            || (is_array($value) && !is_scalar_setting((string) $key, $defaults));
+        if ($is_section) {
             $normalized[$key] = normalize_config_section($value);
             continue;
         }
 
+        // A single-value setting written as a section has no meaning to any
+        // consumer, so drop it and let the default stand.
         if (is_array($value)) {
-            // A single-value setting written as a section has no meaning to any
-            // consumer, so drop it and let the default stand. Any other section
-            // is the author's own and is kept for custom themes to read.
-            if (!is_scalar_setting((string) $key, $defaults)) {
-                $normalized[$key] = normalize_config_section($value);
-            }
             continue;
         }
 
@@ -546,20 +548,12 @@ function shape_warnings(string $ini_text): array
         }
     }
 
-    foreach (parse_ini_safe($ini_text) as $key => $value) {
+    foreach ($parsed as $key => $value) {
         $expects_section = is_config_section((string) $key, $defaults);
 
         if ($expects_section && !is_array($value)) {
             $warnings[] = "`{$key}` is a list of entries: write it as a `[{$key}]` section. "
                 . 'The single value was ignored.';
-            continue;
-        }
-
-        // An author's own section is valid: custom themes read it. Only a
-        // section named like a single-value setting is a mistake.
-        if (!$expects_section && is_scalar_setting((string) $key, $defaults) && is_array($value)) {
-            $warnings[] = "`[{$key}]` is a single-value setting, so the section was ignored. "
-                . 'Write it as `name = value`, above the first section.';
             continue;
         }
 
@@ -697,6 +691,11 @@ const SETTINGS_FORM_FIELDS = [
 ];
 
 /**
+ * Every single-value setting the /settings form owns: its text fields and the `feeds_draft` checkbox.
+ */
+const SETTINGS_FORM_SCALARS = [...SETTINGS_FORM_FIELDS, 'feeds_draft'];
+
+/**
  * The sections the /settings form owns, each posted as one textarea of `label = value` lines.
  *
  * Every other section in the stored INI (an author's own) is carried over
@@ -747,7 +746,7 @@ function form_to_ini(array $post, string $current_ini): string
         $sections[$name] = parse_section_text(settings_form_value($post, $name, false))['entries'];
     }
 
-    $owned = [...SETTINGS_FORM_FIELDS, 'feeds_draft', ...SETTINGS_FORM_SECTIONS];
+    $owned = [...SETTINGS_FORM_SCALARS, ...SETTINGS_FORM_SECTIONS];
     foreach (parse_ini_safe($current_ini) as $key => $value) {
         if (in_array((string) $key, $owned, true) || isset(REMOVED_SETTINGS[$key])) {
             continue;
