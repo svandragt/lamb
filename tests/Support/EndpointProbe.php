@@ -22,6 +22,8 @@ final class EndpointProbe
 {
     private const META_MARKER = "\n===META===\n";
 
+    private const TIMEOUT_SECONDS = 30;
+
     /**
      * Runs a handler call against one request and returns the response it sent.
      *
@@ -96,16 +98,16 @@ final class EndpointProbe
             }
 
             fclose($pipes[0]);
-            if ($listener !== null) {
-                self::answerTokenIntrospection($listener, $request['token'] ?? '');
+            try {
+                [$stdout, $stderr] = self::collectOutput($process, $pipes, $listener, $request['token'] ?? '');
+            } finally {
+                proc_close($process);
             }
-            $stdout = (string) stream_get_contents($pipes[1]);
-            $stderr = (string) stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($process);
         } finally {
-            self::removeDirectory($rootDir);
+            if ($listener !== null) {
+                fclose($listener);
+            }
+            Filesystem::removeDirectory($rootDir);
         }
 
         [$body, $metaJson] = array_pad(explode(self::META_MARKER, $stdout, 2), 2, '{}');
@@ -123,19 +125,75 @@ final class EndpointProbe
     }
 
     /**
+     * Reads the child's stdout and stderr to the end, answering its token request on the way.
+     *
+     * One stream_select() loop serves all three, so a child that fills a pipe is drained instead of
+     * blocking, and a child that exits without asking for a token is not waited for.
+     *
+     * @param resource             $process  The child process.
+     * @param array<int, resource> $pipes    The child's pipes, as proc_open() filled them.
+     * @param resource|null        $listener The fake token endpoint's listening socket, if any.
+     * @param string               $json     The JSON the token endpoint answers with.
+     * @return array{0: string, 1: string} What the child wrote to stdout and to stderr.
+     * @throws \RuntimeException When the child is still running after TIMEOUT_SECONDS.
+     */
+    private static function collectOutput($process, array $pipes, $listener, string $json): array
+    {
+        $open = [1 => $pipes[1], 2 => $pipes[2]];
+        $output = [1 => '', 2 => ''];
+        $deadline = microtime(true) + self::TIMEOUT_SECONDS;
+
+        while ($open !== [] && microtime(true) < $deadline) {
+            $read = $open;
+            if ($listener !== null) {
+                $read[] = $listener;
+            }
+            $write = $except = null;
+            if (stream_select($read, $write, $except, 0, 100000) === false) {
+                break;
+            }
+
+            foreach ($read as $stream) {
+                if ($stream === $listener) {
+                    self::answerTokenIntrospection($listener, $json);
+                    $listener = null;
+                    continue;
+                }
+
+                $channel = (int) array_search($stream, $open, true);
+                $chunk = fread($stream, 8192);
+                if ($chunk !== false && $chunk !== '') {
+                    $output[$channel] .= $chunk;
+                } elseif (feof($stream)) {
+                    fclose($stream);
+                    unset($open[$channel]);
+                }
+            }
+        }
+
+        if ($open !== []) {
+            proc_terminate($process);
+            throw new \RuntimeException('The probe subprocess did not finish in ' . self::TIMEOUT_SECONDS . ' seconds.');
+        }
+
+        return [$output[1], $output[2]];
+    }
+
+    /**
      * Answers the handler's one token introspection request.
      *
-     * @param resource $listener The listening socket named in the child's token_endpoint.
+     * @param resource $listener The listening socket named in the child's token_endpoint, with a connection waiting.
      * @param string   $json     The JSON body to answer with.
      * @return void
      */
     private static function answerTokenIntrospection($listener, string $json): void
     {
-        $connection = @stream_socket_accept($listener, 10);
+        $connection = @stream_socket_accept($listener, 5);
         if ($connection === false) {
             return;
         }
 
+        stream_set_timeout($connection, 5);
         fread($connection, 8192);
         fwrite(
             $connection,
@@ -204,27 +262,6 @@ final class EndpointProbe
         }
 
         return $global;
-    }
-
-    /**
-     * Removes a directory and everything in it.
-     *
-     * @param string $path The directory.
-     * @return void
-     */
-    private static function removeDirectory(string $path): void
-    {
-        if (!is_dir($path)) {
-            return;
-        }
-        foreach (scandir($path) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $full = "$path/$entry";
-            is_dir($full) ? self::removeDirectory($full) : unlink($full);
-        }
-        rmdir($path);
     }
 
     private const TEMPLATE = <<<'PHP'

@@ -160,7 +160,9 @@ class LambMicropubAdapter extends MicropubAdapter
             ]);
             return false;
         }
-        if (empty($data['me'])) {
+        // `me` is remote input: only a string can name this site, and rtrim() on
+        // anything else is a TypeError (a 500) instead of a refused token.
+        if (empty($data['me']) || !is_string($data['me'])) {
             mp_log('token_verify', [
                 'reason' => 'no_me',
                 'token'  => token_fingerprint($token),
@@ -190,11 +192,11 @@ class LambMicropubAdapter extends MicropubAdapter
     /**
      * Whether the identity a token was issued for is this site, logging the reason when it is not.
      *
-     * @param mixed  $me    The `me` the token endpoint reported for the token.
+     * @param string $me    The `me` the token endpoint reported for the token.
      * @param string $token The token, logged as a fingerprint only.
      * @return bool
      */
-    private function tokenIsForThisSite(mixed $me, string $token): bool
+    private function tokenIsForThisSite(string $me, string $token): bool
     {
         global $config;
 
@@ -1453,18 +1455,6 @@ function mp_log(string $event, array $context = []): void
 }
 
 /**
- * Build a `WWW-Authenticate: Bearer` challenge value per OAuth bearer-token RFC 6750 §3.
- *
- * With no error this returns a bare `Bearer` — RFC 6750 §3.1 says a request that
- * supplied no credentials at all SHOULD NOT carry an error code. When an error is
- * given, the optional `error_description` and `scope` attributes are appended in the
- * spec's listed order (error, error_description, scope).
- *
- * @param string|null $error       Error code (e.g. 'invalid_token', 'insufficient_scope').
- * @param string|null $scope       Scope the action requires (insufficient_scope only).
- * @param string|null $description Human-readable error description.
- */
-/**
  * Whether a verified access-token user carries a given Micropub scope.
  *
  * Shared by every scope-gated Micropub action (post creation/update, and the
@@ -1480,6 +1470,19 @@ function has_micropub_scope(array|false $user, string $scope): bool
     return is_array($user) && in_array($scope, $user['scope'] ?? [], true);
 }
 
+/**
+ * Build a `WWW-Authenticate: Bearer` challenge value per OAuth bearer-token RFC 6750 §3.
+ *
+ * With no error this returns a bare `Bearer` — RFC 6750 §3.1 says a request that
+ * supplied no credentials at all SHOULD NOT carry an error code. When an error is
+ * given, the optional `error_description` and `scope` attributes are appended in the
+ * spec's listed order (error, error_description, scope).
+ *
+ * @param string|null $error       Error code (e.g. 'invalid_token', 'insufficient_scope').
+ * @param string|null $scope       Scope the action requires (insufficient_scope only).
+ * @param string|null $description Human-readable error description.
+ * @return string The header value.
+ */
 function bearer_challenge(?string $error = null, ?string $scope = null, ?string $description = null): string
 {
     $params = [];
@@ -1565,6 +1568,7 @@ function respond_micropub(): void
  * @param array<string, string> $headers The request headers.
  * @param string|null           $rawBody The raw request body, or null when it is empty.
  * @return ServerRequest
+ * @throws \InvalidArgumentException When the request method or URI is not valid.
  */
 function micropub_request(array $headers, ?string $rawBody): ServerRequest
 {
@@ -1716,15 +1720,9 @@ function micropub_error(int $status, string $error, string $description, ?string
  *     endpoint reads $_FILES/$_POST directly — but declared first because
  *     call_route() invokes every handler as $callback($args); a typed first
  *     parameter would receive that array and fatal (a 500 on every request).
- * @param LambMicropubAdapter|null $adapter The adapter to verify the bearer token against;
- *     defaults to a new LambMicropubAdapter. Injectable so tests can stub token
- *     introspection instead of hitting the real token endpoint over HTTP. Typed to
- *     the concrete class, not the MicropubAdapter base, because this function relies
- *     on LambMicropubAdapter's narrower verifyAccessTokenCallback() return shape
- *     (array{me, scope}|false) rather than the base's array|string|false|ResponseInterface.
  * @return void
  */
-function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapter = null): void
+function respond_micropub_media(mixed $args = null): void
 {
     // Same override as respond_micropub() above, and for the same reason: this
     // endpoint is bearer-token-gated, not session-cookie-gated, so index.php's
@@ -1745,7 +1743,7 @@ function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapte
         'has_file'        => !empty($_FILES['file']),
     ]);
 
-    authorize_media_request($authHeader, $adapter);
+    authorize_media_request($authHeader);
     [$file, $ext] = validated_media_upload();
 
     $sub_path  = \Lamb\Response\upload_subpath();
@@ -1777,11 +1775,10 @@ function respond_micropub_media(mixed $args = null, ?LambMicropubAdapter $adapte
  *
  * Ends the request with a JSON error when it is not.
  *
- * @param string                   $authHeader The request's Authorization header, or ''.
- * @param LambMicropubAdapter|null $adapter    The adapter to verify the token against; a new one when null.
+ * @param string $authHeader The request's Authorization header, or ''.
  * @return void
  */
-function authorize_media_request(string $authHeader, ?LambMicropubAdapter $adapter): void
+function authorize_media_request(string $authHeader): void
 {
     $token = null;
     if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
@@ -1793,7 +1790,7 @@ function authorize_media_request(string $authHeader, ?LambMicropubAdapter $adapt
         micropub_error(401, 'unauthorized', 'Missing bearer token.', bearer_challenge());
     }
 
-    $adapter ??= new LambMicropubAdapter();
+    $adapter = new LambMicropubAdapter();
     if (mp_debug_enabled()) {
         $adapter->logger = mp_adapter_logger();
     }

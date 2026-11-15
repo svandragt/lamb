@@ -290,6 +290,18 @@ class MicropubAdapterTest extends TestCase
         $this->assertContains('update', $result['scope']);
     }
 
+    public function testVerifyTokenRejectsAMeThatIsNotAString(): void
+    {
+        // A token endpoint is remote input: `me` can be a JSON array or number,
+        // and rtrim() on one is a TypeError (a 500), not a refused token.
+        $adapter = new StubMicropubAdapter();
+
+        foreach ([[ROOT_URL], ['url' => ROOT_URL], 5, true] as $me) {
+            $adapter->stubResponse = ['me' => $me, 'scope' => 'create'];
+            $this->assertFalse($adapter->verifyAccessTokenCallback('valid-jwt'), var_export($me, true));
+        }
+    }
+
     public function testVerifyTokenScopeIsExactlyWhatTheTokenCarries(): void
     {
         $adapter = new StubMicropubAdapter();
