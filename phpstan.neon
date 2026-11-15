@@ -3,6 +3,9 @@ includes:
 
 parameters:
     level: 8
+    # Per-checkout cache: the default /tmp/phpstan is shared, so parallel
+    # worktrees running analyse clash.
+    tmpDir: %currentWorkingDirectory%/.phpstan-cache
     # Analyse against the minimum supported PHP (composer.json require), not
     # the runtime default, so 8.5-only APIs are flagged.
     phpVersion: 80400

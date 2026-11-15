@@ -11,6 +11,7 @@
 /data/*.log
 /src/assets/
 /vendor/
+.phpstan-cache/
 /todos.md
 
 # Ignore user-installed themes; the repo ships 'base' and '2026'.
