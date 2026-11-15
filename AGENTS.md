@@ -244,7 +244,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 
 ### Database
 
-RedBeanPHP (fluid mode) on SQLite. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`. Schema evolves automatically.
+RedBeanPHP on SQLite. Production freezes the schema at the end of `bootstrap_db()` (`R::freeze(true)`), so a write naming a column that `SCHEMA` in `src/bootstrap.php` does not list throws instead of adding the column. Unit tests run fluid unless a test freezes the schema. Beans are dispensed/loaded with `R::dispense`, `R::load`, `R::findOne`, `R::find`, `R::findAll`.
 
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`

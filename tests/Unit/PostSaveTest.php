@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Post\on;
 use function Lamb\Post\populate_bean;
@@ -120,39 +121,6 @@ class PostSaveTest extends TestCase
         R::store(populate_bean("---\nslug: taken\n---\nSeed."));
     }
 
-    public function testARollbackThatFailsDoesNotReplaceTheOriginalException(): void
-    {
-        // The second store ends the transaction and throws, so save()'s own ROLLBACK
-        // fails with "no transaction is active"; the caller must still see 'boom'.
-        // RedBeanPHP cannot remove a listener, so the flag turns this one inert after the test.
-        $this->seedTakenSlug();
-        $observer = new class implements \RedBeanPHP\Observer {
-            public bool $armed = true;
-            private int $stores = 0;
-
-            public function onEvent($eventname, $bean)
-            {
-                if ($this->armed && ++$this->stores === 2) {
-                    R::exec('ROLLBACK');
-                    throw new \RuntimeException('boom');
-                }
-            }
-        };
-        R::getRedBean()->addEventListener('update', $observer);
-
-        // Fluid mode makes R::exec() swallow a failed ROLLBACK (it treats SQLSTATE HY000 as a
-        // missing table), so only a frozen schema, as in production, reproduces the failure.
-        R::freeze(true);
-
-        try {
-            $this->expectExceptionMessage('boom');
-            save(populate_bean("---\nslug: taken\n---\nNew."), ['finalize_slug' => true]);
-        } finally {
-            R::freeze(false);
-            $observer->armed = false;
-        }
-    }
-
     public function testAFailedCreateCanBeRetriedAsAnInsert(): void
     {
         $this->seedTakenSlug();
@@ -163,7 +131,7 @@ class PostSaveTest extends TestCase
         try {
             save($bean, ['finalize_slug' => true]);
             $this->fail('The second store should have thrown.');
-        } catch (\RedBeanPHP\RedException\SQL) {
+        } catch (SQL) {
             R::exec('DROP TRIGGER post_block_update');
         }
 
@@ -176,6 +144,79 @@ class PostSaveTest extends TestCase
 
         $this->assertSame(2, R::count('post'));
         $this->assertSame('taken-' . $bean->id, $bean->slug);
+    }
+
+    public function testAFailedEditPutsTheSlugAndBodyBackButKeepsTheId(): void
+    {
+        $this->seedTakenSlug();
+        $mine = populate_bean("---\nslug: mine\n---\nMine.");
+        $id = (int) R::store($mine);
+
+        // Only the finalised slug (`taken-<id>`) is refused, so the first store of the
+        // edit succeeds and the second one, written by finalize_slug(), throws.
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post WHEN NEW.slug LIKE 'taken-%' BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        $mine->slug = 'taken';
+        $mine->body = "---\nslug: taken\n---\nMine, edited.";
+        $edited_body = $mine->body;
+
+        try {
+            save($mine, ['finalize_slug' => true]);
+            $this->fail('The second store should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER post_block_update');
+        }
+
+        $this->assertSame($id, (int) $mine->id);
+        $this->assertSame('taken', $mine->slug);
+        $this->assertSame($edited_body, $mine->body);
+        $this->assertSame('mine', R::load('post', $id)->slug);
+    }
+
+    public function testASubscriberThatThrowsDoesNotFailACommittedSave(): void
+    {
+        $later = [];
+        on('post.created', function (): void {
+            throw new \RuntimeException('subscriber broke');
+        });
+        on('post.published', function () use (&$later): void {
+            $later[] = 'published';
+        });
+
+        $log = tempnam(sys_get_temp_dir(), 'lamb-log');
+        $previous_log = ini_set('error_log', $log);
+        try {
+            $bean = populate_bean('A status.');
+            save($bean, ['notify' => true]);
+        } finally {
+            ini_set('error_log', (string) $previous_log);
+        }
+
+        $this->assertSame(1, R::count('post'));
+        $this->assertNotEmpty($bean->id);
+        $this->assertSame(['published'], $later, 'The next subscriber still runs.');
+        $this->assertStringContainsString('subscriber broke', (string) file_get_contents($log));
+        unlink($log);
+    }
+
+    public function testAFailedSlugChangeRedirectRollsTheSaveBack(): void
+    {
+        $redirect = R::dispense('redirect');
+        $redirect->from_slug = '';
+        $redirect->to_url = '';
+        R::store($redirect);
+        R::exec('DELETE FROM redirect');
+        R::exec("CREATE TRIGGER redirect_block_insert BEFORE INSERT ON redirect BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        $bean = populate_bean("---\nslug: new\n---\nBody.");
+
+        try {
+            save($bean, ['redirect_on_slug_change' => true, 'old_slug' => 'old']);
+            $this->fail('The redirect write should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER redirect_block_insert');
+        }
+
+        $this->assertSame(0, R::count('post'));
     }
 
     public function testWithoutFinalizeSlugACollidingSlugIsLeftAsIs(): void

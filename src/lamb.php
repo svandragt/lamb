@@ -761,6 +761,46 @@ function set_option(OODBBean $bean, mixed $value): void
 }
 
 /**
+ * Runs $fn in one write transaction: BEGIN IMMEDIATE, $fn, COMMIT.
+ *
+ * When a transaction is already open (SQLite has no nested ones) $fn joins it
+ * and the outer caller commits or rolls back. Otherwise a throw rolls the
+ * transaction back, unless the engine already ended it, and the original
+ * exception is rethrown whatever the rollback does.
+ *
+ * Raw statements, not R::begin(): that is a no-op unless the schema is frozen,
+ * and the transaction must hold in either mode.
+ *
+ * @template T
+ * @param callable(): T $fn The writes to make atomic.
+ * @return T Whatever $fn returns.
+ * @throws \Throwable Whatever $fn or the COMMIT throws.
+ */
+function with_write_transaction(callable $fn): mixed
+{
+    if (R::getPDO()?->inTransaction()) {
+        return $fn();
+    }
+
+    R::exec('BEGIN IMMEDIATE');
+    try {
+        $result = $fn();
+        R::exec('COMMIT');
+
+        return $result;
+    } catch (\Throwable $e) {
+        if (R::getPDO()?->inTransaction()) {
+            try {
+                R::exec('ROLLBACK');
+            } catch (SQL) {
+                // A failed rollback must not replace the failure the caller needs to see.
+            }
+        }
+        throw $e;
+    }
+}
+
+/**
  * Returns the SQL fragment and bound parameter that exclude posts scheduled for
  * the future. A post is publicly visible only once its `created` date has arrived.
  *

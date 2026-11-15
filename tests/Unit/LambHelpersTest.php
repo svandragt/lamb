@@ -15,6 +15,7 @@ use function Lamb\permalink_path;
 use function Lamb\post_has_slug;
 use function Lamb\post_path;
 use function Lamb\set_option;
+use function Lamb\with_write_transaction;
 
 class LambHelpersTest extends TestCase
 {
@@ -309,6 +310,107 @@ class LambHelpersTest extends TestCase
             $this->assertSame($bean->slug, post_has_slug($bean->slug), 'Logged-in author must reach their slugged scheduled post');
         } finally {
             $_SESSION = [];
+        }
+    }
+
+    // with_write_transaction
+
+    private function inTransaction(): bool
+    {
+        return R::getPDO()->inTransaction();
+    }
+
+    private function storeProbe(): void
+    {
+        R::store(R::dispense('writeprobe'));
+    }
+
+    public function testWithWriteTransactionCommitsAndReturnsTheResult(): void
+    {
+        R::wipe('writeprobe');
+
+        $result = with_write_transaction(function (): string {
+            $this->storeProbe();
+
+            return 'done';
+        });
+
+        $this->assertSame('done', $result);
+        $this->assertSame(1, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testWithWriteTransactionRollsBackAndRethrowsTheOriginalException(): void
+    {
+        R::wipe('writeprobe');
+        $thrown = new \RuntimeException('original');
+
+        try {
+            with_write_transaction(function () use ($thrown): void {
+                $this->storeProbe();
+                throw $thrown;
+            });
+            $this->fail('The exception should have propagated.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame($thrown, $e);
+        }
+
+        $this->assertSame(0, R::count('writeprobe'));
+        $this->assertFalse($this->inTransaction());
+    }
+
+    public function testWithWriteTransactionRethrowsTheOriginalWhenTheCallableEndedTheTransaction(): void
+    {
+        R::wipe('writeprobe');
+        // A frozen schema, as in production, is where a ROLLBACK with nothing to roll
+        // back raises; fluid mode swallows it.
+        R::freeze(true);
+
+        try {
+            with_write_transaction(function (): void {
+                $this->storeProbe();
+                R::exec('ROLLBACK');
+                throw new \RuntimeException('original');
+            });
+            $this->fail('The exception should have propagated.');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('original', $e->getMessage());
+        } finally {
+            R::freeze(false);
+        }
+
+        $this->assertSame(0, R::count('writeprobe'));
+    }
+
+    public function testWithWriteTransactionJoinsAnOpenTransaction(): void
+    {
+        R::wipe('writeprobe');
+        R::exec('BEGIN IMMEDIATE');
+
+        try {
+            with_write_transaction(fn () => $this->storeProbe());
+
+            $this->assertTrue($this->inTransaction(), 'The outer transaction is still open.');
+        } finally {
+            R::exec('ROLLBACK');
+        }
+
+        $this->assertSame(0, R::count('writeprobe'), 'Nothing was committed on the outer transaction\'s behalf.');
+    }
+
+    public function testWithWriteTransactionLeavesAnOpenTransactionToTheOuterCallerWhenItThrows(): void
+    {
+        R::exec('BEGIN IMMEDIATE');
+
+        try {
+            with_write_transaction(function (): void {
+                throw new \RuntimeException('inner');
+            });
+            $this->fail('The exception should have propagated.');
+        } catch (\RuntimeException) {
+            $this->assertTrue($this->inTransaction(), 'Only the owner of the transaction rolls it back.');
+        } finally {
+            R::exec('ROLLBACK');
         }
     }
 }
