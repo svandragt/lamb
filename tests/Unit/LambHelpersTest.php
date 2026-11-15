@@ -320,14 +320,37 @@ class LambHelpersTest extends TestCase
         return R::getPDO()->inTransaction();
     }
 
+    /**
+     * Creates `writeprobe` (fluid mode only) and empties it, so a test can freeze the
+     * schema without the table missing and a count means "committed rows".
+     */
+    private function resetProbe(): void
+    {
+        R::store(R::dispense('writeprobe'));
+        R::wipe('writeprobe');
+    }
+
     private function storeProbe(): void
     {
         R::store(R::dispense('writeprobe'));
     }
 
+    public function testARawBeginImmediateOpensATransactionThePdoReports(): void
+    {
+        // with_write_transaction() asks the PDO whether a transaction is open, so a
+        // driver that does not report one for a raw BEGIN must fail here, not in production.
+        R::exec('BEGIN IMMEDIATE');
+        try {
+            $this->assertTrue($this->inTransaction());
+        } finally {
+            R::exec('ROLLBACK');
+        }
+        $this->assertFalse($this->inTransaction());
+    }
+
     public function testWithWriteTransactionCommitsAndReturnsTheResult(): void
     {
-        R::wipe('writeprobe');
+        $this->resetProbe();
 
         $result = with_write_transaction(function (): string {
             $this->storeProbe();
@@ -342,7 +365,7 @@ class LambHelpersTest extends TestCase
 
     public function testWithWriteTransactionRollsBackAndRethrowsTheOriginalException(): void
     {
-        R::wipe('writeprobe');
+        $this->resetProbe();
         $thrown = new \RuntimeException('original');
 
         try {
@@ -361,7 +384,7 @@ class LambHelpersTest extends TestCase
 
     public function testWithWriteTransactionRethrowsTheOriginalWhenTheCallableEndedTheTransaction(): void
     {
-        R::wipe('writeprobe');
+        $this->resetProbe();
         // A frozen schema, as in production, is where a ROLLBACK with nothing to roll
         // back raises; fluid mode swallows it.
         R::freeze(true);
@@ -382,33 +405,19 @@ class LambHelpersTest extends TestCase
         $this->assertSame(0, R::count('writeprobe'));
     }
 
-    public function testWithWriteTransactionJoinsAnOpenTransaction(): void
+    public function testWithWriteTransactionRefusesToRunInsideAnOpenTransaction(): void
     {
-        R::wipe('writeprobe');
+        $called = false;
         R::exec('BEGIN IMMEDIATE');
 
         try {
-            with_write_transaction(fn () => $this->storeProbe());
-
-            $this->assertTrue($this->inTransaction(), 'The outer transaction is still open.');
-        } finally {
-            R::exec('ROLLBACK');
-        }
-
-        $this->assertSame(0, R::count('writeprobe'), 'Nothing was committed on the outer transaction\'s behalf.');
-    }
-
-    public function testWithWriteTransactionLeavesAnOpenTransactionToTheOuterCallerWhenItThrows(): void
-    {
-        R::exec('BEGIN IMMEDIATE');
-
-        try {
-            with_write_transaction(function (): void {
-                throw new \RuntimeException('inner');
+            with_write_transaction(function () use (&$called): void {
+                $called = true;
             });
-            $this->fail('The exception should have propagated.');
-        } catch (\RuntimeException) {
-            $this->assertTrue($this->inTransaction(), 'Only the owner of the transaction rolls it back.');
+            $this->fail('A LogicException should have been thrown.');
+        } catch (\LogicException) {
+            $this->assertFalse($called);
+            $this->assertTrue($this->inTransaction(), 'The outer transaction is left to its owner.');
         } finally {
             R::exec('ROLLBACK');
         }

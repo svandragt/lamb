@@ -851,7 +851,14 @@ function emit(string $event, OODBBean $bean): void
         try {
             $subscriber($bean);
         } catch (\Throwable $e) {
-            error_log(sprintf('%s subscriber failed: %s', $event, $e->getMessage()));
+            error_log(sprintf(
+                '%s subscriber failed: %s: %s in %s:%d',
+                $event,
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
         }
     }
 }
@@ -912,9 +919,9 @@ function register_default_subscribers(): void
  * transaction, so a failed second store rolls the first back instead of leaving
  * a row behind for a resubmit to duplicate (#970). The rollback does not catch
  * the failure: each call site flashes its own message and decides what to do, so
- * the RedException\SQL propagates. The bean comes back with the slug and body it
- * had before the call, and a new bean without the id the failed save gave it,
- * ready to be saved again. The events run after the commit.
+ * the RedException\SQL propagates. The bean comes back with the properties it
+ * had before the call (a new one without the id the failed save gave it), ready
+ * to be saved again. The events run after the commit.
  *
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
@@ -932,14 +939,12 @@ function save(OODBBean $bean, array $context = []): void
     ];
 
     $is_new = empty($bean->id);
+    $before = $bean->export();
 
     // Before the store: feed_locked is a column on the row being written.
     if ($context['lock_if_feed_sourced'] && !empty($bean->feeditem_uuid)) {
         $bean->feed_locked = 1;
     }
-
-    $slug_before = $bean->slug;
-    $body_before = $bean->body;
 
     try {
         with_write_transaction(function () use ($bean, $context): void {
@@ -962,13 +967,14 @@ function save(OODBBean $bean, array $context = []): void
             }
         });
     } catch (\Throwable $e) {
-        // finalize_slug() rewrote these in memory, but the rollback restored the row.
-        $bean->slug = $slug_before;
-        $bean->body = $body_before;
-        if ($is_new) {
-            // The rolled-back row is gone: forget its id, so a retry inserts
-            // instead of updating nothing.
-            $bean->id = 0;
+        // The rollback restored the row, not the bean: put back what save() changed
+        // (feed_locked, the finalised slug and body, a new bean's minted id, which
+        // makes a retry insert instead of updating nothing).
+        foreach (array_keys(array_diff_key($bean->export(), $before)) as $name) {
+            unset($bean->$name);
+        }
+        foreach ($before as $name => $value) {
+            $bean->$name = $value;
         }
         throw $e;
     }

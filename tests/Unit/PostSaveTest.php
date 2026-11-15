@@ -187,15 +187,38 @@ class PostSaveTest extends TestCase
         try {
             $bean = populate_bean('A status.');
             save($bean, ['notify' => true]);
+            $logged = (string) file_get_contents($log);
         } finally {
             ini_set('error_log', (string) $previous_log);
+            unlink($log);
         }
 
         $this->assertSame(1, R::count('post'));
         $this->assertNotEmpty($bean->id);
         $this->assertSame(['published'], $later, 'The next subscriber still runs.');
-        $this->assertStringContainsString('subscriber broke', (string) file_get_contents($log));
-        unlink($log);
+        $this->assertStringContainsString('post.created', $logged);
+        $this->assertStringContainsString('RuntimeException', $logged);
+        $this->assertStringContainsString('subscriber broke', $logged);
+        $this->assertStringContainsString('PostSaveTest.php', $logged);
+    }
+
+    public function testAFailedSaveRestoresEveryPropertyItSet(): void
+    {
+        $this->seedTakenSlug();
+        R::exec("CREATE TRIGGER post_block_insert BEFORE INSERT ON post BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        $bean = populate_bean('Fresh.');
+        $bean->feeditem_uuid = 'uuid-1';
+        $before = $bean->export();
+
+        try {
+            save($bean, ['lock_if_feed_sourced' => true]);
+            $this->fail('The store should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER post_block_insert');
+        }
+
+        // feed_locked is set before the store; it must not outlive the failed save.
+        $this->assertSame($before, $bean->export());
     }
 
     public function testAFailedSlugChangeRedirectRollsTheSaveBack(): void

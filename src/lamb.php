@@ -763,10 +763,11 @@ function set_option(OODBBean $bean, mixed $value): void
 /**
  * Runs $fn in one write transaction: BEGIN IMMEDIATE, $fn, COMMIT.
  *
- * When a transaction is already open (SQLite has no nested ones) $fn joins it
- * and the outer caller commits or rolls back. Otherwise a throw rolls the
- * transaction back, unless the engine already ended it, and the original
- * exception is rethrown whatever the rollback does.
+ * SQLite has no nested transactions and a caller that joined an outer one could
+ * not know whether its writes were committed, so a transaction that is already
+ * open is a programming error. A throw rolls the transaction back and the
+ * original exception is rethrown, whatever the rollback does (it fails when the
+ * engine already ended the transaction).
  *
  * Raw statements, not R::begin(): that is a no-op unless the schema is frozen,
  * and the transaction must hold in either mode.
@@ -774,12 +775,13 @@ function set_option(OODBBean $bean, mixed $value): void
  * @template T
  * @param callable(): T $fn The writes to make atomic.
  * @return T Whatever $fn returns.
+ * @throws \LogicException When a transaction is already open.
  * @throws \Throwable Whatever $fn or the COMMIT throws.
  */
 function with_write_transaction(callable $fn): mixed
 {
     if (R::getPDO()?->inTransaction()) {
-        return $fn();
+        throw new \LogicException('with_write_transaction() cannot run inside an open transaction.');
     }
 
     R::exec('BEGIN IMMEDIATE');
@@ -789,12 +791,10 @@ function with_write_transaction(callable $fn): mixed
 
         return $result;
     } catch (\Throwable $e) {
-        if (R::getPDO()?->inTransaction()) {
-            try {
-                R::exec('ROLLBACK');
-            } catch (SQL) {
-                // A failed rollback must not replace the failure the caller needs to see.
-            }
+        try {
+            R::exec('ROLLBACK');
+        } catch (SQL) {
+            // A failed rollback must not replace the failure the caller needs to see.
         }
         throw $e;
     }

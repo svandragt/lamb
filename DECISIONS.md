@@ -147,7 +147,7 @@ Storage follows the existing `data/cache/` convention (already gitignored, alrea
 
 The conversion is deliberately incremental: this decision lands the funnel with a single call site converted (`Response\apply_checkbox_toggle()`, an existing post with an empty context, which must not notify). The other eight sites still call `finalize_and_store_post()`/`notify_post_subscribers()` directly and convert one commit at a time behind the same green suite; `post.deleted`/`post.restored` and `redirect_on_slug_change` arrive with the sites that need them. The exit criterion — `grep -rn 'notify_post_subscribers\|finalize_and_store_post' src/` hitting only `src/post.php` — is the end state of the whole conversion, not of this first step. (Done: every site now calls `save()`, `finalize_and_store_post()` is deleted, and the grep finds neither name.)
 
-**Consequences:** The flag-to-event matrix is executable (`tests/Unit/PostSaveTest.php`) rather than a comment. Until every site is converted, two ways to save a post coexist, and the funnel's event set grows as sites move onto it. Part of #692 / #684 (D1).
+**Consequences:** The flag-to-event matrix is executable (`tests/Unit/PostSaveTest.php`) rather than a comment. While sites were being converted, two ways to save a post coexisted; every site now calls `save()` and `finalize_and_store_post()` is removed. Part of #692 / #684 (D1).
 
 ---
 
