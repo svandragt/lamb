@@ -1570,6 +1570,11 @@ function respond_micropub(): void
         'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
     ]);
 
+    // The spec forbids sending the token in both places (micropub.rocks test 805).
+    if (bearer_token($lcHeaders['authorization'] ?? '') !== null && isset($_POST['access_token'])) {
+        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
+    }
+
     $adapter = new LambMicropubAdapter();
     if (mp_debug_enabled()) {
         $adapter->logger = mp_adapter_logger();
@@ -1798,6 +1803,27 @@ function respond_micropub_media(mixed $args = null): void
 }
 
 /**
+ * The Bearer token in an Authorization header value.
+ *
+ * Other schemes (Basic, say) and an empty value carry no token; the adapter
+ * then falls back to the body, so callers must treat them the same way.
+ *
+ * @param string $authHeader The Authorization header value, or ''.
+ * @return string|null The token, or null when the header carries none.
+ * @throws void
+ */
+function bearer_token(string $authHeader): ?string
+{
+    if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
+        $token = trim($m[1]);
+
+        return $token === '' ? null : $token;
+    }
+
+    return null;
+}
+
+/**
  * Reject a media request unless its bearer token is valid and carries the create scope.
  *
  * Ends the request with a JSON error when it is not.
@@ -1807,10 +1833,7 @@ function respond_micropub_media(mixed $args = null): void
  */
 function authorize_media_request(string $authHeader): void
 {
-    $token = null;
-    if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
-        $token = trim($m[1]);
-    }
+    $token = bearer_token($authHeader);
 
     if (!$token) {
         // No credentials supplied: bare Bearer challenge, no error code (RFC 6750 §3.1).
