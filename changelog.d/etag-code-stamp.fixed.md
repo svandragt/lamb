@@ -1,0 +1,1 @@
+- Pages no longer show stale HTML after an upgrade that changes templates or code, because the page ETag now changes with the installed release.

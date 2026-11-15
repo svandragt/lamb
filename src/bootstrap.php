@@ -854,13 +854,52 @@ function http_date(int $ts): string
  * invalidate cached pages. Folding both in means either source moving (even
  * within the same second) yields a different ETag (issue #279).
  *
- * @param int $contentTs Unix timestamp of the most recent content change (the response's last-modified).
- * @param int $configTs  Unix timestamp of the last config edit.
+ * The code stamp is a third component: an upgrade that changes templates,
+ * scripts or rendering code moves neither timestamp, so without it browsers and
+ * caches would keep serving stale HTML that links old asset paths.
+ *
+ * @param int    $contentTs Unix timestamp of the most recent content change (the response's last-modified).
+ * @param int    $configTs  Unix timestamp of the last config edit.
+ * @param string $codeHash  The code_stamp() value.
  * @return string A quoted ETag value.
  */
-function content_etag(int $contentTs, int $configTs): string
+function content_etag(int $contentTs, int $configTs, string $codeHash): string
 {
-    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '"';
+    return '"' . dechex($contentTs) . '-' . dechex($configTs) . '-' . $codeHash . '"';
+}
+
+/**
+ * Opaque 8-character stamp of the installed commit for the ETag, or '' when
+ * unknown. Hashed so the public header does not reveal the running version.
+ * Sources and known gaps: see AGENTS.md ("Conditional GET").
+ *
+ * @param string|null $root Repository root; null means this install's own.
+ * @return string
+ */
+function code_stamp(?string $root = null): string
+{
+    $git = ($root ?? dirname(__DIR__)) . '/.git';
+    $sha = '';
+    $head = trim((string) @file_get_contents($git . '/HEAD'));
+    if (str_starts_with($head, 'ref: ')) {
+        $ref = substr($head, 5);
+        $sha = trim((string) @file_get_contents($git . '/' . $ref));
+        if ($sha === '') {
+            foreach (explode("\n", (string) @file_get_contents($git . '/packed-refs')) as $line) {
+                $line = rtrim($line);
+                if (str_ends_with($line, ' ' . $ref)) {
+                    $sha = (string) strtok($line, ' ');
+                    break;
+                }
+            }
+        }
+    } else {
+        $sha = $head;
+    }
+    if (!preg_match('/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/', $sha)) {
+        $sha = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
+    }
+    return $sha === '' ? '' : substr(md5($sha), 0, 8);
 }
 
 /**

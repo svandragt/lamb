@@ -115,6 +115,8 @@ function latest_content_timestamp(): int
  * Emits ETag/Last-Modified validators for a cacheable response and short-circuits
  * with 304 Not Modified when the client already holds the current version.
  *
+ * The ETag also carries the code stamp; Last-Modified does not (AGENTS.md, "Conditional GET").
+ *
  * No-ops when there is no content timestamp. Callers must only use this for
  * cacheable (anonymous, non-error) GET/HEAD responses, before any output.
  * Validator model (why the ETag and Last-Modified diverge, #279): see
@@ -131,7 +133,7 @@ function send_304_if_current(int $contentTs, int $configTs): void
     if ($lastModifiedTs <= 0) {
         return;
     }
-    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs);
+    $etag = \Lamb\Bootstrap\content_etag($contentTs, $configTs, \Lamb\Bootstrap\code_stamp());
     header('ETag: ' . $etag);
     header('Last-Modified: ' . \Lamb\Bootstrap\http_date($lastModifiedTs));
     if (\Lamb\Bootstrap\client_has_current_version($_SERVER, $etag, $lastModifiedTs)) {
