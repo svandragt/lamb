@@ -356,10 +356,9 @@ class ResponsePostsTest extends TestCase
      *
      * A post already owns the slug `taken`, so finalize_slug() suffixes the new
      * post's slug and pins the changed value into its body — the second of
-     * finalize_and_store_post()'s two R::store() calls. Blocking only UPDATE lets
-     * the first store (INSERT) mint the id and makes the second throw, which is
-     * the #685 shape: the bean already has an id, so the notify guards that
-     * early-return on `!id` do not fire.
+     * save()'s two R::store() calls. Blocking only UPDATE lets
+     * the first store (INSERT) succeed and makes the second throw, so save() has
+     * a stored row to roll back (#685, #970).
      */
     private function submitCreateWithFailingSecondWrite(): void
     {
@@ -379,12 +378,9 @@ class ResponsePostsTest extends TestCase
         $_POST['contents']          = "---\nslug: taken\n---\n\nsee [elsewhere](https://other.example/a)\n";
 
         R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'database is locked'); END");
-        // R::begin() is a no-op unless the schema is frozen, as it is in production.
-        R::freeze(true);
         try {
             redirect_created();
         } finally {
-            R::freeze(false);
             R::exec('DROP TRIGGER IF EXISTS post_block_update');
         }
     }

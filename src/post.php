@@ -5,6 +5,7 @@ namespace Lamb\Post;
 use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 use SimplePie\Item;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
@@ -803,29 +804,6 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
- * Stores a freshly populated post and pins its finalized slug.
- *
- * Every create path follows the same idiom: store once to mint an id (the id is
- * part of any dedup suffix), then finalize_slug() — which reserves/suffixes the
- * slug and pins it into the body's front matter — and re-store only when that
- * changed something. Centralising it keeps the create paths (web form, Micropub,
- * feed ingestion) from drifting apart.
- *
- * @param OODBBean $bean An unsaved or partially-saved post bean.
- * @return void
- */
-function finalize_and_store_post(OODBBean $bean): void
-{
-    R::store($bean);
-    if (finalize_slug($bean)) {
-        R::store($bean);
-    }
-    // Funnel point for every create/edit path: bumps the monotonic content
-    // high-water mark latest_content_timestamp() reads (#669).
-    \Lamb\Response\bump_content_timestamp();
-}
-
-/**
  * The registry of post-lifecycle event subscribers, keyed by event name.
  *
  * A by-reference accessor so on() and reset_subscribers() mutate the one static
@@ -914,8 +892,7 @@ function register_default_subscribers(): void
  * The context flags carry the behaviours each site used to express by omitting a
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
- *    into the front matter (what every create path used to get from
- *    finalize_and_store_post(), now superseded by this funnel).
+ *    into the front matter (the step every create path runs after its first store).
  *  - `notify` — emit `post.published` after a successful store.
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
@@ -927,7 +904,8 @@ function register_default_subscribers(): void
  * Both stores run in one transaction, so a failed second store rolls the first
  * back instead of leaving a row behind for a resubmit to duplicate (#970). The
  * rollback does not catch the failure: each call site flashes its own message
- * and decides what to do, so the RedException\SQL propagates.
+ * and decides what to do, so the RedException\SQL propagates. A new bean comes
+ * back without the id and slug the failed save gave it, ready to be saved again.
  *
  * @param OODBBean $bean A populated post bean.
  * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
@@ -951,9 +929,12 @@ function save(OODBBean $bean, array $context = []): void
         $bean->feed_locked = 1;
     }
 
-    // R::begin() only opens a transaction on a frozen schema, which is what
-    // bootstrap_db() leaves the app in.
-    R::begin();
+    $slug_before = $bean->slug;
+    $body_before = $bean->body;
+
+    // Raw statements, not R::begin(): that is a no-op unless the schema is frozen,
+    // and the transaction must hold in either mode (see reserve_login_attempt()).
+    R::exec('BEGIN IMMEDIATE');
     try {
         R::store($bean);
         // finalize_slug() needs the minted id for any dedup suffix, so it runs after
@@ -961,15 +942,26 @@ function save(OODBBean $bean, array $context = []): void
         if ($context['finalize_slug'] && finalize_slug($bean)) {
             R::store($bean);
         }
-        R::commit();
+        R::exec('COMMIT');
     } catch (\Throwable $e) {
-        R::rollback();
+        try {
+            R::exec('ROLLBACK');
+        } catch (SQL) {
+            // A transaction the engine already ended has nothing left to roll back,
+            // and its error must not replace the failure the caller needs to see.
+        }
+        if ($is_new) {
+            // The rolled-back row is gone: forget its id and the slug and body that
+            // finalize_slug() rewrote, so a retry inserts instead of updating nothing.
+            $bean->id   = 0;
+            $bean->slug = $slug_before;
+            $bean->body = $body_before;
+        }
         throw $e;
     }
 
-    // save() is the write funnel, so the content high-water mark must advance
-    // here too — not only in finalize_and_store_post(), which the funnel does
-    // not call (#669). Without this, posts saved through save() (the #692 site
+    // save() is the write funnel, so it advances the content high-water mark
+    // itself (#669). Without this, posts saved through save() (the #692 site
     // and every #717 conversion) would never move latest_content_timestamp().
     \Lamb\Response\bump_content_timestamp();
 

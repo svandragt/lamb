@@ -145,8 +145,8 @@ function og_escape(string $html): string
  *
  * After a refused create (invalid front matter, a failed save) the text the
  * author posted comes back instead. A create that succeeds redirects, so a POST
- * that renders this form was refused or reported a failure. A failure reported
- * after the first of the two stores in Post\save() leaves a row behind.
+ * that renders this form was refused or reported a failure, and a failed save
+ * leaves no row behind (Post\save() rolls it back).
  *
  * @return string Escaped text string, or '' when neither is present.
  */

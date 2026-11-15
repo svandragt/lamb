@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
 
-use function Lamb\Bootstrap\ensure_schema;
 use function Lamb\Post\on;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\register_default_subscribers;
@@ -97,28 +96,86 @@ class PostSaveTest extends TestCase
         $this->assertStringContainsString('slug: shared-' . $second->id, (string) $second->body);
     }
 
-    public function testACreateAndAnEditStillPersistWhenTheSchemaIsFrozen(): void
+    public function testACreateAndAnEditStillPersist(): void
     {
-        // Production runs frozen, which is the only mode where R::begin() opens a
-        // transaction, so this is the shape the save() transaction really runs in (#970).
-        R::nuke();
-        ensure_schema();
-        R::freeze(true);
-        try {
-            $text = "---\nslug: shared\n---\nContent.";
-            save(populate_bean($text), ['finalize_slug' => true]);
-            $second = populate_bean($text);
-            save($second, ['finalize_slug' => true]);
+        $text = "---\nslug: shared\n---\nContent.";
+        save(populate_bean($text), ['finalize_slug' => true]);
+        $second = populate_bean($text);
+        save($second, ['finalize_slug' => true]);
 
-            $loaded = R::load('post', $second->id);
-            $loaded->body = "---\nslug: " . $loaded->slug . "\n---\nEdited.";
-            save($loaded);
-        } finally {
-            R::freeze(false);
-        }
+        $loaded = R::load('post', $second->id);
+        $loaded->body = "---\nslug: " . $loaded->slug . "\n---\nEdited.";
+        save($loaded);
 
         $this->assertSame(2, R::count('post'));
         $this->assertStringContainsString('Edited.', (string) R::load('post', $second->id)->body);
+    }
+
+    /**
+     * Seeds a post that owns the slug `taken`, so a create with that slug and
+     * finalize_slug stores twice: an INSERT, then an UPDATE that suffixes the slug.
+     */
+    private function seedTakenSlug(): void
+    {
+        R::store(populate_bean("---\nslug: taken\n---\nSeed."));
+    }
+
+    public function testARollbackThatFailsDoesNotReplaceTheOriginalException(): void
+    {
+        // The second store ends the transaction and throws, so save()'s own ROLLBACK
+        // fails with "no transaction is active"; the caller must still see 'boom'.
+        // RedBeanPHP cannot remove a listener, so the flag turns this one inert after the test.
+        $this->seedTakenSlug();
+        $observer = new class implements \RedBeanPHP\Observer {
+            public bool $armed = true;
+            private int $stores = 0;
+
+            public function onEvent($eventname, $bean)
+            {
+                if ($this->armed && ++$this->stores === 2) {
+                    R::exec('ROLLBACK');
+                    throw new \RuntimeException('boom');
+                }
+            }
+        };
+        R::getRedBean()->addEventListener('update', $observer);
+
+        // Fluid mode makes R::exec() swallow a failed ROLLBACK (it treats SQLSTATE HY000 as a
+        // missing table), so only a frozen schema, as in production, reproduces the failure.
+        R::freeze(true);
+
+        try {
+            $this->expectExceptionMessage('boom');
+            save(populate_bean("---\nslug: taken\n---\nNew."), ['finalize_slug' => true]);
+        } finally {
+            R::freeze(false);
+            $observer->armed = false;
+        }
+    }
+
+    public function testAFailedCreateCanBeRetriedAsAnInsert(): void
+    {
+        $this->seedTakenSlug();
+        R::exec("CREATE TRIGGER post_block_update BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, 'boom'); END");
+        $bean = populate_bean("---\nslug: taken\n---\nNew.");
+        $original_body = $bean->body;
+
+        try {
+            save($bean, ['finalize_slug' => true]);
+            $this->fail('The second store should have thrown.');
+        } catch (\RedBeanPHP\RedException\SQL) {
+            R::exec('DROP TRIGGER post_block_update');
+        }
+
+        // The rolled-back row is gone, so the bean must not still point at its id.
+        $this->assertEmpty($bean->id);
+        $this->assertSame('taken', $bean->slug);
+        $this->assertSame($original_body, $bean->body);
+
+        save($bean, ['finalize_slug' => true]);
+
+        $this->assertSame(2, R::count('post'));
+        $this->assertSame('taken-' . $bean->id, $bean->slug);
     }
 
     public function testWithoutFinalizeSlugACollidingSlugIsLeftAsIs(): void

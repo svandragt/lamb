@@ -816,7 +816,7 @@ class LambRestoreTest extends TestCase
     public function testASlugCollisionRewritesTheSlugWithoutRedatingThePost(): void
     {
         // finalize_slug() suffixes the slug and rewrites the body's front
-        // matter, so finalize_and_store_post() stores a second time. The
+        // matter, so save() stores a second time. The
         // manifest's dates must survive that store, not be re-stamped.
         $local = R::dispense('post');
         $local->slug = 'hello-world';

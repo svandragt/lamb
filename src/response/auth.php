@@ -372,8 +372,9 @@ function login_throttle_retry_after(string $ip, int $now): int
  * Any throw in the critical section rolls the transaction back in `finally`, so
  * the shared connection is never left mid-transaction to poison later queries.
  *
- * R::begin()/R::commit() are no-ops in this app's fluid mode (see
- * RedBeanPHP\Facade::begin()), so the lock is taken with a raw statement.
+ * R::begin() only opens a transaction on a frozen schema (see
+ * RedBeanPHP\Facade::begin()), so the lock is taken with a raw BEGIN, which
+ * holds the transaction in either mode.
  *
  * @param string $ip  Client address.
  * @param int    $now Current Unix timestamp.
