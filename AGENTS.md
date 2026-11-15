@@ -9,6 +9,9 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - Check whether a docs page exists for the feature and update it if needed.
 - When adding new user-facing behaviour, consider whether a new docs page is warranted.
 - Ensure docs pages that are topically related link to each other via a "Related" section.
+- Explain each topic fully on one home page. Every other page keeps the one sentence
+  its reader needs there and links to the home page, with an anchor where one exists
+  (for example, `docs/import-export.md` for the importers' shared steps).
 - Describe the behaviour of the release the docs ship in. For a deprecation, write
   "works until 0.N, then …", not the behaviour after removal.
 - When a sentence claims behaviour, find the code line that produces it and cite

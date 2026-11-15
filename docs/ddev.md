@@ -23,6 +23,8 @@ ddev php make-password.php hackme
 ddev restart
 ```
 
+[Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password) explains the password hash.
+
 ## Workflow
 
 - Run `ddev start`. The output will tell you where you can open the project.

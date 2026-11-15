@@ -11,11 +11,15 @@ You need a working Docker setup and a checkout of the repository.
 
 ## Run the release image
 
-`.docker/Dockerfile.release` bundles PHP, the webserver (FrankenPHP/Caddy), and all dependencies into a single production container. Build it from a checkout, then run it:
+`.docker/Dockerfile.release` bundles PHP, the webserver (FrankenPHP/Caddy), and all dependencies into a single production container. Build it from a checkout, then run it. The container reads the hash from `LAMB_LOGIN_PASSWORD`; [Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password) explains the hash:
 
 ```shell
-# Generate a password hash on any machine with PHP, or inside a throwaway container:
-$ docker run --rm php:8.5-cli php -r "echo base64_encode(password_hash('hackme', PASSWORD_DEFAULT));"
+# Clone the repository
+$ git clone --branch release https://github.com/svandragt/lamb && cd lamb
+
+# Make the password hash with make-password.php (see Login security). With no PHP on
+# the host, run the script in a throwaway container; -w /tmp keeps the .env it writes there:
+$ docker run --rm -v "$PWD/make-password.php:/make-password.php:ro" -w /tmp php:8.5-cli php /make-password.php '<your-password>'
 
 # Build the image (run from the repository root)
 $ docker build -f .docker/Dockerfile.release -t lamb .

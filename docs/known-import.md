@@ -7,7 +7,7 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [Known CMS](https://withknown.com) RSS export and feeds each published item through Lamb's existing post-creation pipeline. The importer is fully offline — no credentials, no API access — and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. The importer refuses to run without it.
+This importer is experimental. [Import & export]({{ site.baseurl }}{% link import-export.md %}) covers the `--experimental` flag and what the three importers share.
 
 ## What you get
 
@@ -17,8 +17,8 @@ Lamb ships a CLI script that reads a [Known CMS](https://withknown.com) RSS expo
 - **Status detection.** ~45% of a typical Known export is title-less "status update" posts, where Known synthesised a title from the post body. These are detected two ways — the title ends in `...`, or the body carries a microformats2 `p-name` class — and are imported as native, titleless Lamb status posts (permalink `/status/<id>`) rather than pinning the synthetic title. Posts with a real title keep it, and pin the `<link>` path leaf as their slug via front matter.
 - **Bookmarks.** Items whose `<link>` points at an offsite page (not the export's own host) are bookmarks. A markdown link line — `[title](url)` — is prepended to the body, mirroring how Known rendered them, and the title is kept in front matter (unlike status posts).
 - **Tags.** Known's `<category>#tag</category>` elements become inline `#hashtags` at the end of the body, same as WordPress categories/tags. Leading `#`, case and duplicates are normalised away, and any tag already present as an inline hashtag in the converted body (case-insensitively) is dropped rather than duplicated — Known posts often carry the same tag both ways. Known's structural tags are not imported at all: `#status` just marks a titleless status update (which Lamb models as a post without a title) and `#uncategorized` means no category.
-- Every image referenced in the body is downloaded into `src/assets/YYYY/MM/` (using the post's own creation date), re-encoded to WebP and scaled down to the upload pipeline's max edge ([details](media.md)), and the body links are rewritten to point at the local copies — the same image pipeline the WordPress importer uses. `<enclosure>` elements are ignored: they always duplicate an image already inline in the body. `<video>` elements and links to `.mp4`, `.webm` or `.mov` files in the body are downloaded unchanged and `<video>` elements become embedded players (a `poster` image is not imported), as described in [WordPress import](wordpress-import.md).
-- Imported posts are **silent**: the importer calls the low-level save pipeline directly, so no outbound webmentions or WebSub hub pings are emitted. The content already exists somewhere else.
+- Every image referenced in the body is downloaded and converted as [Import & export]({{ site.baseurl }}{% link import-export.md %}#after-the-import) describes, and the body links are rewritten to point at the local copies. `<enclosure>` elements are ignored: they always duplicate an image already inline in the body. `<video>` elements and links to `.mp4`, `.webm` or `.mov` files in the body are downloaded unchanged and `<video>` elements become embedded players (a `poster` image is not imported), as described in [WordPress import]({{ site.baseurl }}{% link wordpress-import.md %}).
+- An import run is silent: it sends no webmentions or WebSub pings. See [Import & export]({{ site.baseurl }}{% link import-export.md %}#import-runs-are-silent).
 
 ## Exporting from Known
 
@@ -26,37 +26,24 @@ In Known, go to **Site Configuration → Import/Export**, and export an **RSS** 
 
 ## Running the importer
 
-From the project root:
+Run it as [Import & export]({{ site.baseurl }}{% link import-export.md %}) describes, with the path to your `.rss` file:
 
 ```bash
 # Preview what would be imported without writing anything
-bin/lamb import known /path/to/export.rss --dry-run --experimental
+sudo -u www-data bin/lamb import known /path/to/export.rss --dry-run --experimental
 
 # Run it for real
-bin/lamb import known /path/to/export.rss --experimental
+sudo -u www-data bin/lamb import known /path/to/export.rss --experimental
 ```
 
-The importer prints one line per item (`imported:`, `would import:`, `replaced:` or `would replace:`) plus a final summary with the totals (created, existed, skipped). An item that was already imported in a previous run is recognised by its `import_uuid` (md5 of `'known-' + guid`) and left alone.
-
-### `--replace`
-
-By default, an item that was already imported is left alone on a second run — the importer counts it as `existed` and moves on. Pass `--replace` to re-apply it instead: body, title, slug, `created`/`updated` and draft state are all set back to what the export describes. The post keeps its id and its `import_uuid`, so its permalink and every redirect pointing at it still work.
-
-This is deliberately total, not a merge. Local edits made to an imported post since the import are lost when you `--replace` it — that is what "replace" means. The case it exists for is Known's HTML→Markdown conversion: when a fix lands for something that came across badly, re-run the same export with `--replace` and take the new conversion.
-
-Images and videos already downloaded by an earlier run are not fetched again: the downloader names each file after `sha1(<source url>)` and returns the existing file when it is already on disk.
-
-Imported posts are treated as **your own content**, not as syndicated feed items: they carry no "Via …" attribution line, and they take part in webmentions and WebSub exactly like a post you wrote in Lamb. The import run itself stays silent — nothing is pinged for content that was published years ago — but editing an imported post later notifies the way any other edit does.
+The importer recognises an item it imported before by its `import_uuid`, the md5 of `'known-' + guid`. Add `--replace` to re-apply those items instead, as [Replacing imported posts]({{ site.baseurl }}{% link import-export.md %}#replacing-imported-posts) explains.
 
 ## After the import
 
-The importer writes directly to the same database your site uses, so the posts are visible immediately. There is no separate review queue.
-
-A few things worth checking manually:
+The posts are visible at once, and [Import & export]({{ site.baseurl }}{% link import-export.md %}#after-the-import) covers what to check in `src/assets/`. Two things are specific to Known:
 
 - **Slugs and redirects.** Every post keeps the slug from its original `<link>` path leaf, written into front matter as `slug:`, so imported posts stay on their old URL. Status posts (synthetic-title detection above) keep the slug but get no `title:`. A post whose `<link>` carries no usable slug — an offsite bookmark, for example — falls through to a `/status/<id>` permalink instead. Either way, an automatic 301 redirect is created from **both** the old on-host `<link>` path (e.g. `/2020/old-slug`) and the old `<guid>` path (`/view/<hash>`) to the new local URL, so old links and any bookmarks to the `guid` permalink keep working.
 - **Bookmarks.** The bookmarked page's title and URL appear as a markdown link line at the top of the post body — edit it if you'd rather present it differently.
-- **Media.** Run a quick `git status` on `src/assets/` to see what was downloaded.
 
 ## Related
 

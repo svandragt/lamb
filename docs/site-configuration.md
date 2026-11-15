@@ -86,6 +86,14 @@ The settings page warns you if you save a `site_url` with a path. To run Lamb at
 `example.com/blog` today, give it its own subdomain — `blog.example.com` — and
 point `site_url` at that.
 
+## Timezone
+
+Servers are usually set to UTC, which may not be your timezone. Set yours once in the **Timezone** dropdown of the **Site** group on the **Configuration** tab at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock. The dropdown lists the [supported timezones](https://www.php.net/manual/en/timezones.php), for example `Europe/London`. It defaults to `UTC`.
+
+## Feed drafts
+
+Lamb saves posts it ingests from your feeds as drafts by default, to put authorship before syndication. To publish them instead, untick **Save posts from these feeds as drafts for review** in the **Feeds** group on the **Configuration** tab at `/settings`. The setting is stored as `feeds_draft`. [Drafts]({{ site.baseurl }}{% link drafts.md %}#feed-drafts) describes what a feed draft is and how to publish one.
+
 ## Related
 
 * [Setting up Cross-Posting]({{ site.baseurl }}{% link cross-posting.md %}#setup) requires site configuration changes.

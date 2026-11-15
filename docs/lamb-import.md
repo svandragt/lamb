@@ -7,18 +7,18 @@ parent: Import & export
 
 Lamb ships a CLI script that reads a [Lamb export](export.md) — the `.zip` that `/export` produces, or an already-unpacked copy of one — and restores every post and asset it describes. It's a Lamb-to-Lamb restore rather than a converter: it writes back exactly what you exported, through the same low-level pipeline every other importer uses. The importer works fully offline, with no credentials and no API access, and re-running it is safe.
 
-**Experimental.** This importer is still gathering real-world testing. Pass `--experimental` to `bin/lamb import` to run it. The importer refuses to run without it.
+This importer is experimental. [Import & export]({{ site.baseurl }}{% link import-export.md %}) covers the `--experimental` flag and what the three importers share.
 
 ## What you get
 
 - Lamb restores every post in the manifest: its body, front matter, slug, `created` and `updated` timestamps, and draft or trash state, exactly as recorded.
 - Lamb writes every asset the manifest lists back to `src/assets/YYYY/MM/`, at the same path it was exported from.
 - Re-running the importer on the same archive doesn't create duplicates. Lamb tags each restored post with an `import_uuid`, the md5 of `'lamb-' + origin + '#' + id`, where the origin is the site the archive came from. It leaves an item alone when that uuid is already present.
-- Imported posts are **silent**. The importer calls the low-level save pipeline directly, so it emits no outbound webmentions and no WebSub hub pings. The content already existed somewhere else.
+- An import run is silent: it sends no webmentions or WebSub pings. See [Import & export]({{ site.baseurl }}{% link import-export.md %}#import-runs-are-silent).
 
 ## Run the importer
 
-From the project root, as the web server user rather than your own shell user (see [NGINX configuration](nginx.md)):
+Run it as [Import & export]({{ site.baseurl }}{% link import-export.md %}) describes, with the path to the `.zip`:
 
 ```bash
 # Preview what the importer would restore, without writing anything
@@ -28,8 +28,6 @@ sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --dry-
 sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26.zip --experimental
 ```
 
-`data/lamb.db` runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the database. Run the importer as your own user and it leaves those sidecars owned by you; a read-only connection can never checkpoint them away, so every subsequent web request then fails with "attempt to write a readonly database" until someone changes the sidecars' owner (see [NGINX configuration](nginx.md)). `bin/lamb` checks the database's owner before opening it and refuses to run as the wrong user, rather than let this happen.
-
 An already-unpacked export directory works too. Pass its path instead of the `.zip`:
 
 ```bash
@@ -38,7 +36,7 @@ sudo -u www-data bin/lamb import lamb /path/to/lamb-export-2026-07-26/ --experim
 
 Reading a `.zip` uses PHP's `zip` extension, or its `phar` extension when `zip` is missing (the file name then needs an extension, such as `.zip`). If PHP has neither, the importer tells you to unzip the archive yourself and pass the directory.
 
-The importer prints one line per post (`imported:`, `would import:`, `replaced:`, or `would replace:`), plus a final summary with the totals for created, existed, and skipped, and a one-line asset tally of restored, skipped, and rejected.
+Besides the lines and summary described in [Import & export]({{ site.baseurl }}{% link import-export.md %}#run-an-importer), this importer prints a one-line asset tally of restored, skipped, and rejected.
 
 ### `--site-url=<url>`
 
@@ -48,18 +46,13 @@ Without either value, the importer still imports and still dedupes re-runs corre
 
 ### `--replace`
 
-By default, the importer leaves a post it already restored alone on a second run, matching it by `import_uuid`, counting it as `existed`, and moving on. Pass `--replace` to overwrite it instead. Lamb then sets the body, slug, `created` and `updated` timestamps, draft state, and trash state back to what the manifest records.
-
-This is deliberately total rather than a merge. You lose any local edits made to a restored post since you took the archive — that's what "replace" means. A restore that left a post published when the backup says it was trashed, or dated today instead of when you actually wrote it, wouldn't be much of a restore.
+Pass `--replace` to overwrite a post the importer already restored, as [Replacing imported posts]({{ site.baseurl }}{% link import-export.md %}#replacing-imported-posts) explains. Here it also sets the trash state back to what the manifest records. You lose any local edits made since you took the archive. A restore that left a post published when the backup says it was trashed, or dated today instead of when you actually wrote it, wouldn't be much of a restore.
 
 ## After the import
 
-The importer writes directly to the same database your site uses, so the posts are visible immediately. There's no separate review queue.
-
-A few things are worth checking manually:
+The posts are visible at once, and [Import & export]({{ site.baseurl }}{% link import-export.md %}#after-the-import) covers what to check in `src/assets/`. One thing is specific to a Lamb restore:
 
 - **Slugs.** Every post keeps the slug you exported it with. The one case Lamb can't restore is a post that had no slug to begin with, meaning a titleless status post. Its permalink was `/status/<its old id>`, and source ids can't be restored into a populated database, because a new row gets a new id. It comes back as a status post again, but at `/status/<new id>`, a different URL than before. Only the URL is affected: Lamb matches posts on the id recorded in the manifest rather than on their slug, so a slugless post still imports exactly once however often you re-run the importer.
-- **Media.** Run `git status` on `src/assets/` to see what the importer restored.
 
 ## Related
 

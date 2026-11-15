@@ -13,13 +13,7 @@ How you upgrade depends on how you installed Lamb. There is [more information ab
 
 `bin/upgrade` installs dependencies with [viv](https://github.com/svandragt/vivace) when it is on your `PATH`, and with Composer otherwise. If you already use Composer, you have nothing more to install.
 
-viv is optional and faster. It is a Composer-compatible installer that reads your existing `composer.json`/`composer.lock`. Use version 0.22.0 or later: older versions write vendor files that a web server running as another user can't read, so `bin/upgrade` uses Composer instead. To install viv:
-
-```
-cargo binstall --git https://github.com/svandragt/vivace vivace
-```
-
-Or download a release binary from the [releases page](https://github.com/svandragt/vivace/releases) (viv's releases are currently tagged as prereleases, so "latest release" links don't resolve — use the releases page). `bin/upgrade` prints which installer it uses. It stops with an error, without touching your checkout, if it finds neither.
+viv is optional and faster. It is a Composer-compatible installer that reads your existing `composer.json`/`composer.lock`. Use version 0.22.0 or later: older versions write vendor files that a web server running as another user can't read, so `bin/upgrade` uses Composer instead. [Local PHP setup]({{ site.baseurl }}{% link local-php-setup.md %}) shows how to install viv. `bin/upgrade` prints which installer it uses. It stops with an error, without touching your checkout, if it finds neither.
 
 Run the bundled upgrade script:
 
@@ -79,7 +73,7 @@ It's safe to run at any time: each migration checks whether it still has anythin
 
 One of these steps lists the settings 0.17 removed that your stored settings still hold, without changing them (see [Upgrading to 0.17](#upgrading-to-017)). Another migration adds `draft: true` to the front matter of every [feed draft]({{ site.baseurl }}{% link drafts.md %}) that lacks it. Without the line, editing a feed draft in Lamb publishes it.
 
-`bin/lamb migrate` also brings every stored post up to date, the same upgrade `bin/lamb upgrade-posts` runs on its own. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
+`bin/lamb migrate` also brings every stored post up to date. [`bin/lamb upgrade-posts`]({{ site.baseurl }}{% link upgrade-posts.md %}) runs only that part, for when that is all you need. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
 
 `bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
 
@@ -113,13 +107,9 @@ Rebuild the image from an updated checkout and recreate the container:
 git pull
 docker build -f .docker/Dockerfile.release -t lamb .
 docker stop lamb && docker rm lamb
-docker run -d --name lamb -p 80:80 \
-  -e LAMB_LOGIN_PASSWORD='<your-hash>' \
-  -v lamb-data:/app/data -v lamb-assets:/app/src/assets \
-  lamb
 ```
 
-The database and uploads live in the named volumes and survive the recreate.
+Then start the container again with the `docker run` command in [Docker]({{ site.baseurl }}{% link docker.md %}#run-the-release-image), using the same hash and the same volume names. The database and uploads live in the named volumes and survive the recreate.
 
 ## Upgrading to 0.16
 
@@ -140,5 +130,3 @@ The database and uploads live in the named volumes and survive the recreate.
 - [Docker]({{ site.baseurl }}{% link docker.md %})
 - [Cron Scheduled Tasks]({{ site.baseurl }}{% link cron-scheduled-tasks.md %})
 - [Upgrading stored posts]({{ site.baseurl }}{% link upgrade-posts.md %}): Bring every post's stored data up to date in one pass after upgrading Lamb.
-
-`bin/lamb migrate` and `bin/lamb upgrade-posts` overlap on purpose: `migrate` runs every outstanding one-off data change, including the post upgrade, in one command; `upgrade-posts` runs only the post upgrade, for when that's all you need.

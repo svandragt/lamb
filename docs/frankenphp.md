@@ -19,7 +19,7 @@ sudo -E frankenphp run
 
 ## Logins
 
-To allow logins, set the output of `php make-password.php hackme` (don't use hackme) as the `LAMB_LOGIN_PASSWORD` environment variable for the process:
+To allow logins, set the hash from [Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password) as the `LAMB_LOGIN_PASSWORD` environment variable for the process:
 
 ```shell
 export LAMB_LOGIN_PASSWORD='JDJ5JDEwJExMQm1j...GM5S2Q0VWY3Rk9sdXoyVVFkYTg3bDA1M'
@@ -30,7 +30,7 @@ The `-E` flag makes `sudo` pass the variable through. For a production host, set
 
 ## Writable directories
 
-The `data` and `src/assets` directories must be writable by the user FrankenPHP runs as. `data` holds the SQLite database; `src/assets` is the runtime upload directory used for images dropped into posts. Theme CSS and application JavaScript live elsewhere and do not need to be writable at runtime.
+The [`data` and `src/assets` directories must be writable]({{ site.baseurl }}{% link index.md %}#writable-directories) by the user FrankenPHP runs as.
 
 ## Caching static assets
 

@@ -64,7 +64,7 @@ Images and video sent via Micropub — both inline `photo` files on a post and f
 
 ## Server requirements
 
-Uploads require the directory `src/assets/` to be writable by the web server or PHP-FPM user.
+Uploads require [`src/assets/` to be writable]({{ site.baseurl }}{% link index.md %}#writable-directories) by the web server or PHP-FPM user.
 
 ### Upload size limits
 

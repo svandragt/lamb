@@ -9,13 +9,17 @@ Posts can be saved as drafts by adding `draft: true` to the front-matter.
 
 When logged in, all drafts are available from `/drafts`.
 
+## Preview links
+
 Each draft (and scheduled post) shows a **Preview** link next to its Edit button. The link carries an expiring token valid for 24 hours, so you can share it with someone who isn't logged in. A fresh token is issued whenever you save the post after the old one expires.
 
 A preview page tells search engines not to index or follow it, so an
 unpublished post shared this way does not turn up in search results — see
 [Search Engines]({{ site.baseurl }}{% link search-engines.md %}).
 
-Feed ingested posts are saved as drafts by default to prioritize authorship over syndication. Should you prefer, untick **Save posts from these feeds as drafts for review** in the **Feeds** group on the **Configuration** tab at `/settings` and they will be published instead.
+## Feed drafts
+
+Feed ingested posts are saved as drafts by default. [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#feed-drafts) shows how to publish them instead.
 
 A feed draft has `draft: true` in its front-matter, like any other draft. The edit form shows it, and saving the post keeps it a draft. To publish the post, remove the `draft: true` line. Feed drafts saved before this behaviour get the line when you run `bin/lamb migrate` — see [Upgrading]({{ site.baseurl }}{% link upgrading.md %}#data-migrations).
 

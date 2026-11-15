@@ -14,20 +14,9 @@ Update the `lamb.test` file to point to your preferred server_name, logs and doc
 
 ## PHP-FPM
 
-The `data` and `src/assets` directory must be writable by the user php-fpm runs under, this is usually `www-data`.
+### Writable directories
 
-`src/assets` is the runtime upload directory used for images and video dropped into posts. Theme CSS and application JavaScript live elsewhere and do not need to be writable at runtime.
-
-### Upload size limits
-
-PHP's defaults (`upload_max_filesize = 2M`, `post_max_size = 8M`) reject photos larger than 2&nbsp;MB, and will reject essentially all video. Raise them in your php.ini or FPM pool, for example:
-
-```text
-upload_max_filesize = 100M
-post_max_size = 100M
-```
-
-The shipped `snippets/lamb.conf` sets the matching NGINX limit (`client_max_body_size 100m;` — its default is only 1m). See [Media]({{ site.baseurl }}{% link media.md %}) for details.
+[`data` and `src/assets` must be writable]({{ site.baseurl }}{% link index.md %}#writable-directories) by the user php-fpm runs under, this is usually `www-data`:
 
 ```shell
 sudo chown $USER:www-data data -R
@@ -36,13 +25,11 @@ sudo chown $USER:www-data src/assets -R
 sudo chmod g+w src/assets -R
 ```
 
-This leaves `data/lamb.db` owned by your shell user, not `www-data`. Run `bin/lamb` (see [Lamb import](lamb-import.md) and [WordPress import](wordpress-import.md)) as the web server user instead of your own:
+### Running as the web server user
 
-```shell
-sudo -u www-data bin/lamb import wordpress /path/to/export.xml --experimental
-```
+This leaves `data/lamb.db` owned by your shell user, not `www-data`. Run `bin/lamb` (for example an [import]({{ site.baseurl }}{% link import-export.md %})) as the web server user instead of your own, as `sudo -u www-data bin/lamb <command>`.
 
-`bin/lamb` refuses to run as any other user and tells you so. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone changes the sidecars' owner. When that happens, Lamb stops with an error that names both files. To recover, change their owner to the web server user, then reload:
+`bin/lamb` refuses to run when `data/lamb.db` exists and is owned by another user, and tells you so. A fresh install has no database yet, so run the first command as the web server user. The database runs in WAL mode, and its `-wal`/`-shm` sidecar files inherit whichever user opens the connection; a read-only connection can't checkpoint them away, so a sidecar left behind by the wrong user makes every subsequent web request fail with "attempt to write a readonly database" until someone changes the sidecars' owner. When that happens, Lamb stops with an error that names both files. To recover, change their owner to the web server user, then reload:
 
 ```shell
 sudo chown www-data data/lamb.db-wal data/lamb.db-shm
@@ -50,13 +37,25 @@ sudo chown www-data data/lamb.db-wal data/lamb.db-shm
 
 Don't delete them: they can hold committed writes (a whole import, for example) that `lamb.db` does not have yet. If the error names the data directory instead, there are no sidecars to fix: make `data/` and `data/lamb.db` writable by the web server user.
 
-To allow logins, add the output of `HIDDEN=1 php make-password.php hackme` (don't use hackme) as an
-environment variable
+### Logins
+
+To allow logins, add the hash from [Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password) as an environment variable
 to `/etc/php/8.5/fpm/pool.d/www.conf` (replace `8.5` with your installed PHP version):
 
 ```text
 env[LAMB_LOGIN_PASSWORD] = JDJ5JDEwJExMQm1j...k9sdXoyVVFkYTg3bDA1M
 ```
+
+### Upload size limits
+
+Raise PHP's upload limits in your php.ini or FPM pool, for example:
+
+```text
+upload_max_filesize = 100M
+post_max_size = 100M
+```
+
+The shipped `snippets/lamb.conf` sets the matching NGINX limit (`client_max_body_size 100m;`). [Media]({{ site.baseurl }}{% link media.md %}#upload-size-limits) explains why the defaults are too low for photos and video.
 
 ## Caching static assets
 

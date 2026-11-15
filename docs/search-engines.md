@@ -74,7 +74,7 @@ Ordinary posts and pages carry neither, so nothing public changes.
 
 This matters most for preview links: they are meant to be shared with someone
 who is not logged in, which is exactly the way an unpublished post ends up in
-a search index. A preview link also expires after 24 hours.
+a search index. [Drafts]({{ site.baseurl }}{% link drafts.md %}#preview-links) explains how preview links expire.
 
 ### Overriding robots.txt
 

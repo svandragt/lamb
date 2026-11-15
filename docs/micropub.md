@@ -17,18 +17,7 @@ Lamb exposes a `/micropub` endpoint. Clients discover it via a `<link rel="micro
 
 Enter your canonical site URL, such as `https://example.com`, in the **Site URL** field of the **Site** group on the **Configuration** tab at `/settings`, then save.
 
-Lamb compares the identity in an IndieAuth token against this value to confirm the
-token was issued for *your* site and not someone else's. Until it is set, the
-Micropub endpoint refuses every token and logs
-`micropub: rejecting token, no site_url configured` to the PHP error log.
-
-Do not derive it from the request — that is exactly what this setting exists to
-avoid. You can also supply it as the `LAMB_SITE_URL` environment variable, which
-takes precedence over the setting.
-
-Give the domain on its own, with no path. Lamb serves from the root of a domain,
-so a value like `https://example.com/blog` cannot work — see
-[Troubleshooting](#troubleshooting).
+Until it is set, the Micropub endpoint refuses every token. Give the domain on its own, with no path. [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#site-url) explains why, and covers the `LAMB_SITE_URL` environment variable.
 
 ### 2. Add `rel="me"` identity links
 
@@ -87,7 +76,7 @@ A create or update whose `content` opens with a front-matter block that is not v
 
 ## Draft and scheduled post previews
 
-Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a secret preview token to the URL it returns (`?preview=…`). That link shows the unpublished post to anyone who has it — without logging in — and expires after 24 hours. The plain permalink (without the token) stays hidden until the post is published.
+Posts created with `post-status: draft` or a future `published` date are not publicly visible, so their permalink returns a 404 to anyone who isn't logged in. Because Micropub clients open the post URL right after creating it, Lamb appends a preview token to the URL it returns (`?preview=…`). [Drafts]({{ site.baseurl }}{% link drafts.md %}#preview-links) explains how preview links work. The plain permalink (without the token) stays hidden until the post is published.
 
 ## Troubleshooting
 
@@ -95,7 +84,7 @@ If a client can't connect — for example it reports "something went wrong setti
 
 The first thing to check is that `site_url` is set (see [Set your site URL](#1-set-your-site-url)); without it every token is refused, with a `no_site_url` reason in the log below.
 
-The second is that your site is served from the root of a domain. Lamb does not support an install under a subdirectory such as `https://example.com/blog`: it reads `site_url` as the domain alone, while your IndieAuth identity is the whole address including the path, so no token can ever match and every request is refused with a `me_mismatch` reason. The settings page warns you if you save a `site_url` with a path in it. Serve the site from its own domain or subdomain instead.
+The second is that your site is served from the root of a domain. Under a subdirectory such as `https://example.com/blog` every request is refused with a `me_mismatch` reason. See [Serve from the root of a domain]({{ site.baseurl }}{% link site-configuration.md %}#serve-from-the-root-of-a-domain).
 
 Set the `LAMB_MICROPUB_DEBUG` environment variable to `true` (`1`, `yes` and `on` also work) and reload PHP:
 

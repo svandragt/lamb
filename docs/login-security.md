@@ -54,7 +54,30 @@ and log lines show the proxy's address. Configure your proxy to present the real
 client address to PHP (for example with nginx's `realip` module) if you want
 per-visitor accuracy.
 
-## Choosing a password
+## Setting the password
+
+Run `make-password.php` from the Lamb directory, on any machine with PHP and its `mbstring` extension:
+
+```
+php make-password.php <your-password>
+```
+
+It prints the login hash and writes the same value to `.env` as
+`LAMB_LOGIN_PASSWORD`. The hash is a base64-encoded bcrypt hash, which is the
+form `LAMB_LOGIN_PASSWORD` expects, so copy it as printed. If `.env` already
+exists, the script refuses to run; see
+[Changing the password later](#changing-the-password-later).
+
+Lamb loads `.env` itself only under PHP's built-in server, and only when the
+development dependencies are installed, as in [Local PHP setup]({{ site.baseurl }}{% link local-php-setup.md %}).
+Any other server, including a production install, reads only the environment it
+gives PHP, so set `LAMB_LOGIN_PASSWORD` there to the printed hash. Your server's
+page shows how:
+[Nginx]({{ site.baseurl }}{% link nginx.md %}#logins),
+[FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}#logins) or
+[Docker]({{ site.baseurl }}{% link docker.md %}#run-the-release-image).
+
+### Choosing a password
 
 `make-password.php` warns on standard error when the password you give it is
 weak. The throttle raises the cost of guessing, but a strong password is what
@@ -81,11 +104,9 @@ site runs on, and an accidental second run — a test, a forgotten password —
 used to replace it silently, leaving logins failing for a reason nothing
 reported.
 
-Under php-fpm, FrankenPHP, or Docker, Lamb does not read `.env` at all: it
-reads the environment, and the hash reaches it from your pool config or
-container settings. Regenerating `.env` on those setups changes nothing on its
-own — copy the printed hash into `LAMB_LOGIN_PASSWORD` where the server sets
-it. See [Nginx]({{ site.baseurl }}{% link nginx.md %}) for the php-fpm form.
+Only PHP's built-in server reads `.env`, so on any other setup also update
+`LAMB_LOGIN_PASSWORD` where your server sets it, as described in
+[Setting the password](#setting-the-password).
 
 ## Related
 
