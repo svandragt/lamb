@@ -1570,6 +1570,11 @@ function respond_micropub(): void
         'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
     ]);
 
+    // The spec forbids sending the token in both places (micropub.rocks test 805).
+    if (isset($lcHeaders['authorization'], $_POST['access_token'])) {
+        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
+    }
+
     $adapter = new LambMicropubAdapter();
     if (mp_debug_enabled()) {
         $adapter->logger = mp_adapter_logger();

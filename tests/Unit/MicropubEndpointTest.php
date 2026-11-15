@@ -259,6 +259,17 @@ class MicropubEndpointTest extends TestCase
         $this->assertStringStartsWith('https://example.com/', $result['headers']['location'][0] ?? '');
     }
 
+    public function testRocks805ATokenInBothTheHeaderAndTheBodyIsRefused(): void
+    {
+        $result = $this->formRequest(
+            ['h' => 'entry', 'content' => 'Testing access token in both header and body', 'access_token' => 'body-token']
+        );
+
+        $this->assertSame(400, $result['status']);
+        $this->assertSame('invalid_request', json_decode($result['body'], true)['error']);
+        $this->assertSame([], $result['posts']);
+    }
+
     public function testRocks802TheAccessTokenIsNotStoredWithThePost(): void
     {
         $result = $this->formRequest(
