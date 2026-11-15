@@ -48,8 +48,11 @@ services:
     depends_on:
       viv:
         condition: service_completed_successfully
+    # Optional so a fresh clone starts before make-password.php has written .env.
+    # `required: false` needs Docker Compose 2.24 or later.
     env_file:
-      - ../.ddev/.env
+      - path: ../.env
+        required: false
     ports:
       - "80:80"
     volumes:

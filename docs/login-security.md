@@ -104,9 +104,11 @@ site runs on, and an accidental second run — a test, a forgotten password —
 used to replace it silently, leaving logins failing for a reason nothing
 reported.
 
-Only PHP's built-in server reads `.env`, so on any other setup also update
-`LAMB_LOGIN_PASSWORD` where your server sets it, as described in
-[Setting the password](#setting-the-password).
+Only PHP's built-in server and the [Docker development setup]({{ site.baseurl }}{% link docker.md %}#build-from-source)
+read `.env`, so on any other setup also update `LAMB_LOGIN_PASSWORD` where your
+server sets it, as described in [Setting the password](#setting-the-password).
+The Docker development setup reads `.env` when it creates the container, so
+recreate the container after the change.
 
 ## Related
 

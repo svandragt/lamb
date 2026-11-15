@@ -45,10 +45,6 @@ $hash = base64_encode(password_hash($password, PASSWORD_DEFAULT));
 // getenv(), not $_ENV: the stock variables_order leaves $_ENV empty.
 $test_port = getenv('LAMB_TEST_PORT') ?: (string)(8748 + abs(crc32((string)getcwd()) % 1000));
 $site_url  = $_ENV['DDEV_PRIMARY_URL'] ?? "http://0.0.0.0:{$test_port}";
-if (($_ENV['PWD'] ?? '') === '/srv/app') {
-    // Inside the Docker dev container FrankenPHP serves the site locally.
-    $site_url = 'http://localhost';
-}
 
 /**
  * One `.env` value, quoted so phpdotenv reads back exactly what was passed.

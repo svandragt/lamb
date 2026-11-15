@@ -111,6 +111,12 @@ docker stop lamb && docker rm lamb
 
 Then start the container again with the `docker run` command in [Docker]({{ site.baseurl }}{% link docker.md %}#run-the-release-image), using the same hash and the same volume names. The database and uploads live in the named volumes and survive the recreate.
 
+Once the container is up, run the [data migrations](#data-migrations) inside it, as `www-data` so the database keeps its owner:
+
+```
+docker exec -u www-data lamb php bin/lamb migrate
+```
+
 ## Upgrading to 0.16
 
 * The settings page is now a form. Site title, site URL and author name must be filled in the first time you save it.

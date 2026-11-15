@@ -4,8 +4,8 @@
 # ci.yml already exercises the built-in PHP server (viv run serve) on every PR
 # across PHP 8.4-8.5, so that path is intentionally not duplicated here. This
 # workflow adds:
-#   - the Docker/FrankenPHP release image (.docker/Dockerfile.release, what
-#     release-artifacts.yml publishes to GHCR)
+#   - the Docker/FrankenPHP release image (.docker/Dockerfile.release, which
+#     operators build themselves from a checkout)
 #   - an nginx + php-fpm install using the shipped .nginx/ configuration
 #
 # Both jobs run codecept on the runner with `--env external` (see
@@ -68,6 +68,10 @@ jobs:
           done
           docker logs lamb-verify
           exit 1
+
+      - name: Run bin/lamb inside the release image
+        # docs/docker.md tells operators to run it this way; www-data owns the database.
+        run: docker exec -u www-data lamb-verify php bin/lamb migrate --dry-run
 
       - name: Run acceptance tests against the release image
         # seeds-db tests write the SQLite file directly, which the container's user owns.
