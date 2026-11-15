@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Support\Filesystem;
 
 use function Lamb\Response\accept_upload_batch;
 use function Lamb\Response\asset_dimensions;
@@ -41,27 +42,8 @@ class UploadTest extends TestCase
     protected function tearDown(): void
     {
         // Clean up any directories created under tempRootDir
-        $this->removeDirectory($this->tempRootDir);
+        Filesystem::removeDirectory($this->tempRootDir);
         putenv('LAMB_MAX_UPLOAD_PIXELS');
-    }
-
-    private function removeDirectory(string $path): void
-    {
-        if (!is_dir($path)) {
-            return;
-        }
-        foreach (scandir($path) as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            $full = "$path/$entry";
-            if (is_dir($full)) {
-                $this->removeDirectory($full);
-            } else {
-                unlink($full);
-            }
-        }
-        rmdir($path);
     }
 
     // normalize_uploaded_files

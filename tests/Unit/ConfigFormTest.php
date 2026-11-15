@@ -73,6 +73,7 @@ class ConfigFormTest extends TestCase
             'following_url' => 'https://reader.example/following.opml',
             'authorization_endpoint' => 'https://auth.example/auth',
             'token_endpoint' => 'https://auth.example/token',
+            'indieauth_metadata' => 'https://auth.example/metadata',
             'websub_hubs' => 'https://hub.example/, https://hub2.example/',
         ]), '');
 
@@ -87,18 +88,20 @@ class ConfigFormTest extends TestCase
         $this->assertSame('https://reader.example/following.opml', $parsed['following_url']);
         $this->assertSame('https://auth.example/auth', $parsed['authorization_endpoint']);
         $this->assertSame('https://auth.example/token', $parsed['token_endpoint']);
+        $this->assertSame('https://auth.example/metadata', $parsed['indieauth_metadata']);
         $this->assertSame('https://hub.example/, https://hub2.example/', $parsed['websub_hubs']);
     }
 
     public function testFormToIniOmitsEmptySingleFieldsSoDefaultsApply(): void
     {
-        $ini = form_to_ini($this->post(['site_description' => '', 'theme' => '  ', 'timezone' => '']), '');
+        $ini = form_to_ini($this->post(['site_description' => '', 'theme' => '  ', 'timezone' => '', 'indieauth_metadata' => '']), '');
 
         $parsed = parse_ini_safe($ini);
         $this->assertArrayNotHasKey('site_description', $parsed);
         $this->assertArrayNotHasKey('theme', $parsed);
         $this->assertArrayNotHasKey('timezone', $parsed);
         $this->assertArrayNotHasKey('author_email', $parsed);
+        $this->assertArrayNotHasKey('indieauth_metadata', $parsed);
     }
 
     public function testFormToIniTrimsPostedValues(): void

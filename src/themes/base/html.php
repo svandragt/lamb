@@ -4,6 +4,7 @@ use function Lamb\Theme\escape;
 use function Lamb\Theme\li_menu_items;
 use function Lamb\Theme\page_title;
 use function Lamb\Theme\part;
+use function Lamb\Theme\the_indieauth_metadata;
 use function Lamb\Theme\the_meta_description;
 use function Lamb\Theme\the_opengraph;
 use function Lamb\Theme\the_preconnect;
@@ -35,6 +36,7 @@ global $template;
     <?php endforeach; ?>
     <link rel="authorization_endpoint" href="<?= escape($config['authorization_endpoint']) ?>">
     <link rel="token_endpoint" href="<?= escape($config['token_endpoint']) ?>">
+    <?php the_indieauth_metadata(); ?>
     <link rel="micropub" href="<?= ROOT_URL ?>/micropub">
     <link rel="webmention" href="<?= ROOT_URL ?>/webmention">
     <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>

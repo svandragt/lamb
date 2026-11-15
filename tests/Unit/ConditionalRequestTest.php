@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
+use Tests\Support\Filesystem;
 
 use function Lamb\Bootstrap\http_date;
 use function Lamb\Bootstrap\code_stamp;
@@ -31,7 +32,7 @@ class ConditionalRequestTest extends TestCase
 
     protected function tearDown(): void
     {
-        $this->removeDirectory($this->tempDir);
+        Filesystem::removeDirectory($this->tempDir);
         $this->roots = [];
     }
 
@@ -115,17 +116,6 @@ class ConditionalRequestTest extends TestCase
         }
         $this->roots[] = $root;
         return $root;
-    }
-
-    private function removeDirectory(string $path): void
-    {
-        foreach (scandir($path) ?: [] as $entry) {
-            if ($entry === '.' || $entry === '..') {
-                continue;
-            }
-            is_dir("$path/$entry") ? $this->removeDirectory("$path/$entry") : unlink("$path/$entry");
-        }
-        rmdir($path);
     }
 
     public function testContentEtagDiffersWhenCodeHashChanges(): void

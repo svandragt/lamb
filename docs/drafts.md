@@ -15,7 +15,7 @@ A preview page tells search engines not to index or follow it, so an
 unpublished post shared this way does not turn up in search results — see
 [Search Engines]({{ site.baseurl }}{% link search-engines.md %}).
 
-Feed ingested posts are saved as drafts by default to prioritize authorship over syndication. Should you prefer, add `feeds_draft = false` to the site settings and they will be published instead. Place it in the top-level section, above any `[section]` headers — inside `[feeds]` it would be read as a feed entry, not a setting.
+Feed ingested posts are saved as drafts by default to prioritize authorship over syndication. Should you prefer, untick **Save posts from these feeds as drafts for review** in the **Feeds** group on the **Configuration** tab at `/settings` and they will be published instead.
 
 A feed draft has `draft: true` in its front-matter, like any other draft. The edit form shows it, and saving the post keeps it a draft. To publish the post, remove the `draft: true` line. Feed drafts saved before this behaviour get the line when you run `bin/lamb migrate` — see [Upgrading]({{ site.baseurl }}{% link upgrading.md %}#data-migrations).
 

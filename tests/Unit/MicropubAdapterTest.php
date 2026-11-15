@@ -290,6 +290,28 @@ class MicropubAdapterTest extends TestCase
         $this->assertContains('update', $result['scope']);
     }
 
+    public function testVerifyTokenRejectsAMeThatIsNotAString(): void
+    {
+        // A token endpoint is remote input: `me` can be a JSON array or number,
+        // and rtrim() on one is a TypeError (a 500), not a refused token.
+        $adapter = new StubMicropubAdapter();
+
+        foreach ([[ROOT_URL], ['url' => ROOT_URL], 5, true] as $me) {
+            $adapter->stubResponse = ['me' => $me, 'scope' => 'create'];
+            $this->assertFalse($adapter->verifyAccessTokenCallback('valid-jwt'), var_export($me, true));
+        }
+    }
+
+    public function testVerifyTokenScopeIsExactlyWhatTheTokenCarries(): void
+    {
+        $adapter = new StubMicropubAdapter();
+        $adapter->stubResponse = ['me' => ROOT_URL . '/', 'scope' => 'create'];
+        $this->assertSame(['create'], $adapter->verifyAccessTokenCallback('valid-jwt')['scope']);
+
+        $adapter->stubResponse = ['me' => ROOT_URL . '/'];
+        $this->assertSame([], $adapter->verifyAccessTokenCallback('valid-jwt')['scope']);
+    }
+
     public function testVerifyTokenRejectsIdentityMatchingOnlyTheRequestHost(): void
     {
         // The request host is attacker-chosen (a spoofed Host header reaches PHP
@@ -1052,6 +1074,21 @@ class MicropubAdapterTest extends TestCase
         $this->assertStringNotContainsString('post-status', $post->body);
     }
 
+    public function testCreateCallbackWithDraftPostStatusReturnsAPreviewUrl(): void
+    {
+        // The client GETs the Location URL to show the new post, and an anonymous
+        // GET of a draft is a 404 without the preview token (#285).
+        $location = (new LambMicropubAdapter())->createCallback([
+            'type' => ['h-entry'],
+            'properties' => ['content' => ['A draft to preview'], 'post-status' => ['draft']],
+        ]);
+
+        $post = R::findOne('post', ' body = ? ', ['A draft to preview']);
+        $this->assertNotNull($post);
+        $this->assertNotEmpty($post->preview_token);
+        $this->assertStringEndsWith('?preview=' . $post->preview_token, $location);
+    }
+
     public function testCreateCallbackWithPublishedPostStatusSavesAsPublished(): void
     {
         $adapter = new LambMicropubAdapter();
@@ -1363,6 +1400,20 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('Original content', R::load('post', $bean->id)->body);
     }
 
+    public function testUpdateCallbackReplaceContentWithAnEmptyListClearsTheContent(): void
+    {
+        // An empty value list is Micropub's "replace with nothing".
+        $bean = $this->storedPost('Original content', '');
+
+        $result = (new LambMicropubAdapter())->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['content' => []]]
+        );
+
+        $this->assertTrue($result);
+        $this->assertSame('', R::load('post', $bean->id)->body);
+    }
+
     public function testUpdateCallbackReplaceContentPreservesHashtags(): void
     {
         $bean = $this->storedPost('Original content #foo #bar', '');
@@ -1393,6 +1444,24 @@ class MicropubAdapterTest extends TestCase
         $updated = R::load('post', $bean->id);
         $this->assertStringContainsString('#test1', $updated->body);
         $this->assertStringContainsString('#test2', $updated->body);
+    }
+
+    public function testUpdateCallbackAddCategoryToAPostWithNoCategoryAppendsHashtag(): void
+    {
+        // micropub.rocks test 402: add a value to a property the post does not have yet.
+        $bean = $this->storedPost('This test adds a category property to a post that previously had no category.', '');
+
+        $adapter = new LambMicropubAdapter();
+        $result = $adapter->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['add' => ['category' => ['test1']]]
+        );
+
+        $this->assertTrue($result);
+        $this->assertSame(
+            'This test adds a category property to a post that previously had no category. #test1',
+            R::load('post', $bean->id)->body
+        );
     }
 
     public function testUpdateCallbackAddCategoryDoesNotDuplicate(): void
@@ -2404,6 +2473,19 @@ class MicropubAdapterTest extends TestCase
         $this->assertSame('invalid_request', $result);
         $updated = R::load('post', $bean->id);
         $this->assertSame($created, (string) $updated->created);
+    }
+
+    public function testUpdateReplaceNameWithAValueCarryingNoTextIsRejected(): void
+    {
+        $bean = $this->storeReply('Body text');
+
+        $result = (new LambMicropubAdapter())->updateCallback(
+            ROOT_URL . '/status/' . $bean->id,
+            ['replace' => ['name' => [['unexpected' => 'object']]]]
+        );
+
+        $this->assertSame('invalid_request', $result);
+        $this->assertSame('', (string) R::load('post', $bean->id)->title);
     }
 
     public function testUpdateAddNameIsRejected(): void

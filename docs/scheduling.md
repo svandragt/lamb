@@ -41,13 +41,7 @@ Relative phrases are resolved **when you save**, then pinned: Lamb rewrites the 
 
 ## Timezone
 
-Servers are usually set to UTC, which may not be your timezone. Set yours once in the site configuration at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock:
-
-```ini
-timezone = Europe/London
-```
-
-Use a name from the [list of supported timezones](https://www.php.net/manual/en/timezones.php). It defaults to `UTC`.
+Servers are usually set to UTC, which may not be your timezone. Set yours once in the **Timezone** dropdown of the **Site** group on the **Configuration** tab at `/settings` so post dates, scheduling, and relative phrases like `next friday` all use your local clock. The dropdown lists the [supported timezones](https://www.php.net/manual/en/timezones.php), for example `Europe/London`. It defaults to `UTC`.
 
 ## Viewing scheduled posts
 
