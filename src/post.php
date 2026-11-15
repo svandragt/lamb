@@ -11,6 +11,7 @@ use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
 use function Lamb\Http\is_valid_http_url;
+use function Lamb\is_notifiable;
 use function Lamb\normalize_utf8;
 use function Lamb\parse_bean;
 use function Lamb\Route\is_reserved_route;
@@ -909,11 +910,12 @@ function register_default_subscribers(): void
  * call:
  *  - `finalize_slug` — reserve/suffix a colliding or reserved slug and pin it
  *    into the front matter (the step every create path runs after its first store).
- *  - `notify` — emit `post.published` after a successful store, and write a
- *    random token to the row's `webmentions_pending` column in the same
- *    transaction. The webmention subscriber clears it after queueing, only while
- *    the row still holds the token; a failed queueing leaves it set for /_cron
- *    to retry (Webmention\enqueue_pending_posts()).
+ *  - `notify` — emit `post.published` after a successful store, and, for a post
+ *    that sends webmentions (not a draft or a feed item), write a random token to
+ *    the row's `webmentions_pending` column in the same transaction. The webmention
+ *    subscriber clears it after queueing, only while the row still holds the
+ *    token; a failed queueing leaves it set for /_cron to retry
+ *    (Webmention\enqueue_pending_posts()).
  *  - `lock_if_feed_sourced` — mark a feed-sourced post author-owned so later
  *    crawls leave it alone (the edit form's lock_if_feed_sourced()).
  *  - `redirect_on_slug_change` / `old_slug` — when the bean's slug ends up
@@ -962,8 +964,9 @@ function save(OODBBean $bean, array $context = []): void
     // while it still holds this save's token, so a slow queueing of an earlier
     // save cannot clear the mark a later save set. 31 bits, because fluid mode
     // widens an INTEGER column for a larger value, and only two saves of one post
-    // within seconds of each other ever need telling apart.
-    if ($context['notify']) {
+    // within seconds of each other ever need telling apart. Only a post that will
+    // be queued is marked: nothing would ever clear the mark of a draft or a feed item.
+    if ($context['notify'] && is_notifiable($bean)) {
         $bean->webmentions_pending = random_int(1, 2147483647);
     }
 

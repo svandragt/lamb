@@ -933,6 +933,18 @@ function is_draft(OODBBean $post): bool
 }
 
 /**
+ * Returns true when saving a post may queue webmentions for it: it is not a draft
+ * and not an ingested feed item (third-party content).
+ *
+ * @param OODBBean $post The post to inspect.
+ * @return bool
+ */
+function is_notifiable(OODBBean $post): bool
+{
+    return empty($post->feed_name) && !is_draft($post);
+}
+
+/**
  * Returns true when a post is not yet publicly visible: a draft, or
  * scheduled for the future. Deleted is deliberately not part of this — a
  * trashed post is a separate state from "not published yet".

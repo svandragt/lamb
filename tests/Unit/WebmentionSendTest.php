@@ -130,6 +130,8 @@ class WebmentionSendTest extends TestCase
             enqueue_for_post(R::load('post', $this->postId));
             $this->fail('The second insert should have thrown.');
         } catch (SQL) {
+            // Expected.
+        } finally {
             R::exec('DROP TRIGGER outbox_block_insert');
         }
 

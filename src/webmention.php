@@ -14,6 +14,7 @@ use function Lamb\Http\is_public_http_url;
 use function Lamb\Http\is_valid_http_url;
 use function Lamb\is_deleted;
 use function Lamb\is_draft;
+use function Lamb\is_notifiable;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 use function Lamb\Post\split_reply_targets;
@@ -575,8 +576,9 @@ function resolve_url(string $base, string $rel): string
  * The mark holds the token of the save that set it, and this clears it only
  * while the row still holds the token $bean carries. If a later save has marked
  * the post since, this call is stale: it writes nothing, and that save's own
- * queueing (or /_cron) does the work from the newer content. A draft or a
- * feed-sourced post owes nothing, so its mark is cleared without queueing.
+ * queueing (or /_cron) does the work from the newer content. Once the clear has
+ * committed, $bean's own copy of the token is zeroed too, so a later store of the
+ * bean does not write the old token back. A stale call leaves the bean alone.
  *
  * @param OODBBean $bean A stored post bean, carrying the token its save wrote.
  * @return int Number of queue rows this call wrote.
@@ -585,27 +587,52 @@ function resolve_url(string $base, string $rel): string
  */
 function enqueue_for_post(OODBBean $bean): int
 {
-    if (!$bean->id) {
+    if (!$bean->id || !is_notifiable($bean)) {
         return 0;
     }
 
     $post_id = (int) $bean->id;
     $token = (int) $bean->webmentions_pending;
-    $claim = static fn(): bool => $token === 0 || clear_webmentions_pending($post_id, $token);
+    $cleared = false;
+    $claim = static function () use ($post_id, $token, &$cleared): bool {
+        $cleared = $token !== 0 && clear_webmentions_pending($post_id, $token);
 
-    if (!empty($bean->feed_name) || is_draft($bean)) {
-        $claim();
+        return $token === 0 || $cleared;
+    };
 
-        return 0;
-    }
-
-    return enqueue_outbound(
+    $written = enqueue_outbound(
         $post_id,
         permalink($bean),
         (string) ($bean->transformed ?? ''),
         (string) ($bean->in_reply_to ?? ''),
         $claim
     );
+    if ($cleared) {
+        $bean->webmentions_pending = 0;
+    }
+
+    return $written;
+}
+
+/**
+ * The query that lists the ids enqueue_pending_posts() works on.
+ *
+ * Its own function so a test can ask SQLite how it plans exactly this statement.
+ * It orders by the indexed column first: with `ORDER BY id` alone SQLite walks the
+ * whole table in id order and filters, instead of probing the index.
+ *
+ * @return array{sql: string, params: list<mixed>}
+ */
+function pending_posts_query(): array
+{
+    $visible = visible_clause();
+
+    return [
+        'sql' => 'SELECT id FROM post WHERE webmentions_pending > 0 AND '
+            . $visible['sql']
+            . " AND (feed_name IS NULL OR feed_name = '') ORDER BY webmentions_pending, id LIMIT ?",
+        'params' => [...$visible['params'], ENQUEUE_SWEEP_LIMIT],
+    ];
 }
 
 /**
@@ -631,14 +658,16 @@ function enqueue_for_post(OODBBean $bean): int
  */
 function enqueue_pending_posts(): int
 {
-    $visible = visible_clause();
+    // A locked database fails this query too, and /_cron has to go on to the feed
+    // crawl and the drains, so it is logged here like a failing post is below.
+    try {
+        $query = pending_posts_query();
+        $ids = R::getCol($query['sql'], $query['params']);
+    } catch (\Throwable $e) {
+        error_log('Webmention sweep could not list the marked posts: ' . $e->getMessage());
 
-    $ids = R::getCol(
-        'SELECT id FROM post WHERE webmentions_pending > 0 AND '
-        . $visible['sql']
-        . " AND (feed_name IS NULL OR feed_name = '') ORDER BY id LIMIT ?",
-        [...$visible['params'], ENQUEUE_SWEEP_LIMIT]
-    );
+        return 0;
+    }
 
     $processed = 0;
     foreach ($ids as $id) {

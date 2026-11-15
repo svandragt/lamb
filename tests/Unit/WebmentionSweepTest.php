@@ -13,6 +13,7 @@ use function Lamb\Post\register_default_subscribers;
 use function Lamb\Post\reset_subscribers;
 use function Lamb\Post\save;
 use function Lamb\Response\apply_checkbox_toggle;
+use function Lamb\Response\restore_post;
 use function Lamb\Webmention\enqueue_for_post;
 use function Lamb\Webmention\enqueue_pending_posts;
 
@@ -218,9 +219,9 @@ class WebmentionSweepTest extends TestCase
      * @param array<string, mixed> $fields
      * @dataProvider postsNobodyNotifiesFor
      */
-    public function testNotifyingForAPostThatSendsNothingClearsItsMark(array $fields): void
+    public function testNotifyingForAPostThatSendsNothingLeavesNoMark(array $fields): void
     {
-        // The edit form and Micropub always notify, so without this the mark stays set forever.
+        // The edit form and Micropub always notify, so a mark set here would stay forever.
         register_default_subscribers();
         $bean = populate_bean('Secret [a](https://other.example/a).');
         foreach ($fields as $name => $value) {
@@ -231,6 +232,56 @@ class WebmentionSweepTest extends TestCase
 
         $this->assertSame(0, $this->queued($bean));
         $this->assertSame(0, $this->pending($bean));
+    }
+
+    public function testALaterStoreOfTheBeanDoesNotMarkItAgain(): void
+    {
+        // The bean from save() still carries its token. Once the queueing has cleared
+        // the row, storing the bean again must not write the old token back.
+        register_default_subscribers();
+        $bean = populate_bean('See [a](https://other.example/a).');
+        save($bean, ['notify' => true]);
+        $this->assertSame(0, $this->pending($bean));
+
+        $bean->body = 'See [a](https://other.example/a), edited without notifying.';
+        R::store($bean);
+
+        $this->assertSame(0, $this->pending($bean));
+    }
+
+    public function testARestoredPostIsNotQueuedBecauseARestoreSetsNoMark(): void
+    {
+        $post = $this->flaggedPost(['webmentions_pending' => 0, 'deleted' => 1, 'deleted_at' => date('Y-m-d H:i:s')]);
+
+        restore_post($post);
+
+        $this->assertSame(0, $this->pending($post));
+        $this->assertSame(0, enqueue_pending_posts());
+        $this->assertSame(0, $this->queued($post));
+    }
+
+    public function testAFailingListingQueryIsLoggedAndDoesNotAbortTheRun(): void
+    {
+        // A locked database fails the sweep's own query, before any post is read. /_cron
+        // still has to reach the feed crawl and the drains, so the sweep must not throw.
+        $this->flaggedPost();
+        R::exec('ALTER TABLE post DROP COLUMN feed_name');
+        // Frozen, as in production: fluid mode answers a query on a missing column with no rows.
+        R::freeze(true);
+
+        $log = tempnam(sys_get_temp_dir(), 'lamb-log');
+        $previous_log = ini_set('error_log', $log);
+        try {
+            $this->assertSame(0, enqueue_pending_posts());
+            $logged = (string) file_get_contents($log);
+        } finally {
+            R::freeze(false);
+            R::exec('ALTER TABLE post ADD COLUMN feed_name TEXT');
+            ini_set('error_log', (string) $previous_log);
+            unlink($log);
+        }
+
+        $this->assertStringContainsString('Webmention sweep', $logged);
     }
 
     public function testTheSweepCountsAPostWhoseFailedRowWasRevived(): void
