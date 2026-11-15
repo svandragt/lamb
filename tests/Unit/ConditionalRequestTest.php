@@ -5,7 +5,6 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 use function Lamb\Bootstrap\http_date;
-use function Lamb\Bootstrap\scan_code_stamp;
 use function Lamb\Bootstrap\code_stamp;
 use function Lamb\Bootstrap\content_etag;
 use function Lamb\Bootstrap\client_has_current_version;
@@ -46,79 +45,10 @@ class ConditionalRequestTest extends TestCase
         $this->assertNotSame(content_etag(1000, 500, 'h'), content_etag(1000, 1000, 'h'));
     }
 
-    public function testCodeStampChangesWhenAnyCoveredFileChanges(): void
+    public function testCodeStampIsTheInstalledRootPackageReference(): void
     {
-        $base = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
-        $dir = $base . '/src';
-        foreach (['themes/x/parts', 'themes/x/styles', 'scripts/logged_in', 'sub'] as $sub) {
-            mkdir($dir . '/' . $sub, 0777, true);
-        }
-        mkdir($base . '/vendor/composer', 0777, true);
-        $files = [
-            $dir . '/a.php',
-            $dir . '/sub/s.php',
-            $dir . '/themes/x/b.php',
-            $dir . '/themes/x/parts/p.php',
-            $dir . '/themes/x/styles/s.css',
-            $dir . '/scripts/c.js',
-            $dir . '/scripts/logged_in/d.js',
-            $base . '/vendor/composer/installed.php',
-        ];
-        try {
-            foreach ($files as $file) {
-                touch($file, 1000);
-            }
-            $before = scan_code_stamp($dir);
-            $this->assertSame($before, scan_code_stamp($dir));
-            foreach ($files as $file) {
-                touch($file, 2000);
-                $this->assertNotSame($before, scan_code_stamp($dir), "$file is not covered");
-                touch($file, 1000);
-            }
-        } finally {
-            foreach ($files as $file) {
-                @unlink($file);
-            }
-            foreach (['themes/x/parts', 'themes/x/styles', 'themes/x', 'themes', 'scripts/logged_in', 'scripts', 'sub'] as $sub) {
-                @rmdir($dir . '/' . $sub);
-            }
-            @rmdir($dir);
-            @rmdir($base . '/vendor/composer');
-            @rmdir($base . '/vendor');
-            @rmdir($base);
-        }
-    }
-
-    public function testCodeStampChangesWhenAFileIsRenamedWithTheSameMtime(): void
-    {
-        $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
-        mkdir($dir);
-        try {
-            touch($dir . '/a.php', 1000);
-            $before = scan_code_stamp($dir);
-            rename($dir . '/a.php', $dir . '/b.php');
-            $this->assertNotSame($before, scan_code_stamp($dir));
-        } finally {
-            @unlink($dir . '/a.php');
-            @unlink($dir . '/b.php');
-            @rmdir($dir);
-        }
-    }
-
-    public function testCodeStampIsCachedPerDirectoryWithinTheRequest(): void
-    {
-        $dir = sys_get_temp_dir() . '/lamb-stamp-' . uniqid();
-        mkdir($dir);
-        try {
-            touch($dir . '/a.php', 1000);
-            $first = code_stamp($dir);
-            touch($dir . '/a.php', 2000);
-            $this->assertSame($first, code_stamp($dir));
-            $this->assertNotSame($first, scan_code_stamp($dir));
-        } finally {
-            @unlink($dir . '/a.php');
-            @rmdir($dir);
-        }
+        $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
+        $this->assertSame(substr((string) $reference, 0, 8), code_stamp());
     }
 
     public function testContentEtagDiffersWhenCodeHashChanges(): void

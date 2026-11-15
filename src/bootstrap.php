@@ -854,9 +854,10 @@ function http_date(int $ts): string
  * invalidate cached pages. Folding both in means either source moving (even
  * within the same second) yields a different ETag (issue #279).
  *
- * The code hash is a third component: an upgrade that changes templates,
+ * The code stamp is a third component: an upgrade that changes templates,
  * scripts or rendering code moves neither timestamp, so without it browsers and
- * caches would keep serving stale HTML that links old asset paths.
+ * caches would keep serving stale HTML that links old asset paths. Clients that
+ * send only If-Modified-Since are not covered.
  *
  * @param int    $contentTs Unix timestamp of the most recent content change (the response's last-modified).
  * @param int    $configTs  Unix timestamp of the last config edit.
@@ -869,46 +870,19 @@ function content_etag(int $contentTs, int $configTs, string $codeHash): string
 }
 
 /**
- * Fingerprint of the files that render a page, for the ETag (see content_etag()).
+ * Identity of the installed release, for the ETag (see content_etag()).
  *
- * Covers exactly these files, relative to `src/`: PHP files directly in it and
- * one folder down; PHP files directly in a theme folder and in its `parts`
- * folder; CSS files in a theme's `styles` folder; JS files in `scripts` and one
- * folder down; and `../vendor/composer/installed.php` (which changes with
- * dependencies). Files in deeper folders of a custom theme
- * are not covered. Fixed globs are cheaper than a recursive walk.
+ * This is the first 8 characters of the root package's `reference` in
+ * `vendor/composer/installed.php`: the git commit recorded when the installer
+ * last ran, so it changes on every upgrade that runs the installer. A git
+ * checkout updated without `bin/upgrade` keeps the old stamp. Composer's
+ * InstalledVersions already holds the data in memory, so this reads no files.
  *
- * @param string $dir The `src/` directory to scan.
- * @return string crc32 (hex) of every `path:mtime` pair, so a rename, a swapped
- *                file or an older restored file still changes it.
+ * @return string Up to 8 characters, or '' when no reference is recorded.
  */
-function scan_code_stamp(string $dir): string
+function code_stamp(): string
 {
-    $patterns = [
-        '*.php', '*/*.php', 'themes/*/*.php', 'themes/*/parts/*.php', 'themes/*/styles/*.css',
-        'scripts/*.js', 'scripts/*/*.js', '../vendor/composer/installed.php',
-    ];
-    $pairs = [];
-    foreach ($patterns as $pattern) {
-        foreach (glob($dir . '/' . $pattern) ?: [] as $file) {
-            // A file deleted mid-deploy makes filemtime() warn; treat it as 0.
-            $pairs[] = $file . ':' . (@filemtime($file) ?: 0);
-        }
-    }
-    return dechex(crc32(implode("\n", $pairs)));
-}
-
-/**
- * The code stamp of `src/` (or another directory), scanned once per request.
- *
- * @param string|null $dir The `src/` directory; null means this one.
- * @return string See scan_code_stamp().
- */
-function code_stamp(?string $dir = null): string
-{
-    static $cache = [];
-    $dir ??= __DIR__;
-    return $cache[$dir] ??= scan_code_stamp($dir);
+    return substr((string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? ''), 0, 8);
 }
 
 /**

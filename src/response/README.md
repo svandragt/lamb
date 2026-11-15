@@ -70,9 +70,10 @@ content and config timestamps as distinct components while `Last-Modified`
 collapses them — is recorded in [AGENTS.md](../../AGENTS.md)'s "Conditional
 GET" note under Security; this module only wires the two call sites into it.
 
-The `ETag` also folds in `Bootstrap\code_stamp()`, so an upgrade invalidates
-cached pages. `Last-Modified` does not carry it: `If-None-Match` takes
-precedence (RFC 9110), and a code mtime there would produce future dates.
+The `ETag` also folds in `Bootstrap\code_stamp()`, the installed release's git
+commit, so it changes on every upgrade that runs the installer; a checkout
+updated without `bin/upgrade` keeps the old stamp. `Last-Modified` does not
+carry it, so clients that send only `If-Modified-Since` are not covered.
 
 ## Login: a sessionless page with its own CSRF model
 
