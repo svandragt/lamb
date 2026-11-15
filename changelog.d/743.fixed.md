@@ -1,0 +1,1 @@
+- Posts without a slug no longer disappear from the home page, tag pages and feeds when a menu item is configured.

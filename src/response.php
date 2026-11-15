@@ -141,10 +141,11 @@ function send_304_if_current(int $contentTs, int $configTs): void
 }
 
 /**
- * Builds a SQL NOT IN clause for excluding posts by slug.
+ * Builds a SQL clause excluding posts by slug, keeping posts whose slug is NULL.
  *
  * @param list<string> $slugs Slugs to exclude.
  * @return array{sql: string, params: list<string>}|null Clause and params, or null when list is empty.
+ * @throws \ValueError
  */
 function build_exclude_slugs_clause(array $slugs): ?array
 {
@@ -153,7 +154,7 @@ function build_exclude_slugs_clause(array $slugs): ?array
     }
     $slots = implode(', ', array_fill(0, count($slugs), '?'));
     return [
-        'sql'    => " slug NOT IN ($slots) ",
+        'sql'    => " (slug IS NULL OR slug NOT IN ($slots)) ",
         'params' => $slugs,
     ];
 }
