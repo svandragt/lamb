@@ -1815,7 +1815,9 @@ function respond_micropub_media(mixed $args = null): void
 function bearer_token(string $authHeader): ?string
 {
     if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m)) {
-        return trim($m[1]) ?: null;
+        $token = trim($m[1]);
+
+        return $token === '' ? null : $token;
     }
 
     return null;
