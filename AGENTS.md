@@ -115,8 +115,8 @@ or a push to, `release`, so it blocks a release until the dependency is fixed.
 Lamb does not publish a prebuilt Docker image. Docker is a documented
 self-build path (`docs/docker.md`), so base-image CVEs are the operator's to
 manage on their own build; Dependabot's `docker` ecosystem keeps the base image
-in `.docker/` current. `release-verify.yml` still builds and acceptance-tests
-the release image before each release.
+in `.docker/` current. `release-verify.yml` still builds the release image,
+runs `bin/lamb` in it and acceptance-tests it before each release.
 
 Two things that automation deliberately does **not** handle, so they need a
 human:

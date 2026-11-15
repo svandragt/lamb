@@ -1,4 +1,4 @@
-# Production image published to ghcr.io/svandragt/lamb on each release.
+# Production image, built from the repository by the operator (Lamb no longer publishes one).
 # Self-contained: app + vendor baked in, FrankenPHP (Caddy + PHP) serves it.
 # Build from the repository root: docker build -f .docker/Dockerfile.release .
 
@@ -74,6 +74,7 @@ COPY .docker/Caddyfile.release /etc/frankenphp/Caddyfile
 WORKDIR /app
 COPY composer.json make-password.php ./
 COPY src/ src/
+COPY bin/ bin/
 COPY --from=vendor /app/vendor/ vendor/
 
 # SQLite database and uploads live outside the image.

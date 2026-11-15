@@ -29,8 +29,11 @@ For example the linux cron system can be setup as follows:
 */30 * * * * /usr/bin/curl -s https://example.com/_cron > /dev/null 2>&1
 ```
 
+For a Docker install, schedule the request from the host with `docker exec`. See [Scheduled tasks]({{ site.baseurl }}{% link docker.md %}#scheduled-tasks).
+
 ## Related
 
+* [Docker]({{ site.baseurl }}{% link docker.md %}#scheduled-tasks): Scheduling the cron request for a container.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
 * [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged by the cron.
 * [Webmentions]({{ site.baseurl }}{% link webmentions.md %}): Outbound webmentions are sent during the cron run.

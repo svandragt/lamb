@@ -1,0 +1,1 @@
+- The Docker release image now includes `bin/lamb`, so you can run `docker exec -u www-data lamb php bin/lamb migrate` after an upgrade.
