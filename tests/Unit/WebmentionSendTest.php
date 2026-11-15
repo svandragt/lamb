@@ -4,6 +4,7 @@ namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Webmention\discover_endpoint;
 use function Lamb\Webmention\enqueue_for_post;
@@ -110,6 +111,27 @@ class WebmentionSendTest extends TestCase
         enqueue_outbound($this->postId, $source, $html);
         enqueue_outbound($this->postId, $source, $html);
         $this->assertSame(1, R::count('webmentionoutbox'));
+    }
+
+    public function testEnqueueQueuesNoTargetWhenALaterInsertFails(): void
+    {
+        // A partly queued post would have rows, so the /_cron sweep that retries
+        // posts without rows would never queue the targets that failed.
+        $source = ROOT_URL . '/status/1';
+        $html = '<a href="https://other.example/a">a</a><a href="https://other.example/b">b</a>';
+        // Creates the table so the trigger can name it.
+        enqueue_outbound($this->postId, $source, '<a href="https://other.example/seed">seed</a>');
+        R::exec('DELETE FROM webmentionoutbox');
+        R::exec("CREATE TRIGGER outbox_block_insert BEFORE INSERT ON webmentionoutbox WHEN NEW.target LIKE '%/b' BEGIN SELECT RAISE(ABORT, 'boom'); END");
+
+        try {
+            enqueue_outbound($this->postId, $source, $html);
+            $this->fail('The second insert should have thrown.');
+        } catch (SQL) {
+            R::exec('DROP TRIGGER outbox_block_insert');
+        }
+
+        $this->assertSame(0, R::count('webmentionoutbox'));
     }
 
     public function testEnqueueRetriesFailedRow(): void

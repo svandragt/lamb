@@ -537,7 +537,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### Feed Ingestion (Cron)
 
-`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication. The same run also drains the outbound webmention queue via `Webmention\process_outbound()`.
+`GET /_cron` triggers `Network\process_feeds()`. It reads `[feeds]` from config, fetches each RSS/Atom feed via SimplePie, and creates/updates posts. Rate-limited: minimum 1 minute between full runs, 30 minutes per feed. Feed items get a `feeditem_uuid` (md5 of feed name + item ID) for deduplication. Before the crawl, the run queues webmentions for recent posts that have none (`Webmention\enqueue_for_recent_posts()`: published or edited in the last 24 hours, no `webmentionoutbox` row), which retries a `post.published` queueing that failed. The same run also drains the outbound webmention queue via `Webmention\process_outbound()`.
 
 ### IndieWeb Endpoints
 

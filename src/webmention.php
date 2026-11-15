@@ -7,6 +7,7 @@ namespace Lamb\Webmention;
 use JetBrains\PhpStorm\NoReturn;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
+use RedBeanPHP\RedException\SQL;
 
 use function Lamb\Http\fetch_guarded;
 use function Lamb\Http\is_public_http_url;
@@ -16,6 +17,8 @@ use function Lamb\is_draft;
 use function Lamb\is_scheduled;
 use function Lamb\permalink;
 use function Lamb\Post\split_reply_targets;
+use function Lamb\visible_clause;
+use function Lamb\with_write_transaction;
 
 use const ROOT_URL;
 
@@ -48,6 +51,13 @@ const WEBMENTION_FETCH_MAX_BYTES = 2_000_000;
  * practice a run reaches deliverable rows long before this.
  */
 const OUTBOX_SCAN_LIMIT = 500;
+
+/**
+ * Seconds a post stays eligible for enqueue_for_recent_posts(): long enough for
+ * several /_cron runs to retry a failed queueing, short enough that a post with
+ * no external links is rechecked only for a day.
+ */
+const OUTBOUND_SWEEP_WINDOW = 86400;
 
 /**
  * Most webmentions rendered on a single post page.
@@ -560,20 +570,72 @@ function resolve_url(string $base, string $rel): string
  * once the source post is publicly visible (#302).
  *
  * @param OODBBean $bean A stored post bean.
- * @return void
+ * @return int Number of newly created queue rows.
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
-function enqueue_for_post(OODBBean $bean): void
+function enqueue_for_post(OODBBean $bean): int
 {
     if (!$bean->id || !empty($bean->feed_name) || is_draft($bean)) {
-        return;
+        return 0;
     }
 
-    enqueue_outbound(
+    return enqueue_outbound(
         (int) $bean->id,
         permalink($bean),
         (string) ($bean->transformed ?? ''),
         (string) ($bean->in_reply_to ?? '')
     );
+}
+
+/**
+ * Queue webmentions for recent posts that have none queued, so a publish whose
+ * queueing failed is retried by /_cron.
+ *
+ * Post\save() emits `post.published` after its commit, and emit() only logs a
+ * subscriber's SQL failure (a locked database), so a post can publish without
+ * its webmentions ever being queued. This sweep takes the posts published or
+ * edited in the last OUTBOUND_SWEEP_WINDOW seconds that have no outbox row at
+ * all and runs enqueue_for_post() on them. Drafts, deleted posts, posts
+ * scheduled for the future, ingested feed items and imported or restored posts
+ * are skipped (an import stamps `updated` with the import time but never
+ * notifies); a scheduled post is picked up once its time has passed. A post
+ * with rows is left alone, so the sweep never retries a failed send and never
+ * duplicates a row, and a post without external links is rechecked cheaply: no
+ * network, one pass over its HTML.
+ *
+ * A post that fails is logged and the sweep carries on; the next run tries it
+ * again until it leaves the window.
+ *
+ * @return int Number of posts that gained queue rows.
+ */
+function enqueue_for_recent_posts(): int
+{
+    $since = date('Y-m-d H:i:s', time() - OUTBOUND_SWEEP_WINDOW);
+    $visible = visible_clause();
+
+    $posts = R::findAll(
+        'post',
+        $visible['sql']
+        . " AND (feed_name IS NULL OR feed_name = '') "
+        . " AND (import_uuid IS NULL OR import_uuid = '') "
+        . ' AND (created >= ? OR updated >= ?) '
+        . ' AND NOT EXISTS (SELECT 1 FROM webmentionoutbox WHERE webmentionoutbox.post_id = post.id) ',
+        [...$visible['params'], $since, $since]
+    );
+
+    $queued = 0;
+    foreach ($posts as $post) {
+        try {
+            if (enqueue_for_post($post) > 0) {
+                $queued++;
+            }
+        } catch (SQL $e) {
+            error_log(sprintf('Webmention sweep failed for post %d: %s', $post->id, $e->getMessage()));
+        }
+    }
+
+    return $queued;
 }
 
 /**
@@ -591,11 +653,17 @@ function enqueue_for_post(OODBBean $bean): void
  * parent gets notified. Each is subject to the same external-host filter as
  * body links.
  *
+ * All the writes commit together. A failure part-way would otherwise leave a
+ * post with some of its targets queued, and enqueue_for_recent_posts() skips a
+ * post that has any row.
+ *
  * @param int    $post_id
  * @param string $source   This post's permalink.
  * @param string $html     The post's rendered HTML.
  * @param string $reply_to Optional `in-reply-to` target URL(s), space-separated.
  * @return int Number of newly created queue rows.
+ * @throws SQL When a write fails, the transaction did not begin or it ended before the commit.
+ * @throws \LogicException When a transaction is already open.
  */
 function enqueue_outbound(int $post_id, string $source, string $html, string $reply_to = ''): int
 {
@@ -607,39 +675,41 @@ function enqueue_outbound(int $post_id, string $source, string $html, string $re
         }
     }
 
-    // Cancel pending rows for links the post no longer contains.
-    $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
-    foreach ($stale as $row) {
-        if (!in_array((string) $row->target, $targets, true)) {
-            $row->status = 'cancelled';
-            R::store($row);
-        }
-    }
-
-    $created = 0;
-    foreach ($targets as $target) {
-        $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
-        if ($row) {
-            if ($row->status === 'failed' || $row->status === 'cancelled') {
-                $row->status = 'pending';
+    return with_write_transaction(function () use ($post_id, $source, $targets): int {
+        // Cancel pending rows for links the post no longer contains.
+        $stale = R::find('webmentionoutbox', ' source = ? AND status = ? ', [$source, 'pending']);
+        foreach ($stale as $row) {
+            if (!in_array((string) $row->target, $targets, true)) {
+                $row->status = 'cancelled';
                 R::store($row);
             }
-            continue;
         }
 
-        $row = R::dispense('webmentionoutbox');
-        $row->post_id = $post_id;
-        $row->source = $source;
-        $row->target = $target;
-        $row->status = 'pending';
-        $row->attempts = 0;
-        $row->created = \Lamb\now();
-        $row->processed_at = null;
-        R::store($row);
-        $created++;
-    }
+        $created = 0;
+        foreach ($targets as $target) {
+            $row = R::findOne('webmentionoutbox', ' source = ? AND target = ? ', [$source, $target]);
+            if ($row) {
+                if ($row->status === 'failed' || $row->status === 'cancelled') {
+                    $row->status = 'pending';
+                    R::store($row);
+                }
+                continue;
+            }
 
-    return $created;
+            $row = R::dispense('webmentionoutbox');
+            $row->post_id = $post_id;
+            $row->source = $source;
+            $row->target = $target;
+            $row->status = 'pending';
+            $row->attempts = 0;
+            $row->created = \Lamb\now();
+            $row->processed_at = null;
+            R::store($row);
+            $created++;
+        }
+
+        return $created;
+    });
 }
 
 /**

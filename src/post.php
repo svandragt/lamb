@@ -916,8 +916,11 @@ function register_default_subscribers(): void
  *    different from `old_slug`, record a 301 from `old_slug` to the new one
  *    (the edit form's store_slug_change_redirect() call). The funnel has no
  *    pre-edit slug of its own, so the caller passes it in.
+ *  - `extra_writes` — a callable that receives the stored bean and makes writes
+ *    that belong to the save (an importer's legacy-URL redirects), inside the
+ *    same transaction.
  *
- * The stores, the content mark and the slug-change redirect run in one
+ * The stores, the content mark, the slug-change redirect and the extra writes run in one
  * transaction, so a failed second store rolls the first back instead of leaving
  * a row behind for a resubmit to duplicate (#970). The rollback does not catch
  * the failure: each call site flashes its own message and decides what to do, so
@@ -926,7 +929,7 @@ function register_default_subscribers(): void
  * to be saved again. The events run after the commit.
  *
  * @param OODBBean $bean A populated post bean.
- * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string} $context
+ * @param array{finalize_slug?: bool, notify?: bool, lock_if_feed_sourced?: bool, redirect_on_slug_change?: bool, old_slug?: string, extra_writes?: ?callable(OODBBean): void} $context
  * @return void
  * @throws SQL When a write in the transaction fails, the transaction did not begin or it ended before the commit.
  * @throws \LogicException When a transaction is already open.
@@ -939,6 +942,7 @@ function save(OODBBean $bean, array $context = []): void
         'lock_if_feed_sourced'    => false,
         'redirect_on_slug_change' => false,
         'old_slug'                => '',
+        'extra_writes'            => null,
     ];
 
     $is_new = empty($bean->id);
@@ -965,6 +969,10 @@ function save(OODBBean $bean, array $context = []): void
             // pointing at content that was never saved, nor a save without its 301.
             if ($context['redirect_on_slug_change'] && $context['old_slug'] !== '' && $context['old_slug'] !== $bean->slug) {
                 \Lamb\Response\store_slug_change_redirect((string) $context['old_slug'], (string) $bean->slug);
+            }
+
+            if ($context['extra_writes'] !== null) {
+                ($context['extra_writes'])($bean);
             }
         });
     } catch (\Throwable $e) {
