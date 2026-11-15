@@ -252,21 +252,26 @@ function the_preconnect(): void
 /**
  * Lists the remote origins that the posts on the current page load media from.
  *
- * Reads $data['posts'], the same list the page's templates render, so listings, tag and search
- * pages and single posts are covered. Own-origin and relative URLs are left out.
+ * Reads $data['home_post'] (the `home` post shown above the first page) and $data['posts'], the
+ * same list the page's templates render, so listings, tag and search pages and single posts are
+ * covered. Own-origin and relative URLs are left out.
  *
  * @return list<string> Origins ("https://host[:port]"), in order of first appearance.
  */
 function media_origins(): array
 {
     global $data, $template;
-    if (empty($data['posts'])) {
+    $beans = $data['posts'] ?? [];
+    if (!empty($data['home_post'])) {
+        array_unshift($beans, $data['home_post']);
+    }
+    if (empty($beans)) {
         return [];
     }
 
     $own_origin = url_origin(ROOT_URL);
     $origins = [];
-    foreach ($data['posts'] as $bean) {
+    foreach ($beans as $bean) {
         // Menu pages are skipped from listings, so their media never loads there.
         if (is_hidden_menu_item($template, $bean)) {
             continue;
