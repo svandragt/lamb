@@ -114,7 +114,16 @@ echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
 # Health check: only when SITE_URL is configured (written by make-password.php).
 site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "'\"") || true
 if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
-    if ! curl -fsS -o /dev/null --max-time 15 "$site_url"; then
+    # Retry: OPcache (revalidate_freq=2) can serve stale files for a moment after the reset.
+    healthy=0
+    for attempt in 1 2 3; do
+        if [ "$attempt" -gt 1 ]; then sleep "${LAMB_UPGRADE_HEALTH_RETRY_DELAY:-3}"; fi
+        if curl -fsS -o /dev/null --max-time 15 "$site_url"; then
+            healthy=1
+            break
+        fi
+    done
+    if [ "$healthy" -eq 0 ]; then
         echo "Health check failed for ${site_url}" >&2
         echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
         exit 1

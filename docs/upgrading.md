@@ -27,7 +27,7 @@ Run the bundled upgrade script:
 bin/upgrade
 ```
 
-It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds. If the health check fails, it prints the exact command to roll back to the previous version.
+It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds, trying up to three times a few seconds apart. If the health check still fails, it prints the exact command to roll back to the previous version.
 
 Note: the reset discards any local changes to tracked files. Your database (`data/`), uploads (`src/assets/`), and `.env` are not tracked, so they are unaffected.
 

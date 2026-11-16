@@ -1,0 +1,1 @@
+- `bin/upgrade` tries the health check up to three times, a few seconds apart, before it reports a failure, so a site that serves stale files for a moment after the upgrade no longer triggers a false rollback warning.
