@@ -6,6 +6,27 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-11-20 — A new install starts with a welcome draft
+
+**Status:** Accepted
+**Context:** Issue #1004 (Seed a welcome draft on a fresh install that links to a "Do you run Lamb?" post): a new Lamb site starts empty, and the maintainer has no way to learn that it exists. Two shapes were considered and rejected. A published seed post would announce every install, including test sites and sites the owner is not ready to make public. An opt-in "I run Lamb" setting needs a setting, and new sending code beside the webmention queue Lamb already has.
+
+**Decision:** A new database gets one draft, "Hello from Lamb", on the owner's first logged-in request. It says "Hello! This is the first post on my new site, which runs on Lamb", and "Lamb" links to the maintainer's "Do you run Lamb?" post (`DO_YOU_RUN_LAMB_URL`). Removing `draft: true` publishes the body as written, so it makes no claim that is false once public, and the instructions for the owner live in `docs/first-post.md`. The target is a post on the maintainer's Lamb site, because it must accept webmentions and the GitHub Pages docs site does not. Publishing the draft is the owner's opt-in. It goes through the normal publish path, so the outgoing webmention queue sends it, and deleting it sends nothing.
+
+A database is new when `ensure_schema()` finds none of the `SCHEMA` tables. `create_new_database()` then builds all of them, so the rest of `ensure_schema()` does not run, and writes a `welcome_draft_pending` row to `option`, in one write transaction. It saves no post, because `bootstrap_db()` runs before the timezone is applied, the subscribers are registered and the schema is frozen. Requests that boot a new database together each run that transaction.
+
+`src/index.php` saves the draft only for a logged-in request, once it has booted completely. A request from anyone else, such as the release image's health check or a bot, neither saves the draft nor reads the pending row. The first logged-in request saves the draft only on an empty site. A post can arrive before the owner first logs in: a Micropub create, a feed item that `/_cron` ingested, or an import that `bin/lamb` ran. A feed item counts, because the home page and the drafts page list it like any post. A trashed post counts too, because a site with one is not new.
+
+The draft, the empty-site check and the deletion of the pending row are one transaction. Requests that see the row together take the write lock (`BEGIN IMMEDIATE`) in turn, and the checks run after the draft is inserted, under that lock. If `post` holds any row other than the draft, the transaction rolls back, so a post that committed while the request waited for the lock still cancels the draft. The DELETE of the pending row is the claim, because its affected-row count tells the request whether another one took the row first, which `set_option()` cannot report. A request that finds the row gone rolls its draft back too. After either rollback the pending row is deleted in a separate statement, which is harmless when it is already gone. `WelcomeDraftTest` runs child processes against one database while the test holds the write lock, and each child signals just before it asks for the lock, so the test releases the lock only after every child has read the pending row. Two requests that boot a new database together have no such test: they run the same transaction, which creates tables only if missing and writes the pending row through `get_option()`, so a row written after the draft was saved is dropped by the empty-site check.
+
+The draft is optional, so any other failure is logged and the pending row is deleted in a separate statement after the rollback. If that delete fails too, because the failure that stopped the save also stops it, the row stays, and the next logged-in request tries the save again and logs again. Only a completed delete stops the retries.
+
+An existing install has no pending row, and a draft the owner deleted is not saved again because its row went when it was saved, even after the trash is purged. `bin/lamb import` does nothing for the draft: an import that creates posts makes the site non-empty, and the first logged-in request then drops the row. `bin/lamb migrate` leaves the row, so a Docker install that runs `migrate` before its first request still gets the draft.
+
+**Consequences:** No setting and no new sending code. A logged-in request reads the `option` table once for the pending row until the draft is saved or the row is removed. The acceptance suite deletes the database before each test, so each test that logs in starts with the draft. A local or test install that publishes it sends a webmention that fails verification, so nothing is recorded. Existing installs get the ask through issue #1001 (Tell me about your Lamb site) and the release announcement. Changing the target URL needs a release.
+
+---
+
 ## 2026-11-20 — Core holds what any Lamb user can use; one-service integrations wait for plugins
 
 **Status:** Accepted

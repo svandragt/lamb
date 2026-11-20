@@ -16,6 +16,12 @@ Post\register_default_subscribers();
 
 $config = Config\load();
 Config\apply_timezone($config);
+// Only for the owner: a health check or a bot must neither save the draft nor read
+// its pending row, and an import before the owner's first visit withdraws it.
+// After the timezone, so the draft's dates are in it, and after the subscribers.
+if (isset($_SESSION[SESSION_LOGIN])) {
+    Bootstrap\seed_welcome_draft();
+}
 
 // Prefer the author's configured canonical URL; fall back to the requested host
 // for installs that have not set one. The fallback is validated to a strict host

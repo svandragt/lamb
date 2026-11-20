@@ -720,7 +720,7 @@ function admin_toolbar_html(): string
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
         . '<a href="' . escape(FEEDBACK_DISCUSSION_URL) . '" target="_blank">Feedback</a>'
-        . '<a href="https://svandragt.github.io/lamb" target="_blank">Help</a>'
+        . '<a href="' . DOCS_URL . '" target="_blank">Help</a>'
         . '<a href="/logout">Logout</a>'
         . '</div>'
         . '<style>'

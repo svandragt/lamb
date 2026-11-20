@@ -64,6 +64,15 @@ class BootWriteGateTest extends TestCase
         $this->assertSame([], $this->ddlDuring(fn () => ensure_schema()));
     }
 
+    public function testEnsureSchemaBuildsANewDatabaseWithOneCreatePerTableAndNoAlter(): void
+    {
+        $ddl = $this->ddlDuring(fn () => ensure_schema());
+
+        $creates = array_values(array_filter($ddl, fn ($line) => stripos($line, 'CREATE TABLE') !== false));
+        $this->assertCount(count(SCHEMA), $creates, 'a new database is built once, not built and then checked again');
+        $this->assertSame([], array_filter($ddl, fn ($line) => stripos($line, 'ALTER') !== false));
+    }
+
     public function testEnsureSchemaStillCreatesATableThatIsGenuinelyMissing(): void
     {
         ensure_schema();

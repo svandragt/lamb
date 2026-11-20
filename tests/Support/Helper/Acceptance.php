@@ -135,6 +135,86 @@ class Acceptance extends Module
     }
 
     /**
+     * Asserts the outgoing webmention queue holds a pending row for the target.
+     *
+     * Publishing a post only queues its webmentions: /_cron sends them, so the
+     * queue is where a test sees that Lamb will notify a link's target.
+     *
+     * @param string $target The URL the post links to.
+     */
+    public function seeWebmentionQueuedFor(string $target): void
+    {
+        $this->assertContains($target, $this->queuedWebmentionTargets());
+    }
+
+    /**
+     * Asserts the pending outgoing webmentions have exactly these targets.
+     *
+     * @param list<string> $targets The URLs the queue must hold, in any order.
+     */
+    public function seeWebmentionQueueIs(array $targets): void
+    {
+        $queued = $this->queuedWebmentionTargets();
+        sort($queued);
+        sort($targets);
+        $this->assertSame($targets, $queued);
+    }
+
+    /**
+     * Asserts a new database is still waiting to save its welcome draft.
+     */
+    public function seeWelcomeDraftPending(): void
+    {
+        $this->assertSame(1, $this->welcomeDraftPendingCount());
+    }
+
+    /**
+     * Asserts the database is not waiting to save a welcome draft.
+     */
+    public function dontSeeWelcomeDraftPending(): void
+    {
+        $this->assertSame(0, $this->welcomeDraftPendingCount());
+    }
+
+    /**
+     * Asserts how many posts, drafts and trashed ones included, the database holds.
+     *
+     * @param int $expected The number of rows in `post`.
+     */
+    public function seePostCountIs(int $expected): void
+    {
+        $this->assertSame(
+            $expected,
+            (int) $this->readFromDatabaseCopy(fn (\PDO $pdo) => $pdo->query('SELECT COUNT(*) FROM post')->fetchColumn())
+        );
+    }
+
+    private function welcomeDraftPendingCount(): int
+    {
+        return (int) $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query("SELECT COUNT(*) FROM \"option\" WHERE name = 'welcome_draft_pending'")->fetchColumn()
+        );
+    }
+
+    /**
+     * Asserts the outgoing webmention queue holds no pending row.
+     */
+    public function seeNoWebmentionQueued(): void
+    {
+        $this->assertSame([], $this->queuedWebmentionTargets());
+    }
+
+    /**
+     * @return list<string> The target of every pending outgoing webmention.
+     */
+    private function queuedWebmentionTargets(): array
+    {
+        return $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query("SELECT target FROM webmentionoutbox WHERE status = 'pending'")->fetchAll(\PDO::FETCH_COLUMN)
+        );
+    }
+
+    /**
      * Fetches one column of a post row over an open connection.
      *
      * @param \PDO   $pdo    Connection to a copy of the acceptance database.

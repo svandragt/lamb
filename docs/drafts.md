@@ -9,6 +9,10 @@ Posts can be saved as drafts by adding `draft: true` to the front-matter.
 
 When logged in, all drafts are available from `/drafts`.
 
+## Welcome draft
+
+A new Lamb site with no posts yet starts with one draft, "Hello from Lamb", once you first log in. Publishing it queues a webmention to the maintainer's "Do you run Lamb?" post. [Write your first post]({{ site.baseurl }}{% link first-post.md %}#the-welcome-draft) explains it.
+
 ## Preview links
 
 Each draft (and scheduled post) shows a **Preview** link next to its Edit button. The link carries an expiring token valid for 24 hours, so you can share it with someone who isn't logged in. A fresh token is issued whenever you save the post after the old one expires.

@@ -52,6 +52,12 @@ define('LOGIN_THROTTLE_MAX_FAILURES', 10);
 define('LOGIN_THROTTLE_WINDOW', 15 * MINUTE_IN_SECONDS);
 // Prefix for the per-client throttle rows in the `option` table.
 define('LOGIN_THROTTLE_PREFIX', 'login_fail_');
+// Where docs/ is published: docs/_config.yml's `url` and `baseurl` joined.
+// DocsUrlGuardTest fails when the two differ.
+define('DOCS_URL', 'https://svandragt.github.io/lamb');
+// The maintainer's post that the welcome draft on a new install links to. It is a
+// post on a Lamb site, not the docs site, because the target must accept webmentions.
+define('DO_YOU_RUN_LAMB_URL', 'https://vandragt.com/do-you-run-lamb');
 define('SESSION_LOGIN', 'logged_in');
 define('SUBMIT_CREATE', 'Create post');
 define('SUBMIT_EDIT', 'Update post');

@@ -6,10 +6,17 @@ use Dotenv\Dotenv;
 use Dotenv\Repository\Adapter\PutenvAdapter;
 use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\ensure_preview_token;
+use function Lamb\get_option;
 use function Lamb\Http\apply_dns_resolve_timeout;
+use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
+use function Lamb\set_option;
+use function Lamb\with_write_transaction;
 
 /**
  * Loads the project's .env file into the process environment for the dev server.
@@ -122,6 +129,10 @@ function login_password(): string
  * turn the bare stack trace into recovery steps (see readonly_database_message()).
  * It stays fatal: a degraded read-only mode is not possible, and schema
  * problems are meant to be loud (#796).
+ *
+ * Building a new database also records that its welcome draft is pending. This
+ * function saves no post: src/index.php saves the draft once a request has booted
+ * completely (see seed_welcome_draft()).
  *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
@@ -341,6 +352,9 @@ const SCHEMA = [
  * two requests racing a fresh install both succeed. PRAGMA table_info is
  * already a read, so the per-table ALTER path needs no equivalent change.
  *
+ * A database with none of the SCHEMA tables is a new install. create_new_database()
+ * builds all of it, so nothing else runs for it. An upgrade never takes that path.
+ *
  * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
  * are themselves schema changes, which a frozen connection also refuses.
  *
@@ -349,17 +363,14 @@ const SCHEMA = [
 function ensure_schema(): void
 {
     $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
+    if (array_intersect(array_keys(SCHEMA), $existing_tables) === []) {
+        create_new_database();
+
+        return;
+    }
     foreach (SCHEMA as $table => $columns) {
-        $definitions = [];
-        foreach ($columns as $name => $type) {
-            $definitions[] = "$name $type";
-        }
         if (!in_array($table, $existing_tables, true)) {
-            R::exec(sprintf(
-                'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
-                $table,
-                implode(', ', $definitions)
-            ));
+            create_table($table, $columns);
         }
 
         $existing = array_column(R::getAll("PRAGMA table_info($table)"), 'name');
@@ -369,6 +380,134 @@ function ensure_schema(): void
             }
         }
     }
+}
+
+/**
+ * Creates a table from its SCHEMA columns, unless it exists.
+ *
+ * @param string                $table   Table name, one of the SCHEMA keys.
+ * @param array<string, string> $columns Column names and types, beyond the implicit id.
+ * @return void
+ */
+function create_table(string $table, array $columns): void
+{
+    $definitions = [];
+    foreach ($columns as $name => $type) {
+        $definitions[] = "$name $type";
+    }
+    R::exec(sprintf(
+        'CREATE TABLE IF NOT EXISTS %s (id INTEGER PRIMARY KEY AUTOINCREMENT, %s)',
+        $table,
+        implode(', ', $definitions)
+    ));
+}
+
+/**
+ * Builds a database that has none of the SCHEMA tables, and records that its
+ * welcome draft is pending, in one write transaction.
+ *
+ * See DECISIONS.md, 2026-11-20.
+ *
+ * @return void
+ * @throws SQL When a write fails or the transaction does not begin or end.
+ */
+function create_new_database(): void
+{
+    with_write_transaction(static function (): void {
+        foreach (SCHEMA as $table => $columns) {
+            create_table($table, $columns);
+        }
+        set_option(get_option(WELCOME_DRAFT_PENDING, ''), '1');
+    });
+}
+
+/**
+ * Option row that records a new database has not had its welcome draft saved yet.
+ */
+const WELCOME_DRAFT_PENDING = 'welcome_draft_pending';
+
+/**
+ * The markdown of the draft a new install starts with.
+ *
+ * The owner publishes the draft by removing its `draft: true` line, so the rest
+ * is what the public reads and has to be true of a published post. It links the
+ * maintainer's "Do you run Lamb?" post, so publishing it queues a webmention to
+ * that post through the normal publish path.
+ *
+ * @return string Front matter and the one sentence the draft says.
+ */
+function welcome_draft_body(): string
+{
+    return sprintf(
+        <<<'MD'
+        ---
+        title: Hello from Lamb
+        draft: true
+        ---
+
+        Hello! This is the first post on my new site, which runs on [Lamb](%s).
+        MD,
+        DO_YOU_RUN_LAMB_URL
+    );
+}
+
+/**
+ * Saves the welcome draft a new database is waiting for, if it is.
+ *
+ * Called by src/index.php for a logged-in request. The save rolls back, and the
+ * pending row is dropped, when the site already has a post or another request
+ * took the row first. A failure is logged and drops the row too, and if that
+ * delete fails the next request tries again. See DECISIONS.md, 2026-11-20.
+ *
+ * @return void
+ */
+function seed_welcome_draft(): void
+{
+    if (empty(get_option(WELCOME_DRAFT_PENDING, '')->id)) {
+        return;
+    }
+
+    $settled = false;
+    try {
+        $bean = populate_bean(welcome_draft_body());
+        ensure_preview_token($bean);
+        save($bean, [
+            'finalize_slug' => true,
+            'extra_writes' => static function (OODBBean $draft) use (&$settled): void {
+                // Under the write lock, so a post that committed while this request waited counts.
+                if (R::getCell('SELECT 1 FROM post WHERE id <> ? LIMIT 1', [$draft->id])) {
+                    $settled = true;
+                    throw new RuntimeException('The site already has a post');
+                }
+                // The affected-row count is the claim, which set_option() cannot report.
+                if (R::exec('DELETE FROM option WHERE name = ?', [WELCOME_DRAFT_PENDING]) === 0) {
+                    $settled = true;
+                    throw new RuntimeException('Another request took the pending welcome draft');
+                }
+            },
+        ]);
+    } catch (\Throwable $e) {
+        if (!$settled) {
+            error_log('Could not save the welcome draft: ' . $e->getMessage());
+        }
+        try {
+            withdraw_welcome_draft();
+        } catch (\Throwable $cleanup) {
+            // The failure that stopped the save can stop this delete too. The next request tries both again.
+            error_log('Could not withdraw the pending welcome draft: ' . $cleanup->getMessage());
+        }
+    }
+}
+
+/**
+ * Drops the pending welcome draft, so none is saved.
+ *
+ * @return void
+ * @throws SQL When the delete fails.
+ */
+function withdraw_welcome_draft(): void
+{
+    R::exec('DELETE FROM option WHERE name = ?', [WELCOME_DRAFT_PENDING]);
 }
 
 /**

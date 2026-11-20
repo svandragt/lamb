@@ -256,12 +256,14 @@ RedBeanPHP on SQLite. Production freezes the schema at the end of `bootstrap_db(
 
 **Tables used:**
 - `post` — blog posts; columns include `body`, `slug`, `title`, `description`, `transformed`, `created`, `updated`, `version`, `feed_name`, `feeditem_uuid`, `import_uuid`, `source_url`, `webmentions_pending`
-- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters)
+- `option` — key/value store (e.g. `site_config_ini`, `last_processed_date`, `login_fail_*` throttle counters, `welcome_draft_pending`)
 - `redirect` — automatic 301 redirects created when a post slug changes; columns: `from_slug`, `to_url`
 - `webmention` — received (inbound) webmentions; columns: `source`, `target`, `post_id`, `type`, `author`, `content`, `status`, `created`, `verified_at`
 - `webmentionoutbox` — outbound webmention queue processed by `/_cron`; columns: `post_id`, `source`, `target`, `endpoint`, `status`, `attempts`, `created`, `processed_at`
 
 **Post versioning:** startup bootstrapping in `bootstrap_db()` stamps legacy rows with `version = 1` via SQL (`UPDATE post SET version = 1 WHERE version IS NULL`). `upgrade_posts()` in `response.php` is still called on read paths, but it now mainly acts as a safety net for unexpected old rows loaded into memory rather than the primary migration mechanism.
+
+**Welcome draft:** when `ensure_schema()` finds none of the `SCHEMA` tables, `create_new_database()` builds them and writes a `welcome_draft_pending` row to `option` in one write transaction. `bootstrap_db()` saves no post. `src/index.php` calls `Bootstrap\seed_welcome_draft()` only for a logged-in request (`isset($_SESSION[SESSION_LOGIN])`), after the timezone and the post subscribers are set, so health checks and bots never read the row. It saves the draft, whose published body links `DO_YOU_RUN_LAMB_URL`, through `Post\save()`. In that transaction (`extra_writes`, under the write lock) it rolls back if `post` holds any row other than the draft (a Micropub create, a feed item, an import, a trashed post), and otherwise deletes the pending row, where the DELETE affecting a row is the claim that serialises concurrent requests. After a rollback it deletes the pending row in a separate statement. A failure is logged and deleted the same way, and if that delete fails too the next request retries and logs again. `bin/lamb import` does nothing for the draft, and `bin/lamb migrate` leaves the row. `DECISIONS.md` (2026-11-20) has the reasons. Publishing the draft goes through `Post\save()`, so the webmention queue picks the link up with no code of its own. Every acceptance test starts on a new database, so `/drafts` holds this draft in each test once it has logged in.
 
 ### Configuration
 

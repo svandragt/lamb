@@ -60,6 +60,18 @@ Still thinking about this one.
 
 The post is saved but not shown on your blog. Every draft is listed at `/drafts` while you are logged in, each with an **Edit** link to finish it and a **Preview** link you can share with someone who isn't logged in. See [Drafts]({{ site.baseurl }}{% link drafts.md %}#preview-links) for how previews and their expiring links work.
 
+To publish a draft, open it with **Edit**, remove the `draft: true` line and save.
+
+## The welcome draft
+
+A new Lamb site starts with one draft, "Hello from Lamb". It says "Hello! This is the first post on my new site, which runs on Lamb", and "Lamb" links to [Do you run Lamb?](https://vandragt.com/do-you-run-lamb), a post on the Lamb maintainer's site.
+
+Publish it to say hello, or delete it. To publish it, remove the `draft: true` line as described above. Lamb then queues a [webmention]({{ site.baseurl }}{% link webmentions.md %}#sending) to that post, which tells the maintainer your site exists. A site that other sites cannot reach, such as a local test install, sends a webmention that fails verification, so nothing is recorded.
+
+If you delete the draft, Lamb sends nothing and does not add it again, even after the trash is emptied.
+
+A new site gets the draft on your first logged-in request, if it has no posts yet. Visits from anyone who is not logged in do not add it. A site you upgrade does not get it. Neither does a site that has a post before that first request, for example one imported with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer), posted by a Micropub client or fetched from a feed, because that site is not empty.
+
 ## Where to go next
 
 You have now published a status, tagged it, added an image, made a page, and saved a draft. Each of those has a reference page with the details this tutorial skipped:
@@ -67,5 +79,6 @@ You have now published a status, tagged it, added an image, made a page, and sav
 - [Post Types]({{ site.baseurl }}{% link post-types.md %}) — statuses, pages, task lists, and front matter.
 - [Media]({{ site.baseurl }}{% link media.md %}) — images and video, formats, and upload limits.
 - [Drafts]({{ site.baseurl }}{% link drafts.md %}) — drafts, previews, and shareable links.
+- [Webmentions]({{ site.baseurl }}{% link webmentions.md %}) — how publishing notifies the sites you link to.
 - [Scheduling]({{ site.baseurl }}{% link scheduling.md %}) — publish a post at a future date.
 - [Reply posts]({{ site.baseurl }}{% link replies.md %}) — reply to another page and join the conversation.
