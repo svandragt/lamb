@@ -42,7 +42,7 @@ class UpgradeScriptTest extends TestCase
         mkdir($this->stubs, 0777, true);
         mkdir($this->tools, 0777, true);
         $finder = new ExecutableFinder();
-        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'head', 'id', 'sh', 'sort', 'stat', 'tr'] as $tool) {
+        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'head', 'id', 'sh', 'sleep', 'sort', 'stat', 'tr'] as $tool) {
             symlink($finder->find($tool), $this->tools . '/' . $tool);
         }
         $this->writeStub('viv', $this->vivLog, 0, 'viv 0.22.0');
@@ -135,6 +135,19 @@ class UpgradeScriptTest extends TestCase
         $this->assertNotSame(0, $process->getExitCode(), 'health check failure should be visible to cron');
         $output = $process->getOutput() . $process->getErrorOutput();
         $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
+        $this->assertCount(3, file($this->curlLog), 'should try the health check three times before giving up');
+    }
+
+    public function testHealthCheckRetriesAfterAFailureAndPasses(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->writeStub('curl', $this->curlLog, 0, null, 1);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringNotContainsString('Health check failed', $process->getOutput() . $process->getErrorOutput());
+        $this->assertCount(2, file($this->curlLog), 'should stop retrying once curl succeeds');
     }
 
     public function testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck(): void
@@ -312,7 +325,7 @@ class UpgradeScriptTest extends TestCase
         $process = new Process(
             [$this->site . '/bin/upgrade'],
             $this->site,
-            ['PATH' => $this->stubs . ':' . $this->tools] + self::scrubGitEnv()
+            ['PATH' => $this->stubs . ':' . $this->tools, 'LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '0'] + self::scrubGitEnv()
         );
         $process->run();
 
@@ -323,13 +336,17 @@ class UpgradeScriptTest extends TestCase
      * With $versionLine set, `--version` prints it without being logged, the
      * way viv answers bin/upgrade's version check.
      */
-    private function writeStub(string $name, string $log, int $exitCode = 0, ?string $versionLine = null): void
+    private function writeStub(string $name, string $log, int $exitCode = 0, ?string $versionLine = null, int $failFirst = 0): void
     {
         $script = "#!/bin/sh\n";
         if ($versionLine !== null) {
             $script .= 'if [ "$1" = "--version" ]; then echo ' . escapeshellarg($versionLine) . "; exit 0; fi\n";
         }
-        $script .= "echo \"$*\" >> " . escapeshellarg($log) . "\nexit {$exitCode}\n";
+        $script .= "echo \"$*\" >> " . escapeshellarg($log) . "\n";
+        if ($failFirst > 0) {
+            $script .= 'if [ "$(grep -c \'\' ' . escapeshellarg($log) . ")\" -le {$failFirst} ]; then exit 22; fi\n";
+        }
+        $script .= "exit {$exitCode}\n";
         file_put_contents($this->stubs . '/' . $name, $script);
         chmod($this->stubs . '/' . $name, 0755);
     }
