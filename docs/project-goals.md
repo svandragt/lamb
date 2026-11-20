@@ -40,7 +40,7 @@ intentionally left out of scope to keep the aggregator focused.
 
 Lamb includes features that every Lamb site can use without an account on another service. Lamb talks to other sites through open standards, such as Webmention, Micropub and feeds, so any compatible site works with it.
 
-An integration with one service, such as replies from a single social network, waits for a plugin system and is not built into Lamb. Import commands for another platform's export are the exception, because you run them once and they add nothing to your site.
+An integration with one service, such as replies from a single social network, waits for a plugin system and is not built into Lamb. Import commands for another platform's export are the exception, because you run them once: they turn your export into ordinary Lamb posts and leave no connection to the other platform.
 
 ## Related
 
