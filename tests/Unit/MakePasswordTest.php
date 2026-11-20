@@ -197,7 +197,7 @@ class MakePasswordTest extends TestCase
         );
     }
 
-    // Refusing to clobber an existing .env (issues #597, #598)
+    // Leaving an existing .env alone (issues #597, #598)
     //
     // The script writes .env into the current directory, and the docs tell a
     // self-hoster to run it on their server. A second run there — a test, a
@@ -220,18 +220,23 @@ class MakePasswordTest extends TestCase
         return $line;
     }
 
-    public function testRefusesToOverwriteAnExistingEnv(): void
+    public function testExistingEnvIsLeftAloneAndTheHashIsStillPrinted(): void
     {
         $existing = $this->seedExistingEnv('live-install-marker');
 
         $process = new Process(
-            ['php', codecept_root_dir('make-password.php'), 'correct-horse-battery-staple'],
+            ['php', codecept_root_dir('make-password.php'), 'somepassword123'],
             $this->workspace,
             ['PWD' => $this->workspace]
         );
         $process->run();
 
-        $this->assertNotSame(0, $process->getExitCode(), 'Expected a non-zero exit');
+        $this->assertSame(2, $process->getExitCode(), 'Expected exit 2 (nothing written): ' . $process->getErrorOutput());
+        $this->assertTrue(
+            password_verify('somepassword123', (string)base64_decode($process->getOutput(), true)),
+            'STDOUT must be the base64 hash of the password'
+        );
+        $this->assertStringContainsString('LAMB_LOGIN_PASSWORD', $process->getErrorOutput());
         $this->assertStringContainsString('--force', $process->getErrorOutput());
         $this->assertSame(
             $existing,
@@ -240,10 +245,11 @@ class MakePasswordTest extends TestCase
         );
     }
 
-    public function testRefusalDoesNotLeakTheTestPasswordIntoTheExistingEnv(): void
+    public function testExistingEnvGetsNoTestPasswordAndTheRunSaysSo(): void
     {
-        // The incident in #598: the opt-in is set, so a successful run would
-        // append the cleartext. The refusal has to come first.
+        // The incident in #598: the opt-in is set, so a write would append the
+        // cleartext. Leaving the file alone has to come first, and STDERR says
+        // LAMB_TEST_PASSWORD was skipped too.
         $this->seedExistingEnv('live-install-marker');
 
         $process = new Process(
@@ -253,7 +259,25 @@ class MakePasswordTest extends TestCase
         );
         $process->run();
 
+        $this->assertSame(2, $process->getExitCode());
+        $this->assertTrue(password_verify('hackme', (string)base64_decode($process->getOutput(), true)));
+        $this->assertStringContainsString('LAMB_TEST_PASSWORD', $process->getErrorOutput());
         $this->assertStringNotContainsString('hackme', file_get_contents($this->workspace . '/.env'));
+    }
+
+    public function testFailedEnvWriteExitsNonZero(): void
+    {
+        // .env is a directory, so file_put_contents() cannot write it.
+        mkdir($this->workspace . '/.env');
+
+        $process = new Process(
+            ['php', codecept_root_dir('make-password.php'), 'somepassword123', '--force'],
+            $this->workspace,
+            ['PWD' => $this->workspace]
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode(), $process->getErrorOutput());
     }
 
     public function testForceOverwritesAnExistingEnv(): void
