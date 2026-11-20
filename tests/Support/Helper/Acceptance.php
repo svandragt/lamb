@@ -135,6 +135,37 @@ class Acceptance extends Module
     }
 
     /**
+     * Asserts the outgoing webmention queue holds a pending row for the target.
+     *
+     * Publishing a post only queues its webmentions: /_cron sends them, so the
+     * queue is where a test sees that Lamb will notify a link's target.
+     *
+     * @param string $target The URL the post links to.
+     */
+    public function seeWebmentionQueuedFor(string $target): void
+    {
+        $this->assertContains($target, $this->queuedWebmentionTargets());
+    }
+
+    /**
+     * Asserts the outgoing webmention queue holds no pending row.
+     */
+    public function seeNoWebmentionQueued(): void
+    {
+        $this->assertSame([], $this->queuedWebmentionTargets());
+    }
+
+    /**
+     * @return list<string> The target of every pending outgoing webmention.
+     */
+    private function queuedWebmentionTargets(): array
+    {
+        return $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query("SELECT target FROM webmentionoutbox WHERE status = 'pending'")->fetchAll(\PDO::FETCH_COLUMN)
+        );
+    }
+
+    /**
      * Fetches one column of a post row over an open connection.
      *
      * @param \PDO   $pdo    Connection to a copy of the acceptance database.

@@ -6,6 +6,17 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-11-20 — A new install starts with a welcome draft
+
+**Status:** Accepted
+**Context:** Issue #1004 (Seed a welcome draft on a fresh install that links to a "Do you run Lamb?" post): a new Lamb site starts empty, and the maintainer has no way to learn that it exists. Two shapes were considered and rejected. A published seed post would announce every install, including test sites and sites the owner is not ready to make public. An opt-in "I run Lamb" setting needs a setting, and new sending code beside the webmention queue Lamb already has.
+
+**Decision:** The first boot of a database seeds one draft, "Hello from Lamb", that links to the "Write your first post" tutorial and to the maintainer's "Do you run Lamb?" post (`DO_YOU_RUN_LAMB_URL`). The target is a post on the maintainer's Lamb site, because it must accept webmentions and the GitHub Pages docs site does not. Publishing the draft is the owner's opt-in. It goes through the normal publish path, so the outgoing webmention queue sends it, and deleting it sends nothing. A database is new when `ensure_schema()` finds none of the `SCHEMA` tables, which holds for exactly one boot, so an existing install is never seeded and a deleted draft is never re-created, even after the trash is purged. A marker row in `option` (`welcome_draft_seeded`), claimed in one statement, makes requests that boot the same new database at once seed one draft.
+
+**Consequences:** No setting and no new sending code. Every new database gets the draft, including one first opened by `bin/lamb` and the acceptance suite's per-test database. A local or test install that publishes it sends a webmention that fails verification, so nothing is recorded. Existing installs get the ask through issue #1001 (Tell me about your Lamb site) and the release announcement. Changing the target URL needs a release.
+
+---
+
 ## 2026-10-29 — SocialSpec files are derived, and the following list is a copy
 
 **Status:** Accepted

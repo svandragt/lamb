@@ -9,7 +9,10 @@ use RuntimeException;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
+use function Lamb\ensure_preview_token;
 use function Lamb\Http\apply_dns_resolve_timeout;
+use function Lamb\Post\populate_bean;
+use function Lamb\Post\save;
 
 /**
  * Loads the project's .env file into the process environment for the dev server.
@@ -123,6 +126,9 @@ function login_password(): string
  * It stays fatal: a degraded read-only mode is not possible, and schema
  * problems are meant to be loud (#796).
  *
+ * A database that had no Lamb table before this boot is a new install, and
+ * gets a welcome draft (see seed_welcome_draft()).
+ *
  * @param string $data_dir The directory path where the database file will be stored.
  * @return void
  * @throws RuntimeException If the specified directory cannot be created, or the
@@ -152,8 +158,11 @@ function bootstrap_db(string $data_dir): void
     }
     R::useWriterCache(true);
 
-    ensure_schema();
+    $is_new_database = ensure_schema();
     migrate_post_table();
+    if ($is_new_database) {
+        seed_welcome_draft();
+    }
 
     // Frozen mode rejects a write to any column not declared in SCHEMA instead
     // of silently adding it (RedBeanPHP's default fluid behaviour) — a typo'd
@@ -344,11 +353,13 @@ const SCHEMA = [
  * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
  * are themselves schema changes, which a frozen connection also refuses.
  *
- * @return void
+ * @return bool True when none of the SCHEMA tables existed, so this call built
+ *              the whole database: a new install rather than an upgrade.
  */
-function ensure_schema(): void
+function ensure_schema(): bool
 {
     $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
+    $is_new_database = array_intersect(array_keys(SCHEMA), $existing_tables) === [];
     foreach (SCHEMA as $table => $columns) {
         $definitions = [];
         foreach ($columns as $name => $type) {
@@ -368,6 +379,73 @@ function ensure_schema(): void
                 R::exec("ALTER TABLE $table ADD COLUMN $name $type");
             }
         }
+    }
+
+    return $is_new_database;
+}
+
+/**
+ * Option row that records the welcome draft has been seeded.
+ */
+const WELCOME_DRAFT_MARKER = 'welcome_draft_seeded';
+
+/**
+ * The markdown of the draft a new install starts with.
+ *
+ * The draft links the maintainer's "Do you run Lamb?" post, so publishing it
+ * queues a webmention to that post through the normal publish path.
+ *
+ * @return string Front matter and body, ending with the invitation to publish or delete.
+ */
+function welcome_draft_body(): string
+{
+    return sprintf(
+        <<<'MD'
+        ---
+        title: Hello from Lamb
+        draft: true
+        ---
+
+        Welcome to your new Lamb site. Only you can see this draft.
+
+        To learn the basics, follow [Write your first post](https://svandragt.github.io/lamb/first-post). It takes about ten minutes and shows how to publish a draft like this one.
+
+        Lamb's maintainer keeps a post called [Do you run Lamb?](%s) for people who want to say hello. This draft links to it, so publishing this post tells that post your site exists.
+
+        Publish this to say hello, or delete it.
+        MD,
+        DO_YOU_RUN_LAMB_URL
+    );
+}
+
+/**
+ * Saves the welcome draft a new install starts with.
+ *
+ * Called only for a database that had no tables, so an existing install never
+ * gets one and a draft the owner deleted stays deleted. The marker row decides
+ * between requests that boot the same new database at once: its insert is one
+ * statement that only the first of them wins, so the draft is saved once. A
+ * failure to save the draft is logged and does not stop the boot, because the
+ * site works without it.
+ *
+ * @return void
+ */
+function seed_welcome_draft(): void
+{
+    $claimed = R::exec(
+        'INSERT INTO option (name, value, updated) SELECT ?, ?, ? WHERE NOT EXISTS (SELECT 1 FROM option WHERE name = ?)',
+        [WELCOME_DRAFT_MARKER, '1', \Lamb\now(), WELCOME_DRAFT_MARKER]
+    );
+    if ($claimed !== 1) {
+        return;
+    }
+
+    $bean = populate_bean(welcome_draft_body());
+    ensure_preview_token($bean);
+    try {
+        save($bean, ['finalize_slug' => true]);
+    } catch (SQL $e) {
+        error_log('Could not save the welcome draft: ' . $e->getMessage());
     }
 }
 
