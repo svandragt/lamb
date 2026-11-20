@@ -182,7 +182,7 @@ It tags the current `release` tip, so promote main → release (step 4) first.
       attached `lamb-<version>.tar.gz` to the release (`gh release view <version>`).
       Re-run via `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
 - [ ] Open an announcement discussion for the release in the **Announcements**
-      category, linking the release tag with a short note. Match the existing
+      category, linking the release tag with a short note and ending with a line that asks readers to reply in the feedback discussion (#1001). Match the existing
       per-release discussions (e.g. `Lamb 0.14.0`):
 
       ```sh
@@ -192,7 +192,9 @@ It tags the current `release` tip, so promote main → release (step 4) first.
         -f title="Lamb <version>" \
         -f body="https://github.com/svandragt/lamb/releases/tag/<version>
 
-      <short note>" --jq '.data.createDiscussion.discussion.url'
+      <short note>
+
+      Do you run Lamb? Tell me about your site: https://github.com/svandragt/lamb/discussions/1001" --jq '.data.createDiscussion.discussion.url'
       ```
 - [ ] Announce / update any demo site if applicable.
 - [ ] Note that the Docker/Devbox/DDev users pull from `release`; confirm a

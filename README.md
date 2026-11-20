@@ -13,6 +13,8 @@ Barrier free super simple blogging, self-hosted.
 - One-click export of every post as plain Markdown files plus their images, so your writing is never locked in.
 - Import from WordPress, Known, or a previous Lamb export, straight into the same post pipeline.
 
+If you run Lamb, [tell me about your site](https://github.com/svandragt/lamb/discussions/1001).
+
 # Getting started
 
 [Read the documentation](https://svandragt.github.io/lamb) to get started. It is published from the `release`
