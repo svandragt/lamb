@@ -400,42 +400,57 @@ class WelcomeDraftTest extends TestCase
     }
 
     /**
-     * Starts two processes that boot and seed the same data directory, holds
-     * the database's write lock until both are ready to write, then lets them
-     * go. Both have then read the state before either has written, which is
-     * what two requests that arrive together do.
+     * Runs logged-in requests against a booted data directory while this test
+     * holds the database's write lock, and lets go of the lock only once every
+     * request is about to ask for it.
      *
-     * @param string $dir      The data directory.
-     * @param bool   $booted   Whether the directory is booted before the lock is taken.
-     * @return array{posts: int, pending: int} What the database holds afterwards.
+     * A child signals from a query logger when its BEGIN IMMEDIATE is about to
+     * run. By then it has read the pending row, so it acts on the state from
+     * before anything the test commits. The children then take the lock in turn.
+     *
+     * @param string $dir        The data directory, booted first so that the pending row exists.
+     * @param int    $requests   How many requests run together.
+     * @param string $under_lock SQL the test runs while it holds the lock, committed with it.
+     * @return array{bodies: list<string>, pending: int} The posts and the pending rows afterwards.
      */
-    private function twoRequestsTogether(string $dir, bool $booted): array
+    private function seedWhileHoldingTheLock(string $dir, int $requests, string $under_lock = ''): array
     {
-        if ($booted) {
-            $this->boot($dir);
-        }
+        $this->boot($dir);
         $pdo = new \PDO('sqlite:' . $dir . '/lamb.db', null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
-        $pdo->exec('PRAGMA journal_mode=WAL');
         $pdo->exec('BEGIN IMMEDIATE');
+        if ($under_lock !== '') {
+            $pdo->exec($under_lock);
+        }
 
         $script = <<<'PHP'
+        use RedBeanPHP\R;
+
         require $argv[1];
-        touch($argv[3]);
         \Lamb\Bootstrap\bootstrap_db($argv[2]);
         \Lamb\Post\register_default_subscribers();
+        R::getDatabaseAdapter()->getDatabase()->setLogger(new class ($argv[3]) implements \RedBeanPHP\Logger {
+            public function __construct(private string $file)
+            {
+            }
+
+            public function log()
+            {
+                if (str_starts_with((string) (func_get_args()[0] ?? ''), 'BEGIN IMMEDIATE')) {
+                    touch($this->file);
+                }
+            }
+        })->setEnableLogging(true);
         \Lamb\Bootstrap\seed_welcome_draft();
         PHP;
         $children = [];
-        foreach ([1, 2] as $n) {
+        for ($n = 1; $n <= $requests; $n++) {
             $children[$n] = new Process(['php', '-r', $script, dirname(__DIR__, 2) . '/vendor/autoload.php', $dir, "$dir/ready-$n"]);
             $children[$n]->start();
         }
-        $deadline = microtime(true) + 30;
-        while (!(file_exists("$dir/ready-1") && file_exists("$dir/ready-2")) && microtime(true) < $deadline) {
-            usleep(10_000);
-        }
-        // Long enough for both children to run to their first write and wait for the lock.
-        usleep(700_000);
+        $this->waitUntil(
+            static fn(): bool => count(glob("$dir/ready-*") ?: []) === $requests
+                || count(array_filter($children, static fn(Process $child): bool => !$child->isRunning())) > 0
+        );
         $pdo->exec('COMMIT');
         $pdo = null;
 
@@ -443,19 +458,57 @@ class WelcomeDraftTest extends TestCase
             $child->wait();
             $this->assertSame(0, $child->getExitCode(), $child->getErrorOutput() . $child->getOutput());
         }
+        $this->assertCount($requests, glob("$dir/ready-*") ?: [], 'every request must have asked for the write lock');
 
         $after = $this->boot($dir);
 
-        return ['posts' => count($after['posts']), 'pending' => $after['pending']];
+        return ['bodies' => array_column($after['posts'], 'body'), 'pending' => $after['pending']];
     }
 
-    public function testTwoRequestsThatBootTheSameNewDatabaseTogetherSaveOneDraft(): void
+    /**
+     * Polls until the condition holds, and fails the test when it does not within 30 seconds.
+     *
+     * @param callable(): bool $condition
+     */
+    private function waitUntil(callable $condition): void
     {
-        $this->assertSame(['posts' => 1, 'pending' => 0], $this->twoRequestsTogether($this->dataDir(), false));
+        $deadline = microtime(true) + 30;
+        while (!$condition()) {
+            $this->assertLessThan($deadline, microtime(true), 'timed out waiting for the child processes');
+            usleep(5_000);
+        }
     }
 
-    public function testTwoRequestsThatSeedTheSameBootedDatabaseTogetherSaveOneDraft(): void
+    public function testTwoRequestsThatReadThePendingRowBeforeEitherWritesSaveOneDraft(): void
     {
-        $this->assertSame(['posts' => 1, 'pending' => 0], $this->twoRequestsTogether($this->dataDir(), true));
+        $result = $this->seedWhileHoldingTheLock($this->dataDir(), 2);
+
+        $this->assertCount(1, $result['bodies']);
+        $this->assertStringContainsString('title: Hello from Lamb', $result['bodies'][0]);
+        $this->assertSame(0, $result['pending']);
+    }
+
+    public function testAPostCommittedWhileTheRequestWaitsForTheLockCancelsTheDraft(): void
+    {
+        $result = $this->seedWhileHoldingTheLock(
+            $this->dataDir(),
+            1,
+            "INSERT INTO post (body) VALUES ('Posted while the draft waited.')"
+        );
+
+        $this->assertSame(['Posted while the draft waited.'], $result['bodies']);
+        $this->assertSame(0, $result['pending']);
+    }
+
+    public function testAPendingRowDroppedWhileTheRequestWaitsForTheLockCancelsTheDraft(): void
+    {
+        $result = $this->seedWhileHoldingTheLock(
+            $this->dataDir(),
+            1,
+            "DELETE FROM \"option\" WHERE name = 'welcome_draft_pending'"
+        );
+
+        $this->assertSame([], $result['bodies']);
+        $this->assertSame(0, $result['pending']);
     }
 }

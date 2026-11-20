@@ -6,6 +6,7 @@ use Dotenv\Dotenv;
 use Dotenv\Repository\Adapter\PutenvAdapter;
 use Dotenv\Repository\RepositoryBuilder;
 use RuntimeException;
+use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
@@ -453,9 +454,10 @@ function welcome_draft_body(): string
 /**
  * Saves the welcome draft a new database is waiting for, if it is.
  *
- * Called by src/index.php for a logged-in request. A site that already has a
- * post is not empty, so the pending row is dropped instead. A failure is logged
- * once and also drops it. See DECISIONS.md, 2026-11-20.
+ * Called by src/index.php for a logged-in request. The save rolls back, and the
+ * pending row is dropped, when the site already has a post or another request
+ * took the row first. A failure is logged and drops the row too, and if that
+ * delete fails the next request tries again. See DECISIONS.md, 2026-11-20.
  *
  * @return void
  */
@@ -464,31 +466,30 @@ function seed_welcome_draft(): void
     if (empty(get_option(WELCOME_DRAFT_PENDING, '')->id)) {
         return;
     }
-    if (R::getCell('SELECT 1 FROM post LIMIT 1')) {
-        withdraw_welcome_draft();
 
-        return;
-    }
-
-    $lost_claim = false;
+    $settled = false;
     try {
         $bean = populate_bean(welcome_draft_body());
         ensure_preview_token($bean);
         save($bean, [
             'finalize_slug' => true,
-            'extra_writes' => static function () use (&$lost_claim): void {
+            'extra_writes' => static function (OODBBean $draft) use (&$settled): void {
+                // Under the write lock, so a post that committed while this request waited counts.
+                if (R::getCell('SELECT 1 FROM post WHERE id <> ? LIMIT 1', [$draft->id])) {
+                    $settled = true;
+                    throw new RuntimeException('The site already has a post');
+                }
                 // The affected-row count is the claim, which set_option() cannot report.
                 if (R::exec('DELETE FROM option WHERE name = ?', [WELCOME_DRAFT_PENDING]) === 0) {
-                    $lost_claim = true;
-                    throw new RuntimeException('Another request saved the welcome draft first');
+                    $settled = true;
+                    throw new RuntimeException('Another request took the pending welcome draft');
                 }
             },
         ]);
     } catch (\Throwable $e) {
-        if ($lost_claim) {
-            return;
+        if (!$settled) {
+            error_log('Could not save the welcome draft: ' . $e->getMessage());
         }
-        error_log('Could not save the welcome draft: ' . $e->getMessage());
         try {
             withdraw_welcome_draft();
         } catch (\Throwable) {
