@@ -492,8 +492,9 @@ function seed_welcome_draft(): void
         }
         try {
             withdraw_welcome_draft();
-        } catch (\Throwable) {
+        } catch (\Throwable $cleanup) {
             // The failure that stopped the save can stop this delete too. The next request tries both again.
+            error_log('Could not withdraw the pending welcome draft: ' . $cleanup->getMessage());
         }
     }
 }
