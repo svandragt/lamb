@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
+use function Lamb\Bootstrap\bootstrap_db;
 use function Lamb\Bootstrap\should_start_session;
 use function Lamb\Bootstrap\cache_headers;
 use function Lamb\Bootstrap\configure_session;
@@ -198,21 +199,51 @@ class SessionBootstrapTest extends TestCase
         // over an existing file), so this reproduces the failure deterministically.
         touch($data_dir . '/sessions');
 
-        // mkdir() itself raises E_WARNING on this exact failure; the test
-        // runner's default handler turns that into its own exception before
-        // the function's own `!mkdir() && !is_dir()` check ever runs. Silence
-        // just that warning here so the assertion is on this function's
-        // handling of the failure, not on the runner's warning conversion —
-        // production leaves the warning intact (unsuppressed, like
-        // bootstrap_db()'s equivalent check) so it still reaches the error log.
-        set_error_handler(static fn () => true, E_WARNING);
+        $warnings = [];
+        set_error_handler(static function (int $no, string $msg) use (&$warnings): bool {
+            if (!(error_reporting() & $no)) {
+                return false;
+            }
+            $warnings[] = $msg;
+            return false;
+        }, E_WARNING);
         try {
             $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('File exists');
             configure_session_save_path($data_dir);
         } finally {
             restore_error_handler();
+            $this->assertSame([], $warnings, 'mkdir() must not raise a PHP warning');
             @unlink($data_dir . '/sessions');
             @rmdir($data_dir);
+        }
+    }
+
+    public function testThrowsWithoutAWarningWhenDataDirectoryCannotBeCreated(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            $this->markTestSkipped('root ignores directory permissions');
+        }
+        $parent = sys_get_temp_dir() . '/lamb-readonly-parent-' . getmypid();
+        mkdir($parent, 0550);
+
+        $warnings = [];
+        set_error_handler(static function (int $no, string $msg) use (&$warnings): bool {
+            if (!(error_reporting() & $no)) {
+                return false;
+            }
+            $warnings[] = $msg;
+            return false;
+        }, E_WARNING);
+        try {
+            $this->expectException(RuntimeException::class);
+            $this->expectExceptionMessage('Permission denied');
+            bootstrap_db($parent . '/data');
+        } finally {
+            restore_error_handler();
+            $this->assertSame([], $warnings, 'mkdir() must not raise a PHP warning');
+            chmod($parent, 0750);
+            rmdir($parent);
         }
     }
 
