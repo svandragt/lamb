@@ -197,7 +197,7 @@ class MakePasswordTest extends TestCase
         );
     }
 
-    // Refusing to clobber an existing .env (issues #597, #598)
+    // Leaving an existing .env alone (issues #597, #598)
     //
     // The script writes .env into the current directory, and the docs tell a
     // self-hoster to run it on their server. A second run there — a test, a
@@ -220,18 +220,23 @@ class MakePasswordTest extends TestCase
         return $line;
     }
 
-    public function testRefusesToOverwriteAnExistingEnv(): void
+    public function testExistingEnvIsLeftAloneAndTheHashIsStillPrinted(): void
     {
         $existing = $this->seedExistingEnv('live-install-marker');
 
         $process = new Process(
-            ['php', codecept_root_dir('make-password.php'), 'correct-horse-battery-staple'],
+            ['php', codecept_root_dir('make-password.php'), 'somepassword123'],
             $this->workspace,
             ['PWD' => $this->workspace]
         );
         $process->run();
 
-        $this->assertNotSame(0, $process->getExitCode(), 'Expected a non-zero exit');
+        $this->assertSame(0, $process->getExitCode(), 'Expected a zero exit: ' . $process->getErrorOutput());
+        $this->assertTrue(
+            password_verify('somepassword123', (string)base64_decode($process->getOutput(), true)),
+            'STDOUT must be the base64 hash of the password'
+        );
+        $this->assertStringContainsString('LAMB_LOGIN_PASSWORD', $process->getErrorOutput());
         $this->assertStringContainsString('--force', $process->getErrorOutput());
         $this->assertSame(
             $existing,

@@ -85,21 +85,23 @@ actually makes guessing hopeless.
 
 ## Changing the password later
 
-`make-password.php` writes `.env` in the directory you run it from, and refuses
-to overwrite one that already exists:
+`make-password.php` writes `.env` in the directory you run it from. It does not
+overwrite one that already exists. It prints the hash instead, and tells you on
+standard error that it left the file unchanged:
 
 ```
-.env already exists in /var/www/example.com
-Refusing to overwrite it. Move it aside, or re-run with --force.
+.env already exists in /var/www/example.com, so it was left unchanged.
+Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on STDOUT, or re-run with --force to replace the file.
 ```
 
-To replace the file, pass `--force`:
+To set the new hash, edit `LAMB_LOGIN_PASSWORD` in `.env` yourself. To replace
+the whole file, pass `--force`:
 
 ```
 php make-password.php <your-new-password> --force
 ```
 
-The refusal protects a live install. A `.env` on a server holds the hash your
+Leaving the file alone protects a live install. A `.env` on a server holds the hash your
 site runs on, and an accidental second run — a test, a forgotten password —
 used to replace it silently, leaving logins failing for a reason nothing
 reported.

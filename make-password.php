@@ -13,16 +13,10 @@ $password = $operands[0];
 // .env into whatever directory it is run from. A second run there — a test, a
 // forgotten password — used to overwrite the live file in place: that is how a
 // production checkout ended up holding a cleartext LAMB_TEST_PASSWORD and a
-// login hash the running site never read (issues #597, #598). Refuse by
-// default, so replacing a real .env has to be asked for.
-if (!$force && file_exists('.env')) {
-    fwrite(
-        STDERR,
-        '.env already exists in ' . getcwd() . PHP_EOL
-        . 'Refusing to overwrite it. Move it aside, or re-run with --force.' . PHP_EOL
-    );
-    exit(1);
-}
+// login hash the running site never read (issues #597, #598). Never overwrite
+// by default, so replacing a real .env has to be asked for. The hash is still
+// printed, so the owner can set LAMB_LOGIN_PASSWORD in the file themselves.
+$env_exists = !$force && file_exists('.env');
 
 // Highlight a weak password rather than refusing it: communicate, don't block
 // (a refusal would also break test fixtures that pass a short password). The
@@ -37,6 +31,17 @@ if (mb_strlen($password) < MIN_PASSWORD_LENGTH) {
 }
 
 $hash = base64_encode(password_hash($password, PASSWORD_DEFAULT));
+
+if ($env_exists) {
+    fwrite(
+        STDERR,
+        '.env already exists in ' . getcwd() . ', so it was left unchanged.' . PHP_EOL
+        . "Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on STDOUT,"
+        . ' or re-run with --force to replace the file.' . PHP_EOL
+    );
+    echo $hash;
+    exit(0);
+}
 
 // One port per checkout, so acceptance runs in parallel worktrees don't share a
 // server, and none of them kills the dev server on 8747.
