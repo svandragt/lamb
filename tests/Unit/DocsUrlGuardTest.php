@@ -5,9 +5,8 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 /**
- * The welcome draft links to the docs and to the maintainer's post, and both
- * URLs are written down in more than one place. These tests fail when a copy
- * drifts from the constant.
+ * The docs URL and the maintainer's "Do you run Lamb?" post are written down in
+ * more than one place. These tests fail when a copy drifts from the constant.
  */
 class DocsUrlGuardTest extends TestCase
 {
@@ -23,12 +22,6 @@ class DocsUrlGuardTest extends TestCase
         preg_match('/^baseurl:\s*(\S+)/m', $config, $baseurl);
 
         $this->assertSame(($url[1] ?? '') . ($baseurl[1] ?? ''), DOCS_URL);
-    }
-
-    public function testTheFirstPostTutorialUrlIsThePageTheTutorialIsPublishedAt(): void
-    {
-        $this->assertSame(DOCS_URL . '/first-post', FIRST_POST_TUTORIAL_URL);
-        $this->assertFileExists(dirname(__DIR__, 2) . '/docs/first-post.md');
     }
 
     public function testTheTutorialNamesTheMaintainersPostTheWelcomeDraftLinks(): void

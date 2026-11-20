@@ -10,9 +10,11 @@ use RedBeanPHP\R;
 use RedBeanPHP\RedException\SQL;
 
 use function Lamb\ensure_preview_token;
+use function Lamb\get_option;
 use function Lamb\Http\apply_dns_resolve_timeout;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\save;
+use function Lamb\set_option;
 use function Lamb\with_write_transaction;
 
 /**
@@ -361,7 +363,7 @@ function ensure_schema(): void
 {
     $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
     if (array_intersect(array_keys(SCHEMA), $existing_tables) === []) {
-        $existing_tables = create_new_database();
+        create_new_database();
     }
     foreach (SCHEMA as $table => $columns) {
         if (!in_array($table, $existing_tables, true)) {
@@ -406,10 +408,10 @@ function create_table(string $table, array $columns): void
  * wins the lock builds it. The other would otherwise record a second pending
  * draft after the first request had already saved the draft.
  *
- * @return array<string> The tables the database has afterwards.
+ * @return void
  * @throws SQL When a write fails or the transaction does not begin or end.
  */
-function create_new_database(): array
+function create_new_database(): void
 {
     with_write_transaction(static function (): void {
         $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
@@ -419,13 +421,8 @@ function create_new_database(): array
         foreach (SCHEMA as $table => $columns) {
             create_table($table, $columns);
         }
-        R::exec(
-            'INSERT INTO option (name, value, updated) VALUES (?, ?, ?)',
-            [WELCOME_DRAFT_PENDING, '1', \Lamb\now()]
-        );
+        set_option(get_option(WELCOME_DRAFT_PENDING, ''), '1');
     });
-
-    return R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
 }
 
 /**
@@ -436,10 +433,12 @@ const WELCOME_DRAFT_PENDING = 'welcome_draft_pending';
 /**
  * The markdown of the draft a new install starts with.
  *
- * The draft links the maintainer's "Do you run Lamb?" post, so publishing it
- * queues a webmention to that post through the normal publish path.
+ * The owner publishes the draft by removing its `draft: true` line, so the rest
+ * is what the public reads and has to be true of a published post. It links the
+ * maintainer's "Do you run Lamb?" post, so publishing it queues a webmention to
+ * that post through the normal publish path.
  *
- * @return string Front matter and body, ending with the invitation to publish or delete.
+ * @return string Front matter and the one sentence the draft says.
  */
 function welcome_draft_body(): string
 {
@@ -450,15 +449,8 @@ function welcome_draft_body(): string
         draft: true
         ---
 
-        Welcome to your new Lamb site. Only you can see this draft.
-
-        To learn the basics, follow [Write your first post](%s). It takes about ten minutes and shows how to publish a draft like this one.
-
-        Lamb's maintainer keeps a post called [Do you run Lamb?](%s) for people who want to say hello. This draft links to it, so publishing this post tells that post your site exists.
-
-        Publish this to say hello, or delete it.
+        Hello! This is the first post on my new site, which runs on [Lamb](%s).
         MD,
-        FIRST_POST_TUTORIAL_URL,
         DO_YOU_RUN_LAMB_URL
     );
 }
@@ -466,25 +458,27 @@ function welcome_draft_body(): string
 /**
  * Saves the welcome draft a new database is waiting for, if it is.
  *
- * Called by src/index.php once the request has booted completely: the schema is
- * frozen, the post subscribers are registered and the timezone is set, so the
- * draft is saved and dated like a post the owner wrote. A request on a database
- * that has no pending marker only reads it. Neither an existing install nor an
- * import (see withdraw_welcome_draft()) has one, and a draft the owner deleted
- * is not saved again because its marker went when it was saved.
+ * Called by src/index.php for a logged-in request, once it has booted
+ * completely: the schema is frozen, the post subscribers are registered and the
+ * timezone is set, so the draft is saved and dated like a post the owner wrote.
+ * A request on a database that has no pending row only reads it. Neither an
+ * existing install nor an import (see withdraw_welcome_draft()) has one, and a
+ * draft the owner deleted is not saved again because its row went when it was
+ * saved.
  *
- * The draft and the removal of the marker are saved in one write transaction,
- * and the marker's DELETE affecting a row is the claim. Requests that see the
- * marker together take that transaction in turn (BEGIN IMMEDIATE), and the ones
- * after the first find the marker gone, which rolls their draft back. A failure
- * is logged and the request carries on. The transaction rolls back, so the
- * marker stays and the next request tries again.
+ * The draft and the removal of the pending row are saved in one write
+ * transaction, and the DELETE affecting a row is the claim, which an option
+ * helper cannot report. Requests that see the row together take that
+ * transaction in turn (BEGIN IMMEDIATE), and the ones after the first find the
+ * row gone, which rolls their draft back. The draft is optional, so any other
+ * failure is logged once and the row is dropped, and the next request does not
+ * try again and log again.
  *
  * @return void
  */
 function seed_welcome_draft(): void
 {
-    if (!R::getCell('SELECT 1 FROM option WHERE name = ?', [WELCOME_DRAFT_PENDING])) {
+    if (empty(get_option(WELCOME_DRAFT_PENDING, '')->id)) {
         return;
     }
 
@@ -502,15 +496,21 @@ function seed_welcome_draft(): void
             },
         ]);
     } catch (\Throwable $e) {
-        if (!$lost_claim) {
-            error_log('Could not save the welcome draft: ' . $e->getMessage());
+        if ($lost_claim) {
+            return;
+        }
+        error_log('Could not save the welcome draft: ' . $e->getMessage());
+        try {
+            withdraw_welcome_draft();
+        } catch (\Throwable) {
+            // The failure that stopped the save can stop this delete too. The next request tries both again.
         }
     }
 }
 
 /**
- * Drops the pending welcome draft: a site that is filled by an import is not a
- * new install.
+ * Drops the pending welcome draft, for a site that is not a new install any
+ * more or whose draft could not be saved.
  *
  * @return void
  * @throws SQL When the delete fails.

@@ -27,13 +27,28 @@ class WelcomeDraftCest
         $I->amOnPage('/drafts');
 
         $I->see(self::TITLE);
-        $I->seeLink('Write your first post', FIRST_POST_TUTORIAL_URL);
-        $I->seeLink('Do you run Lamb?', DO_YOU_RUN_LAMB_URL);
-        $I->see('Publish this to say hello, or delete it.');
+        $I->seeLink('Lamb', DO_YOU_RUN_LAMB_URL);
+    }
+
+    public function testAnAnonymousRequestLeavesTheDraftPendingUntilTheOwnerLogsIn(AcceptanceTester $I): void
+    {
+        $I->amOnPage('/');
+        $I->seeWelcomeDraftPending();
+        $I->seePostCountIs(0);
+
+        $this->login($I);
+        $I->amOnPage('/drafts');
+
+        $I->see(self::TITLE);
+        $I->dontSeeWelcomeDraftPending();
+        $I->seePostCountIs(1);
     }
 
     public function testAVisitorCannotSeeTheWelcomeDraft(AcceptanceTester $I): void
     {
+        $this->login($I);
+        $I->amOnPage('/logout');
+
         $I->amOnPage('/');
         $I->dontSee(self::TITLE);
 
@@ -75,6 +90,6 @@ class WelcomeDraftCest
 
         $I->amOnPage('/drafts');
         $I->dontSee(self::TITLE);
-        $I->seeWebmentionQueuedFor(DO_YOU_RUN_LAMB_URL);
+        $I->seeWebmentionQueueIs([DO_YOU_RUN_LAMB_URL]);
     }
 }

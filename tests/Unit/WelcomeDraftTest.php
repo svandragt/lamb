@@ -16,11 +16,26 @@ use function Lamb\Export\build_export_archive;
  */
 class WelcomeDraftTest extends TestCase
 {
-    /** What src/index.php runs once the database, subscribers and timezone are set. */
+    /** What src/index.php runs for a logged-in request, once the database, subscribers and timezone are set. */
     private const WEB_REQUEST = '\Lamb\Post\register_default_subscribers(); \Lamb\Bootstrap\seed_welcome_draft();';
+
+    /** Makes every insert into `post` fail, which a save cannot recover from. */
+    private const REFUSE_POSTS = <<<'PHP'
+    R::exec("CREATE TRIGGER refuse_posts BEFORE INSERT ON post BEGIN SELECT RAISE(ABORT, 'refused'); END");
+    PHP;
+
+    private const NO_POSTS_WXR = <<<'XML'
+    <?xml version="1.0" encoding="UTF-8"?>
+    <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:wp="http://wordpress.org/export/1.2/">
+    <channel></channel>
+    </rss>
+    XML;
 
     /** @var list<string> */
     private array $dirs = [];
+
+    /** What the last child process wrote to its error stream. */
+    private string $stderr = '';
 
     protected function tearDown(): void
     {
@@ -71,6 +86,7 @@ class WelcomeDraftTest extends TestCase
         $process = new Process(['php', '-r', $this->script($statements), dirname(__DIR__, 2) . '/vendor/autoload.php', $dir]);
         $process->run();
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->stderr = $process->getErrorOutput();
 
         return json_decode($process->getOutput(), true, 512, JSON_THROW_ON_ERROR);
     }
@@ -89,8 +105,9 @@ class WelcomeDraftTest extends TestCase
      * Runs bin/lamb with the data directory set, as an operator would.
      *
      * @param list<string> $arguments
+     * @param int          $exit_code The exit code the command must end with.
      */
-    private function binLamb(string $dir, array $arguments): Process
+    private function binLamb(string $dir, array $arguments, int $exit_code = 0): Process
     {
         $process = new Process(
             ['php', dirname(__DIR__, 2) . '/bin/lamb', ...$arguments],
@@ -98,7 +115,7 @@ class WelcomeDraftTest extends TestCase
             ['LAMB_DATA_DIR' => $dir] + getenv(),
         );
         $process->run();
-        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame($exit_code, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
 
         return $process;
     }
@@ -144,14 +161,16 @@ class WelcomeDraftTest extends TestCase
         $this->assertSame(0, $boot['pending']);
     }
 
-    public function testTheWelcomeDraftLinksTheTutorialAndTheTargetPostAndEndsWithTheInvitation(): void
+    public function testTheWelcomeDraftIsTrueOncePublishedAndLinksTheTargetPost(): void
     {
         $body = $this->request($this->dataDir())[0]['body'];
 
         $this->assertStringContainsString('draft: true', $body);
-        $this->assertStringContainsString('](' . FIRST_POST_TUTORIAL_URL . ')', $body);
-        $this->assertStringContainsString('](' . DO_YOU_RUN_LAMB_URL . ')', $body);
-        $this->assertStringEndsWith("\nPublish this to say hello, or delete it.", trim($body));
+        // Publishing is removing the draft line, so the rest is what the public reads.
+        $this->assertStringEndsWith(
+            "---\n\nHello! This is the first post on my new site, which runs on [Lamb](" . DO_YOU_RUN_LAMB_URL . ').',
+            trim($body)
+        );
     }
 
     public function testTheDraftIsDatedInTheTimezoneTheRequestHasSet(): void
@@ -197,6 +216,17 @@ class WelcomeDraftTest extends TestCase
         }
     }
 
+    public function testIndexSeedsTheDraftOnlyForALoggedInRequest(): void
+    {
+        $index = (string) preg_replace('/\s+/', ' ', (string) file_get_contents(dirname(__DIR__, 2) . '/src/index.php'));
+
+        $this->assertStringContainsString(
+            'if (isset($_SESSION[SESSION_LOGIN])) { Bootstrap\seed_welcome_draft(); }',
+            $index,
+            'an anonymous request, such as a health check, must not seed or read the pending row'
+        );
+    }
+
     public function testASecondRequestAddsNothing(): void
     {
         $dir = $this->dataDir();
@@ -214,38 +244,36 @@ class WelcomeDraftTest extends TestCase
         $this->assertCount(0, $this->request($dir));
     }
 
-    public function testAFailedSaveKeepsTheDraftPendingAndTheNextRequestSavesIt(): void
+    public function testAFailedSaveIsLoggedOnceAndTheDraftIsDroppedSoNoLaterRequestTriesAgain(): void
     {
         $dir = $this->dataDir();
-        $statements = <<<'PHP'
-        R::exec('PRAGMA query_only = ON');
-        \Lamb\Bootstrap\seed_welcome_draft();
-        R::exec('PRAGMA query_only = OFF');
-        $report['after_failure'] = [R::count('post'), R::count('option', ' name = ? ', ['welcome_draft_pending'])];
-        PHP;
 
-        $boot = $this->boot($dir, $statements . self::WEB_REQUEST);
+        $boot = $this->boot($dir, self::REFUSE_POSTS . self::WEB_REQUEST);
 
-        $this->assertSame([0, 1], $boot['after_failure']);
-        $this->assertCount(1, $boot['posts']);
+        $this->assertSame([], $boot['posts']);
         $this->assertSame(0, $boot['pending']);
+        $this->assertSame(1, substr_count($this->stderr, 'Could not save the welcome draft'));
+
+        $later = $this->boot($dir, 'R::exec("DROP TRIGGER refuse_posts");' . self::WEB_REQUEST);
+
+        $this->assertSame([], $later['posts']);
+        $this->assertStringNotContainsString('welcome draft', $this->stderr);
     }
 
-    public function testAnExceptionThatIsNotAnSqlErrorDoesNotStopTheRequest(): void
+    public function testAnExceptionThatIsNotAnSqlErrorDoesNotStopTheRequestOrRepeat(): void
     {
         $dir = $this->dataDir();
         // A transaction that is already open makes the save throw a LogicException.
         $statements = <<<'PHP'
         R::exec('BEGIN');
         \Lamb\Bootstrap\seed_welcome_draft();
-        R::exec('ROLLBACK');
-        $report['after_failure'] = [R::count('post'), R::count('option', ' name = ? ', ['welcome_draft_pending'])];
+        R::exec('COMMIT');
         PHP;
 
         $boot = $this->boot($dir, $statements . self::WEB_REQUEST);
 
-        $this->assertSame([0, 1], $boot['after_failure']);
-        $this->assertCount(1, $boot['posts']);
+        $this->assertSame([], $boot['posts']);
+        $this->assertSame(0, $boot['pending']);
     }
 
     public function testADatabaseThatAlreadyHasPostsGetsNoDraft(): void
@@ -331,6 +359,25 @@ class WelcomeDraftTest extends TestCase
         $archive = $dir . '/export.zip';
         build_export_archive([], $dir . '/no-assets', $archive, '2026-07-29T10:00:00+00:00', ['url' => 'https://example.test']);
         $this->binLamb($dir . '/data', ['import', 'lamb', $archive, '--dry-run', '--experimental']);
+
+        $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
+    }
+
+    public function testAnImportThatCreatesNoPostKeepsTheDraft(): void
+    {
+        $dir = $this->dataDir();
+        $wxr = $dir . '/export.xml';
+        file_put_contents($wxr, self::NO_POSTS_WXR);
+        $output = $this->binLamb($dir . '/data', ['import', 'wordpress', $wxr, '--experimental'])->getOutput();
+
+        $this->assertStringContainsString('Done. created=0', $output);
+        $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
+    }
+
+    public function testAnImportThatCannotReadItsSourceKeepsTheDraft(): void
+    {
+        $dir = $this->dataDir();
+        $this->binLamb($dir . '/data', ['import', 'wordpress', $dir . '/absent.xml', '--experimental'], 1);
 
         $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
     }

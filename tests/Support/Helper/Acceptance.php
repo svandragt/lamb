@@ -148,6 +148,55 @@ class Acceptance extends Module
     }
 
     /**
+     * Asserts the pending outgoing webmentions have exactly these targets.
+     *
+     * @param list<string> $targets The URLs the queue must hold, in any order.
+     */
+    public function seeWebmentionQueueIs(array $targets): void
+    {
+        $queued = $this->queuedWebmentionTargets();
+        sort($queued);
+        sort($targets);
+        $this->assertSame($targets, $queued);
+    }
+
+    /**
+     * Asserts a new database is still waiting to save its welcome draft.
+     */
+    public function seeWelcomeDraftPending(): void
+    {
+        $this->assertSame(1, $this->welcomeDraftPendingCount());
+    }
+
+    /**
+     * Asserts the database is not waiting to save a welcome draft.
+     */
+    public function dontSeeWelcomeDraftPending(): void
+    {
+        $this->assertSame(0, $this->welcomeDraftPendingCount());
+    }
+
+    /**
+     * Asserts how many posts, drafts and trashed ones included, the database holds.
+     *
+     * @param int $expected The number of rows in `post`.
+     */
+    public function seePostCountIs(int $expected): void
+    {
+        $this->assertSame(
+            $expected,
+            (int) $this->readFromDatabaseCopy(fn (\PDO $pdo) => $pdo->query('SELECT COUNT(*) FROM post')->fetchColumn())
+        );
+    }
+
+    private function welcomeDraftPendingCount(): int
+    {
+        return (int) $this->readFromDatabaseCopy(
+            fn (\PDO $pdo) => $pdo->query("SELECT COUNT(*) FROM \"option\" WHERE name = 'welcome_draft_pending'")->fetchColumn()
+        );
+    }
+
+    /**
      * Asserts the outgoing webmention queue holds no pending row.
      */
     public function seeNoWebmentionQueued(): void

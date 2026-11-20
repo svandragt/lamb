@@ -35,7 +35,7 @@ sudo -u www-data bin/lamb import <source> /path/to/export --experimental
 
 The importer prints one line for each item it imports or replaces (`imported:`, `would import:`, `replaced:` or `would replace:`), and one for an item whose conversion failed (`skipped (conversion failed):`). It prints no line for an item that already exists or that it skips for another reason. Those only count towards the summary, which gives `created`, `existed`, `skipped` and `total` (and `replaced` with `--replace`), followed by a breakdown of the skip reasons.
 
-A real run on a new site, before its first web request, means the site never gets its [welcome draft]({{ site.baseurl }}{% link first-post.md %}#the-welcome-draft), because an imported site is not new. A dry run keeps the draft.
+A real run that imports at least one post into a new site, before the owner's first logged-in request, means the site never gets its [welcome draft]({{ site.baseurl }}{% link first-post.md %}#the-welcome-draft), because an imported site is not new. A dry run, or a run that imports nothing, keeps the draft.
 
 Running an importer again is safe. Each imported post carries an `import_uuid`, and the importer leaves a post alone when it has already seen that value, counting it as `existed`.
 

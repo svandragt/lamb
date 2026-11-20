@@ -64,13 +64,13 @@ To publish a draft, open it with **Edit**, remove the `draft: true` line and sav
 
 ## The welcome draft
 
-A new Lamb site starts with one draft, "Hello from Lamb". It links to this tutorial and to [Do you run Lamb?](https://vandragt.com/do-you-run-lamb), a post on the Lamb maintainer's site.
+A new Lamb site starts with one draft, "Hello from Lamb". It says "Hello! This is the first post on my new site, which runs on Lamb", and "Lamb" links to [Do you run Lamb?](https://vandragt.com/do-you-run-lamb), a post on the Lamb maintainer's site.
 
-To say hello, publish the draft as described above. Lamb then queues a [webmention]({{ site.baseurl }}{% link webmentions.md %}#sending) to that post, which tells the maintainer your site exists. A site that other sites cannot reach, such as a local test install, sends a webmention that fails verification, so nothing is recorded.
+Publish it to say hello, or delete it. To publish it, remove the `draft: true` line as described above. Lamb then queues a [webmention]({{ site.baseurl }}{% link webmentions.md %}#sending) to that post, which tells the maintainer your site exists. A site that other sites cannot reach, such as a local test install, sends a webmention that fails verification, so nothing is recorded.
 
-To skip it, delete the draft. Lamb sends nothing and does not add the draft again, even after the trash is emptied.
+If you delete the draft, Lamb sends nothing and does not add it again, even after the trash is emptied.
 
-Lamb adds the draft on the first web request to a new site. A site you upgrade does not get it. Neither does a site you fill with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer), because that site is not new.
+A new site gets the draft on your first logged-in request. Visits from anyone who is not logged in do not add it. A site you upgrade does not get it. Neither does a site you import posts into with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer) before that first request, because that site is not new.
 
 ## Where to go next
 
