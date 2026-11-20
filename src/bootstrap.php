@@ -224,6 +224,10 @@ function readonly_database_message(string $data_dir): string
     );
 }
 
+/** How often a booting request tries to switch a locked database to WAL, and the pause between tries. */
+const WAL_SWITCH_ATTEMPTS = 20;
+const WAL_SWITCH_RETRY_MICROSECONDS = 50000;
+
 /**
  * Switches the connection to WAL journal mode, unless it is already there.
  *
@@ -243,13 +247,56 @@ function readonly_database_message(string $data_dir): string
  * WAL is a persisted property of the file, so once the first boot sets it,
  * every later boot sees "wal" on this read and skips the write.
  *
+ * Two requests booting the same new data directory at once can collide here:
+ * the one that loses gets SQLITE_BUSY. It re-reads the mode, which is now WAL
+ * if the other request won, and otherwise retries for about a second before
+ * rethrowing the original error.
+ *
  * @return void
+ * @throws SQL When the switch still fails after the retries, or fails for any reason but a lock.
  */
 function ensure_wal_journal_mode(): void
 {
-    if (strtolower((string) R::getCell('PRAGMA journal_mode')) !== 'wal') {
-        R::exec('PRAGMA journal_mode=WAL');
+    $attempts = 0;
+    while (!is_wal_journal_mode()) {
+        try {
+            R::exec('PRAGMA journal_mode=WAL');
+            return;
+        } catch (SQL $e) {
+            // Changing the mode needs an exclusive lock, and SQLite reports
+            // SQLITE_BUSY for it at once, without waiting on the busy timeout,
+            // while another request boots the same new database. That request
+            // is usually setting WAL itself, so look again before retrying.
+            if (!is_busy_database_error($e) || ++$attempts >= WAL_SWITCH_ATTEMPTS) {
+                throw $e;
+            }
+            usleep(WAL_SWITCH_RETRY_MICROSECONDS);
+        }
     }
+}
+
+/**
+ * Whether the connection's database file is already in WAL journal mode.
+ *
+ * @return bool True when `PRAGMA journal_mode` reports "wal".
+ */
+function is_wal_journal_mode(): bool
+{
+    return strtolower((string) R::getCell('PRAGMA journal_mode')) === 'wal';
+}
+
+/**
+ * Whether a query failure is SQLite's "database is locked" (SQLITE_BUSY).
+ *
+ * The low byte is the primary result code, 5; the extended variants (such as
+ * BUSY_RECOVERY 261) share it, so the code is masked before comparing.
+ *
+ * @param SQL $e The exception thrown by a RedBeanPHP query.
+ * @return bool True for SQLITE_BUSY or one of its extended codes.
+ */
+function is_busy_database_error(SQL $e): bool
+{
+    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 5;
 }
 
 /**

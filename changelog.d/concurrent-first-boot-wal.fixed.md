@@ -1,0 +1,1 @@
+- A new Lamb site no longer fails one of its first requests with "database is locked" when several requests arrive at the same moment; the request now waits for the other one to finish switching the database to WAL mode.
