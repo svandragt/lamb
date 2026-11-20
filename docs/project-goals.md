@@ -36,6 +36,12 @@ read alongside your own posts.
 Email delivery of new items (e.g. a daily digest) has been considered but is
 intentionally left out of scope to keep the aggregator focused.
 
+## What belongs in Lamb
+
+Lamb includes features that every Lamb site can use without an account on another service. Lamb talks to other sites through open standards, such as Webmention, Micropub and feeds, so any compatible site works with it.
+
+An integration with one service, such as replies from a single social network, waits for a plugin system and is not built into Lamb. Import commands for another platform's export are the exception, because you run them once and they add nothing to your site.
+
 ## Related
 
 * [Feeds]({{ site.baseurl }}{% link feeds.md %})
