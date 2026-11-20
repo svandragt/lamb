@@ -182,8 +182,10 @@ It tags the current `release` tip, so promote main → release (step 4) first.
       attached `lamb-<version>.tar.gz` to the release (`gh release view <version>`).
       Re-run via `gh workflow run release-artifacts.yml -f tag=<version>` if needed.
 - [ ] Open an announcement discussion for the release in the **Announcements**
-      category, linking the release tag with a short note and ending with a line that asks readers to reply in the feedback discussion (#1001). Match the existing
-      per-release discussions (e.g. `Lamb 0.14.0`):
+      category, linking the release tag with a short note and ending with a
+      line that asks readers to reply in `discussion#1001` (Tell me about your
+      Lamb site). Match the existing per-release discussions (e.g.
+      `Lamb 0.14.0`):
 
       ```sh
       REPO_ID=$(gh api graphql -f query='{repository(owner:"svandragt",name:"lamb"){id}}' --jq '.data.repository.id')

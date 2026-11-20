@@ -19,11 +19,14 @@ class SettingsFormCest
         $I->click('Log in');
     }
 
-    public function settingsPageLinksTheFeedbackDiscussion(AcceptanceTester $I): void
+    public function adminToolbarLinksTheFeedbackDiscussionOnEveryPage(AcceptanceTester $I): void
     {
         $this->login($I);
-        $I->amOnPage('/settings');
-        $I->seeElement('a[href="https://github.com/svandragt/lamb/discussions/1001"]');
+        foreach (['/', '/settings'] as $path) {
+            $I->amOnPage($path);
+            $I->seeElement('#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"]');
+            $I->see('Tell me about your Lamb site', '#admin-toolbar');
+        }
     }
 
     public function requiredFieldsAreMarkedAndNoPlaceholderIdentityIsPrefilled(AcceptanceTester $I): void

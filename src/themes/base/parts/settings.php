@@ -468,5 +468,4 @@ $list_field = static function (string $name, string $label, string $help, int $r
             </table>
         <?php endif; ?>
     </section>
-    <p><a href="https://github.com/svandragt/lamb/discussions/1001">Tell me about your Lamb site</a></p>
 </div>
