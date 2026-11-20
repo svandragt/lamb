@@ -25,7 +25,7 @@ class SettingsFormCest
         foreach (['/', '/settings'] as $path) {
             $I->amOnPage($path);
             $I->seeElement('#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"]');
-            $I->see('Tell me about your Lamb site', '#admin-toolbar');
+            $I->see('Feedback', '#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"]');
         }
     }
 
