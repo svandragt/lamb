@@ -81,6 +81,7 @@ $data .= 'LAMB_LOGIN_PASSWORD=' . env_value($hash) . PHP_EOL;
 if (getenv('LAMB_WRITE_TEST_PASSWORD')) {
     $data .= 'LAMB_TEST_PASSWORD=' . env_value($password) . PHP_EOL;
 }
+$write_failed = false;
 if ($leave_env_alone) {
     fwrite(
         STDERR,
@@ -110,6 +111,7 @@ if ($leave_env_alone) {
     $env_out = file_put_contents('.env', $data);
     if (!$env_out) {
         user_error('Problem saving .env', E_USER_WARNING);
+        $write_failed = true;
     }
 }
 
@@ -117,4 +119,5 @@ echo $hash;
 
 // Exit 2, not 0: nothing was written, so `make-password.php pw && next-step`
 // must not carry on as if .env were ready.
-exit($leave_env_alone ? 2 : 0);
+// A failed write exits 1 for the same reason.
+exit($write_failed ? 1 : ($leave_env_alone ? 2 : 0));

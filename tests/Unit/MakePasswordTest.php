@@ -265,6 +265,21 @@ class MakePasswordTest extends TestCase
         $this->assertStringNotContainsString('hackme', file_get_contents($this->workspace . '/.env'));
     }
 
+    public function testFailedEnvWriteExitsNonZero(): void
+    {
+        // .env is a directory, so file_put_contents() cannot write it.
+        mkdir($this->workspace . '/.env');
+
+        $process = new Process(
+            ['php', codecept_root_dir('make-password.php'), 'somepassword123', '--force'],
+            $this->workspace,
+            ['PWD' => $this->workspace]
+        );
+        $process->run();
+
+        $this->assertSame(1, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testForceOverwritesAnExistingEnv(): void
     {
         $this->seedExistingEnv('superseded-marker');
