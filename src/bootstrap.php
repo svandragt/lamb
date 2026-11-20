@@ -148,7 +148,7 @@ function bootstrap_db(string $data_dir): void
         // 0750, not 0777: this directory holds lamb.db and the session files, so
         // only the web-server user has any business reading it. Under a permissive
         // umask 0777 would leave the database world-readable and replaceable.
-        if (!mkdir($data_dir, 0750, true) && !is_dir($data_dir)) {
+        if (!@mkdir($data_dir, 0750, true) && !is_dir($data_dir)) {
             throw new RuntimeException(sprintf('Directory "%s" was not created', $data_dir));
         }
     }
