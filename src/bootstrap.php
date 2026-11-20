@@ -178,17 +178,16 @@ function bootstrap_db(string $data_dir): void
 /**
  * Whether a query failure is SQLite's "attempt to write a readonly database".
  *
- * RedBeanPHP wraps the PDOException in RedException\SQL and keeps the driver
- * code in the driver details. The low byte is the primary result code, 8 for
- * SQLITE_READONLY; the extended variants (READONLY_RECOVERY 264, READONLY_CANTINIT
- * 1288, READONLY_DIRECTORY 1544) share it, so the code is masked before comparing.
+ * The primary result code is 8 for SQLITE_READONLY; the extended variants
+ * (READONLY_RECOVERY 264, READONLY_CANTINIT 1288, READONLY_DIRECTORY 1544)
+ * share it, so the code is masked before comparing.
  *
  * @param SQL $e The exception thrown by a RedBeanPHP query.
  * @return bool True for SQLITE_READONLY or one of its extended codes.
  */
 function is_readonly_database_error(SQL $e): bool
 {
-    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 8;
+    return primary_sqlite_result_code($e) === 8;
 }
 
 /**
@@ -224,8 +223,10 @@ function readonly_database_message(string $data_dir): string
     );
 }
 
-/** How often a booting request tries to switch a locked database to WAL, and the pause between tries. */
+/** How many times a booting request tries to switch a locked database to WAL. */
 const WAL_SWITCH_ATTEMPTS = 20;
+
+/** The pause in microseconds between those tries. */
 const WAL_SWITCH_RETRY_MICROSECONDS = 50000;
 
 /**
@@ -250,24 +251,27 @@ const WAL_SWITCH_RETRY_MICROSECONDS = 50000;
  * Two requests booting the same new data directory at once can collide here:
  * the one that loses gets SQLITE_BUSY. It re-reads the mode, which is now WAL
  * if the other request won, and otherwise retries for about a second before
- * rethrowing the original error.
+ * throwing the error from the last attempt.
  *
  * @return void
  * @throws SQL When the switch still fails after the retries, or fails for any reason but a lock.
  */
 function ensure_wal_journal_mode(): void
 {
-    $attempts = 0;
-    while (!is_wal_journal_mode()) {
+    $attempt = 0;
+    while (true) {
+        $attempt++;
         try {
-            R::exec('PRAGMA journal_mode=WAL');
+            if (!is_wal_journal_mode()) {
+                R::exec('PRAGMA journal_mode=WAL');
+            }
             return;
         } catch (SQL $e) {
             // Changing the mode needs an exclusive lock, and SQLite reports
             // SQLITE_BUSY for it at once, without waiting on the busy timeout,
             // while another request boots the same new database. That request
-            // is usually setting WAL itself, so look again before retrying.
-            if (!is_busy_database_error($e) || ++$attempts >= WAL_SWITCH_ATTEMPTS) {
+            // is usually setting WAL itself, so the next attempt reads again first.
+            if (!is_busy_database_error($e) || $attempt >= WAL_SWITCH_ATTEMPTS) {
                 throw $e;
             }
             usleep(WAL_SWITCH_RETRY_MICROSECONDS);
@@ -296,7 +300,22 @@ function is_wal_journal_mode(): bool
  */
 function is_busy_database_error(SQL $e): bool
 {
-    return ((int) ($e->getDriverDetails()[1] ?? 0) & 0xFF) === 5;
+    return primary_sqlite_result_code($e) === 5;
+}
+
+/**
+ * The primary SQLite result code of a query failure.
+ *
+ * RedBeanPHP wraps the PDOException in RedException\SQL and keeps the driver
+ * code in the driver details. The low byte is the primary code; the higher
+ * bytes extend it, so callers compare this masked value.
+ *
+ * @param SQL $e The exception thrown by a RedBeanPHP query.
+ * @return int The primary result code, 0 when the driver gave none.
+ */
+function primary_sqlite_result_code(SQL $e): int
+{
+    return (int) ($e->getDriverDetails()[1] ?? 0) & 0xFF;
 }
 
 /**
