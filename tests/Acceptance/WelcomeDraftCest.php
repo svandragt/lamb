@@ -12,7 +12,6 @@ use Tests\Support\AcceptanceTester;
 class WelcomeDraftCest
 {
     private const TITLE = 'Hello from Lamb';
-    private const TARGET_URL = 'https://vandragt.com/do-you-run-lamb';
 
     private function login(AcceptanceTester $I): void
     {
@@ -28,8 +27,8 @@ class WelcomeDraftCest
         $I->amOnPage('/drafts');
 
         $I->see(self::TITLE);
-        $I->seeLink('Write your first post', 'https://svandragt.github.io/lamb/first-post');
-        $I->seeLink('Do you run Lamb?', self::TARGET_URL);
+        $I->seeLink('Write your first post', FIRST_POST_TUTORIAL_URL);
+        $I->seeLink('Do you run Lamb?', DO_YOU_RUN_LAMB_URL);
         $I->see('Publish this to say hello, or delete it.');
     }
 
@@ -76,6 +75,6 @@ class WelcomeDraftCest
 
         $I->amOnPage('/drafts');
         $I->dontSee(self::TITLE);
-        $I->seeWebmentionQueuedFor(self::TARGET_URL);
+        $I->seeWebmentionQueuedFor(DO_YOU_RUN_LAMB_URL);
     }
 }

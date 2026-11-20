@@ -21,6 +21,9 @@
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
+ * A real import run (not --dry-run) also deletes the pending welcome draft of a
+ * new database, because an imported site is not a new install.
+ *
  * upgrade-posts walks every post whose `version` is below POST_VERSION and
  * upgrades it through Response\upgrade_all_posts(), so an archive of stale
  * posts is brought current in one pass instead of stamping the version, one
@@ -289,6 +292,11 @@ try {
 }
 
 $items = ($source['extract'])($parsed, ...$extra);
+
+// A site that is filled by an import is not a new install, so it gets no welcome draft.
+if (!$dry_run) {
+    Bootstrap\withdraw_welcome_draft();
+}
 
 Import\run_import(
     $items,

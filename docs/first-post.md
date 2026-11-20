@@ -68,7 +68,9 @@ A new Lamb site starts with one draft, "Hello from Lamb". It links to this tutor
 
 To say hello, publish the draft as described above. Lamb then queues a [webmention]({{ site.baseurl }}{% link webmentions.md %}#sending) to that post, which tells the maintainer your site exists. A site that other sites cannot reach, such as a local test install, sends a webmention that fails verification, so nothing is recorded.
 
-To skip it, delete the draft. Lamb sends nothing and does not add the draft again, even after the trash is emptied. Only a new site gets the draft: a site you upgrade does not.
+To skip it, delete the draft. Lamb sends nothing and does not add the draft again, even after the trash is emptied.
+
+Lamb adds the draft on the first web request to a new site. A site you upgrade does not get it. Neither does a site you fill with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer), because that site is not new.
 
 ## Where to go next
 

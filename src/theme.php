@@ -719,7 +719,7 @@ function admin_toolbar_html(): string
         . $scheduledLink
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
-        . '<a href="https://svandragt.github.io/lamb" target="_blank">Help</a>'
+        . '<a href="' . DOCS_URL . '" target="_blank">Help</a>'
         . '<a href="/logout">Logout</a>'
         . '</div>'
         . '<style>'
