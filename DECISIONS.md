@@ -25,6 +25,17 @@ An existing install has no pending row, and a draft the owner deleted is not sav
 
 ---
 
+## 2026-11-20 — Core holds what any Lamb user can use; one-service integrations wait for plugins
+
+**Status:** Accepted
+**Context:** #949 (Show Micro.blog replies under posts, fetched server-side) added two tables, a `/_cron` task, a setting and output under every post, all for one company's API. Only a site owner with a Micro.blog account gets anything from it. The feature came from the maintainer's own site, and it would have shipped as core code that most users can never turn on. Everything else Lamb talks to at runtime uses an open standard (Webmention, Micropub, WebSub, IndieAuth, SocialSpec, feeds and sitemaps), so any compatible site can use it. The WordPress and Known importers each read one service's format, but they run only from `bin/lamb import`. They turn the export into ordinary posts and leave no ongoing connection to that service.
+
+**Decision:** Core holds features that any Lamb user can use without an account on another service. A feature that serves one service at runtime does not go into core. It waits for a plugin system, and Lamb has none yet. One-off import commands for a service's export format are allowed, because they convert the export into ordinary posts and add no tables, cron tasks, settings or output tied to that service. A default that points at one service through an open standard, such as the IndieAuth endpoints, is allowed while the user can change it (#944 tracks replacing the current one).
+
+**Consequences:** #949 is closed, and #948 (Conversations.js) stays open until a plugin system exists. Its branch keeps the implementation. A feature request first asks "who besides the maintainer can use this?" A second one-service integration with a real user behind it is the signal to design a plugin system, and that design starts from the hooks such features need: their own tables, a cron task, a setting and output on the page.
+
+---
+
 ## 2026-10-29 — SocialSpec files are derived, and the following list is a copy
 
 **Status:** Accepted

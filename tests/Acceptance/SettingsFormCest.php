@@ -19,6 +19,16 @@ class SettingsFormCest
         $I->click('Log in');
     }
 
+    public function adminToolbarLinksTheFeedbackDiscussionOnEveryPage(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        foreach (['/', '/settings'] as $path) {
+            $I->amOnPage($path);
+            $I->seeElement('#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"][target="_blank"]');
+            $I->see('Feedback', '#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"][target="_blank"]');
+        }
+    }
+
     public function requiredFieldsAreMarkedAndNoPlaceholderIdentityIsPrefilled(AcceptanceTester $I): void
     {
         $this->login($I);

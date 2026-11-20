@@ -66,3 +66,6 @@ define('SUBMIT_LOGIN', 'Log in');
 // splits into a sitemap index of /sitemap.xml/page/N children once the site's
 // visible URL count passes this.
 define('SITEMAP_MAX_URLS', 50000);
+// Where site owners are invited to tell the maintainer about their Lamb site.
+// Also pinned in README.md and RELEASING.md (see FeedbackDiscussionUrlGuardTest).
+define('FEEDBACK_DISCUSSION_URL', 'https://github.com/svandragt/lamb/discussions/1001');
