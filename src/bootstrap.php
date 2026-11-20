@@ -1000,9 +1000,10 @@ function configure_session_save_path(string $data_dir): void
 /**
  * Creates a directory (and parents) unless it already exists.
  *
- * The warning from mkdir() is suppressed because the error handler turns it into
- * a fatal error, which would also kill the request that loses a race to create the
- * same directory. The is_dir() re-check separates that case from a real failure.
+ * The warning from mkdir() is suppressed because it would print before the page or
+ * the session headers, including for a request that loses a race to create the same
+ * directory. The is_dir() re-check separates that case from a real failure, and the
+ * exception carries the warning's reason instead.
  *
  * @param string $dir The directory to create.
  * @param int $mode Permissions for newly created directories.
