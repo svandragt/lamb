@@ -65,7 +65,7 @@ php make-password.php <your-password>
 It prints the login hash and writes the same value to `.env` as
 `LAMB_LOGIN_PASSWORD`. The hash is a base64-encoded bcrypt hash, which is the
 form `LAMB_LOGIN_PASSWORD` expects, so copy it as printed. If `.env` already
-exists, the script refuses to run; see
+exists, the script leaves it unchanged and only prints the hash; see
 [Changing the password later](#changing-the-password-later).
 
 Lamb loads `.env` itself only under PHP's built-in server, and only when the
@@ -86,15 +86,16 @@ actually makes guessing hopeless.
 ## Changing the password later
 
 `make-password.php` writes `.env` in the directory you run it from. It does not
-overwrite one that already exists. It prints the hash instead, and tells you on
-standard error that it left the file unchanged:
+overwrite one that already exists. It prints the hash, exits with code 2 and
+tells you on standard error that it left the file unchanged:
 
 ```
 .env already exists in /var/www/example.com, so it was left unchanged.
-Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on STDOUT, or re-run with --force to replace the file.
+Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on
+STDOUT, or re-run with --force to replace the file.
 ```
 
-To set the new hash, edit `LAMB_LOGIN_PASSWORD` in `.env` yourself. To replace
+To set the new hash, copy the printed hash into `LAMB_LOGIN_PASSWORD` in `.env` yourself. To replace
 the whole file, pass `--force`:
 
 ```

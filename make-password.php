@@ -16,7 +16,7 @@ $password = $operands[0];
 // login hash the running site never read (issues #597, #598). Never overwrite
 // by default, so replacing a real .env has to be asked for. The hash is still
 // printed, so the owner can set LAMB_LOGIN_PASSWORD in the file themselves.
-$env_exists = !$force && file_exists('.env');
+$leave_env_alone = !$force && file_exists('.env');
 
 // Highlight a weak password rather than refusing it: communicate, don't block
 // (a refusal would also break test fixtures that pass a short password). The
@@ -31,17 +31,6 @@ if (mb_strlen($password) < MIN_PASSWORD_LENGTH) {
 }
 
 $hash = base64_encode(password_hash($password, PASSWORD_DEFAULT));
-
-if ($env_exists) {
-    fwrite(
-        STDERR,
-        '.env already exists in ' . getcwd() . ', so it was left unchanged.' . PHP_EOL
-        . "Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on STDOUT,"
-        . ' or re-run with --force to replace the file.' . PHP_EOL
-    );
-    echo $hash;
-    exit(0);
-}
 
 // One port per checkout, so acceptance runs in parallel worktrees don't share a
 // server, and none of them kills the dev server on 8747.
@@ -92,24 +81,40 @@ $data .= 'LAMB_LOGIN_PASSWORD=' . env_value($hash) . PHP_EOL;
 if (getenv('LAMB_WRITE_TEST_PASSWORD')) {
     $data .= 'LAMB_TEST_PASSWORD=' . env_value($password) . PHP_EOL;
 }
-// 0600 before the secret goes in, not the umask default: this file holds the
-// login hash, and file_put_contents() alone left it whatever the umask allowed —
-// 644 normally, 664 under 0002, and 666 under 0000, which is not unusual in
-// containers. World-readable hands a local user the bcrypt hash to crack
-// offline; world-*writable* lets them replace it and own the login outright.
-// bootstrap_db() already applies the same reasoning to the data directory
-// ("under a permissive umask 0777 would leave the database world-readable and
-// replaceable"). Creating the file first and tightening it before writing means
-// there is no moment where the hash sits in a readable one.
-if (!file_exists('.env')) {
-    touch('.env');
-}
-if (!chmod('.env', 0600)) {
-    user_error('Could not restrict permissions on .env; check it is not world-readable', E_USER_WARNING);
-}
-$env_out = file_put_contents('.env', $data);
-if (!$env_out) {
-    user_error('Problem saving .env', E_USER_WARNING);
+if ($leave_env_alone) {
+    fwrite(
+        STDERR,
+        '.env already exists in ' . getcwd() . ', so it was left unchanged.' . PHP_EOL
+        . "Set LAMB_LOGIN_PASSWORD='<hash>' in it yourself, using the hash printed on STDOUT,"
+        . ' or re-run with --force to replace the file.' . PHP_EOL
+    );
+    if (getenv('LAMB_WRITE_TEST_PASSWORD')) {
+        fwrite(STDERR, 'LAMB_TEST_PASSWORD was not written either.' . PHP_EOL);
+    }
+} else {
+    // 0600 before the secret goes in, not the umask default: this file holds the
+    // login hash, and file_put_contents() alone left it whatever the umask allowed —
+    // 644 normally, 664 under 0002, and 666 under 0000, which is not unusual in
+    // containers. World-readable hands a local user the bcrypt hash to crack
+    // offline; world-*writable* lets them replace it and own the login outright.
+    // bootstrap_db() already applies the same reasoning to the data directory
+    // ("under a permissive umask 0777 would leave the database world-readable and
+    // replaceable"). Creating the file first and tightening it before writing means
+    // there is no moment where the hash sits in a readable one.
+    if (!file_exists('.env')) {
+        touch('.env');
+    }
+    if (!chmod('.env', 0600)) {
+        user_error('Could not restrict permissions on .env; check it is not world-readable', E_USER_WARNING);
+    }
+    $env_out = file_put_contents('.env', $data);
+    if (!$env_out) {
+        user_error('Problem saving .env', E_USER_WARNING);
+    }
 }
 
 echo $hash;
+
+// Exit 2, not 0: nothing was written, so `make-password.php pw && next-step`
+// must not carry on as if .env were ready.
+exit($leave_env_alone ? 2 : 0);

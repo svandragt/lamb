@@ -231,7 +231,7 @@ class MakePasswordTest extends TestCase
         );
         $process->run();
 
-        $this->assertSame(0, $process->getExitCode(), 'Expected a zero exit: ' . $process->getErrorOutput());
+        $this->assertSame(2, $process->getExitCode(), 'Expected exit 2 (nothing written): ' . $process->getErrorOutput());
         $this->assertTrue(
             password_verify('somepassword123', (string)base64_decode($process->getOutput(), true)),
             'STDOUT must be the base64 hash of the password'
@@ -245,10 +245,11 @@ class MakePasswordTest extends TestCase
         );
     }
 
-    public function testRefusalDoesNotLeakTheTestPasswordIntoTheExistingEnv(): void
+    public function testExistingEnvGetsNoTestPasswordAndTheRunSaysSo(): void
     {
-        // The incident in #598: the opt-in is set, so a successful run would
-        // append the cleartext. The refusal has to come first.
+        // The incident in #598: the opt-in is set, so a write would append the
+        // cleartext. Leaving the file alone has to come first, and STDERR says
+        // LAMB_TEST_PASSWORD was skipped too.
         $this->seedExistingEnv('live-install-marker');
 
         $process = new Process(
@@ -258,6 +259,9 @@ class MakePasswordTest extends TestCase
         );
         $process->run();
 
+        $this->assertSame(2, $process->getExitCode());
+        $this->assertTrue(password_verify('hackme', (string)base64_decode($process->getOutput(), true)));
+        $this->assertStringContainsString('LAMB_TEST_PASSWORD', $process->getErrorOutput());
         $this->assertStringNotContainsString('hackme', file_get_contents($this->workspace . '/.env'));
     }
 
