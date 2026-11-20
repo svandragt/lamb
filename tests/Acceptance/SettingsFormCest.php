@@ -24,8 +24,8 @@ class SettingsFormCest
         $this->login($I);
         foreach (['/', '/settings'] as $path) {
             $I->amOnPage($path);
-            $I->seeElement('#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"]');
-            $I->see('Feedback', '#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"]');
+            $I->seeElement('#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"][target="_blank"]');
+            $I->see('Feedback', '#admin-toolbar a[href="' . FEEDBACK_DISCUSSION_URL . '"][target="_blank"]');
         }
     }
 

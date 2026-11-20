@@ -726,7 +726,7 @@ function admin_toolbar_html(): string
         . '<style>'
         . '#admin-toolbar{'
         . 'position:sticky;top:0;z-index:9999;'
-        . 'display:flex;gap:1rem;align-items:center;'
+        . 'display:flex;flex-wrap:wrap;gap:.25rem 1rem;align-items:center;'
         . 'padding:.4rem 1rem;'
         . 'background:#1a1a1a;color:#fff;font-size:.85rem;'
         . '}'
