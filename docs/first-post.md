@@ -70,7 +70,7 @@ Publish it to say hello, or delete it. To publish it, remove the `draft: true` l
 
 If you delete the draft, Lamb sends nothing and does not add it again, even after the trash is emptied.
 
-A new site gets the draft on your first logged-in request. Visits from anyone who is not logged in do not add it. A site you upgrade does not get it. Neither does a site you import posts into with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer) before that first request, because that site is not new.
+A new site gets the draft on your first logged-in request, if it has no posts yet. Visits from anyone who is not logged in do not add it. A site you upgrade does not get it. Neither does a site that has a post before that first request, for example one imported with [`bin/lamb import`]({{ site.baseurl }}{% link import-export.md %}#run-an-importer), posted by a Micropub client or fetched from a feed, because that site is not empty.
 
 ## Where to go next
 

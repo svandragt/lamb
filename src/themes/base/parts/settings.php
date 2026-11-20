@@ -203,7 +203,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
     <section class="settings-tabs__panel" id="settings-panel-config">
         <p>
             Edit your site's settings. Fields marked required must be filled in.
-            Refer to the <a href="https://svandragt.github.io/lamb/site-configuration" target="_blank">documentation</a> for details and examples.
+            Refer to the <a href="<?= DOCS_URL ?>/site-configuration" target="_blank">documentation</a> for details and examples.
         </p>
 
         <form method="post" action="/settings" id="settingsform" class="settings-form">
@@ -414,7 +414,7 @@ $list_field = static function (string $name, string $label, string $help, int $r
         <p>
             The Markdown files are the same shape Lamb stores internally, so they can be
             read by any editor and re-imported later. See the
-            <a href="https://svandragt.github.io/lamb/export" target="_blank">export documentation</a>
+            <a href="<?= DOCS_URL ?>/export" target="_blank">export documentation</a>
             for the format.
         </p>
         <p>

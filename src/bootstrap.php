@@ -351,8 +351,8 @@ const SCHEMA = [
  * two requests racing a fresh install both succeed. PRAGMA table_info is
  * already a read, so the per-table ALTER path needs no equivalent change.
  *
- * A database with none of the SCHEMA tables is a new install, built by
- * create_new_database(). An upgrade never takes that path.
+ * A database with none of the SCHEMA tables is a new install. create_new_database()
+ * builds all of it, so nothing else runs for it. An upgrade never takes that path.
  *
  * Must run before R::freeze(true): CREATE TABLE and ALTER TABLE ADD COLUMN
  * are themselves schema changes, which a frozen connection also refuses.
@@ -364,6 +364,8 @@ function ensure_schema(): void
     $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
     if (array_intersect(array_keys(SCHEMA), $existing_tables) === []) {
         create_new_database();
+
+        return;
     }
     foreach (SCHEMA as $table => $columns) {
         if (!in_array($table, $existing_tables, true)) {
@@ -403,10 +405,7 @@ function create_table(string $table, array $columns): void
  * Builds a database that has none of the SCHEMA tables, and records that its
  * welcome draft is pending, in one write transaction.
  *
- * The tables are listed again under the write lock. A request that arrives
- * together with another one reads an empty database first, and the one that
- * wins the lock builds it. The other would otherwise record a second pending
- * draft after the first request had already saved the draft.
+ * See DECISIONS.md, 2026-11-20.
  *
  * @return void
  * @throws SQL When a write fails or the transaction does not begin or end.
@@ -414,10 +413,6 @@ function create_table(string $table, array $columns): void
 function create_new_database(): void
 {
     with_write_transaction(static function (): void {
-        $existing_tables = R::getCol("SELECT name FROM sqlite_master WHERE type='table'");
-        if (array_intersect(array_keys(SCHEMA), $existing_tables) !== []) {
-            return;
-        }
         foreach (SCHEMA as $table => $columns) {
             create_table($table, $columns);
         }
@@ -458,27 +453,20 @@ function welcome_draft_body(): string
 /**
  * Saves the welcome draft a new database is waiting for, if it is.
  *
- * Called by src/index.php for a logged-in request, once it has booted
- * completely: the schema is frozen, the post subscribers are registered and the
- * timezone is set, so the draft is saved and dated like a post the owner wrote.
- * A request on a database that has no pending row only reads it. Neither an
- * existing install nor an import (see withdraw_welcome_draft()) has one, and a
- * draft the owner deleted is not saved again because its row went when it was
- * saved.
- *
- * The draft and the removal of the pending row are saved in one write
- * transaction, and the DELETE affecting a row is the claim, which an option
- * helper cannot report. Requests that see the row together take that
- * transaction in turn (BEGIN IMMEDIATE), and the ones after the first find the
- * row gone, which rolls their draft back. The draft is optional, so any other
- * failure is logged once and the row is dropped, and the next request does not
- * try again and log again.
+ * Called by src/index.php for a logged-in request. A site that already has a
+ * post is not empty, so the pending row is dropped instead. A failure is logged
+ * once and also drops it. See DECISIONS.md, 2026-11-20.
  *
  * @return void
  */
 function seed_welcome_draft(): void
 {
     if (empty(get_option(WELCOME_DRAFT_PENDING, '')->id)) {
+        return;
+    }
+    if (R::getCell('SELECT 1 FROM post LIMIT 1')) {
+        withdraw_welcome_draft();
+
         return;
     }
 
@@ -489,6 +477,7 @@ function seed_welcome_draft(): void
         save($bean, [
             'finalize_slug' => true,
             'extra_writes' => static function () use (&$lost_claim): void {
+                // The affected-row count is the claim, which set_option() cannot report.
                 if (R::exec('DELETE FROM option WHERE name = ?', [WELCOME_DRAFT_PENDING]) === 0) {
                     $lost_claim = true;
                     throw new RuntimeException('Another request saved the welcome draft first');
@@ -509,8 +498,7 @@ function seed_welcome_draft(): void
 }
 
 /**
- * Drops the pending welcome draft, for a site that is not a new install any
- * more or whose draft could not be saved.
+ * Drops the pending welcome draft, so none is saved.
  *
  * @return void
  * @throws SQL When the delete fails.

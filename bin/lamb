@@ -21,10 +21,6 @@
  *
  * The lamb source also takes --site-url=<url> (see docs/lamb-import.md).
  *
- * A real import run that creates or replaces at least one post also deletes the
- * pending welcome draft of a new database, because an imported site is not a new
- * install.
- *
  * upgrade-posts walks every post whose `version` is below POST_VERSION and
  * upgrades it through Response\upgrade_all_posts(), so an archive of stale
  * posts is brought current in one pass instead of stamping the version, one
@@ -294,7 +290,7 @@ try {
 
 $items = ($source['extract'])($parsed, ...$extra);
 
-$imported = Import\run_import(
+Import\run_import(
     $items,
     $source['skip_reason'],
     $source['uuid'],
@@ -303,12 +299,6 @@ $imported = Import\run_import(
     static fn(string $uuid): ?OODBBean => R::findOne('post', ' import_uuid = ? ', [$uuid]),
     $replace,
 );
-
-// A site that an import filled is not a new install, so it gets no welcome draft.
-// An empty or dry run leaves it, because nothing was written.
-if (!$dry_run && $imported > 0) {
-    Bootstrap\withdraw_welcome_draft();
-}
 
 if (isset($source['after'])) {
     ($source['after'])($parsed, $dry_run);

@@ -1060,7 +1060,6 @@ function parse_import_args(array $argv, array $extra_prefixes = []): array
  * @param callable(array<string,mixed>):string  $uuid       Computes the item's dedup uuid.
  * @param callable(array<string,mixed>,callable,bool,\RedBeanPHP\OODBBean|null=):?\RedBeanPHP\OODBBean $import Imports a single item.
  * @param callable(string):?\RedBeanPHP\OODBBean $find_existing Finds an already-imported row by uuid.
- * @return int The number of posts created or replaced, which a dry run only counts.
  */
 function run_import(
     array $items,
@@ -1070,7 +1069,7 @@ function run_import(
     bool $dry_run,
     callable $find_existing,
     bool $replace = false
-): int {
+): void {
     $downloader = $dry_run
         ? static fn(): ?string => null
         : 'Lamb\\Import\\default_media_downloader';
@@ -1127,8 +1126,6 @@ function run_import(
             echo "  $count\t$reason\n";
         }
     }
-
-    return $created + $replaced;
 }
 
 /**

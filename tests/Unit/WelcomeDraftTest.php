@@ -24,13 +24,6 @@ class WelcomeDraftTest extends TestCase
     R::exec("CREATE TRIGGER refuse_posts BEFORE INSERT ON post BEGIN SELECT RAISE(ABORT, 'refused'); END");
     PHP;
 
-    private const NO_POSTS_WXR = <<<'XML'
-    <?xml version="1.0" encoding="UTF-8"?>
-    <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:wp="http://wordpress.org/export/1.2/">
-    <channel></channel>
-    </rss>
-    XML;
-
     /** @var list<string> */
     private array $dirs = [];
 
@@ -105,9 +98,8 @@ class WelcomeDraftTest extends TestCase
      * Runs bin/lamb with the data directory set, as an operator would.
      *
      * @param list<string> $arguments
-     * @param int          $exit_code The exit code the command must end with.
      */
-    private function binLamb(string $dir, array $arguments, int $exit_code = 0): Process
+    private function binLamb(string $dir, array $arguments): Process
     {
         $process = new Process(
             ['php', dirname(__DIR__, 2) . '/bin/lamb', ...$arguments],
@@ -115,7 +107,7 @@ class WelcomeDraftTest extends TestCase
             ['LAMB_DATA_DIR' => $dir] + getenv(),
         );
         $process->run();
-        $this->assertSame($exit_code, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
 
         return $process;
     }
@@ -276,6 +268,51 @@ class WelcomeDraftTest extends TestCase
         $this->assertSame(0, $boot['pending']);
     }
 
+    public function testAPostSavedBeforeTheFirstLoginCancelsTheDraft(): void
+    {
+        // What a Micropub create does while nobody is logged in.
+        $statements = <<<'PHP'
+        \Lamb\Post\save(\Lamb\Post\populate_bean('A note from a Micropub client.'), ['finalize_slug' => true, 'notify' => true]);
+        PHP;
+
+        $boot = $this->boot($this->dataDir(), $statements . self::WEB_REQUEST);
+
+        $this->assertSame(['A note from a Micropub client.'], array_column($boot['posts'], 'body'));
+        $this->assertSame(0, $boot['pending']);
+    }
+
+    public function testAFeedItemThatArrivedFirstCancelsTheDraft(): void
+    {
+        // A feed item shows on the home page or the drafts page like any post, so the site is not empty.
+        $statements = <<<'PHP'
+        $item = R::dispense('post');
+        $item->body = 'An item from a feed.';
+        $item->feed_name = 'Example';
+        $item->draft = 1;
+        R::store($item);
+        PHP;
+
+        $boot = $this->boot($this->dataDir(), $statements . self::WEB_REQUEST);
+
+        $this->assertSame(['An item from a feed.'], array_column($boot['posts'], 'body'));
+        $this->assertSame(0, $boot['pending']);
+    }
+
+    public function testATrashedPostAlsoMeansTheSiteIsNotNew(): void
+    {
+        $statements = <<<'PHP'
+        $post = R::dispense('post');
+        $post->body = 'Deleted before the first login.';
+        $post->deleted = 1;
+        R::store($post);
+        PHP;
+
+        $boot = $this->boot($this->dataDir(), $statements . self::WEB_REQUEST);
+
+        $this->assertCount(1, $boot['posts']);
+        $this->assertSame(0, $boot['pending']);
+    }
+
     public function testADatabaseThatAlreadyHasPostsGetsNoDraft(): void
     {
         $dir = $this->dataDir();
@@ -325,9 +362,10 @@ class WelcomeDraftTest extends TestCase
         XML);
         $this->binLamb($dir . '/data', ['import', 'wordpress', $wxr, '--experimental']);
 
-        $posts = $this->request($dir . '/data');
+        $boot = $this->boot($dir . '/data', self::WEB_REQUEST);
 
-        $this->assertSame(['hello-world'], array_column($posts, 'slug'));
+        $this->assertSame(['hello-world'], array_column($boot['posts'], 'slug'));
+        $this->assertSame(0, $boot['pending'], 'an import leaves the row, and the first logged-in request drops it');
     }
 
     public function testRestoringAnArchiveIntoANewDataDirectoryLeavesNoDraft(): void
@@ -351,35 +389,6 @@ class WelcomeDraftTest extends TestCase
         $posts = $this->request($dir . '/data');
 
         $this->assertSame(['hello-world'], array_column($posts, 'slug'));
-    }
-
-    public function testADryRunImportKeepsTheDraftBecauseNothingWasImported(): void
-    {
-        $dir = $this->dataDir();
-        $archive = $dir . '/export.zip';
-        build_export_archive([], $dir . '/no-assets', $archive, '2026-07-29T10:00:00+00:00', ['url' => 'https://example.test']);
-        $this->binLamb($dir . '/data', ['import', 'lamb', $archive, '--dry-run', '--experimental']);
-
-        $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
-    }
-
-    public function testAnImportThatCreatesNoPostKeepsTheDraft(): void
-    {
-        $dir = $this->dataDir();
-        $wxr = $dir . '/export.xml';
-        file_put_contents($wxr, self::NO_POSTS_WXR);
-        $output = $this->binLamb($dir . '/data', ['import', 'wordpress', $wxr, '--experimental'])->getOutput();
-
-        $this->assertStringContainsString('Done. created=0', $output);
-        $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
-    }
-
-    public function testAnImportThatCannotReadItsSourceKeepsTheDraft(): void
-    {
-        $dir = $this->dataDir();
-        $this->binLamb($dir . '/data', ['import', 'wordpress', $dir . '/absent.xml', '--experimental'], 1);
-
-        $this->assertSame(['hello-from-lamb'], array_column($this->request($dir . '/data'), 'slug'));
     }
 
     public function testMigratingANewDataDirectoryKeepsTheDraftForTheFirstWebRequest(): void
