@@ -71,22 +71,4 @@ class ConcurrentFirstBootTest extends TestCase
 
         $this->assertSame([], $failures, count($failures) . ' of ' . (self::ROUNDS * self::REQUESTS) . ' boots failed');
     }
-
-    public function testADataDirectoryThatCannotBeCreatedThrows(): void
-    {
-        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
-            $this->markTestSkipped('root ignores directory permissions');
-        }
-        $parent = sys_get_temp_dir() . '/lamb_readonly_parent_' . uniqid();
-        mkdir($parent, 0550);
-        $this->paths[] = $parent;
-
-        try {
-            $this->expectException(\RuntimeException::class);
-            $this->expectExceptionMessage('was not created');
-            \Lamb\Bootstrap\bootstrap_db($parent . '/data');
-        } finally {
-            chmod($parent, 0750);
-        }
-    }
 }

@@ -148,9 +148,7 @@ function bootstrap_db(string $data_dir): void
         // 0750, not 0777: this directory holds lamb.db and the session files, so
         // only the web-server user has any business reading it. Under a permissive
         // umask 0777 would leave the database world-readable and replaceable.
-        if (!@mkdir($data_dir, 0750, true) && !is_dir($data_dir)) {
-            throw new RuntimeException(sprintf('Directory "%s" was not created', $data_dir));
-        }
+        ensure_directory($data_dir, 0750);
     }
     R::setup(sprintf("sqlite:%s/lamb.db", $data_dir));
     try {
@@ -990,15 +988,37 @@ function configure_session_save_path(string $data_dir): void
 {
     $path = $data_dir . '/sessions';
     if (!is_dir($path)) {
-        // 0700: only the web-server/PHP user should read session files. Same
-        // check-and-throw as bootstrap_db()'s data dir: an ini_set() pointing
-        // at a directory that was never created would silently degrade every
-        // session to "starts, never persists" rather than fail loudly.
-        if (!mkdir($path, 0700, true) && !is_dir($path)) {
-            throw new RuntimeException(sprintf('Directory "%s" was not created', $path));
-        }
+        // 0700: only the web-server/PHP user should read session files.
+        // ensure_directory() throws when the directory cannot be created: an
+        // ini_set() pointing at a directory that was never created would silently
+        // degrade every session to "starts, never persists" rather than fail loudly.
+        ensure_directory($path, 0700);
     }
     ini_set('session.save_path', $path);
+}
+
+/**
+ * Creates a directory (and parents) unless it already exists.
+ *
+ * The warning from mkdir() is suppressed because the error handler turns it into
+ * a fatal error, which would also kill the request that loses a race to create the
+ * same directory. The is_dir() re-check separates that case from a real failure.
+ *
+ * @param string $dir The directory to create.
+ * @param int $mode Permissions for newly created directories.
+ * @return void
+ * @throws RuntimeException If the directory does not exist and cannot be created.
+ */
+function ensure_directory(string $dir, int $mode): void
+{
+    if (!@mkdir($dir, $mode, true) && !is_dir($dir)) {
+        $reason = (string) preg_replace('/^mkdir\(\): /', '', error_get_last()['message'] ?? '');
+        throw new RuntimeException(sprintf(
+            'Directory "%s" was not created%s',
+            $dir,
+            $reason !== '' ? ': ' . $reason : ''
+        ));
+    }
 }
 
 /**
