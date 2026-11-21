@@ -80,12 +80,17 @@ git reset --hard '@{u}'
 # by a later health check that only asks "does the site respond?" — a stale
 # migration can leave that true while the data itself is still wrong.
 #
-# exit 3 is distinct from every other failure: it means bin/lamb refused
-# before touching the database (the #831 ownership guard — data/lamb.db is
-# owned by the webserver user, this script by whoever runs cron, exactly the
-# deploy this script's own header calls normal). That is not a broken
-# upgrade — the checkout and dependencies are fine — so it must not fail the
-# whole run the way a genuine migration failure (any other nonzero) does.
+# exit 3 is distinct from every other failure: it means bin/lamb ran nothing
+# (the #831 ownership guard refused because data/lamb.db is owned by the
+# webserver user and this script by whoever runs cron, exactly the deploy this
+# script's own header calls normal; or /_cron holds the lock). That is not a
+# broken upgrade — the checkout and dependencies are fine — so it must not fail
+# the whole run the way a genuine migration failure (any other nonzero) does.
+# The site migrates itself instead: /_cron runs as the database's owner and
+# runs the same migrations when the code differs from the code the data was
+# last migrated for. Its reply opens with a "Data migrations: <result>" line,
+# which is what this script reads, because /_cron also answers 200 when it was
+# busy and when nothing needed migrating.
 migrate_status=0
 bin/lamb migrate || migrate_status=$?
 
@@ -95,24 +100,62 @@ if [ "$migrate_status" -ne 0 ] && [ "$migrate_status" -ne 3 ]; then
     exit 1
 fi
 
+# SITE_URL is written by make-password.php.
+site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "'\"") || true
+
 # Printed right before the summary line, not buried above the install
 # output, so it survives being skimmed in cron mail.
 if [ "$migrate_status" -eq 3 ]; then
-    owner=$(stat -c '%U' data/lamb.db 2>/dev/null || stat -f '%Su' data/lamb.db 2>/dev/null || echo 'the web server user')
-    cat >&2 <<EOF
-
-WARNING: bin/lamb migrate could not run — data/lamb.db is owned by ${owner}, not $(id -un).
-The upgrade itself succeeded, but the data migrations are still outstanding. Run them by hand:
-
-    sudo -u ${owner} bin/lamb migrate
-
-EOF
+    if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
+        cron_url="${site_url%/}/_cron"
+        cron_delay="${LAMB_UPGRADE_HEALTH_RETRY_DELAY:-3}"
+        # /_cron cannot always tell that OPcache still serves the old code for a
+        # moment after the reset, and would then migrate with old code and record
+        # the new marker. Wait as long as the health check does, before the first request.
+        sleep "$cron_delay"
+        cron_result=""
+        cron_failed=0
+        for attempt in 1 2 3 4 5; do
+            if [ "$attempt" -gt 1 ]; then sleep "$cron_delay"; fi
+            # The migrations can take a while on a large archive, so this waits longer
+            # than the health check. /_cron ends its reply before the feed tasks.
+            if ! cron_reply=$(curl -fsS --max-time 300 "$cron_url"); then
+                cron_failed=1
+                break
+            fi
+            cron_result=$(printf '%s\n' "$cron_reply" | grep -E '^Data migrations: ' | head -n1) || true
+            [ "$cron_result" = "Data migrations: busy" ] || break
+        done
+        case "$cron_result" in
+            "Data migrations: migrated")
+                echo "bin/upgrade: the site ran the data migrations through ${cron_url}"
+                ;;
+            "Data migrations: already current")
+                echo "bin/upgrade: the site had already migrated its data, per ${cron_url}"
+                ;;
+            "Data migrations: busy")
+                # Nothing ran, and a later /_cron request will run the migrations, as
+                # when there is no SITE_URL, so this is not a failed upgrade.
+                echo "bin/upgrade: the site was busy on all 5 requests to ${cron_url}, so the next scheduled /_cron request runs the data migrations"
+                ;;
+            *)
+                if [ "$cron_failed" -eq 1 ]; then
+                    echo "Request to ${cron_url} failed, so the data migrations may not have run" >&2
+                else
+                    echo "${cron_url} did not report that the data migrations ran (${cron_result:-no 'Data migrations:' line}), so they may not have" >&2
+                fi
+                echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
+                exit 1
+                ;;
+        esac
+    else
+        echo "bin/upgrade: bin/lamb migrate ran nothing here, so the next scheduled /_cron request runs the data migrations"
+    fi
 fi
 
 echo "Upgraded ${branch}: ${prev:0:7} -> $(git rev-parse --short HEAD)"
 
-# Health check: only when SITE_URL is configured (written by make-password.php).
-site_url=$(grep -E '^SITE_URL=' .env 2>/dev/null | head -n1 | cut -d= -f2- | tr -d "'\"") || true
+# Health check: only when SITE_URL is configured.
 if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
     # Retry: OPcache (revalidate_freq=2) can serve stale files for a moment after the reset.
     healthy=0

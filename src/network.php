@@ -203,7 +203,27 @@ function run_feed_cycle(
         die('Cannot open the cron lock at ' . cron_lock_path() . ' — is the data directory writable?');
     }
     if ($lock === null) {
-        die('Already running, try again later.');
+        die(\Lamb\Bootstrap\data_migration_result_line('busy') . PHP_EOL . 'Already running, try again later.');
+    }
+
+    // Before the rate-limit gate below, so the first request after an upgrade
+    // migrates even when the feed tasks are not due. This request runs as the
+    // user that owns the database, which a deploy user's bin/lamb cannot be.
+    $migration = \Lamb\Bootstrap\run_pending_data_migrations(
+        get_option(\Lamb\Bootstrap\DATA_MIGRATED_FOR_OPTION, '')
+    );
+    if ($migration['result'] === 'failed') {
+        http_response_code(500);
+    }
+    echo \Lamb\Bootstrap\data_migration_result_line($migration['result']) . PHP_EOL;
+    foreach ($migration['lines'] as $line) {
+        echo $line . PHP_EOL;
+    }
+    // Ends the response before the feed cycle, which can run up to the time limit
+    // above while bin/upgrade's request gives up after five minutes. The built-in
+    // server has no such function, so there the connection stays open to the end.
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
     }
 
     $cron_last_updated = get_option('last_processed_date', 0);
@@ -234,16 +254,22 @@ function run_feed_cycle(
 }
 
 /**
- * The path of the lock file serializing /_cron runs. Lives in the install's
- * data directory, wherever that is — see Bootstrap\data_dir().
+ * The path of the lock file serialising /_cron runs and `bin/lamb migrate`.
+ * Lives in the install's data directory, wherever that is — see
+ * Bootstrap\data_dir().
+ *
+ * @param string|null $data_dir The data directory; null means the web default
+ *                              from Bootstrap\data_dir(). A CLI entry point passes
+ *                              the directory it resolved against its own root.
  */
-function cron_lock_path(): string
+function cron_lock_path(?string $data_dir = null): string
 {
-    return \Lamb\Bootstrap\data_dir() . '/cron.lock';
+    return ($data_dir ?? \Lamb\Bootstrap\data_dir()) . '/cron.lock';
 }
 
 /**
- * Acquires an exclusive, non-blocking lock serialising /_cron runs.
+ * Acquires an exclusive, non-blocking lock serialising /_cron runs and
+ * `bin/lamb migrate`, which both run the data migrations.
  *
  * The handle must stay referenced until the request ends: the lock releases
  * when it closes, so no explicit unlock is needed as long as every
@@ -271,6 +297,31 @@ function acquire_cron_lock(?string $path = null)
     }
 
     return $handle;
+}
+
+/**
+ * Gives a lock file the permission bits and group of the database file.
+ *
+ * `bin/lamb migrate` can be the first to create the lock file, as a user other
+ * than the one PHP runs as. With the default umask the web server could then not
+ * open it for writing, and every /_cron request would fail on the lock. The
+ * database file is the one both users already share, so the lock follows it. A
+ * group the caller does not belong to cannot be set and is left alone.
+ *
+ * @param string $lock_path The lock file, which the caller has just created.
+ * @param string $db_path The database file whose mode and group to copy.
+ * @return void
+ */
+function align_lock_file_with_database(string $lock_path, string $db_path): void
+{
+    $mode = @fileperms($db_path);
+    if ($mode !== false) {
+        @chmod($lock_path, $mode & 0666);
+    }
+    $group = @filegroup($db_path);
+    if ($group !== false && @filegroup($lock_path) !== $group) {
+        @chgrp($lock_path, $group);
+    }
 }
 
 /**

@@ -33,9 +33,12 @@
  * a report of the settings 0.17 removed that the stored settings still hold, plus
  * the same post upgrade as upgrade-posts (#814, reusing
  * Response\upgrade_all_posts() rather than duplicating its
- * batching) — see docs/upgrading.md (#811). `bin/upgrade` runs it
- * automatically; restoring an old `lamb.db` backup by hand needs it run
- * explicitly.
+ * batching) — see docs/upgrading.md (#811). The steps live in
+ * Bootstrap\migrate_data(), which /_cron also runs when the code changes.
+ * `bin/upgrade` runs this command, and /_cron covers an upgrade by a user who
+ * does not own lamb.db; restoring an old `lamb.db` backup by hand needs it run
+ * explicitly. A run takes the cron lock and records the code it migrated for.
+ * It exits 3 when it ran nothing: another user owns lamb.db, or the lock is held.
  *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
@@ -195,26 +198,29 @@ if ($command === 'migrate') {
     Config\apply_timezone($config);
 
     $prefix = $dry_run ? '[dry-run] ' : '';
-    $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
-    $verb = $dry_run ? 'would stamp' : 'stamped';
-    $version_count = Bootstrap\backfill_post_version($columns, $dry_run);
-    echo "{$prefix}backfill_post_version: $verb version=1 on $version_count post(s)\n";
 
-    $verb = $dry_run ? 'would move' : 'moved';
-    $identity_count = Bootstrap\backfill_imported_post_identity($columns, $dry_run);
-    echo "{$prefix}backfill_imported_post_identity: $verb $identity_count post(s) onto import_uuid\n";
+    // The cron lock serialises this run with /_cron, which runs the same
+    // migrations once the code changes. A dry run writes nothing, so it takes
+    // no lock. Exit 3 again: nothing ran here, and the site's next /_cron
+    // request will migrate.
+    $lock_path = Network\cron_lock_path($data_dir);
+    $lock_is_new = !file_exists($lock_path);
+    $lock = $dry_run ? null : Network\acquire_cron_lock($lock_path);
+    if ($lock === false) {
+        fwrite(STDERR, "bin/lamb: cannot open the lock file at $lock_path. Is the data directory writable?\n");
+        exit(1);
+    }
+    if ($lock_is_new && is_resource($lock)) {
+        Network\align_lock_file_with_database($lock_path, "$data_dir/lamb.db");
+    }
+    if ($lock === null && !$dry_run) {
+        fwrite(STDERR, "bin/lamb: /_cron or another bin/lamb migrate holds the lock, so no migration ran. Run bin/lamb migrate again when it has finished.\n");
+        exit(3);
+    }
 
-    $verb = $dry_run ? 'would seed' : 'seeded';
-    $watermark_count = Network\migrate_feed_watermarks(Network\get_feeds(), $dry_run);
-    echo "{$prefix}migrate_feed_watermarks: $verb $watermark_count feed(s) from their legacy watermark\n";
-
-    $verb = $dry_run ? 'would add' : 'added';
-    $draft_count = Network\migrate_feed_drafts($dry_run);
-    echo "{$prefix}migrate_feed_drafts: $verb draft: true to $draft_count feed draft(s)\n";
-
-    $verb = $dry_run ? 'would delete' : 'deleted';
-    $stamp_count = Bootstrap\drop_experimental_gate_stamp($dry_run);
-    echo "{$prefix}drop_experimental_gate_stamp: $verb $stamp_count unused option row(s)\n";
+    foreach (Bootstrap\migrate_data($dry_run) as $line) {
+        echo $line . "\n";
+    }
 
     // Report only: the settings page is the one place that drops a removed setting.
     $stored_ini = Config\get_ini_text();
@@ -225,14 +231,10 @@ if ($command === 'migrate') {
         echo "{$prefix}check_removed_settings: `$setting` was removed and is ignored; saving the settings page drops it. Replacement: $replacement\n";
     }
 
-    // Must run after backfill_post_version() above: that's what gives a
-    // pre-versioning post a `version` at all, so upgrade_all_posts()'s
-    // `WHERE version < ?` sees it in the same pass instead of on a second
-    // `bin/lamb migrate` run.
-    $verb = $dry_run ? 'would upgrade' : 'upgraded';
-    [$needing_upgrade, $upgraded_count] = upgrade_all_posts($dry_run);
-    $post_count = $dry_run ? $needing_upgrade : $upgraded_count;
-    echo "{$prefix}upgrade_all_posts: $verb $post_count post(s) to version " . POST_VERSION . "\n";
+    // A manual run counts for the code it ran with, so /_cron does not repeat it.
+    if (!$dry_run) {
+        Bootstrap\mark_data_migrated(Bootstrap\code_marker(), get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, ''));
+    }
 
     echo "{$prefix}Done.\n";
     exit(0);

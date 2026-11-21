@@ -5,10 +5,13 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\code_marker;
 use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
+use function Lamb\Network\acquire_cron_lock;
+use function Lamb\Network\cron_lock_path;
 
 /**
  * Covers the importer registry (Import\register_source / get_source /
@@ -601,6 +604,123 @@ XML;
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
         $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
         $this->assertSame(1, $this->gateStampCount($data_dir));
+    }
+
+    private function storedDataMarker(string $data_dir): string
+    {
+        return $this->inDatabase(
+            $data_dir,
+            'echo \RedBeanPHP\R::getCell("SELECT value FROM option WHERE name = ?", ["data_migrated_for"]);'
+        );
+    }
+
+    /**
+     * A manual run counts as the migration for the code it ran with, so the
+     * next /_cron request does not repeat it.
+     */
+    public function testMigrateCommandRecordsTheCodeItMigratedFor(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+
+        $this->runMigrate($data_dir);
+
+        $this->assertSame(code_marker(), $this->storedDataMarker($data_dir));
+    }
+
+    public function testMigrateDryRunDoesNotRecordTheMarker(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $this->runMigrate($data_dir, ['--dry-run']);
+
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * /_cron and `bin/lamb migrate` share the cron lock, so they never migrate at once. Exit 3
+     * is the code bin/upgrade reads as "this command did not run the migrations".
+     */
+    public function testMigrateCommandRefusesWhileAnotherRunHoldsTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+        fclose($lock);
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('holds the lock', $process->getErrorOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * The CLI user may create the lock file, and the web server user must still open it for
+     * writing: when it cannot, every /_cron request fails with "Cannot open the cron lock".
+     */
+    public function testMigrateCreatesTheLockFileWithTheModeOfTheDatabase(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        chmod("$data_dir/lamb.db", 0660);
+        $this->assertFileDoesNotExist("$data_dir/cron.lock");
+
+        $this->runMigrate($data_dir);
+
+        $this->assertFileExists("$data_dir/cron.lock");
+        $this->assertSame('0660', substr(sprintf('%o', fileperms("$data_dir/cron.lock")), -4));
+    }
+
+    public function testMigrateLeavesAnExistingLockFileAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        chmod("$data_dir/lamb.db", 0660);
+        touch("$data_dir/cron.lock");
+        chmod("$data_dir/cron.lock", 0640);
+
+        $this->runMigrate($data_dir);
+
+        $this->assertSame('0640', substr(sprintf('%o', fileperms("$data_dir/cron.lock")), -4), 'the web server created it, and chose its mode');
+    }
+
+    public function testMigrateCreatesTheLockFileInTheGroupOfTheDatabase(): void
+    {
+        $other_groups = array_diff(function_exists('posix_getgroups') ? posix_getgroups() : [], [posix_getegid()]);
+        if ($other_groups === []) {
+            $this->markTestSkipped('chgrp needs a second group this user belongs to');
+        }
+        $group = reset($other_groups);
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        chgrp("$data_dir/lamb.db", $group);
+
+        $this->runMigrate($data_dir);
+
+        $this->assertSame($group, filegroup("$data_dir/cron.lock"));
+    }
+
+    public function testMigrateDryRunDoesNotNeedTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = $this->runMigrate($data_dir, ['--dry-run']);
+        fclose($lock);
+
+        $this->assertStringContainsString('upgrade_all_posts: would upgrade 1 post(s)', $process->getOutput());
     }
 
     private function storeSettings(string $data_dir, string $ini): void

@@ -42,7 +42,7 @@ class UpgradeScriptTest extends TestCase
         mkdir($this->stubs, 0777, true);
         mkdir($this->tools, 0777, true);
         $finder = new ExecutableFinder();
-        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'head', 'id', 'sh', 'sleep', 'sort', 'stat', 'tr'] as $tool) {
+        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'date', 'head', 'id', 'sh', 'sleep', 'sort', 'stat', 'tail', 'tr'] as $tool) {
             symlink($finder->find($tool), $this->tools . '/' . $tool);
         }
         $this->writeStub('viv', $this->vivLog, 0, 'viv 0.22.0');
@@ -172,31 +172,257 @@ class UpgradeScriptTest extends TestCase
     }
 
     /**
-     * #811: exit 3 from bin/lamb migrate means the #831 ownership guard
-     * refused before touching the database — the normal shape of a cron
-     * deploy (checkout owned by the webserver user, cron running as a
-     * human), not a broken upgrade. bin/upgrade must warn and keep going
-     * to the health check and a successful exit, not take the fatal path
+     * Exit 3 from bin/lamb migrate means it did not run the migrations: the
+     * #831 ownership guard refused (the normal shape of a cron deploy, with the
+     * checkout and database owned by the webserver user and cron running as a
+     * human), or another run holds the lock. That is not a broken upgrade, so
+     * bin/upgrade hands the migrations to the site's own /_cron, which runs as
+     * the database's owner, before it checks the site is healthy. It must not
+     * take the fatal path
      * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
      * covers for every other nonzero code.
+     *
+     * The HTTP status alone is not enough: /_cron answers 200 for a held lock
+     * and when the migrations were not needed. bin/upgrade reads the
+     * `Data migrations: <result>` line instead.
      */
-    public function testMigrateOwnershipRefusalWarnsAndContinuesToTheHealthCheck(): void
+    public function testMigrateRefusalRequestsCronThenChecksHealth(): void
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
-
-        $this->writeRepoStub('bin/lamb', $this->lambLog, 3);
-        $this->git(['git', 'add', '.'], $this->seed);
-        $this->git(['git', 'commit', '-m', 'lamb refuses on ownership'], $this->seed);
-        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
 
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('bin/lamb migrate', $output, 'should name the command to run by hand');
-        $this->assertStringContainsString('sudo -u', $output, 'should tell the operator which user to run it as');
+        $this->assertStringContainsString('ran the data migrations through http://example.test:8747/_cron', $output);
+        $this->assertStringNotContainsString('sudo', $output, 'nobody has to run anything by hand');
+        $this->assertStringNotContainsString('WARNING', $output);
         $this->assertStringContainsString('Upgraded', $output, 'the upgrade itself still succeeded');
-        $this->assertFileExists($this->curlLog, 'health check must still run after an ownership refusal');
+        $this->assertSame(
+            ['http://example.test:8747/_cron', 'http://example.test:8747'],
+            $this->curlUrls(),
+            'the /_cron request comes before the health check'
+        );
+    }
+
+    public function testMigrateRefusalAcceptsADatabaseThatIsAlreadyCurrent(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, "Data migrations: already current\nToo often, try again later."]]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertStringContainsString('already migrated', $process->getOutput());
+        $this->assertStringNotContainsString('ran the data migrations', $process->getOutput());
+    }
+
+    public function testMigrateRefusalWithATrailingSlashSiteUrlRequestsCronOnce(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747/blog/'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame('http://example.test:8747/blog/_cron', $this->curlUrls()[0]);
+    }
+
+    public function testMigrateRefusalWithoutSiteUrlLeavesTheMigrationsToTheNextCronRequest(): void
+    {
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('next scheduled /_cron request runs the data migrations', $output);
+        $this->assertStringContainsString('Upgraded', $output);
+        $this->assertFileDoesNotExist($this->curlLog, 'there is no site to request');
+    }
+
+    public function testFailedCronRequestAfterAMigrateRefusalPrintsRollbackCommandAndExitsNonZero(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        // curl -f exits 22 on the HTTP 500 that /_cron answers when a migration fails.
+        $this->writeCronCurlStub([[22, '']]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertNotSame(0, $process->getExitCode(), 'a failed /_cron request must be visible to cron');
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('http://example.test:8747/_cron', $output);
+        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertSame(['http://example.test:8747/_cron'], $this->curlUrls(), 'the health check must not run after it');
+    }
+
+    /**
+     * An old Lamb, or a proxy's error page, answers 200 without the result line.
+     */
+    public function testAnAnswerWithoutAResultLineIsNotTakenAsSuccess(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, "Updating feeds...\nDone"]]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertNotSame(0, $process->getExitCode());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('did not report', $output);
+        $this->assertStringContainsString('git reset --hard ' . $before, $output);
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+    }
+
+    public function testABusySiteIsAskedAgainAfterAShortDelay(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([
+            [0, "Data migrations: busy\nAlready running, try again later."],
+            [0, 'Data migrations: busy'],
+            [0, 'Data migrations: migrated'],
+        ]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame(
+            array_fill(0, 3, 'http://example.test:8747/_cron'),
+            array_slice($this->curlUrls(), 0, 3),
+            'asked again until the site answered'
+        );
+        $this->assertStringContainsString('ran the data migrations', $process->getOutput());
+        $this->assertSame('http://example.test:8747', $this->curlUrls()[3], 'then the health check');
+    }
+
+    /**
+     * A busy answer means nothing ran and a later /_cron request will run the
+     * migrations, as when there is no SITE_URL, so the upgrade is not rolled back.
+     */
+    public function testASiteThatStaysBusyLeavesTheMigrationsToTheNextCronRequest(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub(array_fill(0, 8, [0, 'Data migrations: busy']));
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('busy', $output);
+        $this->assertStringContainsString('next scheduled /_cron request runs the data migrations', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertStringContainsString('Upgraded', $output);
+        $urls = $this->curlUrls();
+        $this->assertCount(6, $urls, 'five /_cron requests, then the health check');
+        $this->assertSame('http://example.test:8747', $urls[5]);
+    }
+
+    /**
+     * When /_cron cannot read OPcache's status it cannot tell that it is running the old code
+     * right after the reset, so the script gives the cache the time the health check gives it.
+     */
+    public function testTheFirstCronRequestWaitsForTheCodeCacheToRefresh(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
+        $this->writeTimedVivStub();
+
+        $process = $this->runUpgrade(['LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '1']);
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $installedAt = (int) trim((string) file_get_contents($this->vivLog));
+        $requestedAt = (int) strtok((string) file($this->curlLog)[0], ' ');
+        $this->assertGreaterThanOrEqual(900000000, $requestedAt - $installedAt, 'nanoseconds between the install and the request');
+    }
+
+    public function testASuccessfulMigrationDoesNotRequestCron(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame(['http://example.test:8747'], $this->curlUrls(), 'bin/lamb migrate did the work, so only the health check asks');
+    }
+
+    /**
+     * A curl stub that answers each /_cron request from a list and logs every call as
+     * "<nanoseconds> <arguments>". Any other request, the health check, succeeds silently.
+     *
+     * @param list<array{0: int, 1: string}> $replies Exit code and body, one pair per /_cron request, in order.
+     */
+    private function writeCronCurlStub(array $replies): void
+    {
+        foreach ($replies as $index => [$exitCode, $body]) {
+            file_put_contents($this->stubs . '/cron-reply-' . ($index + 1), $exitCode . "\n" . $body . "\n");
+        }
+        $log = escapeshellarg($this->curlLog);
+        $script = "#!/bin/sh\n"
+            . "echo \"$(date +%s%N) \$*\" >> $log\n"
+            . "case \"\$*\" in\n"
+            . "  *_cron*)\n"
+            . "    n=$(grep -c '_cron' $log)\n"
+            . '    reply=' . escapeshellarg($this->stubs) . "/cron-reply-\$n\n"
+            . "    [ -f \"\$reply\" ] || exit 0\n"
+            . "    tail -n +2 \"\$reply\"\n"
+            . "    exit \"$(head -n1 \"\$reply\")\"\n"
+            . "    ;;\n"
+            . "esac\n"
+            . "exit 0\n";
+        file_put_contents($this->stubs . '/curl', $script);
+        chmod($this->stubs . '/curl', 0755);
+    }
+
+    /**
+     * A viv stub that answers the version check and records when it last installed, in nanoseconds.
+     */
+    private function writeTimedVivStub(): void
+    {
+        $script = "#!/bin/sh\n"
+            . 'if [ "$1" = "--version" ]; then echo ' . escapeshellarg('viv 0.22.0') . "; exit 0; fi\n"
+            . 'date +%s%N > ' . escapeshellarg($this->vivLog) . "\n";
+        file_put_contents($this->stubs . '/viv', $script);
+        chmod($this->stubs . '/viv', 0755);
+    }
+
+    /**
+     * Commits a bin/lamb that exits with $code to the origin: bin/lamb is a
+     * tracked file, reset to whatever origin has on every run, so a stand-in
+     * written only into the site checkout would not survive.
+     */
+    private function commitMigrateExit(int $code): void
+    {
+        $this->writeRepoStub('bin/lamb', $this->lambLog, $code);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', "bin/lamb exits {$code}"], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+    }
+
+    /**
+     * The last argument of each curl call, in order.
+     *
+     * @return list<string>
+     */
+    private function curlUrls(): array
+    {
+        $urls = [];
+        foreach (file($this->curlLog, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+            $urls[] = substr($line, (int) strrpos($line, ' ') + 1);
+        }
+
+        return $urls;
     }
 
     /**
@@ -320,12 +546,15 @@ class UpgradeScriptTest extends TestCase
         $this->assertStringContainsString($rollback, $process->getOutput() . $process->getErrorOutput());
     }
 
-    private function runUpgrade(): Process
+    /**
+     * @param array<string, string> $env Environment that replaces the defaults.
+     */
+    private function runUpgrade(array $env = []): Process
     {
         $process = new Process(
             [$this->site . '/bin/upgrade'],
             $this->site,
-            ['PATH' => $this->stubs . ':' . $this->tools, 'LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '0'] + self::scrubGitEnv()
+            $env + ['PATH' => $this->stubs . ':' . $this->tools, 'LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '0'] + self::scrubGitEnv()
         );
         $process->run();
 
