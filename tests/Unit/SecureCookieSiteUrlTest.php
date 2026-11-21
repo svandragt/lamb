@@ -72,14 +72,15 @@ class SecureCookieSiteUrlTest extends TestCase
 
     /**
      * PHP documents HTTPS as set to a non-empty value for TLS requests, and some
-     * servers set it to "off" for plain HTTP.
+     * servers set it to "off" or "0" for plain HTTP.
      */
-    public function testHttpsServerVariableIsOnWhenNonEmptyAndNotOff(): void
+    public function testHttpsServerVariableIsOffWhenEmptyOffOrZero(): void
     {
         $this->assertTrue(is_https(['HTTPS' => 'ON'], null));
         $this->assertTrue(is_https(['HTTPS' => '1'], null));
         $this->assertFalse(is_https(['HTTPS' => 'off'], null));
         $this->assertFalse(is_https(['HTTPS' => 'OFF'], null));
+        $this->assertFalse(is_https(['HTTPS' => '0'], null));
         $this->assertFalse(is_https(['HTTPS' => ''], null));
         $this->assertFalse(is_https([], null));
     }

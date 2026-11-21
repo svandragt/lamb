@@ -137,9 +137,9 @@ function canonical_redirect(string $request_uri): ?string
  */
 function is_https(array $server, ?string $site_url): bool
 {
-    // PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" otherwise.
+    // PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" or "0" otherwise.
     $https = $server['HTTPS'] ?? '';
-    if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+    if (is_string($https) && !in_array(strtolower($https), ['', 'off', '0'], true)) {
         return true;
     }
     if ($site_url === null || !str_starts_with($site_url, 'https://')) {
