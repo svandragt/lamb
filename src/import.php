@@ -492,7 +492,14 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
-    $videos = $xpath->query('//video[@src] | //video/source[@src]') ?: [];
+    // `//video//source`, not `//video/source`: libxml 2.9 does not know `<source>` is a
+    // void element and nests each `<source>` inside the one before it. The nearest
+    // media ancestor must be the video, so a `<source>` in a nested `<audio>` or
+    // `<picture>` stays untouched.
+    $videos = $xpath->query(
+        '//video[@src] | //video//source[@src]'
+        . '[ancestor::*[self::video or self::audio or self::picture][1][self::video]]'
+    ) ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement) {
             continue;

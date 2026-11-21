@@ -151,6 +151,8 @@ $ docker exec -u "$(id -u):$(id -g)" -e LAMB_LOGIN_PASSWORD= lamb-app vendor/bin
 $ docker exec -u "$(id -u):$(id -g)" -e LAMB_LOGIN_PASSWORD= -e LAMB_TEST_PASSWORD=hackme lamb-app vendor/bin/codecept run
 ```
 
+The Unit suite passes in the container. A few tests report as skipped because they need something the container lacks: passwordless `sudo`, Xdebug, a `vendor/` directory installed from a git checkout, or a local WordPress or Known export. Those skips are expected.
+
 The acceptance suite starts its own PHP built-in server inside the container, on
 `LAMB_TEST_PORT`, and `SITE_URL` in `.env` points at it. It does not test the
 FrankenPHP server that serves your site on port 80.
