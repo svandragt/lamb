@@ -304,20 +304,28 @@ class UpgradeScriptTest extends TestCase
         $this->assertSame('http://example.test:8747', $this->curlUrls()[3], 'then the health check');
     }
 
-    public function testASiteThatStaysBusyFailsWithTheRollbackCommand(): void
+    /**
+     * A busy answer means nothing ran and a later /_cron request will run the
+     * migrations, as when there is no SITE_URL, so the upgrade is not rolled back.
+     */
+    public function testASiteThatStaysBusyLeavesTheMigrationsToTheNextCronRequest(): void
     {
-        $before = $this->revParse($this->site);
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
         $this->writeCronCurlStub(array_fill(0, 8, [0, 'Data migrations: busy']));
 
         $process = $this->runUpgrade();
 
-        $this->assertNotSame(0, $process->getExitCode());
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
         $this->assertStringContainsString('busy', $output);
-        $this->assertStringContainsString('git reset --hard ' . $before, $output);
-        $this->assertCount(5, $this->curlUrls(), 'it gives up after five requests, and runs no health check');
+        $this->assertStringContainsString('next scheduled /_cron request runs the data migrations', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertStringContainsString('Upgraded', $output);
+        $urls = $this->curlUrls();
+        $this->assertCount(6, $urls, 'five /_cron requests, then the health check');
+        $this->assertSame('http://example.test:8747', $urls[5]);
     }
 
     /**

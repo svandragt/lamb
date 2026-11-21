@@ -133,11 +133,14 @@ if [ "$migrate_status" -eq 3 ]; then
             "Data migrations: already current")
                 echo "bin/upgrade: the site had already migrated its data, per ${cron_url}"
                 ;;
+            "Data migrations: busy")
+                # Nothing ran, and a later /_cron request will run the migrations, as
+                # when there is no SITE_URL, so this is not a failed upgrade.
+                echo "bin/upgrade: the site was busy on all 5 requests to ${cron_url}, so the next scheduled /_cron request runs the data migrations"
+                ;;
             *)
                 if [ "$cron_failed" -eq 1 ]; then
                     echo "Request to ${cron_url} failed, so the data migrations may not have run" >&2
-                elif [ "$cron_result" = "Data migrations: busy" ]; then
-                    echo "${cron_url} was busy on all 5 requests, so the data migrations may not have run" >&2
                 else
                     echo "${cron_url} did not report that the data migrations ran (${cron_result:-no 'Data migrations:' line}), so they may not have" >&2
                 fi
