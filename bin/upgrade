@@ -88,9 +88,14 @@ git reset --hard '@{u}'
 # the whole run the way a genuine migration failure (any other nonzero) does.
 # The site migrates itself instead: /_cron runs as the database's owner and
 # runs the same migrations when the code differs from the code the data was
-# last migrated for. Its reply opens with a "Data migrations: <result>" line,
-# which is what this script reads, because /_cron also answers 200 when it was
-# busy and when nothing needed migrating.
+# last migrated for.
+#
+# From here on this script never prints the rollback hint for the migration:
+# migrations only move forward, so rolling the code back could put old code on
+# migrated data. It reads the "Data migrations: <result>" line of the reply, not
+# the HTTP status, because /_cron answers 200 when it was busy and when nothing
+# needed migrating, and a timeout on a large archive says nothing about whether
+# the migration ran.
 migrate_status=0
 bin/lamb migrate || migrate_status=$?
 
@@ -114,16 +119,17 @@ if [ "$migrate_status" -eq 3 ]; then
         # the new marker. Wait as long as the health check does, before the first request.
         sleep "$cron_delay"
         cron_result=""
-        cron_failed=0
+        cron_status=""
+        curl_exit=0
         for attempt in 1 2 3 4 5; do
             if [ "$attempt" -gt 1 ]; then sleep "$cron_delay"; fi
+            # No -f: a failed migration answers 500, and its body is what says so.
             # The migrations can take a while on a large archive, so this waits longer
-            # than the health check. /_cron ends its reply before the feed tasks.
-            if ! cron_reply=$(curl -fsS --max-time 300 "$cron_url"); then
-                cron_failed=1
-                break
-            fi
-            cron_result=$(printf '%s\n' "$cron_reply" | grep -E '^Data migrations: ' | head -n1) || true
+            # than the health check.
+            curl_exit=0
+            cron_reply=$(curl -sS --max-time 300 -w '\n%{http_code}' "$cron_url") || curl_exit=$?
+            cron_status="${cron_reply##*$'\n'}"
+            cron_result=$(printf '%s\n' "${cron_reply%$'\n'*}" | grep -E '^Data migrations: ' | head -n1) || true
             [ "$cron_result" = "Data migrations: busy" ] || break
         done
         case "$cron_result" in
@@ -133,23 +139,22 @@ if [ "$migrate_status" -eq 3 ]; then
             "Data migrations: already current")
                 echo "bin/upgrade: the site had already migrated its data, per ${cron_url}"
                 ;;
+            "Data migrations: failed")
+                echo "bin/upgrade: ${cron_url} answered that the data migration failed (HTTP ${cron_status:-no answer}). The new code is in place, so check the web server's PHP error log. The next /_cron request retries the migration." >&2
+                exit 1
+                ;;
             "Data migrations: busy")
                 # Nothing ran, and a later /_cron request will run the migrations, as
                 # when there is no SITE_URL, so this is not a failed upgrade.
                 echo "bin/upgrade: the site was busy on all 5 requests to ${cron_url}, so the next scheduled /_cron request runs the data migrations"
                 ;;
             *)
-                if [ "$cron_failed" -eq 1 ]; then
-                    echo "Request to ${cron_url} failed, so the data migrations may not have run" >&2
-                else
-                    echo "${cron_url} did not report that the data migrations ran (${cron_result:-no 'Data migrations:' line}), so they may not have" >&2
-                fi
-                echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
-                exit 1
+                echo "WARNING: ${cron_url} did not report that the data migrations ran (HTTP ${cron_status:-no answer}, curl exit ${curl_exit}). They may still be running or may have failed. The next /_cron request retries them: check the web server's PHP error log if they do not finish." >&2
                 ;;
         esac
     else
-        echo "bin/upgrade: bin/lamb migrate ran nothing here, so the next scheduled /_cron request runs the data migrations"
+        owner=$(stat -c '%U' data/lamb.db 2>/dev/null || stat -f '%Su' data/lamb.db 2>/dev/null || echo '<web server user>')
+        echo "bin/upgrade: bin/lamb migrate ran nothing here, and a scheduled /_cron request also runs the data migrations if one exists. To run them now, as the user that owns the database: sudo -u ${owner} bin/lamb migrate"
     fi
 fi
 

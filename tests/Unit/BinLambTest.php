@@ -710,6 +710,23 @@ XML;
         $this->assertSame($group, filegroup("$data_dir/cron.lock"));
     }
 
+    /**
+     * The marker names the code that ran the migrations, so it is computed before the first
+     * step, as /_cron does. Computed after, a file replaced while the steps ran would be
+     * recorded as migrated for.
+     */
+    public function testMigrateComputesTheMarkerBeforeItRunsTheSteps(): void
+    {
+        $source = (string) file_get_contents(codecept_root_dir('bin/lamb'));
+
+        $marker = strpos($source, 'code_marker()');
+        $steps = strpos($source, 'migrate_data($dry_run)');
+
+        $this->assertNotFalse($marker);
+        $this->assertNotFalse($steps);
+        $this->assertLessThan($steps, $marker, 'code_marker() must come before the migrate_data() call');
+    }
+
     public function testMigrateDryRunDoesNotNeedTheLock(): void
     {
         $data_dir = "$this->tmp_dir/data";

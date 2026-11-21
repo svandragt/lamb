@@ -848,19 +848,6 @@ function migrate_data(bool $dry_run = false): array
 const DATA_MIGRATION_FAILED_OPTION = 'data_migration_failed';
 
 /**
- * Records that the stored data is migrated for the code the marker names.
- *
- * @param string $marker The code_marker() the migrations ran under.
- * @param OODBBean $migrated_for The DATA_MIGRATED_FOR_OPTION bean, as get_option() returned it.
- * @return void
- * @throws SQL When the option cannot be written.
- */
-function mark_data_migrated(string $marker, OODBBean $migrated_for): void
-{
-    set_option($migrated_for, $marker);
-}
-
-/**
  * The line that opens a /_cron reply and says what became of the data migrations.
  *
  * `bin/upgrade` reads it, so its words are part of the contract: `migrated` and
@@ -932,7 +919,7 @@ function run_pending_data_migrations(OODBBean $migrated_for, ?int $now = null, m
         }
 
         $lines = migrate_data();
-        mark_data_migrated($marker, $migrated_for);
+        set_option($migrated_for, $marker);
         clear_data_migration_failure($failure);
 
         return ['result' => 'migrated', 'lines' => $lines];

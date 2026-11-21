@@ -212,17 +212,23 @@ function run_feed_cycle(
     $migration = \Lamb\Bootstrap\run_pending_data_migrations(
         get_option(\Lamb\Bootstrap\DATA_MIGRATED_FOR_OPTION, '')
     );
-    if ($migration['result'] === 'failed') {
+    $result = $migration['result'];
+    if ($result === 'failed') {
         http_response_code(500);
     }
-    echo \Lamb\Bootstrap\data_migration_result_line($migration['result']) . PHP_EOL;
+    echo \Lamb\Bootstrap\data_migration_result_line($result) . PHP_EOL;
     foreach ($migration['lines'] as $line) {
         echo $line . PHP_EOL;
     }
-    // Ends the response before the feed cycle, which can run up to the time limit
-    // above while bin/upgrade's request gives up after five minutes. The built-in
-    // server has no such function, so there the connection stays open to the end.
-    if (function_exists('fastcgi_finish_request')) {
+    // Half-migrated data is not for the feed cycle to ingest into.
+    if ($result === 'failed') {
+        exit;
+    }
+    // A request that came to migrate ends its response here, before the feed cycle,
+    // which can run up to the time limit above while bin/upgrade's request gives
+    // up after five minutes. An ordinary caller keeps receiving the feed output.
+    // The built-in server has no such function, so there the connection stays open.
+    if ($result !== 'already current' && function_exists('fastcgi_finish_request')) {
         fastcgi_finish_request();
     }
 

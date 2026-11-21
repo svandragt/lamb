@@ -218,6 +218,8 @@ if ($command === 'migrate') {
         exit(3);
     }
 
+    // Before the steps, as /_cron does: the marker names the code that ran them.
+    $marker = Bootstrap\code_marker();
     foreach (Bootstrap\migrate_data($dry_run) as $line) {
         echo $line . "\n";
     }
@@ -233,7 +235,7 @@ if ($command === 'migrate') {
 
     // A manual run counts for the code it ran with, so /_cron does not repeat it.
     if (!$dry_run) {
-        Bootstrap\mark_data_migrated(Bootstrap\code_marker(), get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, ''));
+        set_option(get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, ''), $marker);
     }
 
     echo "{$prefix}Done.\n";

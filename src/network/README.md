@@ -55,16 +55,16 @@ overlaps `bin/lamb migrate`, which takes the same lock. The request runs as the
 database's owner, which a deploy user's CLI is not.
 
 The reply opens with a `Data migrations: <result>` line, and `bin/upgrade` acts on it.
-`failed` answers 500. `busy` covers a held lock and a code cache that still holds older
-files than the disk, which would otherwise run old migrations and record the new marker.
-The reply ends there when `fastcgi_finish_request()` exists, so a client does not wait for
-a feed cycle that can run 30 minutes. The built-in server keeps the connection open.
+`failed` answers 500 and stops the run, so the feed cycle never ingests into half-migrated
+data. `busy` covers a held lock and a code cache that still holds older files than the disk,
+which would otherwise run old migrations and record the new marker. When the result is not
+`already current`, the reply ends there if `fastcgi_finish_request()` exists, so a client
+does not wait for a feed cycle that can run 30 minutes. An ordinary caller keeps the feed
+output. The built-in server keeps the connection open.
 
-A failure is logged and does not stop the rest of the run. The marker stays and the
-failure row (`data_migration_failed`) records the time and the marker, so the same
-marker is retried only once `cron_run_due()` allows a new run, while a new marker
-migrates at once. The feed tasks that follow run against unmigrated data, as they did
-before the web side migrated at all. See `DECISIONS.md` (2026-11-21).
+A failure is logged. The marker stays and the failure row (`data_migration_failed`)
+records the time and the marker, so the same marker is retried only once `cron_run_due()`
+allows a new run, while a new marker migrates at once. See `DECISIONS.md` (2026-11-21).
 
 ## Finishing the run
 

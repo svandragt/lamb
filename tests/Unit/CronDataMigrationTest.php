@@ -119,7 +119,7 @@ class CronDataMigrationTest extends TestCase
         $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
-    public function testAFailedMigrationAnswers500LogsLeavesTheMarkerAndRunsTheOtherTasks(): void
+    public function testAFailedMigrationAnswers500LogsLeavesTheMarkerAndStopsTheRun(): void
     {
         $this->seedUnmigratablePost();
         $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
@@ -132,7 +132,7 @@ class CronDataMigrationTest extends TestCase
         $this->assertStringNotContainsString('refused by the test', $failed['output'], 'the unauthenticated response must not carry the error');
         $this->assertStringContainsString('Data migration failed: ', $failed['stderr'], 'the failure is logged');
         $this->assertStringContainsString('refused by the test', $failed['stderr']);
-        $this->assertStringContainsString('Updating feeds', $failed['output'], 'the other cron tasks still run');
+        $this->assertStringNotContainsString('Updating feeds', $failed['output'], 'the feed cycle must not run on half-migrated data');
         $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION), 'a failed run leaves the marker for a later request');
     }
 
@@ -202,7 +202,7 @@ class CronDataMigrationTest extends TestCase
         $this->assertStringContainsString('Updating feeds', $response['unsent'], 'the feed cycle still runs');
     }
 
-    public function testAFailureIsAnsweredBeforeTheFeedTasksToo(): void
+    public function testAFailureStopsTheRunBeforeTheFeedTasksToo(): void
     {
         $this->seedUnmigratablePost();
         $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
@@ -211,7 +211,23 @@ class CronDataMigrationTest extends TestCase
 
         $this->assertSame(500, $response['http']);
         $this->assertStringContainsString("Data migrations: failed\n", $response['output']);
-        $this->assertStringNotContainsString('Updating feeds', $response['output']);
+        $this->assertStringNotContainsString('Updating feeds', $response['output'] . $response['unsent']);
+    }
+
+    /**
+     * Only a request that migrated has a reason to end early. An ordinary caller keeps the
+     * feed output ("Done", "Too often", errors) it has always received.
+     */
+    public function testARequestThatMigratedNothingKeepsTheFeedOutput(): void
+    {
+        $this->storeOption(self::MARKER_OPTION, code_marker());
+
+        $response = CronProbe::run($this->dataDir, fastcgi: true);
+
+        $this->assertStringContainsString("Data migrations: already current\n", $response['output']);
+        $this->assertStringContainsString('Updating feeds', $response['output'], 'the feed output still reaches the caller');
+        $this->assertStringContainsString('Done', $response['output']);
+        $this->assertSame('', $response['unsent'], 'the response was not ended early');
     }
 
     /**

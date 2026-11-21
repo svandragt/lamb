@@ -42,7 +42,7 @@ class UpgradeScriptTest extends TestCase
         mkdir($this->stubs, 0777, true);
         mkdir($this->tools, 0777, true);
         $finder = new ExecutableFinder();
-        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'date', 'head', 'id', 'sh', 'sleep', 'sort', 'stat', 'tail', 'tr'] as $tool) {
+        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'date', 'head', 'id', 'sed', 'sh', 'sleep', 'sort', 'stat', 'tail', 'tr'] as $tool) {
             symlink($finder->find($tool), $this->tools . '/' . $tool);
         }
         $this->writeStub('viv', $this->vivLog, 0, 'viv 0.22.0');
@@ -182,15 +182,17 @@ class UpgradeScriptTest extends TestCase
      * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
      * covers for every other nonzero code.
      *
-     * The HTTP status alone is not enough: /_cron answers 200 for a held lock
-     * and when the migrations were not needed. bin/upgrade reads the
-     * `Data migrations: <result>` line instead.
+     * Migrations only move forward, so from here bin/upgrade never prints the
+     * rollback hint: old code on migrated data is worse than the problem. It
+     * reads the `Data migrations: <result>` line, not the HTTP status, because
+     * /_cron answers 200 when busy and when nothing needed migrating, and a
+     * timeout on a large archive says nothing about whether the migration ran.
      */
     public function testMigrateRefusalRequestsCronThenChecksHealth(): void
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
+        $this->writeCronCurlStub([[0, 200, 'Data migrations: migrated']]);
 
         $process = $this->runUpgrade();
 
@@ -211,7 +213,7 @@ class UpgradeScriptTest extends TestCase
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub([[0, "Data migrations: already current\nToo often, try again later."]]);
+        $this->writeCronCurlStub([[0, 200, "Data migrations: already current\nToo often, try again later."]]);
 
         $process = $this->runUpgrade();
 
@@ -224,7 +226,7 @@ class UpgradeScriptTest extends TestCase
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747/blog/'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
+        $this->writeCronCurlStub([[0, 200, 'Data migrations: migrated']]);
 
         $process = $this->runUpgrade();
 
@@ -232,54 +234,96 @@ class UpgradeScriptTest extends TestCase
         $this->assertSame('http://example.test:8747/blog/_cron', $this->curlUrls()[0]);
     }
 
-    public function testMigrateRefusalWithoutSiteUrlLeavesTheMigrationsToTheNextCronRequest(): void
+    public function testMigrateRefusalWithoutSiteUrlGivesTheManualCommandAndLeavesTheRestToCron(): void
     {
+        mkdir($this->site . '/data');
+        touch($this->site . '/data/lamb.db');
         $this->commitMigrateExit(3);
 
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('next scheduled /_cron request runs the data migrations', $output);
+        $owner = trim((string) shell_exec('id -un'));
+        $this->assertStringContainsString("sudo -u {$owner} bin/lamb migrate", $output, 'a hint for the operator, never run by the script');
+        $this->assertStringContainsString('a scheduled /_cron request also runs the data migrations', $output);
         $this->assertStringContainsString('Upgraded', $output);
         $this->assertFileDoesNotExist($this->curlLog, 'there is no site to request');
     }
 
-    public function testFailedCronRequestAfterAMigrateRefusalPrintsRollbackCommandAndExitsNonZero(): void
+    public function testMigrateRefusalWithoutCurlGivesTheManualCommandToo(): void
     {
-        $before = $this->revParse($this->site);
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        // curl -f exits 22 on the HTTP 500 that /_cron answers when a migration fails.
-        $this->writeCronCurlStub([[22, '']]);
+        $this->removeStub('curl');
 
         $process = $this->runUpgrade();
 
-        $this->assertNotSame(0, $process->getExitCode(), 'a failed /_cron request must be visible to cron');
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('http://example.test:8747/_cron', $output);
-        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
-        $this->assertStringNotContainsString('ran the data migrations', $output);
-        $this->assertSame(['http://example.test:8747/_cron'], $this->curlUrls(), 'the health check must not run after it');
+        $this->assertStringContainsString('sudo -u <web server user> bin/lamb migrate', $output, 'no data/lamb.db to read an owner from');
+        $this->assertStringContainsString('a scheduled /_cron request also runs the data migrations', $output);
     }
 
     /**
-     * An old Lamb, or a proxy's error page, answers 200 without the result line.
+     * /_cron answers 500 with "Data migrations: failed" when a step threw. The status alone
+     * would hide that line, so curl must not use -f.
      */
-    public function testAnAnswerWithoutAResultLineIsNotTakenAsSuccess(): void
+    public function testAFailedMigrationStopsTheRunPointingToTheErrorLogWithoutARollbackHint(): void
     {
-        $before = $this->revParse($this->site);
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub([[0, "Updating feeds...\nDone"]]);
+        $this->writeCronCurlStub([[0, 500, "Data migrations: failed\nData migration failed, see the error log."]]);
 
         $process = $this->runUpgrade();
 
-        $this->assertNotSame(0, $process->getExitCode());
+        $this->assertSame(1, $process->getExitCode(), 'a failed migration must be visible to cron');
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('did not report', $output);
-        $this->assertStringContainsString('git reset --hard ' . $before, $output);
+        $this->assertStringContainsString('error log', $output);
+        $this->assertStringContainsString('next /_cron request retries', $output);
+        $this->assertStringNotContainsString('Roll back', $output, 'old code on migrated data is worse than the failure');
         $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertSame(['http://example.test:8747/_cron'], $this->curlUrls(), 'the health check does not run after it');
+    }
+
+    /**
+     * @return array<string, array{int, int, string}>
+     */
+    public static function unconfirmedCronReplies(): array
+    {
+        return [
+            'a timeout' => [28, 0, ''],
+            'a connection error' => [7, 0, ''],
+            'a 504 from the proxy' => [0, 504, '<html>Gateway Time-out</html>'],
+            'a 502 from the proxy' => [0, 502, '<html>Bad Gateway</html>'],
+            'a 200 without the result line' => [0, 200, "Updating feeds...\nDone"],
+        ];
+    }
+
+    /**
+     * A timeout, a gateway error or a reply from an older Lamb says nothing about whether the
+     * migration ran, and it may still be running. Rolling the code back could put old code on
+     * migrated data, so the script warns, leaves the retry to /_cron and carries on.
+     *
+     * @dataProvider unconfirmedCronReplies
+     */
+    public function testAnUnconfirmedCronRequestWarnsAndContinuesWithoutARollbackHint(int $curlExit, int $status, string $body): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[$curlExit, $status, $body]]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('may still be running or may have failed', $output);
+        $this->assertStringContainsString('next /_cron request retries', $output);
+        $this->assertStringContainsString('error log', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertStringContainsString('Upgraded', $output);
+        $this->assertSame('http://example.test:8747', $this->curlUrls()[1], 'the health check still runs');
     }
 
     public function testABusySiteIsAskedAgainAfterAShortDelay(): void
@@ -287,9 +331,9 @@ class UpgradeScriptTest extends TestCase
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
         $this->writeCronCurlStub([
-            [0, "Data migrations: busy\nAlready running, try again later."],
-            [0, 'Data migrations: busy'],
-            [0, 'Data migrations: migrated'],
+            [0, 200, "Data migrations: busy\nAlready running, try again later."],
+            [0, 200, 'Data migrations: busy'],
+            [0, 200, 'Data migrations: migrated'],
         ]);
 
         $process = $this->runUpgrade();
@@ -312,7 +356,7 @@ class UpgradeScriptTest extends TestCase
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub(array_fill(0, 8, [0, 'Data migrations: busy']));
+        $this->writeCronCurlStub(array_fill(0, 8, [0, 200, 'Data migrations: busy']));
 
         $process = $this->runUpgrade();
 
@@ -336,7 +380,7 @@ class UpgradeScriptTest extends TestCase
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
-        $this->writeCronCurlStub([[0, 'Data migrations: migrated']]);
+        $this->writeCronCurlStub([[0, 200, 'Data migrations: migrated']]);
         $this->writeTimedVivStub();
 
         $process = $this->runUpgrade(['LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '1']);
@@ -358,25 +402,28 @@ class UpgradeScriptTest extends TestCase
     }
 
     /**
-     * A curl stub that answers each /_cron request from a list and logs every call as
-     * "<nanoseconds> <arguments>". Any other request, the health check, succeeds silently.
+     * A curl stub that answers each /_cron request from a list, the way
+     * `curl -sS -w '\n%{http_code}'` does: the body, a newline and the status. It logs every
+     * call as "<nanoseconds> <arguments>". Any other request, the health check, succeeds silently.
      *
-     * @param list<array{0: int, 1: string}> $replies Exit code and body, one pair per /_cron request, in order.
+     * @param list<array{0: int, 1: int, 2: string}> $replies Curl's exit code, the HTTP status and
+     *     the body, one triple per /_cron request, in order.
      */
     private function writeCronCurlStub(array $replies): void
     {
-        foreach ($replies as $index => [$exitCode, $body]) {
-            file_put_contents($this->stubs . '/cron-reply-' . ($index + 1), $exitCode . "\n" . $body . "\n");
+        foreach ($replies as $index => [$exitCode, $status, $body]) {
+            file_put_contents($this->stubs . '/cron-reply-' . ($index + 1), $exitCode . "\n" . sprintf('%03d', $status) . "\n" . $body . "\n");
         }
         $log = escapeshellarg($this->curlLog);
         $script = "#!/bin/sh\n"
-            . "echo \"$(date +%s%N) \$*\" >> $log\n"
+            . "printf '%s %s\\n' \"$(date +%s%N)\" \"\$*\" >> $log\n"
             . "case \"\$*\" in\n"
             . "  *_cron*)\n"
             . "    n=$(grep -c '_cron' $log)\n"
             . '    reply=' . escapeshellarg($this->stubs) . "/cron-reply-\$n\n"
             . "    [ -f \"\$reply\" ] || exit 0\n"
-            . "    tail -n +2 \"\$reply\"\n"
+            . "    tail -n +3 \"\$reply\"\n"
+            . "    printf '%s' \"$(sed -n 2p \"\$reply\")\"\n"
             . "    exit \"$(head -n1 \"\$reply\")\"\n"
             . "    ;;\n"
             . "esac\n"
