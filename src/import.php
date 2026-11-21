@@ -492,7 +492,9 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
-    $videos = $xpath->query('//video[@src] | //video/source[@src]') ?: [];
+    // `//video//source`, not `//video/source`: libxml 2.9 does not know `<source>` is a
+    // void element and nests every following one inside the first.
+    $videos = $xpath->query('//video[@src] | //video//source[@src]') ?: [];
     foreach ($videos as $video) {
         if (!$video instanceof DOMElement) {
             continue;

@@ -17,6 +17,7 @@ use function Lamb\Import\prepare_imported_html;
 use function Lamb\Import\response_is_media;
 use function Lamb\Import\run_import;
 use function Lamb\Import\rewrite_media_links;
+use function Lamb\Import\rewrite_media_links_in_dom;
 use function Lamb\Import\dump_html_fragment;
 use function Lamb\Import\load_html_fragment;
 use function Lamb\Import\sanitize_html_in_dom;
@@ -531,7 +532,10 @@ XML;
         $out = prepare_imported_html($html, '2024-03-03 10:00:00', fn(): ?string => null, convert_video_shortcodes_in_dom(...));
 
         // The quote is escaped, so the value cannot close the attribute and open a script element.
-        $this->assertStringContainsString('a.mp4?x=&quot;', $out);
+        // How it is escaped depends on the libxml version (`&quot;` or `%22`), so assert the
+        // outcome instead: no bare quote after `x=`.
+        $this->assertStringContainsString('a.mp4?x=', $out);
+        $this->assertStringNotContainsString('x="', $out);
         $dom = \Lamb\Import\load_html_fragment($out);
         $this->assertSame(0, $dom->getElementsByTagName('script')->length);
         $this->assertSame(1, $dom->getElementsByTagName('video')->length);
@@ -1024,6 +1028,27 @@ XML;
         $this->assertStringContainsString('<video controls src="', $out);
         $this->assertStringContainsString('assets/2024/03/abc123.mp4', $out);
         $this->assertStringNotContainsString('oldsite.example', $out);
+    }
+
+    public function testRewriteMediaLinksDownloadsASourceNestedInAnotherSource(): void
+    {
+        // libxml 2.9 does not know `<source>` is a void element, so it parses a second
+        // `<source>` as a child of the first. Build that tree by hand to cover it on any libxml.
+        $dom = load_html_fragment('<video controls><source src="https://oldsite.example/clip.webm" type="video/webm"></video>');
+        $nested = $dom->createElement('source');
+        $nested->setAttribute('src', 'https://oldsite.example/clip.mp4?ver=2');
+        $dom->getElementsByTagName('source')->item(0)?->appendChild($nested);
+
+        $downloaded = [];
+        rewrite_media_links_in_dom($dom, '2024-03-03 10:00:00', function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'h' . count($downloaded) . '.' . pathinfo((string) parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
+        });
+
+        $this->assertSame(
+            ['https://oldsite.example/clip.webm', 'https://oldsite.example/clip.mp4?ver=2'],
+            $downloaded
+        );
     }
 
     public function testRewriteMediaLinksDownloadsVideoSourceChildren(): void

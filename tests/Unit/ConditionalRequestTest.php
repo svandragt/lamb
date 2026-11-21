@@ -66,8 +66,7 @@ class ConditionalRequestTest extends TestCase
     public function testCodeStampIsTheInstalledRootPackageReferenceWithoutGit(): void
     {
         $root = $this->fakeRoot([]);
-        $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
-        $this->assertSame(substr(md5((string) $reference), 0, 8), code_stamp($root));
+        $this->assertSame($this->rootPackageStamp(), code_stamp($root));
     }
 
     public function testCodeStampIsAHashOfTheCheckedOutCommitNotTheCommitItself(): void
@@ -94,9 +93,21 @@ class ConditionalRequestTest extends TestCase
 
     public function testCodeStampFallsBackWhenTheGitRefCannotBeResolved(): void
     {
-        $reference = \Composer\InstalledVersions::getRootPackage()['reference'];
         $root = $this->fakeRoot(['HEAD' => "ref: refs/heads/gone\n"]);
-        $this->assertSame(substr(md5((string) $reference), 0, 8), code_stamp($root));
+        $this->assertSame($this->rootPackageStamp(), code_stamp($root));
+    }
+
+    /**
+     * The stamp for the root package `reference`, which is empty (so is the stamp)
+     * when the vendor directory was installed outside a git checkout, as in the
+     * dev Docker container.
+     *
+     * @return string
+     */
+    private function rootPackageStamp(): string
+    {
+        $reference = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
+        return $reference === '' ? '' : substr(md5($reference), 0, 8);
     }
 
     /**
