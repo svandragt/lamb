@@ -1570,10 +1570,7 @@ function respond_micropub(): void
         'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
     ]);
 
-    // The spec forbids sending the token in both places (micropub.rocks test 805).
-    if (bearer_token($lcHeaders['authorization'] ?? '') !== null && isset($_POST['access_token'])) {
-        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
-    }
+    refuse_token_in_both_places($lcHeaders['authorization'] ?? '');
 
     $adapter = new LambMicropubAdapter();
     if (mp_debug_enabled()) {
@@ -1746,7 +1743,7 @@ function micropub_error(int $status, string $error, string $description, ?string
 
 /**
  * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
- * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
+ * Validates the access token (Authorization header or form body), saves the uploaded file, and returns HTTP 201 + Location.
  *
  * @param mixed $args The router's positional route arguments. Unused — this
  *     endpoint reads $_FILES/$_POST directly — but declared first because
@@ -1824,18 +1821,39 @@ function bearer_token(string $authHeader): ?string
 }
 
 /**
- * Reject a media request unless its bearer token is valid and carries the create scope.
+ * End a request that sends its access token in both the Authorization header and the form body.
  *
- * Ends the request with a JSON error when it is not.
+ * The Micropub spec forbids it (micropub.rocks test 805). A header that carries
+ * no Bearer token, such as a Basic one, does not count as a second token.
+ *
+ * @param string $authHeader The request's Authorization header, or ''.
+ * @return void
+ */
+function refuse_token_in_both_places(string $authHeader): void
+{
+    if (bearer_token($authHeader) !== null && isset($_POST['access_token'])) {
+        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
+    }
+}
+
+/**
+ * Reject a media request unless its token is valid and carries the create scope.
+ *
+ * The token is the Bearer one in the Authorization header, or the `access_token`
+ * form field when there is no Bearer header, as on the main endpoint. Ends the
+ * request with a JSON error when it is not valid.
  *
  * @param string $authHeader The request's Authorization header, or ''.
  * @return void
  */
 function authorize_media_request(string $authHeader): void
 {
-    $token = bearer_token($authHeader);
+    refuse_token_in_both_places($authHeader);
 
-    if (!$token) {
+    $bodyToken = $_POST['access_token'] ?? null;
+    $token = bearer_token($authHeader) ?? (is_string($bodyToken) && $bodyToken !== '' ? $bodyToken : null);
+
+    if ($token === null) {
         // No credentials supplied: bare Bearer challenge, no error code (RFC 6750 §3.1).
         micropub_error(401, 'unauthorized', 'Missing bearer token.', bearer_challenge());
     }

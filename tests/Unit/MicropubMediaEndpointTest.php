@@ -69,6 +69,63 @@ class MicropubMediaEndpointTest extends TestCase
         $this->assertSame([], $result['assets']);
     }
 
+    public function testATokenOnlyInTheFormBodyIsAccepted(): void
+    {
+        $this->assertStoredUpload($this->bodyTokenUpload(['access_token' => 'body-token']));
+    }
+
+    public function testATokenInBothTheHeaderAndTheBodyIsRefused(): void
+    {
+        $result = $this->bodyTokenUpload(['access_token' => 'body-token'], 'Bearer test-token');
+
+        $this->assertSame(400, $result['status']);
+        $body = json_decode($result['body'], true);
+        $this->assertSame('invalid_request', $body['error']);
+        $this->assertStringContainsString('both', $body['error_description']);
+        $this->assertArrayNotHasKey('www-authenticate', $result['headers']);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testABasicAuthorizationHeaderDoesNotStopABodyToken(): void
+    {
+        $this->assertStoredUpload($this->bodyTokenUpload(['access_token' => 'body-token'], 'Basic dXNlcjpwYXNz'));
+    }
+
+    /**
+     * @return array<string, array{0: mixed}>
+     */
+    public static function unusableBodyTokens(): array
+    {
+        return [
+            'empty' => [''],
+            'a list' => [['body-token']],
+        ];
+    }
+
+    /**
+     * @dataProvider unusableBodyTokens
+     */
+    public function testABodyTokenThatIsNotANonEmptyStringGets401AndABareChallenge(mixed $value): void
+    {
+        $result = $this->bodyTokenUpload(['access_token' => $value]);
+
+        $this->assertSame(401, $result['status'], $result['stderr']);
+        $this->assertSame(['Bearer'], $result['headers']['www-authenticate'] ?? null);
+        $this->assertSame([], $result['assets']);
+    }
+
+    public function testAnUnverifiableBodyTokenGets401AndAnInvalidTokenChallenge(): void
+    {
+        $result = $this->bodyTokenUpload(['access_token' => 'body-token'], null, '{}');
+
+        $this->assertSame(401, $result['status']);
+        $this->assertSame(
+            ['Bearer error="invalid_token", error_description="The access token is invalid or expired."'],
+            $result['headers']['www-authenticate'] ?? null
+        );
+        $this->assertSame([], $result['assets']);
+    }
+
     public function testUnverifiableTokenGets401AndAnInvalidTokenChallenge(): void
     {
         $result = $this->upload('x.gif', self::GIF, true, '{}');
@@ -191,6 +248,30 @@ class MicropubMediaEndpointTest extends TestCase
     private function upload(string $name, string $base64, bool $acceptUploads = true, ?string $token = self::TOKEN): array
     {
         return $this->probe(['file' => [[$name, base64_decode($base64)]]], $acceptUploads, $token);
+    }
+
+    /**
+     * Posts a GIF to the media endpoint with the given form fields and Authorization header value.
+     *
+     * @param array<string, mixed> $post          The form fields, as PHP parses them into $_POST.
+     * @param string|null          $authorization The Authorization header value; null sends none.
+     * @param string               $token         The JSON the token endpoint answers with.
+     * @return array<string, mixed> The handler's response.
+     */
+    private function bodyTokenUpload(array $post, ?string $authorization = null, string $token = self::TOKEN): array
+    {
+        $server = ['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'multipart/form-data; boundary=x'];
+        if ($authorization !== null) {
+            $server['HTTP_AUTHORIZATION'] = $authorization;
+        }
+
+        return EndpointProbe::run('\Lamb\Micropub\respond_micropub_media();', [
+            'server' => $server,
+            'post' => $post,
+            'files' => ['file' => [['x.gif', base64_decode(self::GIF)]]],
+            'token' => $token,
+            'accept_uploads' => true,
+        ]);
     }
 
     /**
