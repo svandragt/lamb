@@ -138,7 +138,7 @@ function login_csrf_secret(string $loginHash): string
 /**
  * Returns options for the /login CSRF cookie, reusing the hardened defaults.
  *
- * get_cookie_options() already derives `secure` from the connection scheme
+ * get_cookie_options() already derives `secure` from the site's scheme
  * rather than forcing it on: the token this cookie replaces — the
  * session-backed CSRF token — rode in LAMBSESSID, which is only marked secure
  * under HTTPS, so a plain-HTTP dev server still round-trips it. SameSite=Strict

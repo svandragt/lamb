@@ -118,6 +118,30 @@ function canonical_redirect(string $request_uri): ?string
 }
 
 /**
+ * Tells whether visitors reach the site over HTTPS.
+ *
+ * Behind a TLS-terminating proxy the connection Lamb sees is plain HTTP, and
+ * `X-Forwarded-Proto` is client-controlled unless the proxy is trusted, which
+ * Lamb has no setting for. The site URL the author configured is trustworthy
+ * and names the scheme visitors use, so an `https://` site URL counts as HTTPS.
+ * Without one, or with an `http://` one, the connection decides: a request that
+ * did arrive over TLS stays secure.
+ *
+ * @param array<string, mixed> $server   Typically $_SERVER.
+ * @param string|null          $site_url The configured site URL, as returned by
+ *                                       Lamb\Config\canonical_site_url(), or null when unset.
+ * @return bool True when cookies should be marked Secure and links use https://.
+ */
+function is_https(array $server, ?string $site_url): bool
+{
+    if ($site_url !== null && str_starts_with($site_url, 'https://')) {
+        return true;
+    }
+
+    return isset($server['HTTPS']) && $server['HTTPS'] === 'on';
+}
+
+/**
  * Builds the request's own root URL (`scheme://host[:port]`) from the Host header.
  *
  * The Host header is client-supplied and a front-end catch-all vhost (the bundled
@@ -146,9 +170,7 @@ function request_root_url(array $server): ?string
         return null;
     }
 
-    $scheme = (isset($server['HTTPS']) && $server['HTTPS'] === 'on') ? 'https' : 'http';
-
-    return $scheme . '://' . $host;
+    return (is_https($server, null) ? 'https' : 'http') . '://' . $host;
 }
 
 /**

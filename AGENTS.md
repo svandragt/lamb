@@ -214,8 +214,8 @@ lamb/
 
 `index.php` is the single entry point (PHP built-in server or web server rewrite). It:
 1. Calls `bootstrap_db('../data')` to set up SQLite at `../data/lamb.db`
-2. Calls `bootstrap_session()` to configure a hardened session
-3. Loads config via `Config\load()`
+2. Loads config via `Config\load()`, before the session, because the session cookie needs the configured site URL
+3. Calls `bootstrap_session($data_dir, $site_url)` to configure a hardened session
 4. Defines constants: `ROOT_DIR`, `ROOT_URL`, `THEME`, `THEME_DIR`, etc.
 5. Registers routes using `Route\register_route($action, $callback, ...$args)`
 6. Dispatches via `Route\call_route($action)` where `$action` is the first path segment
@@ -533,7 +533,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 - CSRF: token stored in session, verified in `Security\require_csrf()`, consumed after use
 - `respond_upload()` (`src/response/upload.php`) and `respond_checkbox()` (`src/response/posts.php`) call `Security\require_login()` but deliberately skip `require_csrf()` — both fire mid-composition/mid-edit, and consuming the single-use token there would break the subsequent form submit's own CSRF check. Their protection rests entirely on `LAMBSESSID`/`lamb_logged_in` being `SameSite=Strict` (a cross-site POST carries neither cookie, so no session, so `require_login()` redirects). That invariant is pinned by `testSessionCookieIsSameSiteStrict()` / `testGetCookieOptionsSameSiteIsStrict()` rather than assumed — see #536
 - Login brute-force throttle (#443): after `LOGIN_THROTTLE_MAX_FAILURES` failed `/login` attempts from one client address, further attempts are refused for `LOGIN_THROTTLE_WINDOW` with `429` + `Retry-After`, checked *before* `password_verify()` so a blocked client costs no bcrypt. The counter is a `login_fail_<hmac(ip)>` row in the `option` table (no session exists on `/login` — see #462), cleared on a successful login and lazily pruned on the failure write path. Refused attempts are not counted, so retrying can't extend a block. `client_ip()` reads `REMOTE_ADDR` only — `X-Forwarded-For` is attacker-controlled on a directly-exposed install and would hand out a fresh bucket per request
-- Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation
+- Session hardening: `httponly`, `secure` (HTTPS), `SameSite=Strict`, user-agent validation. `Http\is_https()` decides "HTTPS" for the session cookie (`Bootstrap\configure_session()`) and the other cookies (`Response\get_cookie_options()`): an `https://` canonical site URL (`LAMB_SITE_URL` or `site_url`) counts, because behind a TLS proxy the connection is plain HTTP; otherwise `$_SERVER['HTTPS'] === 'on'` decides. `X-Forwarded-Proto` is not read, because any client can send it (#995)
 - Auth: password stored as bcrypt hash in env var `LAMB_LOGIN_PASSWORD` (base64-encoded)
 - Login sets `$_SESSION[SESSION_LOGIN]` and a `lamb_logged_in` cookie; logout destroys the session and expires both cookies
 - Sessions are only started for (previously) logged-in users: `Bootstrap\should_start_session()` checks for the `lamb_logged_in` or `LAMBSESSID` cookie, so anonymous visitors get no `Set-Cookie` and no no-cache headers and their pages stay cacheable. Routes that need a session for an otherwise-anonymous request (the login page, CSRF POSTs, flash-before-redirect) call `Bootstrap\start_session()` explicitly. `Bootstrap\cache_headers()` emits `max-age=300` + `Vary: Cookie` for anonymous responses and private/no-store for logged-in ones (session cache limiter is disabled so it never fights these)
@@ -619,6 +619,7 @@ Tests use **Codeception 5** with PHPUnit underneath.
 
 - **Unit** (`tests/Unit/`): pure PHP, no HTTP. CI runs it in random order and prints `[Seed] N`; reproduce a failure with `vendor/bin/codecept run Unit -o "settings: shuffle: true" --seed N` (`--seed` alone does not shuffle). `tests/Unit/_bootstrap.php` defines `ROOT_URL` once, so a test does not define it. The `RestoreGlobals` extension (`tests/Support/Extension/`) restores `$config`, `$data`, `$template`, `$_SESSION`, `$_GET` and `$_POST` after each Unit test, so a test needs no save and restore of its own for them.
   A route handler that ends in `exit()` (`respond_micropub()`, `respond_micropub_media()`) runs through `Tests\Support\EndpointProbe`, which executes it in a child process and returns the status, headers and body it sent, with a fake token endpoint for the IndieAuth check. `MicropubEndpointTest` and `MicropubMediaEndpointTest` name each test after the micropub.rocks server test it mirrors.
+  `SecureCookieSiteUrlTest` boots `src/index.php` under `php -S` on a free local port, with a temporary `LAMB_DATA_DIR`, to read the `Set-Cookie` headers of a real login.
 - **Acceptance** (`tests/Acceptance/`): browser-level via PhpBrowser. Requires `SITE_URL` and `LAMB_TEST_PASSWORD` in `.env`. Generate it with `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` — `make-password.php` omits the cleartext `LAMB_TEST_PASSWORD` unless that flag is set.
 - **Functional** (`tests/Functional/`): Codeception functional tests.
 

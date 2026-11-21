@@ -131,6 +131,33 @@ class SessionBootstrapTest extends TestCase
     }
 
     /**
+     * Behind a TLS proxy the connection is plain HTTP, so the session cookie follows
+     * the configured site URL instead (issue #995).
+     */
+    public function testSessionCookieIsSecureWhenTheSiteUrlIsHttps(): void
+    {
+        unset($_SERVER['HTTPS']);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        configure_session('https://example.com');
+        $this->assertTrue(session_get_cookie_params()['secure']);
+        $this->assertSame('1', ini_get('session.cookie_secure'));
+    }
+
+    public function testSessionCookieIsNotSecureOverPlainHttpWithoutAnHttpsSiteUrl(): void
+    {
+        unset($_SERVER['HTTPS']);
+        if (session_status() === PHP_SESSION_ACTIVE) {
+            session_write_close();
+        }
+        configure_session('http://example.com');
+        $this->assertFalse(session_get_cookie_params()['secure']);
+        configure_session();
+        $this->assertFalse(session_get_cookie_params()['secure']);
+    }
+
+    /**
      * /upload and /checkbox (src/response/upload.php, src/response/posts.php)
      * skip require_csrf() and rely entirely on this cookie being SameSite=Strict
      * to block cross-site POSTs (see issue #536). Pin it so a future change to
