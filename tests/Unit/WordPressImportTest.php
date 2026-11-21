@@ -532,9 +532,9 @@ XML;
         $out = prepare_imported_html($html, '2024-03-03 10:00:00', fn(): ?string => null, convert_video_shortcodes_in_dom(...));
 
         // The quote is escaped, so the value cannot close the attribute and open a script element.
-        // How it is escaped depends on the libxml version (`&quot;` or `%22`), so assert the
-        // outcome instead: no bare quote after `x=`.
-        $this->assertStringContainsString('a.mp4?x=', $out);
+        // How it is escaped depends on the libxml version (`&quot;` or `%22`), so accept either,
+        // and require that no bare quote follows `x=`.
+        $this->assertMatchesRegularExpression('/a\.mp4\?x=(&quot;|%22)/', $out);
         $this->assertStringNotContainsString('x="', $out);
         $dom = \Lamb\Import\load_html_fragment($out);
         $this->assertSame(0, $dom->getElementsByTagName('script')->length);
@@ -1030,14 +1030,18 @@ XML;
         $this->assertStringNotContainsString('oldsite.example', $out);
     }
 
-    public function testRewriteMediaLinksDownloadsASourceNestedInAnotherSource(): void
+    public function testRewriteMediaLinksDownloadsEverySourceInAChainLibxml29Builds(): void
     {
-        // libxml 2.9 does not know `<source>` is a void element, so it parses a second
-        // `<source>` as a child of the first. Build that tree by hand to cover it on any libxml.
+        // libxml 2.9 does not know `<source>` is a void element, so it nests each
+        // `<source>` inside the one before it. Build that chain by hand to cover it on any libxml.
         $dom = load_html_fragment('<video controls><source src="https://oldsite.example/clip.webm" type="video/webm"></video>');
-        $nested = $dom->createElement('source');
-        $nested->setAttribute('src', 'https://oldsite.example/clip.mp4?ver=2');
-        $dom->getElementsByTagName('source')->item(0)?->appendChild($nested);
+        $parent = $dom->getElementsByTagName('source')->item(0);
+        foreach (['https://oldsite.example/clip.mp4?ver=2', 'https://oldsite.example/clip.mov'] as $url) {
+            $source = $dom->createElement('source');
+            $source->setAttribute('src', $url);
+            $parent?->appendChild($source);
+            $parent = $source;
+        }
 
         $downloaded = [];
         rewrite_media_links_in_dom($dom, '2024-03-03 10:00:00', function (string $url) use (&$downloaded): ?string {
@@ -1046,9 +1050,26 @@ XML;
         });
 
         $this->assertSame(
-            ['https://oldsite.example/clip.webm', 'https://oldsite.example/clip.mp4?ver=2'],
+            [
+                'https://oldsite.example/clip.webm',
+                'https://oldsite.example/clip.mp4?ver=2',
+                'https://oldsite.example/clip.mov',
+            ],
             $downloaded
         );
+    }
+
+    public function testRewriteMediaLinksLeavesASourceInsideNestedFallbackContentAlone(): void
+    {
+        $html = '<video controls><audio><source src="https://oldsite.example/clip.webm"></audio></video>';
+        $downloaded = [];
+        $out = rewrite_media_links($html, '2024-03-03 10:00:00', function (string $url) use (&$downloaded): ?string {
+            $downloaded[] = $url;
+            return 'h.webm';
+        });
+
+        $this->assertSame([], $downloaded);
+        $this->assertStringContainsString('oldsite.example/clip.webm', $out);
     }
 
     public function testRewriteMediaLinksDownloadsVideoSourceChildren(): void

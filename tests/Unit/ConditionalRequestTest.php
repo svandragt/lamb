@@ -65,8 +65,9 @@ class ConditionalRequestTest extends TestCase
 
     public function testCodeStampIsTheInstalledRootPackageReferenceWithoutGit(): void
     {
+        $reference = $this->rootPackageReference();
         $root = $this->fakeRoot([]);
-        $this->assertSame($this->rootPackageStamp(), code_stamp($root));
+        $this->assertSame(substr(md5($reference), 0, 8), code_stamp($root));
     }
 
     public function testCodeStampIsAHashOfTheCheckedOutCommitNotTheCommitItself(): void
@@ -93,21 +94,25 @@ class ConditionalRequestTest extends TestCase
 
     public function testCodeStampFallsBackWhenTheGitRefCannotBeResolved(): void
     {
+        $reference = $this->rootPackageReference();
         $root = $this->fakeRoot(['HEAD' => "ref: refs/heads/gone\n"]);
-        $this->assertSame($this->rootPackageStamp(), code_stamp($root));
+        $this->assertSame(substr(md5($reference), 0, 8), code_stamp($root));
     }
 
     /**
-     * The stamp for the root package `reference`, which is empty (so is the stamp)
-     * when the vendor directory was installed outside a git checkout, as in the
-     * dev Docker container.
+     * The root package `reference` the fallback hashes. It is empty when the vendor
+     * directory was installed outside a git checkout, as in the dev Docker container,
+     * so there is nothing to compare against and the test is skipped.
      *
-     * @return string
+     * @return string A non-empty reference.
      */
-    private function rootPackageStamp(): string
+    private function rootPackageReference(): string
     {
         $reference = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
-        return $reference === '' ? '' : substr(md5($reference), 0, 8);
+        if ($reference === '') {
+            $this->markTestSkipped('The root package has no reference: vendor/ was installed outside a git checkout.');
+        }
+        return $reference;
     }
 
     /**

@@ -30,7 +30,7 @@ class FeedFetchWindowTest extends TestCase
     {
         $this->previous_env = getenv('LAMB_DATA_DIR');
         $this->tmp = sys_get_temp_dir() . '/lamb-feed-window-' . bin2hex(random_bytes(6));
-        mkdir($this->tmp, 0755, true);
+        $this->assertTrue(mkdir($this->tmp, 0755, true), 'Cannot create the temporary data directory');
         putenv('LAMB_DATA_DIR=' . $this->tmp);
     }
 
@@ -46,16 +46,14 @@ class FeedFetchWindowTest extends TestCase
 
     public function testCacheDurationDoesNotOutliveTheFetchWindow(): void
     {
-        $feed = new SimplePie();
-        configure_simplepie_feed($feed, 'https://example.com/feed.atom');
+        $feed = $this->configuredFeed();
 
         $this->assertLessThanOrEqual(FEED_FETCH_INTERVAL, $feed->cache_duration);
     }
 
     public function testConfigureAppliesTheFetchTimeout(): void
     {
-        $feed = new SimplePie();
-        configure_simplepie_feed($feed, 'https://example.com/feed.atom');
+        $feed = $this->configuredFeed();
 
         $this->assertSame(FEED_FETCH_TIMEOUT, $feed->timeout);
     }
@@ -64,5 +62,17 @@ class FeedFetchWindowTest extends TestCase
     {
         $this->assertFalse(feed_fetch_due(1000, 1000 + FEED_FETCH_INTERVAL - 1));
         $this->assertTrue(feed_fetch_due(1000, 1000 + FEED_FETCH_INTERVAL));
+    }
+
+    /**
+     * Configures a feed and checks that its cache landed in the temporary data directory,
+     * so the test never reads a feed that wrote outside it.
+     */
+    private function configuredFeed(): SimplePie
+    {
+        $feed = new SimplePie();
+        configure_simplepie_feed($feed, 'https://example.com/feed.atom');
+        $this->assertDirectoryExists($this->tmp . '/cache/simplepie');
+        return $feed;
     }
 }
