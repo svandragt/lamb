@@ -1,0 +1,1 @@
+- An upgrade by a user who does not own `data/lamb.db` no longer leaves the data migrations undone. The first `/_cron` request after the code changes runs them, `bin/upgrade` makes that request when `SITE_URL` is set, and tarball and Docker upgrades get the same, so none of them needs `bin/lamb migrate` run by hand.

@@ -206,6 +206,13 @@ function run_feed_cycle(
         die('Already running, try again later.');
     }
 
+    // Before the rate-limit gate below, so the first request after an upgrade
+    // migrates even when the feed tasks are not due. This request runs as the
+    // user that owns the database, which a deploy user's bin/lamb cannot be.
+    foreach (\Lamb\Bootstrap\run_pending_data_migrations() as $line) {
+        echo $line . PHP_EOL;
+    }
+
     $cron_last_updated = get_option('last_processed_date', 0);
     if (!cron_run_due((int)$cron_last_updated->value, time())) {
         die('Too often, try again later.');
@@ -234,16 +241,22 @@ function run_feed_cycle(
 }
 
 /**
- * The path of the lock file serializing /_cron runs. Lives in the install's
- * data directory, wherever that is — see Bootstrap\data_dir().
+ * The path of the lock file serializing /_cron runs and `bin/lamb migrate`.
+ * Lives in the install's data directory, wherever that is — see
+ * Bootstrap\data_dir().
+ *
+ * @param string|null $data_dir The data directory; null means the web default
+ *                              from Bootstrap\data_dir(). A CLI entry point passes
+ *                              the directory it resolved against its own root.
  */
-function cron_lock_path(): string
+function cron_lock_path(?string $data_dir = null): string
 {
-    return \Lamb\Bootstrap\data_dir() . '/cron.lock';
+    return ($data_dir ?? \Lamb\Bootstrap\data_dir()) . '/cron.lock';
 }
 
 /**
- * Acquires an exclusive, non-blocking lock serialising /_cron runs.
+ * Acquires an exclusive, non-blocking lock serialising /_cron runs and
+ * `bin/lamb migrate`, which both run the data migrations.
  *
  * The handle must stay referenced until the request ends: the lock releases
  * when it closes, so no explicit unlock is needed as long as every

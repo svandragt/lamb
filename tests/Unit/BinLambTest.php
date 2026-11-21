@@ -5,10 +5,13 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\code_marker;
 use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
+use function Lamb\Network\acquire_cron_lock;
+use function Lamb\Network\cron_lock_path;
 
 /**
  * Covers the importer registry (Import\register_source / get_source /
@@ -601,6 +604,77 @@ XML;
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
         $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
         $this->assertSame(1, $this->gateStampCount($data_dir));
+    }
+
+    private function storedDataMarker(string $data_dir): string
+    {
+        return $this->inDatabase(
+            $data_dir,
+            'echo \RedBeanPHP\R::getCell("SELECT value FROM option WHERE name = ?", ["data_migrated_for"]);'
+        );
+    }
+
+    /**
+     * A manual run counts as the migration for the code it ran with, so the
+     * next /_cron request does not repeat it.
+     */
+    public function testMigrateCommandRecordsTheCodeItMigratedFor(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+
+        $this->runMigrate($data_dir);
+
+        $this->assertSame(code_marker(), $this->storedDataMarker($data_dir));
+    }
+
+    public function testMigrateDryRunDoesNotRecordTheMarker(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $this->runMigrate($data_dir, ['--dry-run']);
+
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * /_cron and `bin/lamb migrate` share the cron lock, so they never migrate at once. Exit 3
+     * is the code bin/upgrade reads as "this command did not run the migrations".
+     */
+    public function testMigrateCommandRefusesWhileAnotherRunHoldsTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+        fclose($lock);
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('holds the lock', $process->getErrorOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    public function testMigrateDryRunDoesNotNeedTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = $this->runMigrate($data_dir, ['--dry-run']);
+        fclose($lock);
+
+        $this->assertStringContainsString('upgrade_all_posts: would upgrade 1 post(s)', $process->getOutput());
     }
 
     private function storeSettings(string $data_dir, string $ini): void

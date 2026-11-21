@@ -794,6 +794,96 @@ function drop_experimental_gate_stamp(bool $dry_run = false): int
 }
 
 /**
+ * Option row that records the code the stored data was last migrated for.
+ */
+const DATA_MIGRATED_FOR_OPTION = 'data_migrated_for';
+
+/**
+ * Runs the one-time data migrations, in the order they depend on, and reports
+ * each step as one line.
+ *
+ * `bin/lamb migrate` and `/_cron` both call this, so the two cannot drift. Needs
+ * the global `$config` loaded and the timezone applied, as both callers do.
+ *
+ * upgrade_all_posts() runs last: backfill_post_version() is what gives a
+ * pre-versioning post a `version`, so the upgrade's `WHERE version < ?` sees it
+ * in the same pass instead of on a second run.
+ *
+ * @param bool $dry_run When true, report what would change and write nothing.
+ * @return list<string> One line per step, without a trailing newline.
+ * @throws \Throwable When a step fails; steps before it have already written.
+ */
+function migrate_data(bool $dry_run = false): array
+{
+    $prefix = $dry_run ? '[dry-run] ' : '';
+    $columns = array_column(R::getAll('PRAGMA table_info(post)'), 'name');
+    $lines = [];
+
+    $count = backfill_post_version($columns, $dry_run);
+    $lines[] = "{$prefix}backfill_post_version: " . ($dry_run ? 'would stamp' : 'stamped') . " version=1 on $count post(s)";
+
+    $count = backfill_imported_post_identity($columns, $dry_run);
+    $lines[] = "{$prefix}backfill_imported_post_identity: " . ($dry_run ? 'would move' : 'moved') . " $count post(s) onto import_uuid";
+
+    $count = \Lamb\Network\migrate_feed_watermarks(\Lamb\Network\get_feeds(), $dry_run);
+    $lines[] = "{$prefix}migrate_feed_watermarks: " . ($dry_run ? 'would seed' : 'seeded') . " $count feed(s) from their legacy watermark";
+
+    $count = \Lamb\Network\migrate_feed_drafts($dry_run);
+    $lines[] = "{$prefix}migrate_feed_drafts: " . ($dry_run ? 'would add' : 'added') . " draft: true to $count feed draft(s)";
+
+    $count = drop_experimental_gate_stamp($dry_run);
+    $lines[] = "{$prefix}drop_experimental_gate_stamp: " . ($dry_run ? 'would delete' : 'deleted') . " $count unused option row(s)";
+
+    [$needing_upgrade, $upgraded] = \Lamb\Response\upgrade_all_posts($dry_run);
+    $count = $dry_run ? $needing_upgrade : $upgraded;
+    $lines[] = "{$prefix}upgrade_all_posts: " . ($dry_run ? 'would upgrade' : 'upgraded') . " $count post(s) to version " . POST_VERSION;
+
+    return $lines;
+}
+
+/**
+ * Records that the stored data is migrated for the running code.
+ *
+ * @return void
+ * @throws SQL When the option cannot be written.
+ */
+function mark_data_migrated(): void
+{
+    set_option(get_option(DATA_MIGRATED_FOR_OPTION, ''), code_marker());
+}
+
+/**
+ * Runs the data migrations when the running code differs from the code the data
+ * was last migrated for, and records the new marker once they succeed.
+ *
+ * The check on a current database is one option read and a comparison. The
+ * caller must hold the cron lock, so two requests, or a request and
+ * `bin/lamb migrate`, never migrate at once.
+ *
+ * A failure is logged, not thrown, and leaves the marker alone: the next call
+ * retries, so the interval of the caller is the retry throttle. The reply says
+ * only that it failed, because `/_cron` answers anyone.
+ *
+ * @return list<string> What to print: one line per step, the failure notice, or nothing.
+ */
+function run_pending_data_migrations(): array
+{
+    try {
+        if ((string) get_option(DATA_MIGRATED_FOR_OPTION, '')->value === code_marker()) {
+            return [];
+        }
+        $lines = migrate_data();
+        mark_data_migrated();
+
+        return $lines;
+    } catch (\Throwable $e) {
+        error_log('Data migration failed: ' . $e->getMessage());
+
+        return ['Data migration failed, see the error log.'];
+    }
+}
+
+/**
  * Whether a one-time backfill has already recorded its probe as empty, via a
  * hidden row in the `option` table.
  *
@@ -1131,6 +1221,62 @@ function code_stamp(?string $root = null): string
         $sha = (string) (\Composer\InstalledVersions::getRootPackage()['reference'] ?? '');
     }
     return $sha === '' ? '' : substr(md5($sha), 0, 8);
+}
+
+/**
+ * Directories of `src/` that hold no code of Lamb's own: uploads, shipped
+ * images, browser scripts and the themes, which an install adds its own to.
+ */
+const CODE_DIGEST_SKIPPED_DIRECTORIES = ['assets', 'images', 'scripts', 'themes'];
+
+/**
+ * Digest of the PHP files that make up Lamb: `src/*.php`, the namespace
+ * directories one level below it, and `bin/lamb`. Reads a few dozen files.
+ *
+ * It covers installs where code_stamp() has nothing to read (a Docker image or
+ * tarball with no `.git` and no reference in `vendor/composer/installed.php`) or
+ * only a stale reference. A change to any file the migrations live in changes it.
+ *
+ * @param string|null $root Repository root; null means this install's own.
+ * @return string An md5 hex digest.
+ */
+function code_digest(?string $root = null): string
+{
+    $root ??= dirname(__DIR__);
+    $files = glob($root . '/src/*.php') ?: [];
+    foreach (glob($root . '/src/*/*.php') ?: [] as $file) {
+        if (!in_array(basename(dirname($file)), CODE_DIGEST_SKIPPED_DIRECTORIES, true)) {
+            $files[] = $file;
+        }
+    }
+    if (is_file($root . '/bin/lamb')) {
+        $files[] = $root . '/bin/lamb';
+    }
+    sort($files);
+
+    $parts = [];
+    foreach ($files as $file) {
+        $parts[] = substr($file, strlen($root)) . ':' . md5_file($file);
+    }
+
+    return md5(implode("\n", $parts));
+}
+
+/**
+ * The marker stored as the code the data was last migrated for.
+ *
+ * It combines the commit (code_stamp(), which follows every git upgrade, even one
+ * that changes no PHP file) with code_digest() (which follows the files, so a
+ * Docker or tarball release moves it where code_stamp() is empty or stale). It
+ * needs no number bumped by hand. The prefix keeps a stored all-digit value from
+ * being read back as a number by a column with integer affinity.
+ *
+ * @param string|null $root Repository root; null means this install's own.
+ * @return string `code:` and twelve hex characters.
+ */
+function code_marker(?string $root = null): string
+{
+    return 'code:' . substr(md5(code_stamp($root) . '|' . code_digest($root)), 0, 12);
 }
 
 /**

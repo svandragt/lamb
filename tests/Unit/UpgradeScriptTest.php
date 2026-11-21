@@ -172,31 +172,113 @@ class UpgradeScriptTest extends TestCase
     }
 
     /**
-     * #811: exit 3 from bin/lamb migrate means the #831 ownership guard
-     * refused before touching the database — the normal shape of a cron
-     * deploy (checkout owned by the webserver user, cron running as a
-     * human), not a broken upgrade. bin/upgrade must warn and keep going
-     * to the health check and a successful exit, not take the fatal path
+     * Exit 3 from bin/lamb migrate means it did not run the migrations: the
+     * #831 ownership guard refused (the normal shape of a cron deploy, with the
+     * checkout and database owned by the webserver user and cron running as a
+     * human), or another run holds the lock. That is not a broken upgrade, so
+     * bin/upgrade hands the migrations to the site's own /_cron, which runs as
+     * the database's owner, before it checks the site is healthy. It must not
+     * take the fatal path
      * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
      * covers for every other nonzero code.
      */
-    public function testMigrateOwnershipRefusalWarnsAndContinuesToTheHealthCheck(): void
+    public function testMigrateRefusalRequestsCronThenChecksHealth(): void
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
-
-        $this->writeRepoStub('bin/lamb', $this->lambLog, 3);
-        $this->git(['git', 'add', '.'], $this->seed);
-        $this->git(['git', 'commit', '-m', 'lamb refuses on ownership'], $this->seed);
-        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+        $this->commitMigrateExit(3);
 
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('bin/lamb migrate', $output, 'should name the command to run by hand');
-        $this->assertStringContainsString('sudo -u', $output, 'should tell the operator which user to run it as');
+        $this->assertStringContainsString('ran the data migrations through http://example.test:8747/_cron', $output);
+        $this->assertStringNotContainsString('sudo', $output, 'nobody has to run anything by hand');
+        $this->assertStringNotContainsString('WARNING', $output);
         $this->assertStringContainsString('Upgraded', $output, 'the upgrade itself still succeeded');
-        $this->assertFileExists($this->curlLog, 'health check must still run after an ownership refusal');
+        $this->assertSame(
+            ['http://example.test:8747/_cron', 'http://example.test:8747'],
+            $this->curlUrls(),
+            'the /_cron request comes before the health check'
+        );
+    }
+
+    public function testMigrateRefusalWithATrailingSlashSiteUrlRequestsCronOnce(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747/blog/'\n");
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame('http://example.test:8747/blog/_cron', $this->curlUrls()[0]);
+    }
+
+    public function testMigrateRefusalWithoutSiteUrlLeavesTheMigrationsToTheNextCronRequest(): void
+    {
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('next scheduled /_cron request runs the data migrations', $output);
+        $this->assertStringContainsString('Upgraded', $output);
+        $this->assertFileDoesNotExist($this->curlLog, 'there is no site to request');
+    }
+
+    public function testFailedCronRequestAfterAMigrateRefusalPrintsRollbackCommandAndExitsNonZero(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeStub('curl', $this->curlLog, 0, null, 1);
+
+        $process = $this->runUpgrade();
+
+        $this->assertNotSame(0, $process->getExitCode(), 'a failed /_cron request must be visible to cron');
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('http://example.test:8747/_cron', $output);
+        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
+        $this->assertStringNotContainsString('ran the data migrations', $output);
+        $this->assertSame(['http://example.test:8747/_cron'], $this->curlUrls(), 'the health check must not run after it');
+    }
+
+    public function testASuccessfulMigrationDoesNotRequestCron(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertSame(['http://example.test:8747'], $this->curlUrls(), 'bin/lamb migrate did the work, so only the health check asks');
+    }
+
+    /**
+     * Commits a bin/lamb that exits with $code to the origin: bin/lamb is a
+     * tracked file, reset to whatever origin has on every run, so a stand-in
+     * written only into the site checkout would not survive.
+     */
+    private function commitMigrateExit(int $code): void
+    {
+        $this->writeRepoStub('bin/lamb', $this->lambLog, $code);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', "bin/lamb exits {$code}"], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+    }
+
+    /**
+     * The last argument of each curl call, in order.
+     *
+     * @return list<string>
+     */
+    private function curlUrls(): array
+    {
+        $urls = [];
+        foreach (file($this->curlLog, FILE_IGNORE_NEW_LINES) ?: [] as $line) {
+            $urls[] = substr($line, (int) strrpos($line, ' ') + 1);
+        }
+
+        return $urls;
     }
 
     /**

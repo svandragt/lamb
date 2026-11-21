@@ -43,6 +43,22 @@ an external scheduler — so it defends itself three ways:
    the last **attempt**, not the last success — so a failing feed is retried on
    schedule instead of locked out, and a healthy one isn't re-fetched early.
 
+## Data migrations after an upgrade
+
+Inside the lock and before the whole-run gate, `process_feeds()` calls
+`Bootstrap\run_pending_data_migrations()`. It compares the `data_migrated_for`
+option with the running code's marker and, when they differ, runs the one-time
+data migrations (`Bootstrap\migrate_data()`, the steps `bin/lamb migrate` runs).
+It runs ahead of the gate so the first request after an upgrade migrates even when
+no feed task is due, and inside the lock so it never overlaps `bin/lamb migrate`,
+which takes the same lock. The request runs as the database's owner, which a deploy
+user's CLI is not.
+
+A failure is logged and does not stop the rest of the run. The marker stays, so the
+next request retries, and the cron interval is the throttle. The feed tasks that
+follow then run against unmigrated data, as they did before the web side migrated at
+all. See `DECISIONS.md` (2026-11-21).
+
 ## Finishing the run
 
 The crawl loop can run for a long time — up to `FEED_FETCH_TIMEOUT` per feed —

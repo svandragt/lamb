@@ -6,6 +6,17 @@ Entries marked **[deduced]** were reconstructed from code and history rather tha
 
 ---
 
+## 2026-11-21 — Data migrations run from /_cron after the code changes
+
+**Status:** Accepted
+**Context:** `bin/upgrade` runs as the deploy user, and `bin/lamb migrate` exits 3 when `data/lamb.db` belongs to another user, usually the web server user. `bin/upgrade` then only warned, so the site served new code on old data until someone ran `sudo -u www-data bin/lamb migrate`. Tarball and Docker upgrades had the same gap. Three shapes were rejected. `bin/upgrade` running `sudo -u` needs a sudoers entry that Lamb cannot assume. Migrating on an ordinary page request adds a check to every request, and it would run the migrations inside a visitor's request. Per-request migration also needs its own retry throttle.
+
+**Decision:** `/_cron` already runs as the web server user and takes the cron lock, so it runs the migrations. Inside the lock and before the `cron_run_due()` gate, it compares the `data_migrated_for` option with `Bootstrap\code_marker()` and, when they differ, runs `Bootstrap\migrate_data()` (the steps `bin/lamb migrate` runs) and stores the marker. The marker is `code_stamp()` plus `code_digest()`, because `code_stamp()` alone is empty in the Docker image and can be stale for a checkout whose `.git` is a file, while the digest alone would not move for a git upgrade that changes no PHP file. A failure is logged and leaves the marker, and the cron interval is the retry throttle. `bin/lamb migrate` takes the cron lock, so it never runs with `/_cron`, and records the marker after a run. `bin/upgrade` requests `${SITE_URL}/_cron` on exit 3.
+
+**Consequences:** A site that never calls `/_cron` migrates only through `bin/lamb migrate`, as before. The migration runs in a cron request, whose output is public, so it reports counts and the name of a failure, not the error. The marker moves on a release that changes no migration, and the migrations are safe to repeat. `bin/upgrade` cannot tell whether its `/_cron` request ran the migrations or found the lock held, in which case the next scheduled request runs them.
+
+---
+
 ## 2026-11-20 — A new install starts with a welcome draft
 
 **Status:** Accepted
