@@ -693,6 +693,106 @@ XML;
         $this->assertSame('', $this->storedDataMarker($data_dir));
     }
 
+    private function runMarker(string $data_dir, string ...$args): Process
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'marker', ...$args],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        return $process;
+    }
+
+    /**
+     * bin/upgrade reads the stored marker before it replaces the code, and the new code's marker
+     * after, to know whether the data needed a migration during the upgrade. The code marker needs
+     * no database.
+     */
+    public function testMarkerCodePrintsTheMarkerOfTheRunningCodeWithoutOpeningADatabase(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+
+        $process = $this->runMarker($data_dir, 'code');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame(code_marker() . "\n", $process->getOutput());
+        $this->assertDirectoryDoesNotExist($data_dir);
+    }
+
+    public function testMarkerStoredPrintsWhatTheLastMigrationRecorded(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->runMigrate($data_dir);
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame(code_marker() . "\n", $process->getOutput());
+    }
+
+    /**
+     * Reading the marker must not create a database or change one. The sidecar files of a
+     * database in WAL mode would be left behind by a reader that did not close cleanly.
+     */
+    public function testMarkerStoredIsEmptyWithoutADatabaseAndOpensNone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame("\n", $process->getOutput());
+        $this->assertSame([], array_values(array_diff(scandir($data_dir) ?: [], ['.', '..'])));
+    }
+
+    public function testMarkerStoredLeavesTheDatabaseAndItsFolderAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $files = scandir($data_dir) ?: [];
+        $digest = md5_file("$data_dir/lamb.db");
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame("\n", $process->getOutput(), 'nothing has been migrated yet');
+        $this->assertSame($files, scandir($data_dir));
+        $this->assertSame($digest, md5_file("$data_dir/lamb.db"));
+    }
+
+    public function testMarkerWithoutAKnownKindIsAUsageError(): void
+    {
+        $process = $this->runMarker("$this->tmp_dir/data", 'nonsense');
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('Usage: bin/lamb marker stored|code', $process->getErrorOutput());
+    }
+
+    /**
+     * A user who does not own the database never opens it, not even to read: SQLite would create
+     * WAL sidecar files owned by that user, which is what the ownership guard exists to prevent.
+     */
+    public function testMarkerStoredExitsThreeForADatabaseOfAnotherUser(): void
+    {
+        if (!self::canChownToAnotherUser()) {
+            $this->markTestSkipped('Requires passwordless sudo to chown a file to another real user.');
+        }
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+        touch("$data_dir/lamb.db");
+        (new Process(['sudo', '-n', 'chown', 'nobody:nogroup', "$data_dir/lamb.db"]))->mustRun();
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame('', $process->getOutput());
+        $this->assertSame(['lamb.db'], array_values(array_diff(scandir($data_dir) ?: [], ['.', '..'])));
+    }
+
     /**
      * A lock file the CLI user cannot open means no migration ran, the same as a held lock, so
      * bin/upgrade hands the migrations to /_cron instead of reporting a partly migrated database.

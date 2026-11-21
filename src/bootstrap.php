@@ -842,8 +842,8 @@ function migrate_data(bool $dry_run = false): array
 }
 
 /**
- * Option row that holds when a data migration last failed and for which marker,
- * as "<unix time> <marker>".
+ * Option row that holds when a data migration last started without finishing, because it
+ * failed or the request died, and for which marker, as "<unix time> <marker>".
  */
 const DATA_MIGRATION_FAILED_OPTION = 'data_migration_failed';
 
@@ -905,6 +905,9 @@ function run_pending_data_migrations(OODBBean $migrated_for, ?int $now = null, m
             return ['result' => 'busy', 'lines' => ['The code cache still holds older code, try again shortly.']];
         }
 
+        // A fatal error (time or memory limit) skips the catch below, so the attempt is
+        // recorded first and the retry delay applies to it too.
+        remember_data_migration_failure($failure, $marker, $now);
         $lines = migrate_data();
         set_option($migrated_for, $marker);
         clear_data_migration_failure($failure);
@@ -919,7 +922,7 @@ function run_pending_data_migrations(OODBBean $migrated_for, ?int $now = null, m
 }
 
 /**
- * Records when a migration failed and for which marker, so a retry waits.
+ * Records when a migration started or failed, and for which marker, so a retry waits.
  *
  * A write that fails too is swallowed: the database is then failing for more than
  * this, and the request has already logged the cause.
@@ -1346,6 +1349,10 @@ function code_digest(?string $root = null): string
     }
     $parts = [];
     foreach ($files as $file) {
+        // The CLI and the web server may be different users, and both must hash the same set.
+        if (!is_readable($file)) {
+            continue;
+        }
         $parts[] = substr($file, strlen($root)) . ':' . md5_file($file);
     }
 

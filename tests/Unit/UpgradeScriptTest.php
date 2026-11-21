@@ -42,7 +42,7 @@ class UpgradeScriptTest extends TestCase
         mkdir($this->stubs, 0777, true);
         mkdir($this->tools, 0777, true);
         $finder = new ExecutableFinder();
-        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'date', 'head', 'id', 'sed', 'sh', 'sleep', 'sort', 'stat', 'tail', 'tr'] as $tool) {
+        foreach (['bash', 'cat', 'cut', 'dirname', 'env', 'git', 'grep', 'date', 'head', 'id', 'mktemp', 'rm', 'sed', 'sh', 'sleep', 'sort', 'stat', 'tail', 'tee', 'tr'] as $tool) {
             symlink($finder->find($tool), $this->tools . '/' . $tool);
         }
         $this->writeStub('viv', $this->vivLog, 0, 'viv 0.22.0');
@@ -206,6 +206,117 @@ class UpgradeScriptTest extends TestCase
         $output = $process->getOutput() . $process->getErrorOutput();
         $this->assertStringContainsString('git reset --hard ' . $before, $output, 'nothing migrated, so rolling back is safe');
         $this->assertStringNotContainsString('rolling back is not safe', $output);
+    }
+
+    /**
+     * @return array<string, array{?string, string}> The marker the data was migrated for before the
+     *     upgrade (null: it could not be read) and who said the data was current afterwards.
+     */
+    public static function upgradesThatMayHaveMigrated(): array
+    {
+        return [
+            'a scheduled /_cron migrated during the upgrade, then bin/lamb said current' => ['code:old', 'cli'],
+            'a scheduled /_cron migrated during the upgrade, then /_cron said current' => ['code:old', 'cron'],
+            'the marker before the upgrade is unknown, bin/lamb said current' => [null, 'cli'],
+            'the marker before the upgrade is unknown, /_cron said current' => [null, 'cron'],
+        ];
+    }
+
+    /**
+     * "Already current" does not prove that no migration ran during the upgrade: a scheduled
+     * /_cron can migrate during `composer install`. Only a marker read before the reset that
+     * already equals the new code's marker proves it.
+     *
+     * @dataProvider upgradesThatMayHaveMigrated
+     */
+    public function testFailedHealthCheckAfterAnAlreadyCurrentAnswerNeedsTheMarkerFromBeforeTheUpgrade(?string $storedBefore, string $via): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->writeSiteStub($storedBefore);
+        if ($via === 'cli') {
+            $this->commitMigrateExit(0, 'Data migrations: already current', 'code:new');
+            $this->writeStub('curl', $this->curlLog, 22);
+        } else {
+            $this->commitMigrateExit(3, null, 'code:new');
+            $this->writeCronCurlStub([[0, 200, 'Data migrations: already current']], 22);
+        }
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(1, $process->getExitCode());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('Health check failed', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('git reset --hard', $output);
+        $this->assertStringContainsString('rolling back is not safe', $output);
+        $this->assertStringContainsString('error log', $output);
+    }
+
+    public function testFailedHealthCheckStillPrintsTheRollbackCommandWhenTheDataWasCurrentForTheNewCodeBeforeTheUpgrade(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->writeSiteStub('code:new');
+        $this->commitMigrateExit(0, 'Data migrations: already current', 'code:new');
+        $this->writeStub('curl', $this->curlLog, 22);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(1, $process->getExitCode());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('git reset --hard ' . $before, $output);
+        $this->assertStringNotContainsString('rolling back is not safe', $output);
+    }
+
+    /**
+     * A site behind a redirect (http to https, a missing trailing slash) answers the first
+     * request with a 301 that carries no result line.
+     */
+    public function testTheMigrationsRequestFollowsRedirects(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, 200, 'Data migrations: migrated']]);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $firstRequest = (string) file($this->curlLog)[0];
+        $this->assertMatchesRegularExpression('/ -L /', $firstRequest);
+        $this->assertDoesNotMatchRegularExpression('/ -\w*f/', $firstRequest, 'no -f, because a failed migration answers 500 with the result line');
+    }
+
+    /**
+     * A long migration must show its progress, and its errors, as it goes, not after it ends.
+     */
+    public function testTheMigrationOutputAppearsWhileTheMigrationIsStillRunning(): void
+    {
+        $release = $this->workspace . '/release-migration';
+        $script = "#!/bin/sh\n"
+            . "if [ \"\$1\" = marker ]; then echo code:same; exit 0; fi\n"
+            . "echo 'migration progress'\n"
+            . 'i=0; while [ ! -f ' . escapeshellarg($release) . " ] && [ \$i -lt 300 ]; do sleep 0.1; i=\$((i + 1)); done\n"
+            . "echo 'Data migrations: migrated'\n"
+            . "exit 0\n";
+        file_put_contents($this->seed . '/bin/lamb', $script);
+        $this->git(['git', 'add', '.'], $this->seed);
+        $this->git(['git', 'commit', '-m', 'slow migrate'], $this->seed);
+        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+
+        $process = $this->upgradeProcess();
+        $process->setTimeout(60);
+        $process->start();
+        $deadline = microtime(true) + 10;
+        while (microtime(true) < $deadline && !str_contains($process->getOutput(), 'migration progress')) {
+            usleep(50000);
+        }
+        $seenWhileRunning = str_contains($process->getOutput(), 'migration progress');
+        touch($release);
+        $process->wait();
+
+        $this->assertTrue($seenWhileRunning, 'the output of bin/lamb migrate must not wait for it to finish');
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('Data migrations: migrated', $process->getOutput());
     }
 
     public function testHealthCheckRetriesAfterAFailureAndPasses(): void
@@ -521,9 +632,9 @@ class UpgradeScriptTest extends TestCase
      * tracked file, reset to whatever origin has on every run, so a stand-in
      * written only into the site checkout would not survive.
      */
-    private function commitMigrateExit(int $code, ?string $output = null): void
+    private function commitMigrateExit(int $code, ?string $output = null, ?string $codeMarker = 'code:same'): void
     {
-        $this->writeRepoStub('bin/lamb', $this->lambLog, $code, $output);
+        $this->writeRepoStub('bin/lamb', $this->lambLog, $code, $output, 'code:same', $codeMarker);
         $this->git(['git', 'add', '.'], $this->seed);
         $this->git(['git', 'commit', '-m', "bin/lamb exits {$code}"], $this->seed);
         $this->git(['git', 'push', 'origin', 'main'], $this->seed);
@@ -658,14 +769,22 @@ class UpgradeScriptTest extends TestCase
      */
     private function runUpgrade(array $env = []): Process
     {
-        $process = new Process(
+        $process = $this->upgradeProcess($env);
+        $process->run();
+
+        return $process;
+    }
+
+    /**
+     * @param array<string, string> $env Environment that replaces the defaults.
+     */
+    private function upgradeProcess(array $env = []): Process
+    {
+        return new Process(
             [$this->site . '/bin/upgrade'],
             $this->site,
             $env + ['PATH' => $this->stubs . ':' . $this->tools, 'LAMB_UPGRADE_HEALTH_RETRY_DELAY' => '0'] + self::scrubGitEnv()
         );
-        $process->run();
-
-        return $process;
     }
 
     /**
@@ -698,15 +817,50 @@ class UpgradeScriptTest extends TestCase
      * bin/lamb), which must be committed and pushed to survive that script's
      * own `git reset --hard '@{u}'`.
      */
-    private function writeRepoStub(string $relativePath, string $log, int $exitCode = 0, ?string $output = null): void
-    {
+    private function writeRepoStub(
+        string $relativePath,
+        string $log,
+        int $exitCode = 0,
+        ?string $output = null,
+        ?string $storedMarker = 'code:same',
+        ?string $codeMarker = 'code:same'
+    ): void {
         $path = $this->seed . '/' . $relativePath;
         @mkdir(dirname($path), 0755, true);
-        $script = "#!/bin/sh\necho \"$*\" >> " . escapeshellarg($log) . "\n"
+        file_put_contents($path, self::lambStub($log, $exitCode, $output, $storedMarker, $codeMarker));
+        chmod($path, 0755);
+    }
+
+    /**
+     * A stand-in bin/lamb. `marker stored` and `marker code` answer with the given marker, or fail
+     * like a release that has no such command (or like a refusal for a database of another
+     * user) when it is null. Every other call is logged and exits with $exitCode.
+     */
+    private static function lambStub(string $log, int $exitCode, ?string $output, ?string $storedMarker, ?string $codeMarker): string
+    {
+        $answer = static fn (?string $marker): string => $marker === null ? 'exit 1' : 'echo ' . escapeshellarg($marker) . '; exit 0';
+
+        return "#!/bin/sh\n"
+            . "if [ \"\$1\" = marker ]; then\n"
+            . "  case \"\$2\" in\n"
+            . '    stored) ' . $answer($storedMarker) . " ;;\n"
+            . '    code) ' . $answer($codeMarker) . " ;;\n"
+            . "  esac\n"
+            . "  exit 1\n"
+            . "fi\n"
+            . 'echo "$*" >> ' . escapeshellarg($log) . "\n"
             . ($output !== null ? 'echo ' . escapeshellarg($output) . "\n" : '')
             . "exit {$exitCode}\n";
-        file_put_contents($path, $script);
-        chmod($path, 0755);
+    }
+
+    /**
+     * Replaces bin/lamb in the site checkout, which is what bin/upgrade runs before it resets
+     * the checkout, with one whose stored marker is $storedMarker.
+     */
+    private function writeSiteStub(?string $storedMarker): void
+    {
+        file_put_contents($this->site . '/bin/lamb', self::lambStub($this->lambLog, 0, 'Data migrations: already current', $storedMarker, 'code:same'));
+        chmod($this->site . '/bin/lamb', 0755);
     }
 
     private function git(array $command, string $cwd): void

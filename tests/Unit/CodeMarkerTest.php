@@ -82,6 +82,37 @@ class CodeMarkerTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{32}$/', code_digest($this->root));
     }
 
+    /**
+     * The CLI and the web server run as different users. A file only one of them can read must
+     * not make their digests differ, and md5_file() would log a warning on every request.
+     */
+    public function testTheDigestSkipsAFileTheUserCannotRead(): void
+    {
+        if (function_exists('posix_geteuid') && posix_geteuid() === 0) {
+            $this->markTestSkipped('root reads every file.');
+        }
+        $before = code_digest($this->root);
+        file_put_contents($this->root . '/src/network.php', "<?php\n");
+        $withReadableFile = code_digest($this->root);
+        chmod($this->root . '/src/network.php', 0000);
+
+        $warnings = [];
+        set_error_handler(static function (int $number, string $message) use (&$warnings): bool {
+            $warnings[] = $message;
+
+            return true;
+        });
+        try {
+            $withUnreadableFile = code_digest($this->root);
+        } finally {
+            restore_error_handler();
+        }
+
+        $this->assertNotSame($before, $withReadableFile);
+        $this->assertSame($before, $withUnreadableFile, 'the unreadable file does not count');
+        $this->assertSame([], $warnings);
+    }
+
     public function testTheDigestChangesWhenAFileIsAdded(): void
     {
         $before = code_digest($this->root);

@@ -40,6 +40,10 @@
  * explicitly. A run takes the cron lock and records the code it migrated for.
  * It exits 3 when it ran nothing: another user owns lamb.db, or the lock is held.
  *
+ * marker stored|code prints one marker and changes nothing, for bin/upgrade: `stored` is what the
+ * last migration recorded (empty before the first), `code` is the marker of the running code.
+ * `stored` exits 3 for a database of another user, and never opens it.
+ *
  * The single entry point for every importer: it owns the bootstrap, argument
  * parsing and source registry the three former import-*.php scripts each
  * hand-rolled a copy of.
@@ -246,10 +250,43 @@ if ($command === 'migrate') {
     exit(0);
 }
 
+if ($command === 'marker') {
+    $which = $argv[2] ?? '';
+    if (!in_array($which, ['stored', 'code'], true) || count($argv) > 3) {
+        fwrite(STDERR, "Usage: bin/lamb marker stored|code\n");
+        exit(1);
+    }
+    if ($which === 'code') {
+        echo Bootstrap\code_marker() . "\n";
+        exit(0);
+    }
+
+    // A reader of another user's database would leave WAL sidecar files owned by itself, which
+    // is what the ownership guard of open_data_dir() prevents (#831), so it does not open it.
+    $db_path = Bootstrap\data_dir(dirname(__DIR__)) . '/lamb.db';
+    if (Bootstrap\db_owned_by_another_user($db_path, function_exists('posix_geteuid') ? posix_geteuid() : null)) {
+        fwrite(STDERR, "bin/lamb: $db_path is owned by a different user than the one running this command, so its marker was not read.\n");
+        exit(3);
+    }
+    $stored = '';
+    if (is_file($db_path)) {
+        try {
+            $pdo = new \PDO('sqlite:' . $db_path, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+            $stored = (string) $pdo->query('SELECT value FROM option WHERE name = ' . $pdo->quote(Bootstrap\DATA_MIGRATED_FOR_OPTION))->fetchColumn();
+        } catch (\PDOException $e) {
+            fwrite(STDERR, 'bin/lamb: cannot read the marker: ' . $e->getMessage() . "\n");
+            exit(1);
+        }
+    }
+    echo $stored . "\n";
+    exit(0);
+}
+
 if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace] [--experimental]\n");
     fwrite(STDERR, "       bin/lamb upgrade-posts [--dry-run]\n");
     fwrite(STDERR, "       bin/lamb migrate [--dry-run]\n");
+    fwrite(STDERR, "       bin/lamb marker stored|code\n");
     fwrite(STDERR, 'Sources: ' . implode(', ', Import\source_names()) . "\n");
     exit(1);
 }

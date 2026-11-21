@@ -319,6 +319,70 @@ class CronDataMigrationTest extends TestCase
     }
 
     /**
+     * @return array<string, array{string}> The query string.
+     */
+    public static function cronQueries(): array
+    {
+        return [
+            'a plain request' => [''],
+            'a migrations-only request' => ['migrations'],
+        ];
+    }
+
+    /**
+     * index.php marks an anonymous response cacheable for five minutes before it routes, so a
+     * caching proxy would serve an old `Data migrations:` line to bin/upgrade. process_feeds()
+     * replaces that before it prints anything.
+     *
+     * @dataProvider cronQueries
+     */
+    public function testTheReplyIsNeverCached(string $query): void
+    {
+        $this->storeOption(self::MARKER_OPTION, code_marker());
+
+        $response = CronProbe::run($this->dataDir, query: $query);
+
+        $cacheControl = array_values(array_filter(
+            $response['headers'],
+            static fn (array $header): bool => str_starts_with(strtolower($header[0]), 'cache-control:')
+        ));
+        $this->assertSame([['Cache-Control: no-store', 0]], $cacheControl, 'one header, sent before any output');
+    }
+
+    /**
+     * A fatal error (a time or memory limit) skips every `catch`, so nothing would record the
+     * attempt and every /_cron request would start the same migration again at once.
+     */
+    public function testAFatalErrorMidMigrationStillMakesTheNextRequestWait(): void
+    {
+        $this->seedFatalPost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        $fatal = CronProbe::run($this->dataDir, fatalMidMigration: true);
+
+        $this->assertStringContainsString('Allowed memory size', $fatal['stderr'], 'the request must die of a fatal error');
+        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
+        $this->assertMatchesRegularExpression('/^\d+ ' . preg_quote(code_marker(), '/') . '$/', $this->storedOption(self::FAILED_OPTION), 'the attempt is on record');
+
+        $again = CronProbe::run($this->dataDir);
+
+        $this->assertSame(500, $again['http']);
+        $this->assertStringContainsString("Data migrations: failed\n", $again['output']);
+        $this->assertStringContainsString('next attempt is due after a minute', $again['output']);
+        $this->assertStringNotContainsString('no such function', $again['stderr'], 'the migration was not started again');
+    }
+
+    public function testASuccessfulMigrationLeavesNoAttemptOnRecord(): void
+    {
+        $this->seedStalePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        CronProbe::run($this->dataDir);
+
+        $this->assertSame('', $this->storedOption(self::FAILED_OPTION));
+    }
+
+    /**
      * Seeds a post stored before the current POST_VERSION, in the data directory's own
      * database. The child process owns the connection, as the probe's requests do.
      */
@@ -340,6 +404,20 @@ class CronDataMigrationTest extends TestCase
             '\RedBeanPHP\R::exec("INSERT INTO post (body) VALUES (\'unversioned\')"); '
             . '$id = \RedBeanPHP\R::getCell("SELECT last_insert_rowid()"); '
             . '\RedBeanPHP\R::exec("CREATE TRIGGER refuse_updates BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, \'refused by the test\'); END"); '
+            . 'echo $id;'
+        );
+    }
+
+    /**
+     * Seeds a post with no version, which backfill_post_version() has to UPDATE, and a trigger
+     * that calls `die_now()`, a function only CronProbe's fatal mode defines.
+     */
+    private function seedFatalPost(): int
+    {
+        return (int) $this->inDatabase(
+            '\RedBeanPHP\R::exec("INSERT INTO post (body) VALUES (\'unversioned\')"); '
+            . '$id = \RedBeanPHP\R::getCell("SELECT last_insert_rowid()"); '
+            . '\RedBeanPHP\R::exec("CREATE TRIGGER die_on_update BEFORE UPDATE ON post BEGIN SELECT die_now(); END"); '
             . 'echo $id;'
         );
     }

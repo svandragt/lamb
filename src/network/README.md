@@ -65,22 +65,35 @@ would make `bin/lamb migrate` and `/_cron` compute different markers. Composer w
 `vendor/` can therefore migrate with the new `src/` and the old libraries and record a
 marker, but the marker changes again once the install finishes, and the next request
 migrates again. The marker is computed from the files on disk, so the running code must
-be that code.
+be that code. A file the running user cannot read is left out of the digest, because
+`md5_file()` would log a warning on every request. A file that only one of the CLI and the
+web server can read still makes their markers differ, and the next `/_cron` migrates again,
+which is harmless because the steps are idempotent.
+
+`bin/lamb marker code` prints the marker of the running code and needs no database.
+`bin/lamb marker stored` prints the `data_migrated_for` option, changes nothing, and never
+opens a database of another user (exit 3), because even a read would leave WAL sidecar files
+owned by that user (#831).
 
 ### Results
 
 The reply opens with a `Data migrations: <result>` line. A client acts on that line, not
 on the HTTP status: `/_cron` answers 200 when it was busy and when nothing needed
 migrating, and a timeout on a large archive says nothing about whether the migration ran.
+`process_feeds()` sends `Cache-Control: no-store` before any output, because `index.php`
+marks an anonymous response cacheable for five minutes and a caching proxy would otherwise
+serve an old result line.
 
 - `migrated` and `already current`: the data matches the code.
 - `failed`: answers 500 and stops the run, so the feed cycle never ingests into
   half-migrated data. The error goes to the PHP error log and the reply says only that it
-  failed, because `/_cron` answers anyone. The marker stays, and the failure row
+  failed, because `/_cron` answers anyone. The marker stays, and the attempt row
   (`data_migration_failed`, `<unix time> <marker>`) makes the same marker retry only once
   `cron_run_due()` allows a new run, while a new marker migrates at once. `/_cron` is
   unauthenticated and the migration check sits before the rate-limit gate, so without that
-  row every request would rerun a failing migration.
+  row every request would rerun a failing migration. The row is written before the steps run
+  and deleted when they succeed, so a fatal error (a time or memory limit), which no `catch`
+  sees, makes the next request wait too.
 - `busy`: nothing ran, and the run stops after the line, as for `failed`, because the
   feed cycle would run old code over data nobody migrated. It covers a held lock and a code
   cache that holds older files than the disk. Right after a deploy OPcache can serve old
@@ -109,23 +122,32 @@ shape of a cron deploy, with the checkout and database owned by the web server u
 run holds the cron lock, or the lock file cannot be opened. That is not a broken upgrade, so
 `bin/upgrade` hands the migrations to `/_cron?migrations`. `bin/lamb migrate` prints the same
 result line as `/_cron`, decided by comparing markers, so `migrated` means the steps ran for
-new code even if each found nothing to change. Any other nonzero exit is a failed migration:
+new code even if each found nothing to change. Its output is streamed, through `tee` to a
+temporary file that `bin/upgrade` reads the result line from, so progress and errors appear in
+order. Any other nonzero exit is a failed migration:
 `bin/upgrade` exits 1, says the data may be partly migrated and points to the error output.
 
 With `SITE_URL` and `curl`, `bin/upgrade` waits `LAMB_UPGRADE_HEALTH_RETRY_DELAY` (3 s)
 before the first request, because OPcache can still serve the old code and `/_cron` cannot
-always see it. It requests without `curl -f`, so the body of a 500 is read, with a 300 s
-limit, longer than the health check's. It asks again up to five times on `busy`, then leaves
+always see it. It requests without `curl -f`, so the body of a 500 is read, and with `-L`,
+so a redirect (http to https, a trailing slash) is followed to the reply that has the result
+line. The limit is 300 s, longer than the health check's. It asks again up to five times on `busy`, then leaves
 the migrations to the next scheduled `/_cron`. `failed` exits 1 and points to the error log. A
 timeout, a 502 or 504 or a reply without the result line warns that the migration may still be
 running or may have failed, and goes on. Without `SITE_URL` or `curl` it prints
 `sudo -u <owner> bin/lamb migrate` as a hint and never runs sudo.
 
 Migrations only move forward, so `bin/upgrade` never prints the rollback hint for the
-migration step. After a failed health check it prints the hint only when no migration ran in
-this upgrade (`bin/lamb migrate` or `/_cron` answered `already current`). After any other
-answer it says that rolling back is not safe and points to the error log. See `DECISIONS.md`
-(2026-11-21).
+migration step. After a failed health check it prints the hint only when it can show that no
+migration was needed. "Already current" does not show that: a scheduled `/_cron` can migrate
+during `composer install` or the wait. So `bin/upgrade` reads `bin/lamb marker stored` before
+anything changes and `bin/lamb marker code` after the install, and prints the hint only when the
+two are equal and the migration step then answered `already current`. Otherwise it says that
+rolling back is not safe and points to the error log. That includes a database of another user,
+whose marker cannot be read, and the first upgrade to a release with `bin/lamb marker`, whose
+old `bin/lamb` has no such command. The CLI reads the marker because a request to the old code
+cannot be trusted to ignore a query string, and the old release would run a whole feed cycle on
+`/_cron?marker`. See `DECISIONS.md` (2026-11-21).
 
 ## Finishing the run
 

@@ -63,6 +63,10 @@ EOF
     exit 1
 fi
 
+# The marker the data was last migrated for, read before any code changes. Empty when it cannot
+# be read: a release without `bin/lamb marker`, or a database of another user.
+stored_marker_before=$(bin/lamb marker stored 2>/dev/null) || stored_marker_before=""
+
 git fetch origin
 
 if [ -n "${1:-}" ]; then
@@ -74,6 +78,7 @@ branch=$(git rev-parse --abbrev-ref HEAD)
 
 git reset --hard '@{u}'
 "${install_cmd[@]}"
+new_marker=$(bin/lamb marker code 2>/dev/null) || new_marker=""
 
 # Runs the one-time data migrations (#811) before the health check, which only
 # asks "does the site respond?". Exit 3 means bin/lamb ran nothing (ownership
@@ -81,17 +86,25 @@ git reset --hard '@{u}'
 # as the database's owner. Any other nonzero exit is a failed migration. Migrations
 # only move forward, so this script never prints a rollback hint for them.
 # See src/network/README.md ("Data migrations after an upgrade").
+migrate_log=$(mktemp "${TMPDIR:-/tmp}/lamb-upgrade-migrate.XXXXXX")
+trap 'rm -f "$migrate_log"' EXIT
 migrate_status=0
-migrate_output=$(bin/lamb migrate) || migrate_status=$?
-if [ -n "$migrate_output" ]; then printf '%s\n' "$migrate_output"; fi
+bin/lamb migrate | tee "$migrate_log" || migrate_status=$?
 
 if [ "$migrate_status" -ne 0 ] && [ "$migrate_status" -ne 3 ]; then
     echo "Data migration failed after upgrading to $(git rev-parse --short HEAD). The data may be partly migrated: see the error output above, fix the cause, then run bin/lamb migrate again as the user that owns data/lamb.db." >&2
     exit 1
 fi
 
+# "Already current" proves nothing by itself: a scheduled /_cron can migrate during the install.
+# Only a marker from before the reset that equals the new code's marker proves that no
+# migration was needed, and an empty one (unreadable) proves nothing.
+data_was_current=0
+if [ -n "$stored_marker_before" ] && [ "$stored_marker_before" = "$new_marker" ]; then
+    data_was_current=1
+fi
 migration_may_have_run=1
-if [ "$migrate_status" -eq 0 ] && grep -qx 'Data migrations: already current' <<< "$migrate_output"; then
+if [ "$data_was_current" -eq 1 ] && [ "$migrate_status" -eq 0 ] && grep -qx 'Data migrations: already current' "$migrate_log"; then
     migration_may_have_run=0
 fi
 
@@ -113,7 +126,7 @@ if [ "$migrate_status" -eq 3 ]; then
             if [ "$attempt" -gt 1 ]; then sleep "$cron_delay"; fi
             # No -f, because a failed migration answers 500 and the body says so.
             curl_exit=0
-            cron_reply=$(curl -sS --max-time 300 -w '\n%{http_code}' "$cron_url") || curl_exit=$?
+            cron_reply=$(curl -sS -L --max-time 300 -w '\n%{http_code}' "$cron_url") || curl_exit=$?
             cron_status="${cron_reply##*$'\n'}"
             cron_result=$(printf '%s\n' "${cron_reply%$'\n'*}" | grep -E '^Data migrations: ' | head -n1) || true
             [ "$cron_result" = "Data migrations: busy" ] || break
@@ -124,7 +137,7 @@ if [ "$migrate_status" -eq 3 ]; then
                 ;;
             "Data migrations: already current")
                 echo "bin/upgrade: the site had already migrated its data, per ${cron_url}"
-                migration_may_have_run=0
+                if [ "$data_was_current" -eq 1 ]; then migration_may_have_run=0; fi
                 ;;
             "Data migrations: failed")
                 echo "bin/upgrade: ${cron_url} answered that the data migration failed (HTTP ${cron_status:-no answer}). The new code is in place, so check the web server's PHP error log. The next /_cron request retries the migration." >&2
@@ -163,7 +176,7 @@ if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
         if [ "$migration_may_have_run" -eq 0 ]; then
             echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
         else
-            echo "The data was migrated for the new code (or its migration may still be running), so rolling back is not safe. Check the web server's PHP error log for the cause." >&2
+            echo "The data may have been migrated for the new code (a migration ran, may still be running, or could not be ruled out), so rolling back is not safe. Check the web server's PHP error log for the cause." >&2
         fi
         exit 1
     fi

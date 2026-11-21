@@ -175,6 +175,8 @@ function run_feed_cycle(
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
+    // index.php marks an anonymous response cacheable; a proxy must not serve an old result line.
+    header('Cache-Control: no-store');
 
     // A single feed fetch may take up to FEED_FETCH_TIMEOUT, so a handful of slow
     // feeds can outlast a web request's PHP limit (typically 30s under FPM). A
