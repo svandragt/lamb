@@ -58,7 +58,7 @@ class UpgradeScriptTest extends TestCase
         mkdir($this->seed . '/bin');
         copy(codecept_root_dir('bin/upgrade'), $this->seed . '/bin/upgrade');
         chmod($this->seed . '/bin/upgrade', 0755);
-        $this->writeRepoStub('bin/lamb', $this->lambLog);
+        $this->writeRepoStub('bin/lamb', $this->lambLog, 0, 'Data migrations: already current');
         file_put_contents($this->seed . '/file.txt', "v1\n");
         $this->git(['git', 'add', '.'], $this->seed);
         $this->git(['git', 'commit', '-m', 'v1'], $this->seed);
@@ -138,6 +138,76 @@ class UpgradeScriptTest extends TestCase
         $this->assertCount(3, file($this->curlLog), 'should try the health check three times before giving up');
     }
 
+    /**
+     * The migrations only move forward, so once one ran, old code could meet data migrated for
+     * the new code. The script then prints no rollback command and points to the error log.
+     */
+    public function testFailedHealthCheckAfterTheCliMigratedSaysRollingBackIsNotSafe(): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(0, 'Data migrations: migrated');
+        $this->writeStub('curl', $this->curlLog, 22);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(1, $process->getExitCode(), 'health check failure should be visible to cron');
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('Data migrations: migrated', $output, 'the output of bin/lamb migrate is still shown');
+        $this->assertStringContainsString('Health check failed', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('git reset --hard', $output);
+        $this->assertStringContainsString('rolling back is not safe', $output);
+        $this->assertStringContainsString('error log', $output);
+    }
+
+    /**
+     * @return array<string, array{list<array{0: int, 1: int, 2: string}>}>
+     */
+    public static function cronRepliesAfterWhichTheSiteMayHaveMigrated(): array
+    {
+        return [
+            'the site migrated' => [[[0, 200, 'Data migrations: migrated']]],
+            'the site stayed busy' => [array_fill(0, 5, [0, 200, 'Data migrations: busy'])],
+            'a timeout' => [[[28, 0, '']]],
+        ];
+    }
+
+    /**
+     * @dataProvider cronRepliesAfterWhichTheSiteMayHaveMigrated
+     * @param list<array{0: int, 1: int, 2: string}> $replies
+     */
+    public function testFailedHealthCheckAfterTheSiteMayHaveMigratedSaysRollingBackIsNotSafe(array $replies): void
+    {
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub($replies, 22);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(1, $process->getExitCode());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('Health check failed', $output);
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('git reset --hard', $output);
+        $this->assertStringContainsString('rolling back is not safe', $output);
+        $this->assertStringContainsString('error log', $output);
+    }
+
+    public function testFailedHealthCheckAfterTheSiteFoundTheDataCurrentStillPrintsTheRollbackCommand(): void
+    {
+        $before = $this->revParse($this->site);
+        file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
+        $this->commitMigrateExit(3);
+        $this->writeCronCurlStub([[0, 200, 'Data migrations: already current']], 22);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(1, $process->getExitCode());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'nothing migrated, so rolling back is safe');
+        $this->assertStringNotContainsString('rolling back is not safe', $output);
+    }
+
     public function testHealthCheckRetriesAfterAFailureAndPasses(): void
     {
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
@@ -150,24 +220,25 @@ class UpgradeScriptTest extends TestCase
         $this->assertCount(2, file($this->curlLog), 'should stop retrying once curl succeeds');
     }
 
-    public function testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck(): void
+    /**
+     * Migrations only move forward, so a failed one leaves data that old code may not read: the
+     * script prints no rollback command. It says the data may be partly migrated and how to
+     * finish the job.
+     */
+    public function testFailedMigrationStopsWithoutARollbackHintBeforeTheHealthCheck(): void
     {
-        $before = $this->revParse($this->site);
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
-
-        // bin/lamb is a tracked file, reset back to whatever origin has on
-        // every run — so the failing version must be committed and pushed,
-        // not just written into the site checkout.
-        $this->writeRepoStub('bin/lamb', $this->lambLog, 1);
-        $this->git(['git', 'add', '.'], $this->seed);
-        $this->git(['git', 'commit', '-m', 'fail migrate'], $this->seed);
-        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
+        $this->commitMigrateExit(1);
 
         $process = $this->runUpgrade();
 
-        $this->assertNotSame(0, $process->getExitCode(), 'migration failure should be visible to cron');
+        $this->assertSame(1, $process->getExitCode(), 'migration failure should be visible to cron');
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('git reset --hard ' . $before, $output, 'should print a rollback command');
+        $this->assertStringNotContainsString('Roll back', $output);
+        $this->assertStringNotContainsString('git reset --hard', $output, 'old code on partly migrated data is worse than the failure');
+        $this->assertStringContainsString('partly migrated', $output);
+        $this->assertStringContainsString('output above', $output);
+        $this->assertStringContainsString('run bin/lamb migrate again as the user that owns data/lamb.db', $output);
         $this->assertFileDoesNotExist($this->curlLog, 'health check must not run after a failed migration');
     }
 
@@ -179,7 +250,7 @@ class UpgradeScriptTest extends TestCase
      * bin/upgrade hands the migrations to the site's own /_cron, which runs as
      * the database's owner, before it checks the site is healthy. It must not
      * take the fatal path
-     * testFailedMigrationPrintsRollbackCommandAndExitsNonZeroBeforeTheHealthCheck()
+     * testFailedMigrationStopsWithoutARollbackHintBeforeTheHealthCheck()
      * covers for every other nonzero code.
      *
      * Migrations only move forward, so from here bin/upgrade never prints the
@@ -408,8 +479,9 @@ class UpgradeScriptTest extends TestCase
      *
      * @param list<array{0: int, 1: int, 2: string}> $replies Curl's exit code, the HTTP status and
      *     the body, one triple per /_cron request, in order.
+     * @param int $healthExit Curl's exit code for every other request.
      */
-    private function writeCronCurlStub(array $replies): void
+    private function writeCronCurlStub(array $replies, int $healthExit = 0): void
     {
         foreach ($replies as $index => [$exitCode, $status, $body]) {
             file_put_contents($this->stubs . '/cron-reply-' . ($index + 1), $exitCode . "\n" . sprintf('%03d', $status) . "\n" . $body . "\n");
@@ -427,7 +499,7 @@ class UpgradeScriptTest extends TestCase
             . "    exit \"$(head -n1 \"\$reply\")\"\n"
             . "    ;;\n"
             . "esac\n"
-            . "exit 0\n";
+            . "exit {$healthExit}\n";
         file_put_contents($this->stubs . '/curl', $script);
         chmod($this->stubs . '/curl', 0755);
     }
@@ -449,9 +521,9 @@ class UpgradeScriptTest extends TestCase
      * tracked file, reset to whatever origin has on every run, so a stand-in
      * written only into the site checkout would not survive.
      */
-    private function commitMigrateExit(int $code): void
+    private function commitMigrateExit(int $code, ?string $output = null): void
     {
-        $this->writeRepoStub('bin/lamb', $this->lambLog, $code);
+        $this->writeRepoStub('bin/lamb', $this->lambLog, $code, $output);
         $this->git(['git', 'add', '.'], $this->seed);
         $this->git(['git', 'commit', '-m', "bin/lamb exits {$code}"], $this->seed);
         $this->git(['git', 'push', 'origin', 'main'], $this->seed);
@@ -564,33 +636,21 @@ class UpgradeScriptTest extends TestCase
         $this->assertSame($before, $this->revParse($this->site), 'checkout must not be reset');
     }
 
-    public function testRollbackHintsNameTheChosenInstaller(): void
+    public function testTheRollbackHintNamesTheChosenInstaller(): void
     {
         $before = $this->revParse($this->site);
         $this->removeStub('viv');
         $this->writeStub('composer', $this->composerLog);
-        $rollback = 'git reset --hard ' . $before . ' && composer install --no-dev --no-scripts --no-interaction';
-
-        // Migration failure.
-        $this->writeRepoStub('bin/lamb', $this->lambLog, 1);
-        $this->git(['git', 'add', '.'], $this->seed);
-        $this->git(['git', 'commit', '-m', 'fail migrate'], $this->seed);
-        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
-        $process = $this->runUpgrade();
-        $this->assertNotSame(0, $process->getExitCode());
-        $this->assertStringContainsString($rollback, $process->getOutput() . $process->getErrorOutput());
-
-        // Health check failure, from the same starting point.
-        $this->git(['git', 'reset', '--hard', $before], $this->site);
-        $this->writeRepoStub('bin/lamb', $this->lambLog);
-        $this->git(['git', 'add', '.'], $this->seed);
-        $this->git(['git', 'commit', '-m', 'migrate ok'], $this->seed);
-        $this->git(['git', 'push', 'origin', 'main'], $this->seed);
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->writeStub('curl', $this->curlLog, 22);
+
         $process = $this->runUpgrade();
+
         $this->assertNotSame(0, $process->getExitCode());
-        $this->assertStringContainsString($rollback, $process->getOutput() . $process->getErrorOutput());
+        $this->assertStringContainsString(
+            'git reset --hard ' . $before . ' && composer install --no-dev --no-scripts --no-interaction',
+            $process->getOutput() . $process->getErrorOutput()
+        );
     }
 
     /**
@@ -638,11 +698,13 @@ class UpgradeScriptTest extends TestCase
      * bin/lamb), which must be committed and pushed to survive that script's
      * own `git reset --hard '@{u}'`.
      */
-    private function writeRepoStub(string $relativePath, string $log, int $exitCode = 0): void
+    private function writeRepoStub(string $relativePath, string $log, int $exitCode = 0, ?string $output = null): void
     {
         $path = $this->seed . '/' . $relativePath;
         @mkdir(dirname($path), 0755, true);
-        $script = "#!/bin/sh\necho \"$*\" >> " . escapeshellarg($log) . "\nexit {$exitCode}\n";
+        $script = "#!/bin/sh\necho \"$*\" >> " . escapeshellarg($log) . "\n"
+            . ($output !== null ? 'echo ' . escapeshellarg($output) . "\n" : '')
+            . "exit {$exitCode}\n";
         file_put_contents($path, $script);
         chmod($path, 0755);
     }

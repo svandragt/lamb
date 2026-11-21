@@ -220,6 +220,8 @@ if ($command === 'migrate') {
 
     // Before the steps, as /_cron does: the marker names the code that ran them.
     $marker = Bootstrap\code_marker();
+    $migrated_for = get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, '');
+    $already_current = (string) $migrated_for->value === $marker;
     foreach (Bootstrap\migrate_data($dry_run) as $line) {
         echo $line . "\n";
     }
@@ -233,9 +235,11 @@ if ($command === 'migrate') {
         echo "{$prefix}check_removed_settings: `$setting` was removed and is ignored; saving the settings page drops it. Replacement: $replacement\n";
     }
 
-    // A manual run counts for the code it ran with, so /_cron does not repeat it.
+    // A manual run counts for the code it ran with, so /_cron does not repeat it. The result
+    // line is the one /_cron prints, and bin/upgrade reads it to decide whether a rollback is safe.
     if (!$dry_run) {
-        set_option(get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, ''), $marker);
+        set_option($migrated_for, $marker);
+        echo Bootstrap\data_migration_result_line($already_current ? 'already current' : 'migrated') . "\n";
     }
 
     echo "{$prefix}Done.\n";

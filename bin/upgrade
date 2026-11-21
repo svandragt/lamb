@@ -90,19 +90,27 @@ git reset --hard '@{u}'
 # runs the same migrations when the code differs from the code the data was
 # last migrated for.
 #
-# From here on this script never prints the rollback hint for the migration:
-# migrations only move forward, so rolling the code back could put old code on
-# migrated data. It reads the "Data migrations: <result>" line of the reply, not
-# the HTTP status, because /_cron answers 200 when it was busy and when nothing
-# needed migrating, and a timeout on a large archive says nothing about whether
-# the migration ran.
+# This script never prints the rollback hint for the migration step: migrations
+# only move forward, so rolling the code back could put old code on migrated
+# data. For the same reason the health check below prints it only when no
+# migration ran in this upgrade (migration_may_have_run stays 0).
+#
+# It reads the "Data migrations: <result>" line of the reply, not the HTTP
+# status, because /_cron answers 200 when it was busy and when nothing needed
+# migrating, and a timeout on a large archive says nothing about whether the
+# migration ran. bin/lamb migrate prints the same line.
 migrate_status=0
-bin/lamb migrate || migrate_status=$?
+migrate_output=$(bin/lamb migrate) || migrate_status=$?
+if [ -n "$migrate_output" ]; then printf '%s\n' "$migrate_output"; fi
 
 if [ "$migrate_status" -ne 0 ] && [ "$migrate_status" -ne 3 ]; then
-    echo "Data migration failed after upgrading to $(git rev-parse --short HEAD)" >&2
-    echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
+    echo "Data migration failed after upgrading to $(git rev-parse --short HEAD). The data may be partly migrated: see the error output above, fix the cause, then run bin/lamb migrate again as the user that owns data/lamb.db." >&2
     exit 1
+fi
+
+migration_may_have_run=1
+if [ "$migrate_status" -eq 0 ] && grep -qx 'Data migrations: already current' <<< "$migrate_output"; then
+    migration_may_have_run=0
 fi
 
 # SITE_URL is written by make-password.php.
@@ -138,6 +146,7 @@ if [ "$migrate_status" -eq 3 ]; then
                 ;;
             "Data migrations: already current")
                 echo "bin/upgrade: the site had already migrated its data, per ${cron_url}"
+                migration_may_have_run=0
                 ;;
             "Data migrations: failed")
                 echo "bin/upgrade: ${cron_url} answered that the data migration failed (HTTP ${cron_status:-no answer}). The new code is in place, so check the web server's PHP error log. The next /_cron request retries the migration." >&2
@@ -173,7 +182,11 @@ if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
     done
     if [ "$healthy" -eq 0 ]; then
         echo "Health check failed for ${site_url}" >&2
-        echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
+        if [ "$migration_may_have_run" -eq 0 ]; then
+            echo "Roll back with: git reset --hard ${prev} && ${install_cmd[*]}" >&2
+        else
+            echo "The data was migrated for the new code (or its migration may still be running), so rolling back is not safe. Check the web server's PHP error log for the cause." >&2
+        fi
         exit 1
     fi
 fi

@@ -629,6 +629,35 @@ XML;
         $this->assertSame(code_marker(), $this->storedDataMarker($data_dir));
     }
 
+    /**
+     * bin/upgrade reads this line, as it reads the one /_cron prints, to learn whether a
+     * migration ran for the new code. A rerun for the same code still runs the idempotent steps.
+     */
+    public function testMigrateSaysWhetherItMigratedOrFoundTheDataCurrent(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $first = $this->runMigrate($data_dir);
+        $second = $this->runMigrate($data_dir);
+
+        $this->assertStringContainsString("Data migrations: migrated\n", $first->getOutput());
+        $this->assertStringNotContainsString('Data migrations: already current', $first->getOutput());
+        $this->assertStringContainsString("Data migrations: already current\n", $second->getOutput());
+        $this->assertStringNotContainsString('Data migrations: migrated', $second->getOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $second->getOutput());
+    }
+
+    public function testMigrateDryRunReportsNoMigrationResult(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $process = $this->runMigrate($data_dir, ['--dry-run']);
+
+        $this->assertStringNotContainsString('Data migrations:', $process->getOutput());
+    }
+
     public function testMigrateDryRunDoesNotRecordTheMarker(): void
     {
         $data_dir = "$this->tmp_dir/data";
