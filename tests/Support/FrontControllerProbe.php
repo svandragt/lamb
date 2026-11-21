@@ -38,9 +38,9 @@ final class FrontControllerProbe
      *     cookies?: array<string, string>,
      *     site_url?: string,
      *     settings?: string,
-     *     password_hash?: string
+     *     login_hash?: string
      * } $request `host` is the Host header and `https` the HTTPS server variable. `site_url` is
-     *     LAMB_SITE_URL, `settings` the INI text saved before the request, and `password_hash`
+     *     LAMB_SITE_URL, `settings` the INI text saved before the request, and `login_hash`
      *     LAMB_LOGIN_PASSWORD.
      * @return array{
      *     cookies: array<string, array{value: string, secure: bool}>,
@@ -64,7 +64,7 @@ final class FrontControllerProbe
             dirname(__DIR__, 2) . '/src',
             [
                 'LAMB_DATA_DIR' => $dataDir,
-                'LAMB_LOGIN_PASSWORD' => $request['password_hash'] ?? false,
+                'LAMB_LOGIN_PASSWORD' => $request['login_hash'] ?? false,
                 'LAMB_SITE_URL' => $request['site_url'] ?? false,
             ]
         );

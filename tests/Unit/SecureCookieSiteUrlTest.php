@@ -22,17 +22,17 @@ use function Lamb\Response\login_csrf_secret;
  */
 class SecureCookieSiteUrlTest extends TestCase
 {
-    private static string $password;
+    private static string $secret;
 
-    private static string $passwordHash;
+    private static string $secretHash;
 
     /** @var list<string> */
     private array $directories = [];
 
     public static function setUpBeforeClass(): void
     {
-        self::$password = bin2hex(random_bytes(16));
-        self::$passwordHash = base64_encode(password_hash(self::$password, PASSWORD_DEFAULT));
+        self::$secret = bin2hex(random_bytes(16));
+        self::$secretHash = base64_encode(password_hash(self::$secret, PASSWORD_DEFAULT));
     }
 
     protected function tearDown(): void
@@ -143,14 +143,14 @@ class SecureCookieSiteUrlTest extends TestCase
      */
     public function testLoginCookiesCarrySecureOnlyWhenTheRequestIsHttps(array $request, bool $secure): void
     {
-        $token = sign_login_marker(bin2hex(random_bytes(8)), login_csrf_secret(self::$passwordHash));
+        $token = sign_login_marker(bin2hex(random_bytes(8)), login_csrf_secret(self::$secretHash));
 
         $login = FrontControllerProbe::run($this->dataDir(), [
             'method' => 'POST',
             'uri' => '/login',
             'cookies' => ['lamb_login_csrf' => $token],
-            'post' => ['submit' => 'Log in', 'password' => self::$password, 'csrf' => $token],
-            'password_hash' => self::$passwordHash,
+            'post' => $this->loginForm($token),
+            'login_hash' => self::$secretHash,
         ] + $request);
 
         $this->assertArrayHasKey('lamb_logged_in', $login['cookies'], 'A successful login sets the marker');
@@ -162,7 +162,7 @@ class SecureCookieSiteUrlTest extends TestCase
 
     public function testLoginFormCsrfCookieFollowsTheSameDecision(): void
     {
-        $site = ['site_url' => 'https://example.com', 'password_hash' => self::$passwordHash, 'uri' => '/login'];
+        $site = ['site_url' => 'https://example.com', 'login_hash' => self::$secretHash, 'uri' => '/login'];
 
         $own_host = FrontControllerProbe::run($this->dataDir(), $site + ['host' => 'example.com']);
         $other_host = FrontControllerProbe::run($this->dataDir(), $site + ['host' => '192.168.1.20']);
@@ -179,6 +179,22 @@ class SecureCookieSiteUrlTest extends TestCase
         );
 
         $this->assertSame('https://example.com', $result['root_url']);
+    }
+
+    /**
+     * Fills in the login form's fields. The theme gives the field that takes the
+     * secret no constant, so its name is read from the form's markup.
+     *
+     * @param string $token The CSRF token for the hidden field.
+     * @return array<string, string>
+     */
+    private function loginForm(string $token): array
+    {
+        $markup = (string) file_get_contents(dirname(__DIR__, 2) . '/src/themes/base/parts/login.php');
+        preg_match('/type="password" name="([^"]+)"/', $markup, $match);
+        $this->assertArrayHasKey(1, $match, 'The login form has a field of type password');
+
+        return [$match[1] => self::$secret, 'submit' => SUBMIT_LOGIN, HIDDEN_CSRF_NAME => $token];
     }
 
     private function dataDir(): string
