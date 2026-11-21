@@ -88,6 +88,30 @@ class MicropubTokenSelectionTest extends TestCase
                 'missing',
                 null,
             ],
+            'a header token with a blank body token uses the header token' => [
+                ['Authorization' => 'Bearer header-token'],
+                ['access_token' => ''],
+                'accepted',
+                'header-token',
+            ],
+            'a header token with a whitespace-only body token uses the header token' => [
+                ['Authorization' => 'Bearer header-token'],
+                ['access_token' => " \t "],
+                'accepted',
+                'header-token',
+            ],
+            'a header token with a list body token uses the header token' => [
+                ['Authorization' => 'Bearer header-token'],
+                ['access_token' => ['x']],
+                'accepted',
+                'header-token',
+            ],
+            'a header token with a padded body token is a token in both places' => [
+                ['Authorization' => 'Bearer header-token'],
+                ['access_token' => '  body-token  '],
+                'both',
+                null,
+            ],
             'the header name is case-insensitive' => [
                 ['AUTHORIZATION' => 'Bearer header-token'],
                 ['access_token' => 'body-token'],

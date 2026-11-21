@@ -1828,8 +1828,9 @@ function bearer_token(string $authHeader): ?string
  * say), a Bearer scheme with no token, or no header at all carries none. Either
  * kind of token is trimmed, and one that is empty after that is no token.
  *
- * Ends the request with `400 invalid_request` when the form field is present
- * next to a header token: the Micropub spec forbids both (micropub.rocks test 805).
+ * Ends the request with `400 invalid_request` when a header token and a body
+ * token are both present: the Micropub spec forbids both (micropub.rocks test 805).
+ * A blank or non-string form field is no body token, so it does not trigger this.
  *
  * @param string $authHeader The request's Authorization header, or ''.
  * @return string|null The token, or null when the request carries none.
@@ -1838,18 +1839,13 @@ function request_access_token(string $authHeader): ?string
 {
     $headerToken = bearer_token($authHeader);
     $bodyToken = $_POST['access_token'] ?? null;
+    $bodyToken = is_string($bodyToken) ? trim($bodyToken) : '';
 
-    if ($headerToken !== null && $bodyToken !== null) {
+    if ($headerToken !== null && $bodyToken !== '') {
         micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
     }
 
-    if ($headerToken !== null) {
-        return $headerToken;
-    }
-
-    $bodyToken = is_string($bodyToken) ? trim($bodyToken) : '';
-
-    return $bodyToken === '' ? null : $bodyToken;
+    return $headerToken ?? ($bodyToken === '' ? null : $bodyToken);
 }
 
 /**
