@@ -118,6 +118,44 @@ function canonical_redirect(string $request_uri): ?string
 }
 
 /**
+ * Tells whether a request counts as HTTPS: it arrived over TLS, or it is addressed
+ * to the host of an `https://` site URL.
+ *
+ * Behind a TLS-terminating proxy the connection Lamb sees is plain HTTP, and
+ * `X-Forwarded-Proto` is client-controlled unless the proxy is trusted, which
+ * Lamb has no setting for. The site URL the author configured is trustworthy and
+ * names the scheme visitors use, so a request whose Host matches an `https://` site
+ * URL counts as HTTPS. A plain-HTTP request to any other host does not: the same
+ * install reached by IP address, or a staging copy of the database, cannot receive
+ * Secure cookies, and a browser would drop them. A request that did arrive over TLS
+ * always counts.
+ *
+ * @param array<string, mixed> $server   Typically $_SERVER.
+ * @param string|null          $site_url The configured site URL, as returned by
+ *                                       Lamb\Config\canonical_site_url(), or null when unset.
+ * @return bool True when the request arrived over TLS, or its Host matches an `https://` $site_url.
+ */
+function is_https(array $server, ?string $site_url): bool
+{
+    // PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" otherwise.
+    $https = $server['HTTPS'] ?? '';
+    if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
+        return true;
+    }
+    if ($site_url === null || !str_starts_with($site_url, 'https://')) {
+        return false;
+    }
+
+    $request_host = $server['HTTP_HOST'] ?? '';
+    if (!is_string($request_host) || $request_host === '') {
+        return false;
+    }
+    $request_host = strtolower((string) preg_replace('/:\d{1,5}$/', '', $request_host));
+
+    return $request_host === strtolower((string) parse_url($site_url, PHP_URL_HOST));
+}
+
+/**
  * Builds the request's own root URL (`scheme://host[:port]`) from the Host header.
  *
  * The Host header is client-supplied and a front-end catch-all vhost (the bundled
@@ -146,9 +184,7 @@ function request_root_url(array $server): ?string
         return null;
     }
 
-    $scheme = (isset($server['HTTPS']) && $server['HTTPS'] === 'on') ? 'https' : 'http';
-
-    return $scheme . '://' . $host;
+    return (is_https($server, null) ? 'https' : 'http') . '://' . $host;
 }
 
 /**

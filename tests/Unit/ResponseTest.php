@@ -15,12 +15,6 @@ use function Lamb\Response\upgrade_posts;
 
 class ResponseTest extends TestCase
 {
-    protected function tearDown(): void
-    {
-        unset($_SERVER['HTTPS']);
-        parent::tearDown();
-    }
-
     // get_cookie_options
 
     public function testGetCookieOptionsReturnsArray()
@@ -53,20 +47,13 @@ class ResponseTest extends TestCase
         $this->assertSame('Strict', get_cookie_options(time())['samesite']);
     }
 
-    public function testGetCookieOptionsSecureIsFalseOverPlainHttp()
+    /**
+     * The flag is the one decision index.php made for the request (IS_HTTPS), not a
+     * second reading of the connection, which behind a TLS proxy is plain HTTP.
+     */
+    public function testGetCookieOptionsSecureFollowsIsHttps()
     {
-        unset($_SERVER['HTTPS']);
-        $this->assertFalse(
-            get_cookie_options(time())['secure'],
-            'A secure cookie is silently dropped by the browser over plain HTTP, which would '
-                . 'break login persistence on any install served without TLS'
-        );
-    }
-
-    public function testGetCookieOptionsSecureIsTrueOverHttps()
-    {
-        $_SERVER['HTTPS'] = 'on';
-        $this->assertTrue(get_cookie_options(time())['secure']);
+        $this->assertSame(IS_HTTPS, get_cookie_options(time())['secure']);
     }
 
     public function testGetCookieOptionsHttponlyIsTrue()

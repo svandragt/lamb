@@ -35,11 +35,11 @@ const POSTS_PER_PAGE = 10;
 /**
  * Returns cookie options with the given expiry timestamp.
  *
- * `secure` tracks the connection scheme rather than being forced on, matching
- * the session cookie (Bootstrap\configure_session()): a cookie marked secure
- * over plain HTTP is silently dropped by the browser, which would otherwise
- * break login persistence on any install served without TLS (e.g. behind a
- * proxy that never sets HTTPS=on, or during initial local setup).
+ * `secure` is IS_HTTPS, the decision index.php made once for the request, rather than
+ * being forced on. The session cookie (Bootstrap\configure_session()) follows the same
+ * value. A cookie marked secure over plain HTTP is silently dropped by the browser,
+ * which would otherwise break login persistence on any install served without TLS
+ * (e.g. during initial local setup).
  *
  * @param int $expires Unix timestamp for cookie expiry.
  * @return array<string, mixed> Cookie options array.
@@ -49,7 +49,7 @@ function get_cookie_options(int $expires): array
     return [
         'expires'  => $expires,
         'path'     => '/',
-        'secure'   => (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on'),
+        'secure'   => IS_HTTPS,
         'httponly' => true,
         'samesite' => 'Strict',
     ];

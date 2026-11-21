@@ -850,13 +850,17 @@ function mark_backfill_done(string $name): void
  * starting a session does not emit no-cache headers — the application manages cache
  * headers itself (see cache_headers()).
  *
+ * The cookie is Secure when the request counts as HTTPS. index.php decides that once
+ * per request, with Http\is_https(), and passes it in; the connection alone would be
+ * wrong behind a TLS proxy.
+ *
+ * @param bool $secure Whether the request counts as HTTPS (the IS_HTTPS constant).
  * @return void
  */
-function configure_session(): void
+function configure_session(bool $secure): void
 {
     // Make cookies inaccessible via JavaScript (XSS).
     ini_set("session.cookie_httponly", 1);
-    $secure = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on');
     ini_set("session.cookie_secure", $secure ? 1 : 0);
     ini_set("session.use_strict_mode", 1);
 
@@ -1026,11 +1030,12 @@ function ensure_directory(string $dir, int $mode): void
  * Initializes and secures a session, starting it only for (previously) logged-in users.
  *
  * @param string $data_dir The app data directory (same one that holds lamb.db).
+ * @param bool   $secure   Whether the request counts as HTTPS (the IS_HTTPS constant).
  * @return void
  */
-function bootstrap_session(string $data_dir): void
+function bootstrap_session(string $data_dir, bool $secure): void
 {
-    configure_session();
+    configure_session($secure);
     configure_session_save_path($data_dir);
     if (should_start_session($_COOKIE)) {
         start_session();
