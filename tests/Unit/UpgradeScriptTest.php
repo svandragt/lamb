@@ -513,7 +513,7 @@ class UpgradeScriptTest extends TestCase
         file_put_contents($this->site . '/.env', "SITE_URL='http://example.test:8747'\n");
         $this->commitMigrateExit(3);
         $this->writeCronCurlStub([
-            [0, 200, "Data migrations: busy\nAlready running, try again later."],
+            [0, 200, 'Data migrations: busy'],
             [0, 200, 'Data migrations: busy'],
             [0, 200, 'Data migrations: migrated'],
         ]);

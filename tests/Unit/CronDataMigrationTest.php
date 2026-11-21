@@ -107,8 +107,7 @@ class CronDataMigrationTest extends TestCase
         $response = CronProbe::run($this->dataDir);
         fclose($lock);
 
-        $this->assertStringContainsString("Data migrations: busy\n", $response['output']);
-        $this->assertStringContainsString('Already running', $response['output']);
+        $this->assertSame("Data migrations: busy\n", $response['output'], 'the result line and nothing else');
         $this->assertSame(200, $response['http']);
         $this->assertSame(1, $this->postVersion($id));
         $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
@@ -362,7 +361,7 @@ class CronDataMigrationTest extends TestCase
         $response = CronProbe::run($this->dataDir);
 
         $this->assertSame(200, $response['http']);
-        $this->assertStringNotContainsString('Cannot open the cron lock', $response['output']);
+        $this->assertStringNotContainsString('Cannot take the cron lock', $response['output']);
         $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
     }
 

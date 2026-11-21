@@ -202,10 +202,10 @@ function run_feed_cycle(
     $lock = acquire_cron_lock();
     if ($lock === false) {
         http_response_code(500);
-        die('Cannot open the cron lock at ' . cron_lock_path() . ' — is the data directory writable?');
+        die('Cannot take the cron lock at ' . cron_lock_path() . ' — is the data directory writable, and does its filesystem support file locks?');
     }
     if ($lock === null) {
-        die(\Lamb\Bootstrap\data_migration_result_line('busy') . PHP_EOL . 'Already running, try again later.');
+        die(\Lamb\Bootstrap\data_migration_result_line('busy') . PHP_EOL);
     }
 
     // Before the rate-limit gate below, so the first request after an upgrade
@@ -284,11 +284,14 @@ function cron_lock_path(?string $data_dir = null): string
  *
  * A file that cannot be opened for writing is opened read-only: flock() needs no
  * write access, and `bin/lamb migrate` can have created the file as another user.
+ * Only flock()'s "would block" answer means another run holds the lock. Any other
+ * failure, such as a filesystem that cannot lock, is an error and not "busy", which
+ * would otherwise stop every run for good.
  *
  * @param string|null $path Lock file path; defaults to cron_lock_path().
  * @return resource|false|null The open lock-file handle; null when another run
  *                             holds the lock; false when the lock file cannot
- *                             be opened.
+ *                             be opened or locked.
  */
 function acquire_cron_lock(?string $path = null)
 {
@@ -297,9 +300,10 @@ function acquire_cron_lock(?string $path = null)
     if ($handle === false) {
         return false;
     }
-    if (!flock($handle, LOCK_EX | LOCK_NB)) {
+    $would_block = 0;
+    if (!flock($handle, LOCK_EX | LOCK_NB, $would_block)) {
         fclose($handle);
-        return null;
+        return $would_block ? null : false;
     }
 
     return $handle;

@@ -40,7 +40,9 @@ an external scheduler — so it defends itself three ways:
    endpoint kept answering "try again later". The file is opened for writing and,
    when that fails, read-only, because `flock()` needs no write access: a lock
    file that `bin/lamb migrate` created as another user can never keep the web
-   server from taking the lock.
+   server from taking the lock. Only `flock()`'s "would block" answer means that
+   another run holds it. Any other failure, such as a filesystem that cannot lock
+   (NFS), is an error and a 500, because "busy" would stop every run for good.
 2. **A whole-run gate** of one run per minute (`cron_run_due()`).
 3. **A per-feed gate** of one fetch per 30 minutes (`feed_fetch_due()`), keyed on
    the last **attempt**, not the last success — so a failing feed is retried on
@@ -75,8 +77,9 @@ which is harmless because the steps are idempotent.
 
 `bin/lamb marker code` prints the marker of the running code and needs no database.
 `bin/lamb marker stored` prints the `data_migrated_for` option, changes nothing, and never
-opens a database of another user (exit 3), because even a read would leave WAL sidecar files
-owned by that user (#831).
+opens a database of another user, or any database when the uid is unknown (no posix
+extension), with exit 3, because even a read would leave WAL sidecar files owned by that
+user (#831).
 
 ### Results
 
@@ -124,7 +127,7 @@ minutes, and does not need `fastcgi_finish_request()`.
 
 `bin/lamb migrate` exits 3 when it ran nothing: the ownership guard refused (the normal
 shape of a cron deploy, with the checkout and database owned by the web server user), another
-run holds the cron lock, or the lock file cannot be opened. That is not a broken upgrade, so
+run holds the cron lock, or the lock file cannot be opened or locked. That is not a broken upgrade, so
 `bin/upgrade` hands the migrations to `/_cron?migrations`. `bin/lamb migrate` prints the same
 result line as `/_cron`, decided by comparing markers, so `migrated` means the steps ran for
 new code even if each found nothing to change. Its output is streamed, through `tee` to a

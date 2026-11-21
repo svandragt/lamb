@@ -764,6 +764,29 @@ XML;
         $this->assertSame($digest, md5_file("$data_dir/lamb.db"));
     }
 
+    /**
+     * Without the posix extension the uid is unknown, so ownership cannot be checked, and the
+     * database is not opened. disable_functions makes function_exists() false for posix_geteuid().
+     */
+    public function testMarkerStoredExitsThreeWhenTheUserIsUnknown(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->runMigrate($data_dir);
+        $files = scandir($data_dir) ?: [];
+
+        $process = new Process(
+            ['php', '-d', 'disable_functions=posix_geteuid', codecept_root_dir('bin/lamb'), 'marker', 'stored'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame('', $process->getOutput());
+        $this->assertSame($files, scandir($data_dir), 'the database was not opened');
+    }
+
     public function testMarkerWithoutAKnownKindIsAUsageError(): void
     {
         $process = $this->runMarker("$this->tmp_dir/data", 'nonsense');
@@ -811,7 +834,7 @@ XML;
         $process->run();
 
         $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
-        $this->assertStringContainsString('cannot open the lock file', $process->getErrorOutput());
+        $this->assertStringContainsString('cannot take the lock', $process->getErrorOutput());
         $this->assertStringContainsString('no migration ran', $process->getErrorOutput());
         $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
         $this->assertSame('', $this->storedDataMarker($data_dir));
