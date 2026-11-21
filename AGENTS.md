@@ -546,7 +546,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### IndieWeb Endpoints
 
-- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); bearer tokens are introspected against the configured `token_endpoint`. No function in `micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
+- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); tokens are introspected against the configured `token_endpoint`. Both endpoints choose the token through `request_access_token()` (Bearer header, else the trimmed `access_token` form field; both at once is a `400`), and `/micropub` hands the adapter that token via `with_access_token()` because the adapter's own `getAccessToken()` is looser. No function in `micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
 - `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered by `parts/_webmentions.php`); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
 - `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers

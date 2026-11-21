@@ -66,6 +66,10 @@ class MicropubMediaEndpointTest extends TestCase
         $this->assertSame(401, $result['status']);
         $this->assertSame(['Bearer'], $result['headers']['www-authenticate'] ?? null);
         $this->assertSame('unauthorized', json_decode($result['body'], true)['error']);
+        $this->assertSame(
+            'The request did not provide an access token. Send it in the Authorization header or the access_token form field.',
+            json_decode($result['body'], true)['error_description']
+        );
         $this->assertSame([], $result['assets']);
     }
 
@@ -214,7 +218,22 @@ class MicropubMediaEndpointTest extends TestCase
         ]);
 
         $this->assertStringContainsString('"event":"media_request"', $result['log']);
-        $this->assertStringContainsString('"has_auth_header":true,"has_file":true', $result['log']);
+        $this->assertStringContainsString('"has_auth_header":true,"has_body_token":false,"has_file":true', $result['log']);
+    }
+
+    public function testDebugLoggingRecordsABodyToken(): void
+    {
+        $result = EndpointProbe::run('\Lamb\Micropub\respond_micropub_media();', [
+            'server' => ['REQUEST_METHOD' => 'POST', 'CONTENT_TYPE' => 'multipart/form-data; boundary=x'],
+            'post' => ['access_token' => 'body-token'],
+            'files' => ['file' => [['x.gif', base64_decode(self::GIF)]]],
+            'token' => self::TOKEN,
+            'accept_uploads' => true,
+            'debug' => true,
+        ]);
+
+        $this->assertStringContainsString('"has_auth_header":false,"has_body_token":true,"has_file":true', $result['log']);
+        $this->assertStringNotContainsString('body-token', $result['log'], 'The token itself is never logged.');
     }
 
     /**

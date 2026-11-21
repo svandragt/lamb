@@ -12,7 +12,8 @@ namespace Tests\Support;
  * child process, and the child defines Lamb\Micropub\header(),
  * http_response_code() and file_get_contents() before it starts. PHP resolves an
  * unqualified call inside a namespace to the namespaced function first, so those
- * three capture the response and supply the request body without Xdebug.
+ * three capture the response and supply the request body without Xdebug. A
+ * request that sets `headers` also gets a getallheaders() the same way.
  *
  * The child has an in-memory database and a fake IndieAuth token endpoint: when
  * `token` is given, the parent answers the handler's token introspection request
@@ -30,6 +31,7 @@ final class EndpointProbe
      * @param string $call PHP statement that invokes the handler under test.
      * @param array{
      *     server?: array<string, string>,
+     *     headers?: array<string, string>,
      *     post?: array<string, mixed>,
      *     input?: string,
      *     files?: array<string, list<array{0: string, 1: string, 2?: int}>>,
@@ -40,6 +42,8 @@ final class EndpointProbe
      *     accept_uploads?: bool
      * } $request What the client sent, plus the post to seed before it:
      *     `server` is $_SERVER, `post` is $_POST, `input` is the raw body.
+ *     `headers` is what getallheaders() returns, for a header name `$_SERVER`
+ *     cannot spell; leave it out to derive the headers from `server`.
      *     `files` maps a field name to [client filename, bytes, error code] uploads;
      *     a name ending in `[]` gives PHP's array-of-uploads shape.
      *     `seed` is Micropub data for a post created first (soft-deleted when
@@ -57,8 +61,10 @@ final class EndpointProbe
      *     posts: list<array{body: string, deleted: mixed}>,
      *     assets: list<string>,
      *     log: string,
-     *     stderr: string
-     * } Header names are lower-case.
+     *     stderr: string,
+     *     introspected_token: string|null
+     * } Header names are lower-case. `introspected_token` is the token the handler
+     *     sent to the token endpoint, or null when it never asked.
      */
     public static function run(string $call, array $request = []): array
     {
@@ -99,7 +105,7 @@ final class EndpointProbe
 
             fclose($pipes[0]);
             try {
-                [$stdout, $stderr] = self::collectOutput($process, $pipes, $listener, $request['token'] ?? '');
+                [$stdout, $stderr, $introspection] = self::collectOutput($process, $pipes, $listener, $request['token'] ?? '');
             } finally {
                 proc_close($process);
             }
@@ -121,6 +127,7 @@ final class EndpointProbe
             'assets'  => $meta['assets'] ?? [],
             'log'     => $meta['log'] ?? '',
             'stderr'  => $stderr,
+            'introspected_token' => preg_match('/^Authorization: Bearer (.*?)\r?$/mi', $introspection, $match) ? $match[1] : null,
         ];
     }
 
@@ -134,13 +141,15 @@ final class EndpointProbe
      * @param array<int, resource> $pipes    The child's pipes, as proc_open() filled them.
      * @param resource|null        $listener The fake token endpoint's listening socket, if any.
      * @param string               $json     The JSON the token endpoint answers with.
-     * @return array{0: string, 1: string} What the child wrote to stdout and to stderr.
+     * @return array{0: string, 1: string, 2: string} What the child wrote to stdout and to stderr,
+     *     and the token request it sent ('' when it sent none).
      * @throws \RuntimeException When the child is still running after TIMEOUT_SECONDS.
      */
     private static function collectOutput($process, array $pipes, $listener, string $json): array
     {
         $open = [1 => $pipes[1], 2 => $pipes[2]];
         $output = [1 => '', 2 => ''];
+        $introspection = '';
         $deadline = microtime(true) + self::TIMEOUT_SECONDS;
 
         while ($open !== [] && microtime(true) < $deadline) {
@@ -155,7 +164,7 @@ final class EndpointProbe
 
             foreach ($read as $stream) {
                 if ($stream === $listener) {
-                    self::answerTokenIntrospection($listener, $json);
+                    $introspection = self::answerTokenIntrospection($listener, $json);
                     $listener = null;
                     continue;
                 }
@@ -176,7 +185,7 @@ final class EndpointProbe
             throw new \RuntimeException('The probe subprocess did not finish in ' . self::TIMEOUT_SECONDS . ' seconds.');
         }
 
-        return [$output[1], $output[2]];
+        return [$output[1], $output[2], $introspection];
     }
 
     /**
@@ -184,23 +193,25 @@ final class EndpointProbe
      *
      * @param resource $listener The listening socket named in the child's token_endpoint, with a connection waiting.
      * @param string   $json     The JSON body to answer with.
-     * @return void
+     * @return string The request the handler sent, or '' when none arrived.
      */
-    private static function answerTokenIntrospection($listener, string $json): void
+    private static function answerTokenIntrospection($listener, string $json): string
     {
         $connection = @stream_socket_accept($listener, 5);
         if ($connection === false) {
-            return;
+            return '';
         }
 
         stream_set_timeout($connection, 5);
-        fread($connection, 8192);
+        $request = (string) fread($connection, 8192);
         fwrite(
             $connection,
             "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " . strlen($json)
             . "\r\nConnection: close\r\n\r\n" . $json
         );
         fclose($connection);
+
+        return $request;
     }
 
     /**
@@ -221,6 +232,7 @@ final class EndpointProbe
             '__ROOT_DIR__' => var_export($rootDir, true),
             '__CONFIG__'   => var_export(['site_url' => 'https://example.com', 'token_endpoint' => $tokenEndpoint], true),
             '__SERVER__'   => var_export($server, true),
+            '__HEADERS__'  => var_export($request['headers'] ?? null, true),
             '__POST__'     => var_export($request['post'] ?? [], true),
             '__INPUT__'    => var_export($request['input'] ?? '', true),
             '__FILES__'    => var_export(self::filesGlobal($rootDir, $request['files'] ?? []), true),
@@ -292,6 +304,15 @@ namespace Lamb\Micropub {
     function file_get_contents(string $filename, mixed ...$args): string|false
     {
         return $filename === 'php://input' ? $GLOBALS['probe']['input'] : \file_get_contents($filename, ...$args);
+    }
+}
+
+namespace Lamb\Micropub {
+    if (__HEADERS__ !== null) {
+        function getallheaders(): array
+        {
+            return __HEADERS__;
+        }
     }
 }
 
