@@ -175,6 +175,8 @@ function run_feed_cycle(
 #[NoReturn] function process_feeds(): void
 {
     header('Content-Type: text/plain');
+    // index.php marks an anonymous response cacheable; a proxy must not serve an old result line.
+    header('Cache-Control: no-store');
 
     // A single feed fetch may take up to FEED_FETCH_TIMEOUT, so a handful of slow
     // feeds can outlast a web request's PHP limit (typically 30s under FPM). A
@@ -200,10 +202,30 @@ function run_feed_cycle(
     $lock = acquire_cron_lock();
     if ($lock === false) {
         http_response_code(500);
-        die('Cannot open the cron lock at ' . cron_lock_path() . ' — is the data directory writable?');
+        die('Cannot take the cron lock at ' . cron_lock_path() . ' — is the data directory writable, and does its filesystem support file locks?');
     }
     if ($lock === null) {
-        die('Already running, try again later.');
+        die(\Lamb\Bootstrap\data_migration_result_line('busy') . PHP_EOL);
+    }
+
+    // Before the rate-limit gate below, so the first request after an upgrade
+    // migrates even when the feed tasks are not due. This request runs as the
+    // user that owns the database, which a deploy user's bin/lamb cannot be.
+    $migration = \Lamb\Bootstrap\run_pending_data_migrations();
+    $result = $migration['result'];
+    if ($result === 'failed') {
+        http_response_code(500);
+    }
+    echo \Lamb\Bootstrap\data_migration_result_line($result) . PHP_EOL;
+    foreach ($migration['lines'] as $line) {
+        echo $line . PHP_EOL;
+    }
+    // See network/README.md ("Data migrations after an upgrade") for why each of these ends the run.
+    if ($result === 'failed' || isset($_GET['migrations'])) {
+        exit;
+    }
+    if ($result !== 'already current' && function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
     }
 
     $cron_last_updated = get_option('last_processed_date', 0);
@@ -234,16 +256,22 @@ function run_feed_cycle(
 }
 
 /**
- * The path of the lock file serializing /_cron runs. Lives in the install's
- * data directory, wherever that is — see Bootstrap\data_dir().
+ * The path of the lock file serialising /_cron runs and `bin/lamb migrate`.
+ * Lives in the install's data directory, wherever that is — see
+ * Bootstrap\data_dir().
+ *
+ * @param string|null $data_dir The data directory; null means the web default
+ *                              from Bootstrap\data_dir(). A CLI entry point passes
+ *                              the directory it resolved against its own root.
  */
-function cron_lock_path(): string
+function cron_lock_path(?string $data_dir = null): string
 {
-    return \Lamb\Bootstrap\data_dir() . '/cron.lock';
+    return ($data_dir ?? \Lamb\Bootstrap\data_dir()) . '/cron.lock';
 }
 
 /**
- * Acquires an exclusive, non-blocking lock serialising /_cron runs.
+ * Acquires an exclusive, non-blocking lock serialising /_cron runs and
+ * `bin/lamb migrate`, which both run the data migrations.
  *
  * The handle must stay referenced until the request ends: the lock releases
  * when it closes, so no explicit unlock is needed as long as every
@@ -254,20 +282,28 @@ function cron_lock_path(): string
  * collapsing them once silently stopped every cron run. See network/README.md
  * ("The run").
  *
+ * A file that cannot be opened for writing is opened read-only: flock() needs no
+ * write access, and `bin/lamb migrate` can have created the file as another user.
+ * Only flock()'s "would block" answer means another run holds the lock. Any other
+ * failure, such as a filesystem that cannot lock, is an error and not "busy", which
+ * would otherwise stop every run for good.
+ *
  * @param string|null $path Lock file path; defaults to cron_lock_path().
  * @return resource|false|null The open lock-file handle; null when another run
  *                             holds the lock; false when the lock file cannot
- *                             be opened.
+ *                             be opened or locked.
  */
 function acquire_cron_lock(?string $path = null)
 {
-    $handle = @fopen($path ?? cron_lock_path(), 'c');
+    $path ??= cron_lock_path();
+    $handle = @fopen($path, 'c') ?: @fopen($path, 'r');
     if ($handle === false) {
         return false;
     }
-    if (!flock($handle, LOCK_EX | LOCK_NB)) {
+    $would_block = 0;
+    if (!flock($handle, LOCK_EX | LOCK_NB, $would_block)) {
         fclose($handle);
-        return null;
+        return $would_block ? null : false;
     }
 
     return $handle;

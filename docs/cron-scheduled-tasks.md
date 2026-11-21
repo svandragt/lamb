@@ -11,10 +11,11 @@ Lamb has an scheduled task endpoint that can be called periodically to run tasks
 
 The following tasks run periodically:
 
-1. **Purging trash.** Posts that have been in the [trash]({{ site.baseurl }}{% link trash.md %}#permanent-deletion) long enough are permanently deleted.
-2. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
-3. **Queueing missed webmentions.** If saving a post could not queue its [webmentions]({{ site.baseurl }}{% link webmentions.md %}), the next run queues them.
-4. **Sending webmentions.** Any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts are delivered.
+1. **Migrating data after an upgrade.** When the code of Lamb has changed since the last run, the first run applies the [data migrations]({{ site.baseurl }}{% link upgrading.md %}#data-migrations) before the other tasks, even when they are not due yet. The reply opens with a `Data migrations:` line that says `migrated`, `already current`, `busy` or `failed`. A failure answers with HTTP 500, writes the error to the PHP error log and stops the run, so no other task works on half-migrated data. The same code is tried again no sooner than a minute later, also after a request that died while it migrated. A `busy` answer means that another run holds the lock, and the reply ends after that line. `/_cron?migrations` runs only this step, prints the result line and ends, whatever the result: `bin/upgrade` uses it, so it never waits for the other tasks. With PHP-FPM or FrankenPHP, a run that migrated ends its reply after that line while the other tasks keep running. A run with nothing to migrate keeps its reply open and prints each task's result, as before. The PHP built-in server (`viv run serve`) keeps the connection open until every task finishes.
+2. **Purging trash.** Posts that have been in the [trash]({{ site.baseurl }}{% link trash.md %}#permanent-deletion) long enough are permanently deleted.
+3. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
+4. **Queueing missed webmentions.** If saving a post could not queue its [webmentions]({{ site.baseurl }}{% link webmentions.md %}), the next run queues them.
+5. **Sending webmentions.** Any pending outbound [webmentions]({{ site.baseurl }}{% link webmentions.md %}) for your posts are delivered.
 
 Note that the feed system has its own rate limiting system to prevent sending too many requests to the feed provider, so checking more often than every 30 minutes or so is not typically useful.
 
@@ -33,6 +34,7 @@ For a Docker install, schedule the request from the host with `docker exec`. See
 
 ## Related
 
+* [Upgrading]({{ site.baseurl }}{% link upgrading.md %}#data-migrations): The first run after an upgrade applies the data migrations.
 * [Docker]({{ site.baseurl }}{% link docker.md %}#scheduled-tasks): Scheduling the cron request for a container.
 * [Cross-posting]({{ site.baseurl }}{% link cross-posting.md %}): Feed syndication that runs via the cron endpoint.
 * [Trash]({{ site.baseurl }}{% link trash.md %}): Trashed posts are purged by the cron.

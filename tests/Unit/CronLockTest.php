@@ -87,6 +87,37 @@ class CronLockTest extends TestCase
         fclose($second);
     }
 
+    /**
+     * `bin/lamb migrate` can create the lock file as another user. flock() needs no write access,
+     * so a user who can only read the file still takes the lock, and still sees it contended.
+     */
+    public function testALockFileThatCanOnlyBeReadIsStillLocked(): void
+    {
+        $path = $this->tmp . '/cron.lock';
+        touch($path);
+        chmod($path, 0444);
+
+        $first = acquire_cron_lock($path);
+        $this->assertIsResource($first);
+        $this->assertNull(acquire_cron_lock($path), 'the read-only handle holds a real lock');
+
+        fclose($first);
+        $second = acquire_cron_lock($path);
+        $this->assertIsResource($second);
+        fclose($second);
+    }
+
+    /**
+     * flock() reports contention through its third argument. A failure without it, such as a
+     * filesystem that cannot lock (NFS) or a stream that does not support locks, is an error:
+     * reported as "busy" it would stop every cron run for good. php://temp is a stream that
+     * flock() cannot lock, and it fails without "would block".
+     */
+    public function testALockFailureThatIsNotContentionIsAnErrorNotBusy(): void
+    {
+        $this->assertFalse(acquire_cron_lock('php://temp'));
+    }
+
     public function testUnopenableLockFileIsNotReportedAsContention(): void
     {
         $missing = $this->tmp . '/no-such-directory/cron.lock';
