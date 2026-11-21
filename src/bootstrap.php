@@ -842,14 +842,37 @@ function migrate_data(bool $dry_run = false): array
 }
 
 /**
- * Records that the stored data is migrated for the running code.
+ * Option row that holds when a data migration last failed and for which marker,
+ * as "<unix time> <marker>".
+ */
+const DATA_MIGRATION_FAILED_OPTION = 'data_migration_failed';
+
+/**
+ * Records that the stored data is migrated for the code the marker names.
  *
+ * @param string $marker The code_marker() the migrations ran under.
+ * @param OODBBean $migrated_for The DATA_MIGRATED_FOR_OPTION bean, as get_option() returned it.
  * @return void
  * @throws SQL When the option cannot be written.
  */
-function mark_data_migrated(): void
+function mark_data_migrated(string $marker, OODBBean $migrated_for): void
 {
-    set_option(get_option(DATA_MIGRATED_FOR_OPTION, ''), code_marker());
+    set_option($migrated_for, $marker);
+}
+
+/**
+ * The line that opens a /_cron reply and says what became of the data migrations.
+ *
+ * `bin/upgrade` reads it, so its words are part of the contract: `migrated` and
+ * `already current` mean the data matches the code, `busy` means nothing ran and
+ * a later request can, and `failed` comes with HTTP 500.
+ *
+ * @param string $result One of `migrated`, `already current`, `failed` or `busy`.
+ * @return string
+ */
+function data_migration_result_line(string $result): string
+{
+    return 'Data migrations: ' . $result;
 }
 
 /**
@@ -860,26 +883,104 @@ function mark_data_migrated(): void
  * caller must hold the cron lock, so two requests, or a request and
  * `bin/lamb migrate`, never migrate at once.
  *
- * A failure is logged, not thrown, and leaves the marker alone: the next call
- * retries, so the interval of the caller is the retry throttle. The reply says
+ * A failure is logged, not thrown, and leaves the marker alone. It records the
+ * time and the marker, and the same marker is tried again only once the cron
+ * interval has passed: `/_cron` is unauthenticated, and its check sits before
+ * the rate-limit gate, so without that every request would rerun a failing
+ * migration. A new marker, from a new upgrade, migrates at once. The reply says
  * only that it failed, because `/_cron` answers anyone.
  *
- * @return list<string> What to print: one line per step, the failure notice, or nothing.
+ * The marker is computed from the files on disk, so the running code must be that
+ * code. Right after a deploy OPcache can still hold the old opcodes for a moment,
+ * and migrating then would record the new marker for old migrations. The files
+ * OPcache holds older than the disk are invalidated, and the request answers
+ * busy so a later one runs the new code. When the status cannot be read
+ * (OPcache off, or its API restricted) the migration goes ahead.
+ *
+ * @param OODBBean $migrated_for The DATA_MIGRATED_FOR_OPTION bean, read once by the caller.
+ * @param int|null $now Unix time; null means now.
+ * @param mixed $opcache_status What opcache_get_status(true) returned; null means ask OPcache.
+ * @return array{result: string, lines: list<string>} The result for
+ *         data_migration_result_line() and the lines to print after it.
  */
-function run_pending_data_migrations(): array
+function run_pending_data_migrations(OODBBean $migrated_for, ?int $now = null, mixed $opcache_status = null): array
 {
-    try {
-        if ((string) get_option(DATA_MIGRATED_FOR_OPTION, '')->value === code_marker()) {
-            return [];
-        }
-        $lines = migrate_data();
-        mark_data_migrated();
+    $marker = code_marker();
+    if ((string) $migrated_for->value === $marker) {
+        return ['result' => 'already current', 'lines' => []];
+    }
 
-        return $lines;
+    $now ??= time();
+    $failure = null;
+    try {
+        $failure = get_option(DATA_MIGRATION_FAILED_OPTION, '');
+        [$failed_at, $failed_marker] = array_pad(explode(' ', (string) $failure->value, 2), 2, '');
+        if ($failed_marker === $marker && !\Lamb\Network\cron_run_due((int) $failed_at, $now)) {
+            return ['result' => 'failed', 'lines' => ['The last data migration failed, see the error log. The next attempt is due after a minute.']];
+        }
+
+        $opcache_status ??= function_exists('opcache_get_status') ? @opcache_get_status(true) : false;
+        $stale = opcache_stale_files(code_digest_files(), $opcache_status) ?? [];
+        if ($stale !== []) {
+            foreach ($stale as $file) {
+                if (function_exists('opcache_invalidate')) {
+                    @opcache_invalidate($file, true);
+                }
+            }
+
+            return ['result' => 'busy', 'lines' => ['The code cache still holds older code, try again shortly.']];
+        }
+
+        $lines = migrate_data();
+        mark_data_migrated($marker, $migrated_for);
+        clear_data_migration_failure($failure);
+
+        return ['result' => 'migrated', 'lines' => $lines];
     } catch (\Throwable $e) {
         error_log('Data migration failed: ' . $e->getMessage());
+        remember_data_migration_failure($failure, $marker, $now);
 
-        return ['Data migration failed, see the error log.'];
+        return ['result' => 'failed', 'lines' => ['Data migration failed, see the error log.']];
+    }
+}
+
+/**
+ * Records when a migration failed and for which marker, so a retry waits.
+ *
+ * A write that fails too is swallowed: the database is then failing for more than
+ * this, and the request has already logged the cause.
+ *
+ * @param OODBBean|null $failure The DATA_MIGRATION_FAILED_OPTION bean, or null when it could not be read.
+ * @param string $marker The marker that failed.
+ * @param int $now Unix time.
+ * @return void
+ */
+function remember_data_migration_failure(?OODBBean $failure, string $marker, int $now): void
+{
+    try {
+        set_option($failure ?? get_option(DATA_MIGRATION_FAILED_OPTION, ''), $now . ' ' . $marker);
+    } catch (\Throwable $e) {
+        // See docblock.
+    }
+}
+
+/**
+ * Deletes the failure record once a migration has succeeded.
+ *
+ * A record that stays is harmless, because it names a marker that is now current,
+ * so a delete that fails is swallowed instead of turning a success into a failure.
+ *
+ * @param OODBBean $failure The DATA_MIGRATION_FAILED_OPTION bean.
+ * @return void
+ */
+function clear_data_migration_failure(OODBBean $failure): void
+{
+    try {
+        if ($failure->id) {
+            R::trash($failure);
+        }
+    } catch (\Throwable $e) {
+        // See docblock.
     }
 }
 
@@ -1230,17 +1331,13 @@ function code_stamp(?string $root = null): string
 const CODE_DIGEST_SKIPPED_DIRECTORIES = ['assets', 'images', 'scripts', 'themes'];
 
 /**
- * Digest of the PHP files that make up Lamb: `src/*.php`, the namespace
- * directories one level below it, and `bin/lamb`. Reads a few dozen files.
- *
- * It covers installs where code_stamp() has nothing to read (a Docker image or
- * tarball with no `.git` and no reference in `vendor/composer/installed.php`) or
- * only a stale reference. A change to any file the migrations live in changes it.
+ * The PHP files that make up Lamb: `src/*.php`, the namespace directories one
+ * level below it, and `bin/lamb`.
  *
  * @param string|null $root Repository root; null means this install's own.
- * @return string An md5 hex digest.
+ * @return list<string> Absolute paths, sorted.
  */
-function code_digest(?string $root = null): string
+function code_digest_files(?string $root = null): array
 {
     $root ??= dirname(__DIR__);
     $files = glob($root . '/src/*.php') ?: [];
@@ -1254,8 +1351,21 @@ function code_digest(?string $root = null): string
     }
     sort($files);
 
+    return $files;
+}
+
+/**
+ * Digest of the files code_digest_files() lists, which is where the migrations live.
+ * Reads a few dozen files.
+ *
+ * @param string|null $root Repository root; null means this install's own.
+ * @return string An md5 hex digest.
+ */
+function code_digest(?string $root = null): string
+{
+    $root ??= dirname(__DIR__);
     $parts = [];
-    foreach ($files as $file) {
+    foreach (code_digest_files($root) as $file) {
         $parts[] = substr($file, strlen($root)) . ':' . md5_file($file);
     }
 
@@ -1265,18 +1375,50 @@ function code_digest(?string $root = null): string
 /**
  * The marker stored as the code the data was last migrated for.
  *
- * It combines the commit (code_stamp(), which follows every git upgrade, even one
- * that changes no PHP file) with code_digest() (which follows the files, so a
- * Docker or tarball release moves it where code_stamp() is empty or stale). It
- * needs no number bumped by hand. The prefix keeps a stored all-digit value from
- * being read back as a number by a column with integer affinity.
+ * Only the PHP files count, not the commit: migrations live in PHP files, so a
+ * commit that changes none needs none. The commit is readable by the user that
+ * owns the checkout and not always by the web server user, so counting it would
+ * make `bin/lamb migrate` and `/_cron` compute different markers. The digest
+ * works the same in a git checkout, a tarball and the Docker image, and needs no
+ * number bumped by hand. The prefix keeps a stored all-digit value from being
+ * read back as a number by a column with integer affinity.
  *
  * @param string|null $root Repository root; null means this install's own.
  * @return string `code:` and twelve hex characters.
  */
 function code_marker(?string $root = null): string
 {
-    return 'code:' . substr(md5(code_stamp($root) . '|' . code_digest($root)), 0, 12);
+    return 'code:' . substr(code_digest($root), 0, 12);
+}
+
+/**
+ * The files of a list that OPcache compiled before they were last modified.
+ *
+ * OPcache's script list records each cached file's modification time at compile
+ * time, so a file whose time on disk is newer is still served from old opcodes.
+ * A file OPcache holds nothing for is not stale: its next include compiles it.
+ *
+ * @param list<string> $files Absolute paths, as code_digest_files() lists them.
+ * @param mixed $status What opcache_get_status(true) returned.
+ * @return list<string>|null The stale files, or null when the status cannot be
+ *         read (it is false when OPcache is off or its API is restricted).
+ */
+function opcache_stale_files(array $files, mixed $status): ?array
+{
+    if (!is_array($status) || !isset($status['scripts']) || !is_array($status['scripts'])) {
+        return null;
+    }
+
+    $stale = [];
+    foreach ($files as $file) {
+        $cached = $status['scripts'][realpath($file) ?: $file]['timestamp'] ?? null;
+        $modified = @filemtime($file);
+        if ($cached !== null && $modified !== false && $modified > $cached) {
+            $stale[] = $file;
+        }
+    }
+
+    return $stale;
 }
 
 /**

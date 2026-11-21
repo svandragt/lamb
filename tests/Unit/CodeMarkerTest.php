@@ -84,9 +84,8 @@ class CodeMarkerTest extends TestCase
         $this->assertMatchesRegularExpression('/^[0-9a-f]{32}$/', code_digest());
     }
 
-    public function testTheMarkerMovesWithTheFilesWhenNoCommitIsAvailable(): void
+    public function testTheMarkerMovesWithTheFiles(): void
     {
-        // The fixture has no .git, so code_stamp() has no commit to follow, as in a Docker image.
         $before = code_marker($this->root);
 
         file_put_contents($this->root . '/src/lamb.php', "<?php // v2\n");
@@ -95,18 +94,20 @@ class CodeMarkerTest extends TestCase
         $this->assertMatchesRegularExpression('/^code:[0-9a-f]{12}$/', code_marker($this->root));
     }
 
-    public function testTheMarkerMovesWithTheCommit(): void
+    /**
+     * Migrations live in PHP files. A commit that changes none needs none, and the commit is
+     * readable by the user that owns the checkout but not always by the web server user, so
+     * counting it would make `bin/lamb migrate` and /_cron compute different markers.
+     */
+    public function testTheMarkerDoesNotMoveWithTheCommit(): void
     {
-        $before = code_marker($this->root);
-
         mkdir($this->root . '/.git', 0777, true);
         file_put_contents($this->root . '/.git/HEAD', str_repeat('a', 40) . "\n");
         $first = code_marker($this->root);
-        file_put_contents($this->root . '/.git/HEAD', str_repeat('b', 40) . "\n");
-        $second = code_marker($this->root);
 
-        $this->assertNotSame($first, $second, 'a git upgrade that changes no PHP file still moves it');
-        $this->assertNotSame($before, $first);
+        file_put_contents($this->root . '/.git/HEAD', str_repeat('b', 40) . "\n");
+
+        $this->assertSame($first, code_marker($this->root));
     }
 
     public function testTheMarkerIsTheSameForTheSameCode(): void

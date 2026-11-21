@@ -18,10 +18,18 @@ use function Lamb\Network\cron_lock_path;
  *
  * A code change is simulated by storing a marker that differs from the running code's,
  * which is the state a database is in after the code under it was replaced.
+ *
+ * Every reply carries one `Data migrations: <result>` line, because bin/upgrade acts on it:
+ * `migrated` and `already current` mean the data is current, `busy` means try again, and
+ * `failed` comes with HTTP 500.
  */
 class CronDataMigrationTest extends TestCase
 {
     private const MARKER_OPTION = 'data_migrated_for';
+
+    private const FAILED_OPTION = 'data_migration_failed';
+
+    private const OLD_MARKER = 'code:the-previous-release';
 
     private string $dataDir;
 
@@ -39,14 +47,16 @@ class CronDataMigrationTest extends TestCase
     public function testACronRequestAfterACodeChangeRunsTheMigrationsAndRecordsTheMarker(): void
     {
         $id = $this->seedStalePost();
-        $this->storeMarker('code:the-previous-release');
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
 
         $response = CronProbe::run($this->dataDir);
 
         $this->assertSame(0, $response['status'], $response['stderr']);
+        $this->assertSame(200, $response['http']);
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
         $this->assertStringContainsString('upgrade_all_posts: upgraded 1 post(s)', $response['output']);
         $this->assertSame(POST_VERSION, $this->postVersion($id));
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
     public function testACronRequestOnADatabaseThatHasNoMarkerYetRunsTheMigrations(): void
@@ -55,79 +65,153 @@ class CronDataMigrationTest extends TestCase
 
         $response = CronProbe::run($this->dataDir);
 
-        $this->assertStringContainsString('upgrade_all_posts: upgraded 1 post(s)', $response['output']);
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
         $this->assertSame(POST_VERSION, $this->postVersion($id));
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
     public function testACronRequestWithTheCurrentMarkerRunsNoMigration(): void
     {
         $id = $this->seedStalePost();
-        $this->storeMarker(code_marker());
+        $this->storeOption(self::MARKER_OPTION, code_marker());
 
         $response = CronProbe::run($this->dataDir);
 
+        $this->assertStringContainsString("Data migrations: already current\n", $response['output']);
         $this->assertStringNotContainsString('upgrade_all_posts', $response['output']);
         $this->assertSame(1, $this->postVersion($id), 'a current marker means the migrations already ran');
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
     public function testTheMigrationsRunBeforeTheFeedTasksAreDue(): void
     {
         CronProbe::run($this->dataDir);
         $id = $this->seedStalePost();
-        $this->storeMarker('code:the-previous-release');
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
 
         $response = CronProbe::run($this->dataDir);
 
         $this->assertStringContainsString('Too often', $response['output'], 'the feed tasks must not be due for this test');
         $this->assertStringContainsString('upgrade_all_posts: upgraded 1 post(s)', $response['output']);
         $this->assertSame(POST_VERSION, $this->postVersion($id));
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
-    public function testAHeldLockSkipsTheMigrations(): void
+    public function testAHeldLockSkipsTheMigrationsAndReportsBusy(): void
     {
         $id = $this->seedStalePost();
-        $this->storeMarker('code:the-previous-release');
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
         $lock = acquire_cron_lock(cron_lock_path($this->dataDir));
         $this->assertIsResource($lock);
 
         $response = CronProbe::run($this->dataDir);
         fclose($lock);
 
+        $this->assertStringContainsString("Data migrations: busy\n", $response['output']);
         $this->assertStringContainsString('Already running', $response['output']);
+        $this->assertSame(200, $response['http']);
         $this->assertSame(1, $this->postVersion($id));
-        $this->assertSame('code:the-previous-release', $this->storedMarker());
+        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
 
         $after = CronProbe::run($this->dataDir);
 
         $this->assertStringContainsString('upgrade_all_posts: upgraded 1 post(s)', $after['output'], 'the next request runs them once the lock is free');
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
     }
 
-    public function testAFailedMigrationIsLoggedLeavesTheMarkerAndIsRetriedByTheNextRequest(): void
+    public function testAFailedMigrationAnswers500LogsLeavesTheMarkerAndRunsTheOtherTasks(): void
     {
-        // A post with no version makes backfill_post_version() UPDATE; the trigger refuses it.
-        $this->inDatabase('\RedBeanPHP\R::exec("INSERT INTO post (body) VALUES (\'unversioned\')"); '
-            . '\RedBeanPHP\R::exec("CREATE TRIGGER refuse_updates BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, \'refused by the test\'); END");');
-        $this->storeMarker('code:the-previous-release');
+        $this->seedUnmigratablePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
 
         $failed = CronProbe::run($this->dataDir);
 
         $this->assertSame(0, $failed['status'], $failed['stderr']);
-        $this->assertStringContainsString('Data migration failed', $failed['output']);
+        $this->assertSame(500, $failed['http'], 'a client such as bin/upgrade must see the failure');
+        $this->assertStringContainsString("Data migrations: failed\n", $failed['output']);
         $this->assertStringNotContainsString('refused by the test', $failed['output'], 'the unauthenticated response must not carry the error');
         $this->assertStringContainsString('Data migration failed: ', $failed['stderr'], 'the failure is logged');
         $this->assertStringContainsString('refused by the test', $failed['stderr']);
         $this->assertStringContainsString('Updating feeds', $failed['output'], 'the other cron tasks still run');
-        $this->assertSame('code:the-previous-release', $this->storedMarker(), 'a failed run leaves the marker for the next request');
+        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION), 'a failed run leaves the marker for a later request');
+    }
 
+    /**
+     * /_cron is unauthenticated, and the migration check sits before the rate-limit gate, so
+     * without a throttle every request after a failure would run the whole migration again.
+     */
+    public function testAFailedMigrationIsNotRetriedBeforeTheCronIntervalHasPassed(): void
+    {
+        $id = $this->seedUnmigratablePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+        CronProbe::run($this->dataDir);
+        [$failedAt, $failedMarker] = explode(' ', $this->storedOption(self::FAILED_OPTION), 2);
+        $this->assertEqualsWithDelta(time(), (int) $failedAt, 120, 'the time of the failure is recorded');
+        $this->assertSame(code_marker(), $failedMarker, 'with the marker that failed');
         $this->inDatabase('\RedBeanPHP\R::exec("DROP TRIGGER refuse_updates");');
+
+        $again = CronProbe::run($this->dataDir);
+
+        $this->assertStringContainsString("Data migrations: failed\n", $again['output']);
+        $this->assertSame(500, $again['http']);
+        $this->assertNull($this->postVersionOrNull($id), 'the throttled request did not run the migration');
+        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
+    }
+
+    public function testAFailedMigrationIsRetriedOnceTheCronIntervalHasPassed(): void
+    {
+        $id = $this->seedUnmigratablePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+        CronProbe::run($this->dataDir);
+        $this->inDatabase('\RedBeanPHP\R::exec("DROP TRIGGER refuse_updates");');
+        $this->storeOption(self::FAILED_OPTION, (time() - 61) . ' ' . code_marker());
+
         $retried = CronProbe::run($this->dataDir);
 
+        $this->assertStringContainsString("Data migrations: migrated\n", $retried['output']);
         $this->assertStringContainsString('backfill_post_version: stamped version=1 on 1 post(s)', $retried['output']);
-        $this->assertSame(code_marker(), $this->storedMarker());
+        $this->assertSame(POST_VERSION, $this->postVersionOrNull($id));
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
+        $this->assertSame('', $this->storedOption(self::FAILED_OPTION), 'a success clears the failure record');
+    }
+
+    public function testACodeChangeMigratesAtOnceEvenRightAfterAFailureOfEarlierCode(): void
+    {
+        $id = $this->seedStalePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+        $this->storeOption(self::FAILED_OPTION, time() . ' code:an-earlier-release');
+
+        $response = CronProbe::run($this->dataDir);
+
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
+        $this->assertSame(POST_VERSION, $this->postVersion($id));
+    }
+
+    /**
+     * A 30-minute feed run must not hold the client of a request that came for the migrations.
+     */
+    public function testTheResponseEndsAfterTheMigrationStepBeforeTheFeedTasks(): void
+    {
+        $this->seedStalePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        $response = CronProbe::run($this->dataDir, fastcgi: true);
+
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
+        $this->assertStringNotContainsString('Updating feeds', $response['output'], 'the client must not wait for the feed cycle');
+        $this->assertStringContainsString('Updating feeds', $response['unsent'], 'the feed cycle still runs');
+    }
+
+    public function testAFailureIsAnsweredBeforeTheFeedTasksToo(): void
+    {
+        $this->seedUnmigratablePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        $response = CronProbe::run($this->dataDir, fastcgi: true);
+
+        $this->assertSame(500, $response['http']);
+        $this->assertStringContainsString("Data migrations: failed\n", $response['output']);
+        $this->assertStringNotContainsString('Updating feeds', $response['output']);
     }
 
     /**
@@ -142,24 +226,46 @@ class CronDataMigrationTest extends TestCase
         );
     }
 
-    private function postVersion(int $id): int
+    /**
+     * Seeds a post with no version, which backfill_post_version() has to UPDATE, and a trigger
+     * that refuses every UPDATE of `post`.
+     */
+    private function seedUnmigratablePost(): int
     {
-        return (int) $this->inDatabase('echo (int) \RedBeanPHP\R::load("post", ' . $id . ')->version;');
-    }
-
-    private function storeMarker(string $marker): void
-    {
-        $this->inDatabase(
-            '$bean = \RedBeanPHP\R::findOneOrDispense("option", " name = ? ", ["' . self::MARKER_OPTION . '"]); '
-            . '$bean->name = "' . self::MARKER_OPTION . '"; $bean->value = getenv("SEED_MARKER"); \RedBeanPHP\R::store($bean);',
-            ['SEED_MARKER' => $marker]
+        return (int) $this->inDatabase(
+            '\RedBeanPHP\R::exec("INSERT INTO post (body) VALUES (\'unversioned\')"); '
+            . '$id = \RedBeanPHP\R::getCell("SELECT last_insert_rowid()"); '
+            . '\RedBeanPHP\R::exec("CREATE TRIGGER refuse_updates BEFORE UPDATE ON post BEGIN SELECT RAISE(ABORT, \'refused by the test\'); END"); '
+            . 'echo $id;'
         );
     }
 
-    private function storedMarker(): string
+    private function postVersion(int $id): int
+    {
+        return (int) $this->postVersionOrNull($id);
+    }
+
+    private function postVersionOrNull(int $id): ?int
+    {
+        $version = $this->inDatabase('echo \RedBeanPHP\R::getCell("SELECT version FROM post WHERE id = ?", [' . $id . ']);');
+
+        return $version === '' ? null : (int) $version;
+    }
+
+    private function storeOption(string $name, string $value): void
+    {
+        $this->inDatabase(
+            '$bean = \RedBeanPHP\R::findOneOrDispense("option", " name = ? ", [getenv("SEED_NAME")]); '
+            . '$bean->name = getenv("SEED_NAME"); $bean->value = getenv("SEED_VALUE"); \RedBeanPHP\R::store($bean);',
+            ['SEED_NAME' => $name, 'SEED_VALUE' => $value]
+        );
+    }
+
+    private function storedOption(string $name): string
     {
         return $this->inDatabase(
-            'echo \RedBeanPHP\R::getCell("SELECT value FROM option WHERE name = ?", ["' . self::MARKER_OPTION . '"]);'
+            'echo \RedBeanPHP\R::getCell("SELECT value FROM option WHERE name = ?", [getenv("SEED_NAME")]);',
+            ['SEED_NAME' => $name]
         );
     }
 

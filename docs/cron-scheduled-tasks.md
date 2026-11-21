@@ -11,7 +11,7 @@ Lamb has an scheduled task endpoint that can be called periodically to run tasks
 
 The following tasks run periodically:
 
-1. **Migrating data after an upgrade.** When the code of Lamb has changed since the last run, the first run applies the [data migrations]({{ site.baseurl }}{% link upgrading.md %}#data-migrations) before the other tasks, even when they are not due yet. If a migration fails, the run writes the error to the PHP error log and the next run tries again.
+1. **Migrating data after an upgrade.** When the code of Lamb has changed since the last run, the first run applies the [data migrations]({{ site.baseurl }}{% link upgrading.md %}#data-migrations) before the other tasks, even when they are not due yet. The reply opens with a `Data migrations:` line that says `migrated`, `already current`, `busy` or `failed`. A failure answers with HTTP 500, writes the error to the PHP error log, and the same code is tried again no sooner than a minute later. With PHP-FPM or FrankenPHP the reply ends after that line while the other tasks keep running. The PHP built-in server (`viv run serve`) keeps the connection open until they finish.
 2. **Purging trash.** Posts that have been in the [trash]({{ site.baseurl }}{% link trash.md %}#permanent-deletion) long enough are permanently deleted.
 3. **Crossposting.** New content from your configured [feeds]({{ site.baseurl }}{% link feeds.md %}) is [ingested]({{ site.baseurl }}{% link cross-posting.md %}) as posts.
 4. **Queueing missed webmentions.** If saving a post could not queue its [webmentions]({{ site.baseurl }}{% link webmentions.md %}), the next run queues them.

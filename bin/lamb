@@ -203,10 +203,15 @@ if ($command === 'migrate') {
     // migrations once the code changes. A dry run writes nothing, so it takes
     // no lock. Exit 3 again: nothing ran here, and the site's next /_cron
     // request will migrate.
-    $lock = $dry_run ? null : Network\acquire_cron_lock(Network\cron_lock_path($data_dir));
+    $lock_path = Network\cron_lock_path($data_dir);
+    $lock_is_new = !file_exists($lock_path);
+    $lock = $dry_run ? null : Network\acquire_cron_lock($lock_path);
     if ($lock === false) {
-        fwrite(STDERR, 'bin/lamb: cannot open the lock file at ' . Network\cron_lock_path($data_dir) . ". Is the data directory writable?\n");
+        fwrite(STDERR, "bin/lamb: cannot open the lock file at $lock_path. Is the data directory writable?\n");
         exit(1);
+    }
+    if ($lock_is_new && is_resource($lock)) {
+        Network\align_lock_file_with_database($lock_path, "$data_dir/lamb.db");
     }
     if ($lock === null && !$dry_run) {
         fwrite(STDERR, "bin/lamb: /_cron or another bin/lamb migrate holds the lock, so no migration ran. Run bin/lamb migrate again when it has finished.\n");
@@ -228,7 +233,7 @@ if ($command === 'migrate') {
 
     // A manual run counts for the code it ran with, so /_cron does not repeat it.
     if (!$dry_run) {
-        Bootstrap\mark_data_migrated();
+        Bootstrap\mark_data_migrated(Bootstrap\code_marker(), get_option(Bootstrap\DATA_MIGRATED_FOR_OPTION, ''));
     }
 
     echo "{$prefix}Done.\n";
