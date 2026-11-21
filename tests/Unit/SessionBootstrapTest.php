@@ -32,14 +32,26 @@ class SessionBootstrapTest extends TestCase
     /** @var string|false */
     private $previous_secret;
 
+    private string|false $previous_cookie_secure;
+
+    /** @var array<string, mixed> */
+    private array $previous_cookie_params;
+
     protected function setUp(): void
     {
         $this->previous_secret = getenv('LAMB_LOGIN_PASSWORD');
         putenv('LAMB_LOGIN_PASSWORD=' . self::SECRET);
+        $this->previous_cookie_secure = ini_get('session.cookie_secure');
+        $this->previous_cookie_params = session_get_cookie_params();
     }
 
     protected function tearDown(): void
     {
+        // configure_session() changes process-wide settings that later tests read.
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_set_cookie_params($this->previous_cookie_params);
+        }
+        ini_set('session.cookie_secure', (string) $this->previous_cookie_secure);
         if ($this->previous_secret === false) {
             putenv('LAMB_LOGIN_PASSWORD');
         } else {
@@ -126,35 +138,33 @@ class SessionBootstrapTest extends TestCase
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        configure_session();
+        configure_session(false);
         $this->assertSame(REMEMBER_LIFETIME, session_get_cookie_params()['lifetime']);
     }
 
     /**
-     * Behind a TLS proxy the connection is plain HTTP, so the session cookie follows
-     * the configured site URL instead (issue #995).
+     * The session cookie is Secure exactly when index.php decided the request is HTTPS
+     * (issue #995); behind a TLS proxy that is not what the connection says.
      */
-    public function testSessionCookieIsSecureWhenTheSiteUrlIsHttps(): void
+    public function testSessionCookieIsSecureWhenTheRequestIsHttps(): void
     {
-        unset($_SERVER['HTTPS']);
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        configure_session('https://example.com');
+        configure_session(true);
         $this->assertTrue(session_get_cookie_params()['secure']);
         $this->assertSame('1', ini_get('session.cookie_secure'));
     }
 
-    public function testSessionCookieIsNotSecureOverPlainHttpWithoutAnHttpsSiteUrl(): void
+    public function testSessionCookieIsNotSecureWhenTheRequestIsHttp(): void
     {
-        unset($_SERVER['HTTPS']);
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        configure_session('http://example.com');
+        configure_session(true);
+        configure_session(false);
         $this->assertFalse(session_get_cookie_params()['secure']);
-        configure_session();
-        $this->assertFalse(session_get_cookie_params()['secure']);
+        $this->assertSame('0', ini_get('session.cookie_secure'));
     }
 
     /**
@@ -168,7 +178,7 @@ class SessionBootstrapTest extends TestCase
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        configure_session();
+        configure_session(false);
         $this->assertSame('Strict', session_get_cookie_params()['samesite']);
     }
 
@@ -181,7 +191,7 @@ class SessionBootstrapTest extends TestCase
         if (session_status() === PHP_SESSION_ACTIVE) {
             session_write_close();
         }
-        configure_session();
+        configure_session(false);
         $this->assertSame((string) REMEMBER_LIFETIME, ini_get('session.gc_maxlifetime'));
     }
 

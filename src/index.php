@@ -11,11 +11,15 @@ require '../vendor/autoload.php';
 
 $data_dir = Bootstrap\data_dir();
 Bootstrap\bootstrap_db($data_dir);
-// Before the session: its cookie is Secure when the configured site URL is https,
-// which matters behind a TLS proxy where this request is plain HTTP.
+// Before the session, because its cookie follows the configured site URL. On a first
+// boot this also writes the default INI, before the session exists and before the
+// post subscribers are registered.
 $config = Config\load();
 $site_url = Config\canonical_site_url($config);
-Bootstrap\bootstrap_session($data_dir, $site_url);
+// One decision for every cookie: behind a TLS proxy this request is plain HTTP, so the
+// connection alone would leave them without Secure (see Http\is_https()).
+define('IS_HTTPS', Http\is_https($_SERVER, $site_url));
+Bootstrap\bootstrap_session($data_dir, IS_HTTPS);
 Post\register_default_subscribers();
 
 Config\apply_timezone($config);

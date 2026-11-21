@@ -118,27 +118,41 @@ function canonical_redirect(string $request_uri): ?string
 }
 
 /**
- * Tells whether visitors reach the site over HTTPS.
+ * Tells whether a request counts as HTTPS: it arrived over TLS, or it is addressed
+ * to the host of an `https://` site URL.
  *
  * Behind a TLS-terminating proxy the connection Lamb sees is plain HTTP, and
  * `X-Forwarded-Proto` is client-controlled unless the proxy is trusted, which
- * Lamb has no setting for. The site URL the author configured is trustworthy
- * and names the scheme visitors use, so an `https://` site URL counts as HTTPS.
- * Without one, or with an `http://` one, the connection decides: a request that
- * did arrive over TLS stays secure.
+ * Lamb has no setting for. The site URL the author configured is trustworthy and
+ * names the scheme visitors use, so a request whose Host matches an `https://` site
+ * URL counts as HTTPS. A plain-HTTP request to any other host does not: the same
+ * install reached by IP address, or a staging copy of the database, cannot receive
+ * Secure cookies, and a browser would drop them. A request that did arrive over TLS
+ * always counts.
  *
  * @param array<string, mixed> $server   Typically $_SERVER.
  * @param string|null          $site_url The configured site URL, as returned by
  *                                       Lamb\Config\canonical_site_url(), or null when unset.
- * @return bool True when cookies should be marked Secure and links use https://.
+ * @return bool True when the request arrived over TLS, or its Host matches an `https://` $site_url.
  */
 function is_https(array $server, ?string $site_url): bool
 {
-    if ($site_url !== null && str_starts_with($site_url, 'https://')) {
+    // PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" otherwise.
+    $https = $server['HTTPS'] ?? '';
+    if (is_string($https) && $https !== '' && strtolower($https) !== 'off') {
         return true;
     }
+    if ($site_url === null || !str_starts_with($site_url, 'https://')) {
+        return false;
+    }
 
-    return isset($server['HTTPS']) && $server['HTTPS'] === 'on';
+    $request_host = $server['HTTP_HOST'] ?? '';
+    if (!is_string($request_host) || $request_host === '') {
+        return false;
+    }
+    $request_host = strtolower((string) preg_replace('/:\d{1,5}$/', '', $request_host));
+
+    return $request_host === strtolower((string) parse_url($site_url, PHP_URL_HOST));
 }
 
 /**

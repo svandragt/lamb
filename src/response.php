@@ -12,7 +12,6 @@ use function Lamb\extract_description;
 use function Lamb\front_matter_summary;
 use function Lamb\get_option;
 use function Lamb\highlight_and_link;
-use function Lamb\Http\is_https;
 use function Lamb\parse_bean;
 use function Lamb\Post\inject_title_matter;
 use function Lamb\Post\parse_matter;
@@ -36,13 +35,11 @@ const POSTS_PER_PAGE = 10;
 /**
  * Returns cookie options with the given expiry timestamp.
  *
- * `secure` tracks whether the site is served over HTTPS rather than being forced
- * on, matching the session cookie (Bootstrap\configure_session()): a cookie marked
- * secure over plain HTTP is silently dropped by the browser, which would otherwise
- * break login persistence on any install served without TLS (e.g. during initial
- * local setup). ROOT_URL is the configured site URL when there is one, so an
- * `https://` site URL marks the cookie secure behind a TLS proxy, where this
- * request is plain HTTP (see Http\is_https()).
+ * `secure` is IS_HTTPS, the decision index.php made once for the request, rather than
+ * being forced on. The session cookie (Bootstrap\configure_session()) follows the same
+ * value. A cookie marked secure over plain HTTP is silently dropped by the browser,
+ * which would otherwise break login persistence on any install served without TLS
+ * (e.g. during initial local setup).
  *
  * @param int $expires Unix timestamp for cookie expiry.
  * @return array<string, mixed> Cookie options array.
@@ -52,7 +49,7 @@ function get_cookie_options(int $expires): array
     return [
         'expires'  => $expires,
         'path'     => '/',
-        'secure'   => is_https($_SERVER, defined('ROOT_URL') ? ROOT_URL : null),
+        'secure'   => IS_HTTPS,
         'httponly' => true,
         'samesite' => 'Strict',
     ];

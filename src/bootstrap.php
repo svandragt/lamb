@@ -13,7 +13,6 @@ use RedBeanPHP\RedException\SQL;
 use function Lamb\ensure_preview_token;
 use function Lamb\get_option;
 use function Lamb\Http\apply_dns_resolve_timeout;
-use function Lamb\Http\is_https;
 use function Lamb\Post\populate_bean;
 use function Lamb\Post\save;
 use function Lamb\set_option;
@@ -851,17 +850,17 @@ function mark_backfill_done(string $name): void
  * starting a session does not emit no-cache headers — the application manages cache
  * headers itself (see cache_headers()).
  *
- * The cookie is Secure when the site is served over HTTPS, which is_https() decides
- * from the site URL first: behind a TLS proxy this request is plain HTTP.
+ * The cookie is Secure when the request counts as HTTPS. index.php decides that once
+ * per request, with Http\is_https(), and passes it in; the connection alone would be
+ * wrong behind a TLS proxy.
  *
- * @param string|null $site_url The configured site URL (Config\canonical_site_url()), or null when unset.
+ * @param bool $secure Whether the request counts as HTTPS (the IS_HTTPS constant).
  * @return void
  */
-function configure_session(?string $site_url = null): void
+function configure_session(bool $secure): void
 {
     // Make cookies inaccessible via JavaScript (XSS).
     ini_set("session.cookie_httponly", 1);
-    $secure = is_https($_SERVER, $site_url);
     ini_set("session.cookie_secure", $secure ? 1 : 0);
     ini_set("session.use_strict_mode", 1);
 
@@ -1030,13 +1029,13 @@ function ensure_directory(string $dir, int $mode): void
 /**
  * Initializes and secures a session, starting it only for (previously) logged-in users.
  *
- * @param string      $data_dir The app data directory (same one that holds lamb.db).
- * @param string|null $site_url The configured site URL (Config\canonical_site_url()), or null when unset.
+ * @param string $data_dir The app data directory (same one that holds lamb.db).
+ * @param bool   $secure   Whether the request counts as HTTPS (the IS_HTTPS constant).
  * @return void
  */
-function bootstrap_session(string $data_dir, ?string $site_url = null): void
+function bootstrap_session(string $data_dir, bool $secure): void
 {
-    configure_session($site_url);
+    configure_session($secure);
     configure_session_save_path($data_dir);
     if (should_start_session($_COOKIE)) {
         start_session();
