@@ -801,7 +801,7 @@ XML;
     {
         $data_dir = "$this->tmp_dir/data";
         $id = $this->seedPost($data_dir, 1, 'plain body');
-        mkdir(cron_lock_path($data_dir));
+        symlink("$this->tmp_dir/no-such-directory/cron.lock", cron_lock_path($data_dir));
 
         $process = new Process(
             ['php', codecept_root_dir('bin/lamb'), 'migrate'],
@@ -815,52 +815,6 @@ XML;
         $this->assertStringContainsString('no migration ran', $process->getErrorOutput());
         $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
         $this->assertSame('', $this->storedDataMarker($data_dir));
-    }
-
-    /**
-     * The CLI user may create the lock file, and the web server user must still open it for
-     * writing: when it cannot, every /_cron request fails with "Cannot open the cron lock".
-     */
-    public function testMigrateCreatesTheLockFileWithTheModeOfTheDatabase(): void
-    {
-        $data_dir = "$this->tmp_dir/data";
-        $this->seedPost($data_dir, POST_VERSION, 'plain body');
-        chmod("$data_dir/lamb.db", 0660);
-        $this->assertFileDoesNotExist("$data_dir/cron.lock");
-
-        $this->runMigrate($data_dir);
-
-        $this->assertFileExists("$data_dir/cron.lock");
-        $this->assertSame('0660', substr(sprintf('%o', fileperms("$data_dir/cron.lock")), -4));
-    }
-
-    public function testMigrateLeavesAnExistingLockFileAlone(): void
-    {
-        $data_dir = "$this->tmp_dir/data";
-        $this->seedPost($data_dir, POST_VERSION, 'plain body');
-        chmod("$data_dir/lamb.db", 0660);
-        touch("$data_dir/cron.lock");
-        chmod("$data_dir/cron.lock", 0640);
-
-        $this->runMigrate($data_dir);
-
-        $this->assertSame('0640', substr(sprintf('%o', fileperms("$data_dir/cron.lock")), -4), 'the web server created it, and chose its mode');
-    }
-
-    public function testMigrateCreatesTheLockFileInTheGroupOfTheDatabase(): void
-    {
-        $other_groups = array_diff(function_exists('posix_getgroups') ? posix_getgroups() : [], [posix_getegid()]);
-        if ($other_groups === []) {
-            $this->markTestSkipped('chgrp needs a second group this user belongs to');
-        }
-        $group = reset($other_groups);
-        $data_dir = "$this->tmp_dir/data";
-        $this->seedPost($data_dir, POST_VERSION, 'plain body');
-        chgrp("$data_dir/lamb.db", $group);
-
-        $this->runMigrate($data_dir);
-
-        $this->assertSame($group, filegroup("$data_dir/cron.lock"));
     }
 
     /**

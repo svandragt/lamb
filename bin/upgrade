@@ -117,7 +117,7 @@ if [ "$migrate_status" -eq 3 ]; then
     if [ -n "${site_url:-}" ] && command -v curl > /dev/null; then
         cron_url="${site_url%/}/_cron?migrations"
         cron_delay="${LAMB_UPGRADE_HEALTH_RETRY_DELAY:-3}"
-        # OPcache can serve the old code for a moment after the reset, and /_cron cannot always see it.
+        # OPcache can serve the old code for a moment after the reset.
         sleep "$cron_delay"
         cron_result=""
         cron_status=""

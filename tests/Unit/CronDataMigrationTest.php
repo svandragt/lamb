@@ -299,26 +299,6 @@ class CronDataMigrationTest extends TestCase
     }
 
     /**
-     * A busy answer means the running code is older than the files, so a feed cycle would run
-     * old code over data nobody migrated. It stops the run, as a failure does.
-     */
-    public function testAStaleCodeCacheAnswersBusyAndStopsTheRunBeforeTheFeedTasks(): void
-    {
-        $id = $this->seedStalePost();
-        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
-
-        $response = CronProbe::run($this->dataDir, fastcgi: true, staleCode: true);
-
-        $this->assertSame(0, $response['status'], $response['stderr']);
-        $this->assertSame(200, $response['http']);
-        $this->assertStringContainsString("Data migrations: busy\n", $response['output']);
-        $this->assertStringNotContainsString('Updating feeds', $response['output'] . $response['unsent']);
-        $this->assertStringNotContainsString('Done', $response['output'] . $response['unsent']);
-        $this->assertSame(1, $this->postVersion($id), 'nothing migrated');
-        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
-    }
-
-    /**
      * @return array<string, array{string}> The query string.
      */
     public static function cronQueries(): array
@@ -350,36 +330,40 @@ class CronDataMigrationTest extends TestCase
     }
 
     /**
-     * A fatal error (a time or memory limit) skips every `catch`, so nothing would record the
-     * attempt and every /_cron request would start the same migration again at once.
+     * The attempt row is written before the steps run and deleted when they succeed, so a request
+     * that dies in the middle (a time or memory limit, which no `catch` sees) leaves it behind and
+     * the next request waits. A trigger copies the row while the first step runs.
      */
-    public function testAFatalErrorMidMigrationStillMakesTheNextRequestWait(): void
+    public function testTheAttemptIsOnRecordWhileTheStepsRun(): void
     {
-        $this->seedFatalPost();
+        $this->seedSnapshotPost();
         $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
 
-        $fatal = CronProbe::run($this->dataDir, fatalMidMigration: true);
+        $response = CronProbe::run($this->dataDir);
 
-        $this->assertStringContainsString('Allowed memory size', $fatal['stderr'], 'the request must die of a fatal error');
-        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
-        $this->assertMatchesRegularExpression('/^\d+ ' . preg_quote(code_marker(), '/') . '$/', $this->storedOption(self::FAILED_OPTION), 'the attempt is on record');
-
-        $again = CronProbe::run($this->dataDir);
-
-        $this->assertSame(500, $again['http']);
-        $this->assertStringContainsString("Data migrations: failed\n", $again['output']);
-        $this->assertStringContainsString('next attempt is due after a minute', $again['output']);
-        $this->assertStringNotContainsString('no such function', $again['stderr'], 'the migration was not started again');
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
+        $this->assertMatchesRegularExpression('/^\d+ ' . preg_quote(code_marker(), '/') . '$/', $this->inDatabase('echo \RedBeanPHP\R::getCell("SELECT value FROM snapshot");'));
+        $this->assertSame('', $this->storedOption(self::FAILED_OPTION), 'deleted once the steps succeeded');
     }
 
-    public function testASuccessfulMigrationLeavesNoAttemptOnRecord(): void
+    /**
+     * A lock file created by `bin/lamb migrate` as another user may not be writable for the web
+     * server. The web request must still take the lock, so it never fails with "Cannot open the
+     * cron lock", and still migrates.
+     */
+    public function testACronRequestTakesTheLockOnAFileItCanOnlyRead(): void
     {
         $this->seedStalePost();
         $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+        $lockFile = cron_lock_path($this->dataDir);
+        touch($lockFile);
+        chmod($lockFile, 0444);
 
-        CronProbe::run($this->dataDir);
+        $response = CronProbe::run($this->dataDir);
 
-        $this->assertSame('', $this->storedOption(self::FAILED_OPTION));
+        $this->assertSame(200, $response['http']);
+        $this->assertStringNotContainsString('Cannot open the cron lock', $response['output']);
+        $this->assertStringContainsString("Data migrations: migrated\n", $response['output']);
     }
 
     /**
@@ -410,15 +394,15 @@ class CronDataMigrationTest extends TestCase
 
     /**
      * Seeds a post with no version, which backfill_post_version() has to UPDATE, and a trigger
-     * that calls `die_now()`, a function only CronProbe's fatal mode defines.
+     * that copies the attempt row into `snapshot` before that UPDATE.
      */
-    private function seedFatalPost(): int
+    private function seedSnapshotPost(): void
     {
-        return (int) $this->inDatabase(
+        $this->inDatabase(
             '\RedBeanPHP\R::exec("INSERT INTO post (body) VALUES (\'unversioned\')"); '
-            . '$id = \RedBeanPHP\R::getCell("SELECT last_insert_rowid()"); '
-            . '\RedBeanPHP\R::exec("CREATE TRIGGER die_on_update BEFORE UPDATE ON post BEGIN SELECT die_now(); END"); '
-            . 'echo $id;'
+            . '\RedBeanPHP\R::exec("CREATE TABLE snapshot (value TEXT)"); '
+            . '\RedBeanPHP\R::exec("CREATE TRIGGER snapshot_attempt BEFORE UPDATE ON post BEGIN '
+            . 'INSERT INTO snapshot (value) SELECT value FROM option WHERE name = \'data_migration_failed\'; END");'
         );
     }
 

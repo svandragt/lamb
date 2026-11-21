@@ -37,7 +37,10 @@ an external scheduler — so it defends itself three ways:
    rather than return. Failure to *open* the lock file is kept distinct from
    contention: a broken/mislocated lock file is a 500, not "already running" —
    reporting it as contention once silently stopped every cron run while the
-   endpoint kept answering "try again later".
+   endpoint kept answering "try again later". The file is opened for writing and,
+   when that fails, read-only, because `flock()` needs no write access: a lock
+   file that `bin/lamb migrate` created as another user can never keep the web
+   server from taking the lock.
 2. **A whole-run gate** of one run per minute (`cron_run_due()`).
 3. **A per-feed gate** of one fetch per 30 minutes (`feed_fetch_due()`), keyed on
    the last **attempt**, not the last success — so a failing feed is retried on
@@ -52,7 +55,8 @@ data migrations (`Bootstrap\migrate_data()`, the steps `bin/lamb migrate` runs).
 runs ahead of the gate so the first request after an upgrade migrates even when no
 feed task is due, and inside the lock so it never overlaps `bin/lamb migrate`, which
 takes the same lock. The request runs as the database's owner, which a deploy user's
-CLI is not.
+CLI is not. Every request computes the marker, which hashes the code files (about
+5 ms), and compares it with the option.
 
 ### The marker
 
@@ -64,8 +68,7 @@ would make `bin/lamb migrate` and `/_cron` compute different markers. Composer w
 `installed.json` last. A request that comes while `composer install` is still replacing
 `vendor/` can therefore migrate with the new `src/` and the old libraries and record a
 marker, but the marker changes again once the install finishes, and the next request
-migrates again. The marker is computed from the files on disk, so the running code must
-be that code. A file the running user cannot read is left out of the digest, because
+migrates again. A file the running user cannot read is left out of the digest, because
 `md5_file()` would log a warning on every request. A file that only one of the CLI and the
 web server can read still makes their markers differ, and the next `/_cron` migrates again,
 which is harmless because the steps are idempotent.
@@ -93,20 +96,22 @@ serve an old result line.
   unauthenticated and the migration check sits before the rate-limit gate, so without that
   row every request would rerun a failing migration. The row is written before the steps run
   and deleted when they succeed, so a fatal error (a time or memory limit), which no `catch`
-  sees, makes the next request wait too.
-- `busy`: nothing ran, and the run stops after the line, as for `failed`, because the
-  feed cycle would run old code over data nobody migrated. It covers a held lock and a code
-  cache that holds older files than the disk. Right after a deploy OPcache can serve old
-  opcodes, and migrating then would record the new marker for old migrations. A file counts
-  as stale when its modification time differs from the one OPcache recorded, older included,
-  because a tarball or `rsync -a` keeps the sender's times. A stale file is invalidated and
-  the request answers `busy`, so a later request runs the new code. When the status cannot be
-  read (OPcache off, or its API restricted) the migration goes ahead.
+  sees, makes the next request wait too. A database error while reading the option or the
+  marker is a `failed` result too.
+- `busy`: another run holds the lock. Nothing ran, and the reply ends after the line.
 
 When the result is not `already current`, the reply ends after the migration step if
 `fastcgi_finish_request()` exists, so a client does not wait for a feed cycle that can run
 30 minutes. An ordinary caller keeps the feed output. The built-in server keeps the
 connection open.
+
+### The code cache
+
+Right after `git reset`, OPcache can still serve the old opcodes of a file, so the first
+request can run the old migration code and record the marker of the new code. `/_cron` does
+not check for that. It can happen with `opcache.validate_timestamps=0`, or with an
+`opcache.revalidate_freq` longer than the wait of `bin/upgrade`, and the fix is to reload
+PHP-FPM after an upgrade.
 
 ### The migrations-only request
 
@@ -123,18 +128,18 @@ run holds the cron lock, or the lock file cannot be opened. That is not a broken
 `bin/upgrade` hands the migrations to `/_cron?migrations`. `bin/lamb migrate` prints the same
 result line as `/_cron`, decided by comparing markers, so `migrated` means the steps ran for
 new code even if each found nothing to change. Its output is streamed, through `tee` to a
-temporary file that `bin/upgrade` reads the result line from, so progress and errors appear in
-order. Any other nonzero exit is a failed migration:
-`bin/upgrade` exits 1, says the data may be partly migrated and points to the error output.
+temporary file that `bin/upgrade` reads the result line from, so progress and errors appear
+in order. Any other nonzero exit is a failed migration: `bin/upgrade` exits 1, says the data
+may be partly migrated and points to the error output.
 
 With `SITE_URL` and `curl`, `bin/upgrade` waits `LAMB_UPGRADE_HEALTH_RETRY_DELAY` (3 s)
-before the first request, because OPcache can still serve the old code and `/_cron` cannot
-always see it. It requests without `curl -f`, so the body of a 500 is read, and with `-L`,
-so a redirect (http to https, a trailing slash) is followed to the reply that has the result
-line. The limit is 300 s, longer than the health check's. It asks again up to five times on `busy`, then leaves
-the migrations to the next scheduled `/_cron`. `failed` exits 1 and points to the error log. A
-timeout, a 502 or 504 or a reply without the result line warns that the migration may still be
-running or may have failed, and goes on. Without `SITE_URL` or `curl` it prints
+before the first request, to give OPcache time to pick up the new files. It requests without
+`curl -f`, so the body of a 500 is read, and with `-L`, so a redirect (http to https, a
+trailing slash) is followed to the reply that has the result line. The limit is 300 s, longer
+than the health check's. It asks again up to five times on `busy`, then leaves the migrations
+to the next scheduled `/_cron`. `failed` exits 1 and points to the error log. A timeout, a 502
+or 504 or a reply without the result line warns that the migration may still be running or
+may have failed, and goes on. Without `SITE_URL` or `curl` it prints
 `sudo -u <owner> bin/lamb migrate` as a hint and never runs sudo.
 
 Migrations only move forward, so `bin/upgrade` never prints the rollback hint for the

@@ -211,9 +211,7 @@ function run_feed_cycle(
     // Before the rate-limit gate below, so the first request after an upgrade
     // migrates even when the feed tasks are not due. This request runs as the
     // user that owns the database, which a deploy user's bin/lamb cannot be.
-    $migration = \Lamb\Bootstrap\run_pending_data_migrations(
-        get_option(\Lamb\Bootstrap\DATA_MIGRATED_FOR_OPTION, '')
-    );
+    $migration = \Lamb\Bootstrap\run_pending_data_migrations();
     $result = $migration['result'];
     if ($result === 'failed') {
         http_response_code(500);
@@ -223,7 +221,7 @@ function run_feed_cycle(
         echo $line . PHP_EOL;
     }
     // See network/README.md ("Data migrations after an upgrade") for why each of these ends the run.
-    if ($result === 'failed' || $result === 'busy' || isset($_GET['migrations'])) {
+    if ($result === 'failed' || isset($_GET['migrations'])) {
         exit;
     }
     if ($result !== 'already current' && function_exists('fastcgi_finish_request')) {
@@ -284,6 +282,9 @@ function cron_lock_path(?string $data_dir = null): string
  * collapsing them once silently stopped every cron run. See network/README.md
  * ("The run").
  *
+ * A file that cannot be opened for writing is opened read-only: flock() needs no
+ * write access, and `bin/lamb migrate` can have created the file as another user.
+ *
  * @param string|null $path Lock file path; defaults to cron_lock_path().
  * @return resource|false|null The open lock-file handle; null when another run
  *                             holds the lock; false when the lock file cannot
@@ -291,7 +292,8 @@ function cron_lock_path(?string $data_dir = null): string
  */
 function acquire_cron_lock(?string $path = null)
 {
-    $handle = @fopen($path ?? cron_lock_path(), 'c');
+    $path ??= cron_lock_path();
+    $handle = @fopen($path, 'c') ?: @fopen($path, 'r');
     if ($handle === false) {
         return false;
     }
@@ -301,31 +303,6 @@ function acquire_cron_lock(?string $path = null)
     }
 
     return $handle;
-}
-
-/**
- * Gives a lock file the permission bits and group of the database file.
- *
- * `bin/lamb migrate` can be the first to create the lock file, as a user other
- * than the one PHP runs as. With the default umask the web server could then not
- * open it for writing, and every /_cron request would fail on the lock. The
- * database file is the one both users already share, so the lock follows it. A
- * group the caller does not belong to cannot be set and is left alone.
- *
- * @param string $lock_path The lock file, which the caller has just created.
- * @param string $db_path The database file whose mode and group to copy.
- * @return void
- */
-function align_lock_file_with_database(string $lock_path, string $db_path): void
-{
-    $mode = @fileperms($db_path);
-    if ($mode !== false) {
-        @chmod($lock_path, $mode & 0666);
-    }
-    $group = @filegroup($db_path);
-    if ($group !== false && @filegroup($lock_path) !== $group) {
-        @chgrp($lock_path, $group);
-    }
 }
 
 /**

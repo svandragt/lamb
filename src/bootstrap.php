@@ -866,43 +866,31 @@ function data_migration_result_line(string $result): string
  * Runs the data migrations when the running code differs from the code the data
  * was last migrated for, and records the new marker once they succeed.
  *
- * The caller must hold the cron lock. A failure is logged and returned as
- * `failed`, not thrown, and leaves the marker alone. A code cache that holds
- * older files than the disk returns `busy` without migrating. The retry and cache
- * rules are in src/network/README.md ("Data migrations after an upgrade").
+ * The caller must hold the cron lock. Any failure, a database error while reading
+ * the option included, is logged and returned as `failed`, not thrown, and leaves
+ * the marker alone. The retry rules are in src/network/README.md ("Data migrations
+ * after an upgrade").
  *
- * @param OODBBean $migrated_for The DATA_MIGRATED_FOR_OPTION bean, read once by the caller.
  * @param int|null $now Unix time; null means now.
- * @param mixed $opcache_status What opcache_get_status(true) returned; null means ask OPcache.
  * @return array{result: string, lines: list<string>} The result for
  *         data_migration_result_line() and the lines to print after it.
  */
-function run_pending_data_migrations(OODBBean $migrated_for, ?int $now = null, mixed $opcache_status = null): array
+function run_pending_data_migrations(?int $now = null): array
 {
-    $marker = code_marker();
-    if ((string) $migrated_for->value === $marker) {
-        return ['result' => 'already current', 'lines' => []];
-    }
-
     $now ??= time();
+    $marker = '';
     $failure = null;
     try {
+        $marker = code_marker();
+        $migrated_for = get_option(DATA_MIGRATED_FOR_OPTION, '');
+        if ((string) $migrated_for->value === $marker) {
+            return ['result' => 'already current', 'lines' => []];
+        }
+
         $failure = get_option(DATA_MIGRATION_FAILED_OPTION, '');
         [$failed_at, $failed_marker] = array_pad(explode(' ', (string) $failure->value, 2), 2, '');
         if ($failed_marker === $marker && !\Lamb\Network\cron_run_due((int) $failed_at, $now)) {
             return ['result' => 'failed', 'lines' => ['The last data migration failed, see the error log. The next attempt is due after a minute.']];
-        }
-
-        $opcache_status ??= function_exists('opcache_get_status') ? @opcache_get_status(true) : false;
-        $stale = opcache_stale_files(code_digest_files(), $opcache_status) ?? [];
-        if ($stale !== []) {
-            foreach ($stale as $file) {
-                if (function_exists('opcache_invalidate')) {
-                    @opcache_invalidate($file, true);
-                }
-            }
-
-            return ['result' => 'busy', 'lines' => ['The code cache still holds older code, try again shortly.']];
         }
 
         // A fatal error (time or memory limit) skips the catch below, so the attempt is
@@ -1376,37 +1364,6 @@ function code_digest(?string $root = null): string
 function code_marker(?string $root = null): string
 {
     return 'code:' . substr(code_digest($root), 0, 12);
-}
-
-/**
- * The files of a list whose modification time on disk differs from the one OPcache
- * recorded when it compiled them.
- *
- * Such a file is still served from the old opcodes. The time can be older than the
- * recorded one, because a tarball or `rsync -a` keeps the sender's times. A file
- * OPcache holds nothing for is not stale: its next include compiles it.
- *
- * @param list<string> $files Absolute paths, as code_digest_files() lists them.
- * @param mixed $status What opcache_get_status(true) returned.
- * @return list<string>|null The stale files, or null when the status cannot be
- *         read (it is false when OPcache is off or its API is restricted).
- */
-function opcache_stale_files(array $files, mixed $status): ?array
-{
-    if (!is_array($status) || !isset($status['scripts']) || !is_array($status['scripts'])) {
-        return null;
-    }
-
-    $stale = [];
-    foreach ($files as $file) {
-        $cached = $status['scripts'][realpath($file) ?: $file]['timestamp'] ?? null;
-        $modified = @filemtime($file);
-        if ($cached !== null && $modified !== false && $modified !== $cached) {
-            $stale[] = $file;
-        }
-    }
-
-    return $stale;
 }
 
 /**

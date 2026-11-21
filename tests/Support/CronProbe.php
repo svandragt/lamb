@@ -19,11 +19,7 @@ use Symfony\Component\Process\Process;
  * marker where it is called, which splits the output into what the client received and what
  * it did not.
  *
- * `$query` is the request's query string, which PHP would put into $_GET. With `$staleCode` the
- * child answers opcache_get_status() as an OPcache that compiled src/network.php before the
- * file on disk was written, which is the state right after a deploy. With `$fatalMidMigration`
- * the first write to a `post` row that fires a `die_now()` trigger ends the request with a
- * memory-limit fatal error, which no `catch` sees.
+ * `$query` is the request's query string, which PHP would put into $_GET.
  *
  * The CLI ignores header(), so the child records the headers that code in `Lamb\Network` sets,
  * each with the number of bytes the request had printed by then.
@@ -42,20 +38,18 @@ final class CronProbe
      * @param string $dataDir The LAMB_DATA_DIR for the request.
      * @param bool $fastcgi Whether the child has a fastcgi_finish_request().
      * @param string $query The query string, without the question mark.
-     * @param bool $staleCode Whether the child's OPcache holds older code than the disk.
-     * @param bool $fatalMidMigration Whether a `die_now()` trigger ends the request with a fatal error.
      * @return array{output: string, unsent: string, stderr: string, status: int|null, http: int, headers: list<array{string, int}>} What
      *     the client received, what the request printed after fastcgi_finish_request() (always ''
      *     without `$fastcgi`), what PHP and error_log() wrote to stderr, the exit code, the HTTP
      *     response code, and the headers set from `Lamb\Network` with the bytes printed before each.
      */
-    public static function run(string $dataDir, bool $fastcgi = false, string $query = '', bool $staleCode = false, bool $fatalMidMigration = false): array
+    public static function run(string $dataDir, bool $fastcgi = false, string $query = ''): array
     {
         $script = sys_get_temp_dir() . '/lamb-cron-probe-' . uniqid() . '.php';
-        file_put_contents($script, self::script($fastcgi, $query, $staleCode, $fatalMidMigration));
+        file_put_contents($script, self::script($fastcgi, $query));
 
         $process = new Process(
-            [PHP_BINARY, '-d', 'display_errors=stderr', '-d', 'xdebug.mode=off', '-d', 'memory_limit=128M', $script],
+            [PHP_BINARY, '-d', 'display_errors=stderr', '-d', 'xdebug.mode=off', $script],
             dirname(__DIR__, 2) . '/src',
             ['LAMB_DATA_DIR' => $dataDir, 'LAMB_LOGIN_PASSWORD' => false, 'LAMB_SITE_URL' => false]
         );
@@ -82,18 +76,14 @@ final class CronProbe
      *
      * @param bool $fastcgi Whether to define fastcgi_finish_request().
      * @param string $query The query string, without the question mark.
-     * @param bool $staleCode Whether to define an opcache_get_status() that reports stale code.
-     * @param bool $fatalMidMigration Whether to define the `die_now()` SQL function as a fatal error.
      * @return string
      */
-    private static function script(bool $fastcgi, string $query, bool $staleCode, bool $fatalMidMigration): string
+    private static function script(bool $fastcgi, string $query): string
     {
         return strtr(self::TEMPLATE, [
             '__INDEX__'    => var_export(dirname(__DIR__, 2) . '/src/index.php', true),
             '__FASTCGI__'  => var_export($fastcgi, true),
             '__QUERY__'    => var_export($query, true),
-            '__STALE__'    => var_export($staleCode ? dirname(__DIR__, 2) . '/src/network.php' : null, true),
-            '__FATAL__'    => var_export($fatalMidMigration, true),
             '__FINISHED__' => var_export(self::FINISHED_MARKER, true),
             '__META__'     => var_export(self::META_MARKER, true),
         ]);
@@ -118,31 +108,6 @@ ob_start(function (string $chunk): string {
 }, 1);
 eval('namespace Lamb\Network; function header(string $header, bool $replace = true, int $response_code = 0): void { '
     . '$GLOBALS["lamb_probe_headers"][] = [$header, $GLOBALS["lamb_probe_printed"]]; \header($header, $replace, $response_code); }');
-
-if (__FATAL__) {
-    // Called right before the migration steps, once the connection exists.
-    if (!function_exists('opcache_get_status')) {
-        function opcache_get_status(bool $include_scripts = true): bool
-        {
-            return false;
-        }
-    }
-    eval('namespace Lamb\Bootstrap; function opcache_get_status(bool $include_scripts = true): bool { '
-        . '\RedBeanPHP\R::getDatabaseAdapter()->getDatabase()->getPDO()->sqliteCreateFunction("die_now", '
-        . 'function () { return strlen(str_repeat("x", 1024 * 1024 * 1024)); }); return false; }');
-} elseif (__STALE__ !== null) {
-    // The namespaced function wins the unqualified call in Lamb\Bootstrap, whether or not the
-    // extension is loaded. The global one only has to exist for function_exists().
-    if (!function_exists('opcache_get_status')) {
-        function opcache_get_status(bool $include_scripts = true): bool
-        {
-            return false;
-        }
-    }
-    $stale_file = __STALE__;
-    $stale_status = ['opcache_enabled' => true, 'scripts' => [realpath($stale_file) => ['timestamp' => filemtime($stale_file) - 1000]]];
-    eval('namespace Lamb\Bootstrap; function opcache_get_status(bool $include_scripts = true): array { return ' . var_export($stale_status, true) . '; }');
-}
 
 register_shutdown_function(function () {
     echo __META__ . json_encode(['http' => http_response_code() ?: 200, 'headers' => $GLOBALS['lamb_probe_headers']]);

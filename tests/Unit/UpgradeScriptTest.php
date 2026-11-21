@@ -555,8 +555,8 @@ class UpgradeScriptTest extends TestCase
     }
 
     /**
-     * When /_cron cannot read OPcache's status it cannot tell that it is running the old code
-     * right after the reset, so the script gives the cache the time the health check gives it.
+     * OPcache can serve the old code for a moment after the reset, so the script gives it the
+     * time the health check gives it before the first request.
      */
     public function testTheFirstCronRequestWaitsForTheCodeCacheToRefresh(): void
     {
