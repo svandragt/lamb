@@ -22,7 +22,7 @@ use function Lamb\Response\login_csrf_secret;
  */
 class SecureCookieSiteUrlTest extends TestCase
 {
-    private const PASSWORD = 'correct horse battery staple';
+    private static string $password;
 
     private static string $passwordHash;
 
@@ -31,7 +31,8 @@ class SecureCookieSiteUrlTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
-        self::$passwordHash = base64_encode(password_hash(self::PASSWORD, PASSWORD_DEFAULT));
+        self::$password = bin2hex(random_bytes(16));
+        self::$passwordHash = base64_encode(password_hash(self::$password, PASSWORD_DEFAULT));
     }
 
     protected function tearDown(): void
@@ -148,7 +149,7 @@ class SecureCookieSiteUrlTest extends TestCase
             'method' => 'POST',
             'uri' => '/login',
             'cookies' => ['lamb_login_csrf' => $token],
-            'post' => ['submit' => 'Log in', 'password' => self::PASSWORD, 'csrf' => $token],
+            'post' => ['submit' => 'Log in', 'password' => self::$password, 'csrf' => $token],
             'password_hash' => self::$passwordHash,
         ] + $request);
 
