@@ -694,6 +694,30 @@ XML;
     }
 
     /**
+     * A lock file the CLI user cannot open means no migration ran, the same as a held lock, so
+     * bin/upgrade hands the migrations to /_cron instead of reporting a partly migrated database.
+     */
+    public function testMigrateCommandExitsThreeWhenItCannotOpenTheLockFile(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+        mkdir(cron_lock_path($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('cannot open the lock file', $process->getErrorOutput());
+        $this->assertStringContainsString('no migration ran', $process->getErrorOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
      * The CLI user may create the lock file, and the web server user must still open it for
      * writing: when it cannot, every /_cron request fails with "Cannot open the cron lock".
      */

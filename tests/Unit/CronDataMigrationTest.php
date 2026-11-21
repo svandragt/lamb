@@ -231,6 +231,94 @@ class CronDataMigrationTest extends TestCase
     }
 
     /**
+     * @return array<string, array{string, string, int}> The database state, the result line and
+     *     the HTTP status.
+     */
+    public static function migrationStates(): array
+    {
+        return [
+            'the data is current' => ['current', 'already current', 200],
+            'a migration runs' => ['stale', 'migrated', 200],
+            'a migration fails' => ['failed', 'failed', 500],
+        ];
+    }
+
+    /**
+     * bin/upgrade asks for `/_cron?migrations`: the migration step under the lock, the result
+     * line, and the end of the request. A feed cycle can run 30 minutes, and a client that came
+     * for the migrations must not wait for it whatever the result. This holds without
+     * fastcgi_finish_request() too, which only some servers have.
+     *
+     * @dataProvider migrationStates
+     */
+    public function testAMigrationsOnlyRequestEndsAfterTheResultLine(string $state, string $line, int $http): void
+    {
+        if ($state === 'current') {
+            $this->storeOption(self::MARKER_OPTION, code_marker());
+        } else {
+            if ($state === 'failed') {
+                $this->seedUnmigratablePost();
+            } else {
+                $this->seedStalePost();
+            }
+            $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+        }
+
+        $response = CronProbe::run($this->dataDir, query: 'migrations');
+
+        $this->assertSame(0, $response['status'], $response['stderr']);
+        $this->assertSame($http, $response['http']);
+        $this->assertStringContainsString("Data migrations: {$line}\n", $response['output']);
+        $this->assertStringNotContainsString('Updating feeds', $response['output'], 'no feed cycle');
+        $this->assertStringNotContainsString('Done', $response['output'], 'no run to finish');
+        $this->assertStringNotContainsString('Too often', $response['output']);
+        $this->assertSame('', $response['unsent']);
+    }
+
+    public function testAMigrationsOnlyRequestStillRunsTheMigrationsAndRecordsTheMarker(): void
+    {
+        $id = $this->seedStalePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        CronProbe::run($this->dataDir, query: 'migrations');
+
+        $this->assertSame(POST_VERSION, $this->postVersion($id));
+        $this->assertSame(code_marker(), $this->storedOption(self::MARKER_OPTION));
+    }
+
+    public function testAMigrationsOnlyRequestAnswersBusyWhileTheLockIsHeld(): void
+    {
+        $lock = acquire_cron_lock(cron_lock_path($this->dataDir));
+        $this->assertIsResource($lock);
+
+        $response = CronProbe::run($this->dataDir, query: 'migrations');
+        fclose($lock);
+
+        $this->assertStringContainsString("Data migrations: busy\n", $response['output']);
+        $this->assertSame(200, $response['http']);
+    }
+
+    /**
+     * A busy answer means the running code is older than the files, so a feed cycle would run
+     * old code over data nobody migrated. It stops the run, as a failure does.
+     */
+    public function testAStaleCodeCacheAnswersBusyAndStopsTheRunBeforeTheFeedTasks(): void
+    {
+        $id = $this->seedStalePost();
+        $this->storeOption(self::MARKER_OPTION, self::OLD_MARKER);
+
+        $response = CronProbe::run($this->dataDir, fastcgi: true, staleCode: true);
+
+        $this->assertSame(0, $response['status'], $response['stderr']);
+        $this->assertSame(200, $response['http']);
+        $this->assertStringContainsString("Data migrations: busy\n", $response['output']);
+        $this->assertStringNotContainsString('Updating feeds', $response['output'] . $response['unsent']);
+        $this->assertStringNotContainsString('Done', $response['output'] . $response['unsent']);
+        $this->assertSame(1, $this->postVersion($id), 'nothing migrated');
+        $this->assertSame(self::OLD_MARKER, $this->storedOption(self::MARKER_OPTION));
+    }
+
+    /**
      * Seeds a post stored before the current POST_VERSION, in the data directory's own
      * database. The child process owns the connection, as the probe's requests do.
      */

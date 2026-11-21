@@ -64,6 +64,17 @@ class StaleOpcacheTest extends TestCase
         $this->assertSame([$this->root . '/lamb.php'], opcache_stale_files($this->files(), $status));
     }
 
+    /**
+     * A tarball or `rsync -a` keeps the modification times of the sender, so the new file can
+     * be older than the one OPcache compiled.
+     */
+    public function testAFileOlderThanTheOneOpcacheCompiledIsStaleToo(): void
+    {
+        $status = $this->opcacheStatus(['lamb.php' => 3000, 'network.php' => 2000]);
+
+        $this->assertSame([$this->root . '/lamb.php'], opcache_stale_files($this->files(), $status));
+    }
+
     public function testFilesCompiledFromTheirCurrentContentAreNotStale(): void
     {
         $status = $this->opcacheStatus(['lamb.php' => 2000, 'network.php' => 2000]);

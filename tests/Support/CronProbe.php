@@ -18,6 +18,10 @@ use Symfony\Component\Process\Process;
  * receiving output at the call. With `$fastcgi` the child defines that function and prints a
  * marker where it is called, which splits the output into what the client received and what
  * it did not.
+ *
+ * `$query` is the request's query string, which PHP would put into $_GET. With `$staleCode` the
+ * child answers opcache_get_status() as an OPcache that compiled src/network.php before the
+ * file on disk was written, which is the state right after a deploy.
  */
 final class CronProbe
 {
@@ -32,15 +36,17 @@ final class CronProbe
      *
      * @param string $dataDir The LAMB_DATA_DIR for the request.
      * @param bool $fastcgi Whether the child has a fastcgi_finish_request().
+     * @param string $query The query string, without the question mark.
+     * @param bool $staleCode Whether the child's OPcache holds older code than the disk.
      * @return array{output: string, unsent: string, stderr: string, status: int|null, http: int} What
      *     the client received, what the request printed after fastcgi_finish_request() (always ''
      *     without `$fastcgi`), what PHP and error_log() wrote to stderr, the exit code, and the HTTP
      *     response code.
      */
-    public static function run(string $dataDir, bool $fastcgi = false): array
+    public static function run(string $dataDir, bool $fastcgi = false, string $query = '', bool $staleCode = false): array
     {
         $script = sys_get_temp_dir() . '/lamb-cron-probe-' . uniqid() . '.php';
-        file_put_contents($script, self::script($fastcgi));
+        file_put_contents($script, self::script($fastcgi, $query, $staleCode));
 
         $process = new Process(
             [PHP_BINARY, '-d', 'display_errors=stderr', '-d', 'xdebug.mode=off', $script],
@@ -68,13 +74,17 @@ final class CronProbe
      * The PHP source of the child process.
      *
      * @param bool $fastcgi Whether to define fastcgi_finish_request().
+     * @param string $query The query string, without the question mark.
+     * @param bool $staleCode Whether to define an opcache_get_status() that reports stale code.
      * @return string
      */
-    private static function script(bool $fastcgi): string
+    private static function script(bool $fastcgi, string $query, bool $staleCode): string
     {
         return strtr(self::TEMPLATE, [
             '__INDEX__'    => var_export(dirname(__DIR__, 2) . '/src/index.php', true),
             '__FASTCGI__'  => var_export($fastcgi, true),
+            '__QUERY__'    => var_export($query, true),
+            '__STALE__'    => var_export($staleCode ? dirname(__DIR__, 2) . '/src/network.php' : null, true),
             '__FINISHED__' => var_export(self::FINISHED_MARKER, true),
             '__META__'     => var_export(self::META_MARKER, true),
         ]);
@@ -90,17 +100,34 @@ if (__FASTCGI__) {
     }
 }
 
+if (__STALE__ !== null) {
+    // The namespaced function wins the unqualified call in Lamb\Bootstrap, whether or not the
+    // extension is loaded. The global one only has to exist for function_exists().
+    if (!function_exists('opcache_get_status')) {
+        function opcache_get_status(bool $include_scripts = true): bool
+        {
+            return false;
+        }
+    }
+    $stale_file = __STALE__;
+    $stale_status = ['opcache_enabled' => true, 'scripts' => [realpath($stale_file) => ['timestamp' => filemtime($stale_file) - 1000]]];
+    eval('namespace Lamb\Bootstrap; function opcache_get_status(bool $include_scripts = true): array { return ' . var_export($stale_status, true) . '; }');
+}
+
 register_shutdown_function(function () {
     echo __META__ . json_encode(['http' => http_response_code() ?: 200]);
 });
 
 $_SERVER = array_merge($_SERVER, [
     'REQUEST_METHOD'  => 'GET',
-    'REQUEST_URI'     => '/_cron',
+    'REQUEST_URI'     => '/_cron' . (__QUERY__ === '' ? '' : '?' . __QUERY__),
+    'QUERY_STRING'    => __QUERY__,
     'SERVER_PROTOCOL' => 'HTTP/1.1',
     'REMOTE_ADDR'     => '127.0.0.1',
     'HTTP_HOST'       => 'example.test',
 ]);
+
+parse_str(__QUERY__, $_GET);
 
 require __INDEX__;
 PHP;

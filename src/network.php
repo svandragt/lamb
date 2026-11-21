@@ -220,14 +220,10 @@ function run_feed_cycle(
     foreach ($migration['lines'] as $line) {
         echo $line . PHP_EOL;
     }
-    // Half-migrated data is not for the feed cycle to ingest into.
-    if ($result === 'failed') {
+    // See network/README.md ("Data migrations after an upgrade") for why each of these ends the run.
+    if ($result === 'failed' || $result === 'busy' || isset($_GET['migrations'])) {
         exit;
     }
-    // A request that came to migrate ends its response here, before the feed cycle,
-    // which can run up to the time limit above while bin/upgrade's request gives
-    // up after five minutes. An ordinary caller keeps receiving the feed output.
-    // The built-in server has no such function, so there the connection stays open.
     if ($result !== 'already current' && function_exists('fastcgi_finish_request')) {
         fastcgi_finish_request();
     }

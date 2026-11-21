@@ -58,6 +58,30 @@ class CodeMarkerTest extends TestCase
         $this->assertNotSame($before, code_digest($this->root));
     }
 
+    /**
+     * A scheduled /_cron request can come while `composer install` is still replacing vendor/,
+     * and would then migrate with the new src/ and the old libraries. Composer writes
+     * installed.json last, so the marker moves again once the install has finished.
+     */
+    public function testTheDigestChangesWhenTheInstalledPackagesChange(): void
+    {
+        $before = code_digest($this->root);
+        mkdir($this->root . '/vendor/composer', 0777, true);
+
+        file_put_contents($this->root . '/vendor/composer/installed.json', '{"packages":[]}');
+        $installed = code_digest($this->root);
+        file_put_contents($this->root . '/vendor/composer/installed.json', '{"packages":[{"name":"a/b"}]}');
+
+        $this->assertNotSame($before, $installed);
+        $this->assertNotSame($installed, code_digest($this->root));
+    }
+
+    public function testTheDigestWorksWithoutAnInstalledJson(): void
+    {
+        $this->assertFileDoesNotExist($this->root . '/vendor/composer/installed.json');
+        $this->assertMatchesRegularExpression('/^[0-9a-f]{32}$/', code_digest($this->root));
+    }
+
     public function testTheDigestChangesWhenAFileIsAdded(): void
     {
         $before = code_digest($this->root);

@@ -269,12 +269,12 @@ class UpgradeScriptTest extends TestCase
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString('ran the data migrations through http://example.test:8747/_cron', $output);
+        $this->assertStringContainsString('ran the data migrations through http://example.test:8747/_cron?migrations', $output);
         $this->assertStringNotContainsString('sudo', $output, 'nobody has to run anything by hand');
         $this->assertStringNotContainsString('WARNING', $output);
         $this->assertStringContainsString('Upgraded', $output, 'the upgrade itself still succeeded');
         $this->assertSame(
-            ['http://example.test:8747/_cron', 'http://example.test:8747'],
+            ['http://example.test:8747/_cron?migrations', 'http://example.test:8747'],
             $this->curlUrls(),
             'the /_cron request comes before the health check'
         );
@@ -302,7 +302,7 @@ class UpgradeScriptTest extends TestCase
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
-        $this->assertSame('http://example.test:8747/blog/_cron', $this->curlUrls()[0]);
+        $this->assertSame('http://example.test:8747/blog/_cron?migrations', $this->curlUrls()[0]);
     }
 
     public function testMigrateRefusalWithoutSiteUrlGivesTheManualCommandAndLeavesTheRestToCron(): void
@@ -354,7 +354,7 @@ class UpgradeScriptTest extends TestCase
         $this->assertStringContainsString('next /_cron request retries', $output);
         $this->assertStringNotContainsString('Roll back', $output, 'old code on migrated data is worse than the failure');
         $this->assertStringNotContainsString('ran the data migrations', $output);
-        $this->assertSame(['http://example.test:8747/_cron'], $this->curlUrls(), 'the health check does not run after it');
+        $this->assertSame(['http://example.test:8747/_cron?migrations'], $this->curlUrls(), 'the health check does not run after it');
     }
 
     /**
@@ -411,7 +411,7 @@ class UpgradeScriptTest extends TestCase
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $this->assertSame(
-            array_fill(0, 3, 'http://example.test:8747/_cron'),
+            array_fill(0, 3, 'http://example.test:8747/_cron?migrations'),
             array_slice($this->curlUrls(), 0, 3),
             'asked again until the site answered'
         );

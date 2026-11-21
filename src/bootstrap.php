@@ -866,23 +866,10 @@ function data_migration_result_line(string $result): string
  * Runs the data migrations when the running code differs from the code the data
  * was last migrated for, and records the new marker once they succeed.
  *
- * The check on a current database is one option read and a comparison. The
- * caller must hold the cron lock, so two requests, or a request and
- * `bin/lamb migrate`, never migrate at once.
- *
- * A failure is logged, not thrown, and leaves the marker alone. It records the
- * time and the marker, and the same marker is tried again only once the cron
- * interval has passed: `/_cron` is unauthenticated, and its check sits before
- * the rate-limit gate, so without that every request would rerun a failing
- * migration. A new marker, from a new upgrade, migrates at once. The reply says
- * only that it failed, because `/_cron` answers anyone.
- *
- * The marker is computed from the files on disk, so the running code must be that
- * code. Right after a deploy OPcache can still hold the old opcodes for a moment,
- * and migrating then would record the new marker for old migrations. The files
- * OPcache holds older than the disk are invalidated, and the request answers
- * busy so a later one runs the new code. When the status cannot be read
- * (OPcache off, or its API restricted) the migration goes ahead.
+ * The caller must hold the cron lock. A failure is logged and returned as
+ * `failed`, not thrown, and leaves the marker alone. A code cache that holds
+ * older files than the disk returns `busy` without migrating. The retry and cache
+ * rules are in src/network/README.md ("Data migrations after an upgrade").
  *
  * @param OODBBean $migrated_for The DATA_MIGRATED_FOR_OPTION bean, read once by the caller.
  * @param int|null $now Unix time; null means now.
@@ -1342,8 +1329,10 @@ function code_digest_files(?string $root = null): array
 }
 
 /**
- * Digest of the files code_digest_files() lists, which is where the migrations live.
- * Reads a few dozen files.
+ * Digest of the files code_digest_files() lists, which is where the migrations live,
+ * and of `vendor/composer/installed.json` when it exists. Composer writes that file
+ * last, so a request that comes while an install is still replacing `vendor/` gets a
+ * marker that changes again once the install finishes. Reads a few dozen files.
  *
  * @param string|null $root Repository root; null means this install's own.
  * @return string An md5 hex digest.
@@ -1351,8 +1340,12 @@ function code_digest_files(?string $root = null): array
 function code_digest(?string $root = null): string
 {
     $root ??= dirname(__DIR__);
+    $files = code_digest_files($root);
+    if (is_file($root . '/vendor/composer/installed.json')) {
+        $files[] = $root . '/vendor/composer/installed.json';
+    }
     $parts = [];
-    foreach (code_digest_files($root) as $file) {
+    foreach ($files as $file) {
         $parts[] = substr($file, strlen($root)) . ':' . md5_file($file);
     }
 
@@ -1379,11 +1372,12 @@ function code_marker(?string $root = null): string
 }
 
 /**
- * The files of a list that OPcache compiled before they were last modified.
+ * The files of a list whose modification time on disk differs from the one OPcache
+ * recorded when it compiled them.
  *
- * OPcache's script list records each cached file's modification time at compile
- * time, so a file whose time on disk is newer is still served from old opcodes.
- * A file OPcache holds nothing for is not stale: its next include compiles it.
+ * Such a file is still served from the old opcodes. The time can be older than the
+ * recorded one, because a tarball or `rsync -a` keeps the sender's times. A file
+ * OPcache holds nothing for is not stale: its next include compiles it.
  *
  * @param list<string> $files Absolute paths, as code_digest_files() lists them.
  * @param mixed $status What opcache_get_status(true) returned.
@@ -1400,7 +1394,7 @@ function opcache_stale_files(array $files, mixed $status): ?array
     foreach ($files as $file) {
         $cached = $status['scripts'][realpath($file) ?: $file]['timestamp'] ?? null;
         $modified = @filemtime($file);
-        if ($cached !== null && $modified !== false && $modified > $cached) {
+        if ($cached !== null && $modified !== false && $modified !== $cached) {
             $stale[] = $file;
         }
     }
