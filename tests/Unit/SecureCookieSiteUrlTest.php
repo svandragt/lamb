@@ -54,6 +54,14 @@ class SecureCookieSiteUrlTest extends TestCase
         $this->assertTrue(is_https(['HTTP_HOST' => '[::1]:8080'], 'https://[::1]'));
     }
 
+    public function testATrailingDotOnEitherHostIsIgnored(): void
+    {
+        $this->assertTrue(is_https(['HTTP_HOST' => 'example.com.'], 'https://example.com'));
+        $this->assertTrue(is_https(['HTTP_HOST' => 'example.com.:8080'], 'https://example.com'));
+        $this->assertTrue(is_https(['HTTP_HOST' => 'example.com'], 'https://example.com.'));
+        $this->assertFalse(is_https(['HTTP_HOST' => 'example.com..'], 'https://example.com'));
+    }
+
     public function testHttpsSiteUrlDoesNotMakeAPlainHttpRequestToAnotherHostHttps(): void
     {
         $this->assertFalse(is_https(['HTTP_HOST' => '192.168.1.20'], 'https://example.com'));

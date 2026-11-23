@@ -121,14 +121,10 @@ function canonical_redirect(string $request_uri): ?string
  * Tells whether a request counts as HTTPS: it arrived over TLS, or it is addressed
  * to the host of an `https://` site URL.
  *
- * Behind a TLS-terminating proxy the connection Lamb sees is plain HTTP, and
- * `X-Forwarded-Proto` is client-controlled unless the proxy is trusted, which
- * Lamb has no setting for. The site URL the author configured is trustworthy and
- * names the scheme visitors use, so a request whose Host matches an `https://` site
- * URL counts as HTTPS. A plain-HTTP request to any other host does not: the same
- * install reached by IP address, or a staging copy of the database, cannot receive
- * Secure cookies, and a browser would drop them. A request that did arrive over TLS
- * always counts.
+ * Contract: a request that arrived over TLS (see arrived_over_tls()) always counts.
+ * Otherwise it counts only when `$site_url` is `https://` and the request's Host
+ * equals that URL's host, ignoring port, case and a trailing dot. `X-Forwarded-Proto`
+ * is never read. The rationale is in AGENTS.md, under session hardening.
  *
  * @param array<string, mixed> $server   Typically $_SERVER.
  * @param string|null          $site_url The configured site URL, as returned by
@@ -137,22 +133,47 @@ function canonical_redirect(string $request_uri): ?string
  */
 function is_https(array $server, ?string $site_url): bool
 {
-    // PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" or "0" otherwise.
-    $https = $server['HTTPS'] ?? '';
-    if (is_string($https) && !in_array(strtolower($https), ['', 'off', '0'], true)) {
+    if (arrived_over_tls($server)) {
         return true;
     }
     if ($site_url === null || !str_starts_with($site_url, 'https://')) {
         return false;
     }
 
+    return request_host_matches($server, $site_url);
+}
+
+/**
+ * Tells whether the connection itself was TLS, from the HTTPS server variable.
+ *
+ * PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" or "0" otherwise.
+ *
+ * @param array<string, mixed> $server Typically $_SERVER.
+ * @return bool
+ */
+function arrived_over_tls(array $server): bool
+{
+    $https = $server['HTTPS'] ?? '';
+
+    return is_string($https) && !in_array(strtolower($https), ['', 'off', '0'], true);
+}
+
+/**
+ * Tells whether the request's Host is the host of a URL, ignoring port, case and a trailing dot.
+ *
+ * @param array<string, mixed> $server Typically $_SERVER.
+ * @param string               $url    An absolute URL.
+ * @return bool
+ */
+function request_host_matches(array $server, string $url): bool
+{
     $request_host = $server['HTTP_HOST'] ?? '';
     if (!is_string($request_host) || $request_host === '') {
         return false;
     }
-    $request_host = strtolower((string) preg_replace('/:\d{1,5}$/', '', $request_host));
+    $request_host = strtolower((string) preg_replace('/\.$/', '', (string) preg_replace('/:\d{1,5}$/', '', $request_host)));
 
-    return $request_host === strtolower((string) parse_url($site_url, PHP_URL_HOST));
+    return $request_host === strtolower((string) preg_replace('/\.$/', '', (string) parse_url($url, PHP_URL_HOST)));
 }
 
 /**

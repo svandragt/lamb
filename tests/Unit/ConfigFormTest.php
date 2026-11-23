@@ -609,6 +609,57 @@ class ConfigFormTest extends TestCase
         $this->assertSame([], $second['flash']);
     }
 
+    /**
+     * An owner on plain HTTP who saves an https:// site URL for the host they are on gets
+     * Secure cookies that the browser drops over http://, so they could not log in again
+     * (issue #995). The save is not blocked; the warning says what changes.
+     *
+     * @return array<string, array{0: array<string, string>, 1: string, 2: bool}>
+     */
+    public static function siteUrlSaves(): array
+    {
+        $own_host = ['HTTP_HOST' => 'blog.example'];
+
+        return [
+            'plain HTTP to the saved host'        => [$own_host, 'https://blog.example', true],
+            'HTTPS set to off'                    => [$own_host + ['HTTPS' => 'off'], 'https://blog.example', true],
+            'HTTPS set to 0'                      => [$own_host + ['HTTPS' => '0'], 'https://blog.example', true],
+            'HTTPS set but empty'                 => [$own_host + ['HTTPS' => ''], 'https://blog.example', true],
+            'host with a port and a trailing dot' => [['HTTP_HOST' => 'Blog.example.:8080'], 'https://blog.example', true],
+            'request over TLS'                    => [$own_host + ['HTTPS' => 'on'], 'https://blog.example', false],
+            'request to another host'             => [['HTTP_HOST' => '192.168.1.20'], 'https://blog.example', false],
+            'http site URL'                       => [$own_host, 'http://blog.example', false],
+            'no site URL'                         => [$own_host, '', false],
+        ];
+    }
+
+    /**
+     * @dataProvider siteUrlSaves
+     *
+     * @param array<string, string> $server  The request's $_SERVER values.
+     * @param string                $site_url The site URL the form saves.
+     * @param bool                  $warns   Whether the save must warn about login cookies.
+     */
+    public function testRespondSettingsWarnsWhenAnHttpsSiteUrlForThisHostIsSavedOverPlainHttp(
+        array $server,
+        string $site_url,
+        bool $warns
+    ): void {
+        $result = $this->runSettingsPost(
+            $this->post(['site_url' => $site_url, 'menu_items' => 'Home = /']),
+            "site_title = Blog\n",
+            $server
+        );
+
+        $this->assertSame($site_url, parse_ini_safe($result['ini'])['site_url'] ?? '', 'The save is not blocked');
+        $flash = implode("\n", $result['flash']);
+        if ($warns) {
+            $this->assertStringContainsString('need HTTPS', $flash);
+        } else {
+            $this->assertStringNotContainsString('need HTTPS', $flash);
+        }
+    }
+
     public function testRespondSettingsRefusesAFormPostWhenTheStoredIniCannotBeRead(): void
     {
         $broken = "[unclosed\n=== not ini ===\nposts_per_page = 5\n";
@@ -646,10 +697,11 @@ class ConfigFormTest extends TestCase
      *
      * @param array<string, string> $post       The posted fields.
      * @param string                $stored_ini The INI stored before the request.
+     * @param array<string, string> $server     Extra $_SERVER values, such as HTTP_HOST.
      * @return array{ini: string, flash: list<string>}
      * @throws \JsonException When the subprocess prints something that is not JSON.
      */
-    private function runSettingsPost(array $post, string $stored_ini): array
+    private function runSettingsPost(array $post, string $stored_ini, array $server = []): array
     {
         $script = <<<'PHP'
         use RedBeanPHP\R;
@@ -661,7 +713,7 @@ class ConfigFormTest extends TestCase
         \Lamb\Bootstrap\ensure_schema();
         \Lamb\Config\save_ini_text($argv[3]);
 
-        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_SERVER = array_merge($_SERVER, ['REQUEST_METHOD' => 'POST'], json_decode($argv[4], true));
         $_SESSION = [SESSION_LOGIN => true, HIDDEN_CSRF_NAME => 'tok'];
         $_POST = json_decode($argv[2], true) + [HIDDEN_CSRF_NAME => 'tok'];
 
@@ -679,6 +731,7 @@ class ConfigFormTest extends TestCase
             dirname(__DIR__, 2) . '/vendor/autoload.php',
             json_encode($post, JSON_THROW_ON_ERROR),
             $stored_ini,
+            json_encode($server, JSON_THROW_ON_ERROR),
         ]);
         $process->run();
 
