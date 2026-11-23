@@ -17,6 +17,8 @@ The end-user documentation lives in `docs/` (tracked in the repository, served v
 - When a sentence claims behaviour, find the code line that produces it and cite
   `file:line` in the PR body.
 
+The README screenshot (`docs/demo-vandragt.webp`) is refreshed by hand. Its generator script was removed in #840 on purpose (issue #816), so do not restore or regenerate it.
+
 GitHub Pages publishes the `release` branch's `docs/` folder, so the live site always matches the latest released version. Docs changes merged to `main` go live when `main` is merged into `release`. Preview the in-development docs locally with `make docs` (serves at http://localhost:4000/lamb/).
 
 ## Key Commands

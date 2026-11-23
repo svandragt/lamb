@@ -11,17 +11,20 @@ parent: Installation & hosting
 
 * [Install ddev](https://ddev.com/get-started/), if you haven't.
 
-Make sure the tool's installed, then it will install prerequisites:
+Start the project, then set the `/login` password. DDev runs Lamb under nginx and php-fpm, which do not read the `.env` file that `make-password.php` writes. Give the hash to the web container as an environment variable instead.
 
 ```shell
 ddev start
 
-# Run lamb - Change `hackme` to something more secure, this is the `/login` password!
+# Prints the password hash. Change `hackme` to something more secure, this is the `/login` password!
 ddev php make-password.php hackme
 
-# reload the environment
+# Store the printed hash for the web container, then reload the environment.
+ddev dotenv set .ddev/.env.web --lamb-login-password='<hash from the previous command>'
 ddev restart
 ```
+
+DDev keeps the hash in `.ddev/.env.web`, which is not part of the repository. Do not commit it.
 
 [Login security]({{ site.baseurl }}{% link login-security.md %}#setting-the-password) explains the password hash.
 
