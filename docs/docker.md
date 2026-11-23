@@ -64,7 +64,7 @@ The server runs as `www-data`. Each time the container starts, the entrypoint ch
 
 The image serves plain HTTP on port 80 and does not request certificates. Choose one of these:
 
-- **Put a TLS proxy in front.** Forward HTTPS from your proxy to the container's port 80. Lamb does not read `X-Forwarded-Proto`, so it sees plain HTTP: it does not mark its cookies `Secure`, and it builds absolute links with `http://` unless you set `LAMB_SITE_URL=https://example.com`.
+- **Put a TLS proxy in front.** Forward HTTPS from your proxy to the container's port 80, and pass on the visitor's `Host` header. Set `LAMB_SITE_URL=https://example.com`: Lamb sees plain HTTP from the proxy, so the `https://` site URL is how it knows to mark its cookies `Secure` and to build absolute links with `https://`. [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#site-url) explains how.
 - **Let Caddy in the image handle it.** Copy `.docker/Caddyfile.release`, replace `:80` with your domain, and mount the copy over `/etc/frankenphp/Caddyfile`. Publish ports 80 and 443, and keep `/data` and `/config` in volumes so a new container reuses the certificates. [FrankenPHP]({{ site.baseurl }}{% link frankenphp.md %}) explains the automatic certificates.
 
 The image's health check requests `http://localhost/`. With your domain in the Caddyfile, that request gets a redirect, which `curl -f` counts as success, so the container reports healthy whether or not the site works. The recipe replaces the check with one that requests your domain over HTTPS. Replace `example.com` with your domain in both places.

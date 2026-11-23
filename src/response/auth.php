@@ -138,7 +138,7 @@ function login_csrf_secret(string $loginHash): string
 /**
  * Returns options for the /login CSRF cookie, reusing the hardened defaults.
  *
- * get_cookie_options() already derives `secure` from the connection scheme
+ * get_cookie_options() already derives `secure` from IS_HTTPS
  * rather than forcing it on: the token this cookie replaces — the
  * session-backed CSRF token — rode in LAMBSESSID, which is only marked secure
  * under HTTPS, so a plain-HTTP dev server still round-trips it. SameSite=Strict
@@ -627,6 +627,20 @@ function respond_settings(): array
             // A removed setting is read from the stored INI: the form just dropped it.
             foreach ([...Config\removed_setting_warnings($stored_ini), ...Config\shape_warnings($submitted_ini)] as $warning) {
                 $_SESSION['flash'][] = $warning;
+            }
+            // Warn only on the save that changes the effective URL (what cookies follow, so
+            // LAMB_SITE_URL wins) to https. Behind a TLS proxy every request looks like plain
+            // HTTP, so a re-save of an https URL must stay quiet.
+            $effective_before = Config\canonical_site_url(Config\parse_ini_safe($stored_ini));
+            $effective_after = Config\canonical_site_url(Config\parse_ini_safe($submitted_ini));
+            $locks_out_http = $effective_after !== null
+                && str_starts_with($effective_after, 'https://')
+                && ($effective_before === null || !str_starts_with($effective_before, 'https://'))
+                && !\Lamb\Http\arrived_over_tls($_SERVER)
+                && \Lamb\Http\request_host_matches($_SERVER, $effective_after);
+            if ($locks_out_http) {
+                $_SESSION['flash'][] = 'Your login cookies now need HTTPS on this host. If you opened this page over http://, '
+                    . 'you cannot log in here again until the site serves HTTPS. To undo it, set LAMB_SITE_URL to the http:// address.';
             }
             redirect_uri('/settings');
         } else {

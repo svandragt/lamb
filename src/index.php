@@ -11,10 +11,16 @@ require '../vendor/autoload.php';
 
 $data_dir = Bootstrap\data_dir();
 Bootstrap\bootstrap_db($data_dir);
-Bootstrap\bootstrap_session($data_dir);
+// Before the session, because its cookie follows the configured site URL. On a first
+// boot this also writes the default INI, before the session exists and before the
+// post subscribers are registered.
+$config = Config\load();
+$site_url = Config\canonical_site_url($config);
+// One decision for every cookie (see Http\is_https()).
+define('IS_HTTPS', Http\is_https($_SERVER, $site_url));
+Bootstrap\bootstrap_session($data_dir, IS_HTTPS);
 Post\register_default_subscribers();
 
-$config = Config\load();
 Config\apply_timezone($config);
 // Only for the owner: a health check or a bot must neither save the draft nor read
 // its pending row, and an import before the owner's first visit withdraws it.
@@ -28,7 +34,7 @@ if (isset($_SESSION[SESSION_LOGIN])) {
 // charset, so a malformed Host can no longer be reflected into HTML or headers —
 // but it is still attacker-chosen, which is why security decisions (the Micropub
 // IndieAuth `me` check) use Config\canonical_site_url() directly instead of this.
-$root_url = Config\canonical_site_url($config) ?? Http\request_root_url($_SERVER);
+$root_url = $site_url ?? Http\request_root_url($_SERVER);
 if ($root_url === null) {
     header(($_SERVER['SERVER_PROTOCOL'] ?? 'HTTP/1.1') . ' 400 Bad Request');
     die('Bad Request');

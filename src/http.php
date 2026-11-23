@@ -118,6 +118,65 @@ function canonical_redirect(string $request_uri): ?string
 }
 
 /**
+ * Tells whether a request counts as HTTPS: it arrived over TLS, or it is addressed
+ * to the host of an `https://` site URL.
+ *
+ * Contract: a request that arrived over TLS (see arrived_over_tls()) always counts.
+ * Otherwise it counts only when `$site_url` is `https://` and the request's Host
+ * equals that URL's host, ignoring port, case and a trailing dot. `X-Forwarded-Proto`
+ * is never read. The rationale is in AGENTS.md, under session hardening.
+ *
+ * @param array<string, mixed> $server   Typically $_SERVER.
+ * @param string|null          $site_url The configured site URL, as returned by
+ *                                       Lamb\Config\canonical_site_url(), or null when unset.
+ * @return bool True when the request arrived over TLS, or its Host matches an `https://` $site_url.
+ */
+function is_https(array $server, ?string $site_url): bool
+{
+    if (arrived_over_tls($server)) {
+        return true;
+    }
+    if ($site_url === null || !str_starts_with($site_url, 'https://')) {
+        return false;
+    }
+
+    return request_host_matches($server, $site_url);
+}
+
+/**
+ * Tells whether the connection itself was TLS, from the HTTPS server variable.
+ *
+ * PHP documents HTTPS as a non-empty value for TLS requests; some servers send "off" or "0" otherwise.
+ *
+ * @param array<string, mixed> $server Typically $_SERVER.
+ * @return bool
+ */
+function arrived_over_tls(array $server): bool
+{
+    $https = $server['HTTPS'] ?? '';
+
+    return is_string($https) && !in_array(strtolower($https), ['', 'off', '0'], true);
+}
+
+/**
+ * Tells whether the request's Host is the host of a URL, ignoring port, case and a trailing dot.
+ *
+ * @param array<string, mixed> $server Typically $_SERVER.
+ * @param string               $url    An absolute URL.
+ * @return bool
+ */
+function request_host_matches(array $server, string $url): bool
+{
+    $request_host = $server['HTTP_HOST'] ?? '';
+    if (!is_string($request_host) || $request_host === '') {
+        return false;
+    }
+    $request_host = strtolower((string) preg_replace('/\.$/', '', (string) preg_replace('/:\d{0,5}$/', '', $request_host)));
+
+    return $request_host === strtolower((string) preg_replace('/\.$/', '', (string) parse_url($url, PHP_URL_HOST)));
+}
+
+/**
  * Builds the request's own root URL (`scheme://host[:port]`) from the Host header.
  *
  * The Host header is client-supplied and a front-end catch-all vhost (the bundled
@@ -146,9 +205,7 @@ function request_root_url(array $server): ?string
         return null;
     }
 
-    $scheme = (isset($server['HTTPS']) && $server['HTTPS'] === 'on') ? 'https' : 'http';
-
-    return $scheme . '://' . $host;
+    return (is_https($server, null) ? 'https' : 'http') . '://' . $host;
 }
 
 /**

@@ -5,7 +5,7 @@
  *
  * All static, non-runtime constants live here so they are discoverable in one place.
  * Runtime constants that depend on config, environment, or server variables remain
- * in index.php (ROOT_URL, THEME, THEME_DIR, THEME_URL) or response.php (LOGIN_PASSWORD).
+ * in index.php (ROOT_URL, IS_HTTPS, THEME, THEME_DIR, THEME_URL) or response.php (LOGIN_PASSWORD).
  */
 
 define('HIDDEN_CSRF_NAME', 'csrf');

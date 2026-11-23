@@ -22,6 +22,10 @@ namespace {
         define('ROOT_URL', 'http://localhost');
     }
 
+    if (!defined('IS_HTTPS')) {
+        define('IS_HTTPS', false);
+    }
+
     if (!defined('THEME')) {
         define('THEME', 'default');
     }
