@@ -426,11 +426,31 @@ class UpgradeScriptTest extends TestCase
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $owner = trim((string) shell_exec('id -un'));
+        $owner = trim((string) shell_exec('id -un 2>/dev/null'));
+        if ($owner === '' || ctype_digit($owner)) {
+            $owner = "'#" . trim((string) shell_exec('id -u')) . "'";
+        }
         $this->assertStringContainsString("sudo -u {$owner} bin/lamb migrate", $output, 'a hint for the operator, never run by the script');
         $this->assertStringContainsString('a scheduled /_cron request also runs the data migrations', $output);
         $this->assertStringContainsString('Upgraded', $output);
         $this->assertFileDoesNotExist($this->curlLog, 'there is no site to request');
+    }
+
+    public function testMigrateRefusalHintUsesTheNumericUidWhenTheOwnerHasNoName(): void
+    {
+        mkdir($this->site . '/data');
+        touch($this->site . '/data/lamb.db');
+        $script = "#!/bin/sh\ncase \"\$2\" in\n    %U) echo UNKNOWN ;;\n    %u) echo 1234 ;;\nesac\n";
+        file_put_contents($this->stubs . '/stat', $script);
+        chmod($this->stubs . '/stat', 0755);
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString("sudo -u '#1234' bin/lamb migrate", $output, 'sudo takes a numeric uid as #uid');
+        $this->assertStringNotContainsString('UNKNOWN', $output);
     }
 
     public function testMigrateRefusalWithoutCurlGivesTheManualCommandToo(): void

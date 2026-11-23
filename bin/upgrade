@@ -153,7 +153,13 @@ if [ "$migrate_status" -eq 3 ]; then
                 ;;
         esac
     else
-        owner=$(stat -c '%U' data/lamb.db 2>/dev/null || stat -f '%Su' data/lamb.db 2>/dev/null || echo '<web server user>')
+        # GNU stat prints UNKNOWN for a uid without a passwd entry (a bind-mounted file in Docker), so fall back to sudo's numeric form.
+        owner=$(stat -c '%U' data/lamb.db 2>/dev/null || stat -f '%Su' data/lamb.db 2>/dev/null || true)
+        if [ -f data/lamb.db ] && { [ -z "$owner" ] || [ "$owner" = "UNKNOWN" ]; }; then
+            owner_uid=$(stat -c '%u' data/lamb.db 2>/dev/null || stat -f '%u' data/lamb.db 2>/dev/null || true)
+            if [ -n "$owner_uid" ]; then owner="'#${owner_uid}'"; else owner=''; fi
+        fi
+        if [ -z "$owner" ]; then owner='<web server user>'; fi
         echo "bin/upgrade: bin/lamb migrate ran nothing here, and a scheduled /_cron request also runs the data migrations if one exists. To run them now, as the user that owns the database: sudo -u ${owner} bin/lamb migrate"
     fi
 fi
