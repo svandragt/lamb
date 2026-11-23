@@ -56,7 +56,7 @@ from the post's description. By default Lamb uses the post's first line; set a
 The site root emits a card only when a `home` post is shown there. The home
 post's description and title fill the card. The card image is the first image in
 the home post's body, falling back to the site-wide `og-image` file and then to
-the built-in Lamb card, as for any other post. and its description also
+the built-in Lamb card, as for any other post. The home post's description also
 fills the page's `<meta name="description">`. The description and the title each
 fall back to the `site_description` and `site_title` settings on their own when
 the home post leaves them empty. Without a home post the root emits no card, and
