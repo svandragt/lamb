@@ -72,6 +72,16 @@ class MentionsInboxTest extends TestCase
         $this->assertSame(1, count_webmentions());
     }
 
+    public function testUnverifiedMentionsAreNeitherCountedNorListed(): void
+    {
+        $postId = $this->post();
+        $this->mention($postId, '2026-01-01 10:00:00');
+        R::exec('UPDATE webmention SET verified_at = NULL');
+
+        $this->assertSame(0, count_webmentions());
+        $this->assertSame([], respond_mentions()['mentions']);
+    }
+
     public function testListIsNewestFirstAndBounded(): void
     {
         $postId = $this->post();

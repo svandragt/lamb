@@ -125,7 +125,8 @@ function count_trash(): int
     return R::count('post', SQL_IS_DELETED);
 }
 
-// Shared by the list and the count so the toolbar number matches what /mentions shows.
+// The list and the count share this filter, so the toolbar number matches what /mentions shows.
+// Only the list is capped, at WEBMENTION_DISPLAY_LIMIT; the count is not.
 const MENTION_LISTED = ' verified_at IS NOT NULL AND post_id IN (SELECT id FROM post WHERE ' . SQL_NOT_DELETED . ') ';
 
 /**
