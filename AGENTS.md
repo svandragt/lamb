@@ -176,7 +176,7 @@ lamb/
 │   ├── response/         # Route handlers (respond_*, redirect_*), split by area
 │   │   ├── auth.php      # Login/logout/settings
 │   │   ├── export.php    # /export download (login required)
-│   │   ├── feeds.php     # Home, drafts/trash/scheduled, search, tag, Atom + JSON feeds
+│   │   ├── feeds.php     # Home, drafts/trash/scheduled, mentions, search, tag, Atom + JSON feeds
 │   │   ├── posts.php     # Status/slug pages, create/edit/delete/restore
 │   │   └── upload.php    # Image upload + WebP conversion
 │   ├── security.php      # require_login(), require_csrf()
@@ -380,6 +380,7 @@ index.php
 | `search` | `posts`, `pagination`, `title`, `intro` | — |
 | `drafts` | `posts`, `pagination`, `title` | — |
 | `settings` | `title`, `ini_text` (the stored INI, which the form is prefilled from via `Config\settings_form_prefill()`), `theme_settings` (what `Config\theme_settings()` read from the active theme's `settings.php`), `feed_statuses`, `redirects` | `form_values` (the typed fields, on a refused save) |
+| `mentions` | `title`, `mentions` (list of `{mention, post}`: the received webmention bean and the bean of the live post it mentions) | — |
 | `404` | `action` | — |
 
 **`$data['posts']`** is an array of RedBeanPHP `OODBBean` objects. Each bean exposes:
@@ -549,7 +550,7 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 ### IndieWeb Endpoints
 
 - `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); tokens are introspected against the configured `token_endpoint`. Both endpoints choose the token through `request_access_token()` (Bearer header, else the trimmed `access_token` form field; both at once is a `400`), and `/micropub` hands the adapter that token via `with_access_token()` because the adapter's own `getAccessToken()` is looser. No function in `micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
-- `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered per post by `parts/_webmentions.php`, and across all posts, newest first and bounded by `WEBMENTION_DISPLAY_LIMIT`, by `/mentions` (`respond_mentions()`, login required; `count_webmentions()` feeds the admin toolbar count)); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
+- `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered per post by `parts/_webmentions.php`, and across all live posts, newest verified first and bounded by `WEBMENTION_DISPLAY_LIMIT`, by `/mentions` (`respond_mentions()`, login required; `count_webmentions()` feeds the admin toolbar count)); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`websub.php`) — pings the `websub_hubs` configured hubs when a post publishes
 - `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
 - The theme `html.php` files emit the same endpoints as `<link>` tags, plus `rel="indieauth-metadata"` from the optional `indieauth_metadata` setting (`the_indieauth_metadata()` in `theme/meta.php`)

@@ -29,9 +29,7 @@ else :
                 <?= escape($mention->content ?: $mention->source) ?>
             </a>
             <time datetime="<?= escape($mention->verified_at) ?>"><?= escape(human_time(strtotime($mention->verified_at))) ?></time>
-        <?php if ($post !== null) : ?>
             <small><a href="<?= escape(permalink_path($post)) ?>">On this post</a></small>
-        <?php endif; ?>
         </li>
     <?php endforeach; ?>
 </ul>

@@ -33,7 +33,18 @@ class MentionsInboxTest extends TestCase
         unset($_SESSION[SESSION_LOGIN]);
     }
 
-    private function mention(int $postId, string $created): void
+    private function post(?int $deleted = null): int
+    {
+        $post = R::dispense('post');
+        $post->body = 'A post';
+        $post->slug = '';
+        $post->created = '2026-01-01 09:00:00';
+        $post->draft = 0;
+        $post->deleted = $deleted;
+        return (int) R::store($post);
+    }
+
+    private function mention(int $postId, string $created, ?string $verifiedAt = null): void
     {
         $row = R::dispense('webmention');
         $row->source = 'https://source.example/' . $created;
@@ -42,28 +53,30 @@ class MentionsInboxTest extends TestCase
         $row->type = 'mention';
         $row->status = 'pending';
         $row->created = $created;
-        $row->verified_at = $created;
+        $row->verified_at = $verifiedAt ?? $created;
         R::store($row);
     }
 
     public function testCountIgnoresTheOutboundQueue(): void
     {
+        $postId = $this->post();
         $out = R::dispense('webmentionoutbox');
-        $out->post_id = 1;
-        $out->source = 'https://example.test/status/1';
+        $out->post_id = $postId;
+        $out->source = 'https://example.test/status/' . $postId;
         $out->target = 'https://other.example/';
         $out->status = 'pending';
         R::store($out);
         $this->assertSame(0, count_webmentions());
 
-        $this->mention(1, '2026-01-01 10:00:00');
+        $this->mention($postId, '2026-01-01 10:00:00');
         $this->assertSame(1, count_webmentions());
     }
 
     public function testListIsNewestFirstAndBounded(): void
     {
+        $postId = $this->post();
         for ($i = 0; $i < WEBMENTION_DISPLAY_LIMIT + 5; $i++) {
-            $this->mention(1, sprintf('2026-01-01 10:%02d:%02d', intdiv($i, 60), $i % 60));
+            $this->mention($postId, sprintf('2026-01-01 10:%02d:%02d', intdiv($i, 60), $i % 60));
         }
 
         $mentions = respond_mentions()['mentions'];
@@ -72,9 +85,44 @@ class MentionsInboxTest extends TestCase
         $this->assertGreaterThan($mentions[1]['mention']->created, $mentions[0]['mention']->created);
     }
 
-    public function testMentionOfAMissingPostHasNoPost(): void
+    public function testListIsOrderedByTheVerifiedTimeItShows(): void
+    {
+        $postId = $this->post();
+        $this->mention($postId, '2026-01-01 10:00:00', '2026-01-03 10:00:00');
+        $this->mention($postId, '2026-01-02 10:00:00', '2026-01-02 10:00:00');
+
+        $mentions = respond_mentions()['mentions'];
+
+        $this->assertSame('2026-01-03 10:00:00', $mentions[0]['mention']->verified_at);
+        $this->assertSame('2026-01-02 10:00:00', $mentions[1]['mention']->verified_at);
+    }
+
+    public function testMentionOfATrashedPostIsNeitherCountedNorListed(): void
+    {
+        $this->mention($this->post(1), '2026-01-01 10:00:00');
+
+        $this->assertSame(0, count_webmentions());
+        $this->assertSame([], respond_mentions()['mentions']);
+    }
+
+    public function testMentionOfAPurgedPostIsNeitherCountedNorListed(): void
     {
         $this->mention(999, '2026-01-01 10:00:00');
-        $this->assertNull(respond_mentions()['mentions'][0]['post']);
+
+        $this->assertSame(0, count_webmentions());
+        $this->assertSame([], respond_mentions()['mentions']);
+    }
+
+    public function testEveryListedMentionCarriesItsPostWhenOthersAreMissing(): void
+    {
+        $postId = $this->post();
+        $this->mention($postId, '2026-01-01 10:00:00');
+        $this->mention(999, '2026-01-02 10:00:00');
+
+        $mentions = respond_mentions()['mentions'];
+
+        $this->assertCount(1, $mentions);
+        $this->assertSame($postId, (int) $mentions[0]['post']->id);
+        $this->assertSame(1, count_webmentions());
     }
 }
