@@ -21,6 +21,7 @@ src/themes/*/
 !src/themes/base/
 !src/themes/2026/
 .env
+/.ddev/.env.web
 
 # Playwright
 node_modules/
