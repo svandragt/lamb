@@ -2,13 +2,13 @@
 
 namespace Lamb\WordPress;
 
-use DOMDocument;
-use DOMText;
-use DOMXPath;
+use Dom\HTMLDocument;
+use Dom\Text;
 use RedBeanPHP\OODBBean;
 use SimpleXMLElement;
 
 use function Lamb\Import\href_has_extension;
+use function Lamb\Import\html_xpath;
 use function Lamb\Import\html_to_markdown as import_html_to_markdown;
 use function Lamb\Import\import_item as shared_import_item;
 use function Lamb\Import\import_uuid;
@@ -200,19 +200,19 @@ function html_to_markdown(string $html): string
  * editor put it in a later paragraph) is dropped when it is the whole text of a
  * later node.
  *
- * @param DOMDocument $dom Document rewritten in place.
+ * @param HTMLDocument $dom Document rewritten in place.
  * @return void
  * @throws \DOMException When a node cannot be created or inserted.
  */
-function convert_video_shortcodes_in_dom(DOMDocument $dom): void
+function convert_video_shortcodes_in_dom(HTMLDocument $dom): void
 {
-    $texts = (new DOMXPath($dom))->query(
+    $texts = html_xpath($dom)->query(
         '//text()[(contains(., "[video") or contains(., "[/video]"))'
-        . ' and not(ancestor::code or ancestor::pre or ancestor::kbd or ancestor::samp or ancestor::a)]'
-    ) ?: [];
+        . ' and not(ancestor::h:code or ancestor::h:pre or ancestor::h:kbd or ancestor::h:samp or ancestor::h:a)]'
+    );
     $unclosed = 0;
     foreach ($texts as $text) {
-        if (!$text instanceof DOMText || $text->parentNode === null) {
+        if (!$text instanceof Text || $text->parentNode === null) {
             continue;
         }
         $value = $text->data;

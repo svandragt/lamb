@@ -2,13 +2,13 @@
 
 namespace Lamb\Known;
 
-use DOMDocument;
-use DOMElement;
-use DOMXPath;
+use Dom\HTMLDocument;
+use Dom\Element;
 use RedBeanPHP\OODBBean;
 use SimpleXMLElement;
 
 use function Lamb\Import\html_to_markdown;
+use function Lamb\Import\html_xpath;
 use function Lamb\Import\import_item as shared_import_item;
 use function Lamb\Import\import_uuid;
 use function Lamb\Import\local_datetime_from_rfc822;
@@ -227,48 +227,48 @@ function skip_reason(array $item): ?string
  *    unfurl-block removal above runs first, so junk subtrees are gone
  *    before this pass keeps their content.
  */
-function normalize_known_html_in_dom(DOMDocument $dom): void
+function normalize_known_html_in_dom(HTMLDocument $dom): void
 {
-    $xpath = new DOMXPath($dom);
+    $xpath = html_xpath($dom);
 
     $unfurls = $xpath->query(
-        '//div[contains(concat(" ", normalize-space(@class), " "), " unfurl-block ")]'
-    ) ?: [];
+        '//h:div[contains(concat(" ", normalize-space(@class), " "), " unfurl-block ")]'
+    );
     foreach ($unfurls as $node) {
-        if ($node instanceof DOMElement && $node->parentNode !== null) {
+        if ($node instanceof Element && $node->parentNode !== null) {
             $node->parentNode->removeChild($node);
         }
     }
 
     $tag_anchors = $xpath->query(
-        '//a[@rel="tag" and contains(concat(" ", normalize-space(@class), " "), " p-category ")]'
-    ) ?: [];
+        '//h:a[@rel="tag" and contains(concat(" ", normalize-space(@class), " "), " p-category ")]'
+    );
     foreach ($tag_anchors as $a) {
-        if (!$a instanceof DOMElement || $a->parentNode === null) {
+        if (!$a instanceof Element || $a->parentNode === null) {
             continue;
         }
         // Structural tags are dropped outright — leaving them as text would
         // put e.g. `#status` back into Lamb's body-scanning tag index.
-        if (is_structural_tag($a->textContent)) {
+        if (is_structural_tag($a->textContent ?? '')) {
             $a->parentNode->removeChild($a);
             continue;
         }
-        $a->parentNode->replaceChild($dom->createTextNode($a->textContent), $a);
+        $a->parentNode->replaceChild($dom->createTextNode($a->textContent ?? ''), $a);
     }
 
 
-    $gallery_anchors = $xpath->query('//a[@data-gallery]') ?: [];
+    $gallery_anchors = $xpath->query('//h:a[@data-gallery]');
     foreach ($gallery_anchors as $a) {
-        if ($a instanceof DOMElement) {
+        if ($a instanceof Element) {
             unwrap_element($dom, $a, false);
         }
     }
 
     do {
         $changed = false;
-        $wrappers = $xpath->query('//div') ?: [];
+        $wrappers = $xpath->query('//h:div');
         foreach ($wrappers as $wrapper) {
-            if (!$wrapper instanceof DOMElement || $wrapper->parentNode === null) {
+            if (!$wrapper instanceof Element || $wrapper->parentNode === null) {
                 continue;
             }
             unwrap_element($dom, $wrapper, true);

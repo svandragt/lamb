@@ -1025,38 +1025,43 @@ XML;
         $out = rewrite_media_links($html, '2024-03-03 10:00:00', $downloader);
 
         $this->assertSame(['https://oldsite.example/wp-content/uploads/2021/09/clip.mp4'], $downloaded);
-        $this->assertStringContainsString('<video controls src="', $out);
+        $this->assertStringContainsString('<video controls="" src="', $out);
         $this->assertStringContainsString('assets/2024/03/abc123.mp4', $out);
         $this->assertStringNotContainsString('oldsite.example', $out);
     }
 
-    public function testRewriteMediaLinksDownloadsEverySourceInAChainLibxml29Builds(): void
+    public function testImportedVideoAndPictureSourcesKeepNoClosingTagsOnAnyLibxml(): void
     {
-        // libxml 2.9 does not know `<source>` is a void element, so it nests each
-        // `<source>` inside the one before it. Build that chain by hand to cover it on any libxml.
-        $dom = load_html_fragment('<video controls><source src="https://oldsite.example/clip.webm" type="video/webm"></video>');
-        $parent = $dom->getElementsByTagName('source')->item(0);
-        foreach (['https://oldsite.example/clip.mp4?ver=2', 'https://oldsite.example/clip.mov'] as $url) {
-            $source = $dom->createElement('source');
-            $source->setAttribute('src', $url);
-            $parent?->appendChild($source);
-            $parent = $source;
-        }
+        $html = '<video controls>'
+            . '<source src="https://oldsite.example/clip.webm" type="video/webm">'
+            . '<source src="https://oldsite.example/clip.mp4?ver=2" type="video/mp4">'
+            . '<source src="https://oldsite.example/clip.mov" type="video/quicktime">'
+            . '</video>'
+            . '<p><picture>'
+            . '<source srcset="https://oldsite.example/img.webp" type="image/webp">'
+            . '<source srcset="https://oldsite.example/img.avif" type="image/avif">'
+            . '<img src="https://oldsite.example/img.jpg" alt="Fallback">'
+            . '</picture></p>';
 
         $downloaded = [];
-        rewrite_media_links_in_dom($dom, '2024-03-03 10:00:00', function (string $url) use (&$downloaded): ?string {
+        $prepared = prepare_imported_html($html, '2024-03-03 10:00:00', function (string $url) use (&$downloaded): ?string {
             $downloaded[] = $url;
             return 'h' . count($downloaded) . '.' . pathinfo((string) parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION);
         });
+        $md = html_to_markdown($prepared);
 
+        $this->assertStringNotContainsString('</source>', $prepared);
+        $this->assertStringNotContainsString('</source>', $md);
         $this->assertSame(
             [
+                'https://oldsite.example/img.jpg',
                 'https://oldsite.example/clip.webm',
                 'https://oldsite.example/clip.mp4?ver=2',
                 'https://oldsite.example/clip.mov',
             ],
             $downloaded
         );
+        $this->assertSame("![](/assets/2024/03/h3.mp4)\n\n![Fallback](/assets/2024/03/h1.jpg)", $md);
     }
 
     public function testRewriteMediaLinksLeavesASourceInsideNestedFallbackContentAlone(): void

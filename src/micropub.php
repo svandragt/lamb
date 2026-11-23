@@ -1292,8 +1292,8 @@ class LambMicropubAdapter extends MicropubAdapter
 
         $filter = new \Lamb\LambDown();
         $dom = \Lamb\Import\load_html_fragment($html);
-        foreach ((new \DOMXPath($dom))->query('//*') ?: [] as $element) {
-            if (!$element instanceof \DOMElement) {
+        foreach (\Lamb\Import\html_xpath($dom)->query('//*') as $element) {
+            if (!$element instanceof \Dom\Element) {
                 continue;
             }
             $this->sanitizeAttributes($element, $filter);
@@ -1306,14 +1306,14 @@ class LambMicropubAdapter extends MicropubAdapter
      * Reduces one element's attributes to the allowlisted set, with any URL
      * among them run through the same filter Parsedown's safe mode applies.
      */
-    private function sanitizeAttributes(\DOMElement $element, \Lamb\LambDown $filter): void
+    private function sanitizeAttributes(\Dom\Element $element, \Lamb\LambDown $filter): void
     {
         $allowed = array_merge(
             self::HTML_ATTRIBUTES['*'],
             self::HTML_ATTRIBUTES[strtolower($element->tagName)] ?? []
         );
 
-        // The names are snapshotted first: DOMNamedNodeMap is live, and removing
+        // The names are snapshotted first: Dom\NamedNodeMap is live, and removing
         // while iterating it skips the entry that shuffles into the freed slot.
         $names = [];
         foreach ($element->attributes as $attribute) {
@@ -1327,7 +1327,7 @@ class LambMicropubAdapter extends MicropubAdapter
                 continue;
             }
             if (in_array($lower, self::HTML_URL_ATTRIBUTES, true)) {
-                $element->setAttribute($name, $filter->filterContentUrl($element->getAttribute($name)));
+                $element->setAttribute($name, $filter->filterContentUrl($element->getAttribute($name) ?? ''));
             }
         }
     }
