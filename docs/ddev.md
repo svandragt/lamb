@@ -9,7 +9,7 @@ parent: Installation & hosting
 
 ## Setup
 
-* [Install DDEV](https://ddev.com/get-started/) 1.24.0 or later, if you haven't. Earlier versions have no `ddev dotenv` command.
+* [Install DDEV](https://ddev.com/get-started/) 1.24.9 or later, if you haven't. Earlier versions do not support PHP 8.5, which the project requires, and versions before 1.24.0 have no `ddev dotenv` command.
 
 Start the project, then set the `/login` password. DDEV runs Lamb under nginx and php-fpm, which do not read the `.env` file that `make-password.php` may write, so ignore its "set it yourself" message. Give the hash to the web container as an environment variable instead.
 
