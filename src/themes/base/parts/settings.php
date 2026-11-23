@@ -77,6 +77,8 @@ $list_field = static function (string $name, string $label, string $help, int $r
     }
     .settings-tabs__nav {
         display: flex;
+        /* A bar wider than the screen scrolls inside its own box, not the page. */
+        overflow-x: auto;
         margin-bottom: 1rem;
         /* Neutralise theme styling of bare <nav> (site chrome). */
         border-bottom: none;
@@ -91,6 +93,8 @@ $list_field = static function (string $name, string $label, string $help, int $r
         border-bottom: 1px solid currentColor;
     }
     .settings-tabs__nav label {
+        flex: none;
+        white-space: nowrap;
         cursor: pointer;
         padding: .4rem .9rem;
         border: 1px solid transparent;

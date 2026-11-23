@@ -53,6 +53,15 @@ from the post's description. By default Lamb uses the post's first line; set a
 `summary:` in the post's front-matter to write that description yourself. See
 [Post Types]({{ site.baseurl }}{% link post-types.md %}).
 
+The site root emits a card only when a `home` post is shown there. The home
+post's description and title fill the card. The card image is the first image in
+the home post's body, falling back to the site-wide `og-image` file and then to
+the built-in Lamb card, as for any other post. The home post's description also
+fills the page's `<meta name="description">`. The description and the title each
+fall back to the `site_description` and `site_title` settings on their own when
+the home post leaves them empty. Without a home post the root emits no card, and
+its `<meta name="description">` is the `site_description` setting.
+
 ## Related
 
 * [Media]({{ site.baseurl }}{% link media.md %}) — uploading images into posts (these become the card image automatically)

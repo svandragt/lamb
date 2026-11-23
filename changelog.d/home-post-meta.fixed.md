@@ -1,0 +1,1 @@
+- The site root uses the `home` post's description for its meta description, and falls back to the site description when the post has none.
