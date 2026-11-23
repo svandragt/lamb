@@ -340,7 +340,7 @@ function markdown_table_cell(Element $cell, array $unwrap_class_prefixes = []): 
     }
     $html = '';
     foreach ($cell->childNodes as $child) {
-        $html .= $doc->saveHtml($child);
+        $html .= $doc->saveHtml(restore_dropped_leading_newlines($child));
     }
     $markdown = html_to_markdown($html, $unwrap_class_prefixes);
     $markdown = preg_replace('/\s+/', ' ', $markdown) ?? $markdown;
@@ -1254,12 +1254,8 @@ function load_html_fragment(string $html): HTMLDocument
  */
 function dump_html_fragment(HTMLDocument $dom): string
 {
-    $body = $dom->body;
-    if ($body === null) {
-        return trim($dom->saveHtml());
-    }
     $out = '';
-    foreach ($body->childNodes as $child) {
+    foreach ($dom->body->childNodes ?? [] as $child) {
         $out .= $dom->saveHtml(restore_dropped_leading_newlines($child));
     }
     return $out;
