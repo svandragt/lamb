@@ -94,6 +94,14 @@ class HomePageCest
         $I->seeElement('meta', ['property' => 'og:description', 'content' => 'Home summary']);
         $I->seeElement('meta', ['property' => 'og:title', 'content' => 'Home title']);
         $I->dontSeeElement('meta', ['content' => 'Site description']);
+        // The root card is a website card with the root's own URL, not an article.
+        $I->seeElement('meta', ['property' => 'og:type', 'content' => 'website']);
+        // The URL is the root with its trailing slash, the same as the home post's permalink.
+        $I->seeElement('//meta[@property="og:url"][substring(@content, string-length(@content)) = "/"][substring-after(substring-after(@content, "//"), "/") = ""]');
+        $url = $I->grabAttributeFrom('meta[property="og:url"]', 'content');
+        $I->seeElement('meta', ['property' => 'twitter:url', 'content' => $url]);
+        $I->dontSeeElement('meta', ['property' => 'og:published_time']);
+        $I->dontSeeElement('meta', ['property' => 'og:modified_time']);
     }
 
     /**

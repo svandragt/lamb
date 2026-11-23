@@ -53,10 +53,12 @@ from the post's description. By default Lamb uses the post's first line; set a
 `summary:` in the post's front-matter to write that description yourself. See
 [Post Types]({{ site.baseurl }}{% link post-types.md %}).
 
-The site root works the same way when a `home` post is shown there: the home
-post's description, title and image fill the card and the page's
-`<meta name="description">`. Without a home post, or when it has no description,
-the root keeps the `site_description` and `site_title` settings.
+The site root emits a card only when a `home` post is shown there. The home
+post's description, title and image fill the card, and its description also
+fills the page's `<meta name="description">`. The description and the title each
+fall back to the `site_description` and `site_title` settings on their own when
+the home post leaves them empty. Without a home post the root emits no card, and
+its `<meta name="description">` is the `site_description` setting.
 
 ## Related
 

@@ -1,0 +1,1 @@
+- The site root emits an OpenGraph and Twitter card when a `home` post is shown there. The description and the title each fall back to the site setting on their own when the home post leaves them empty.

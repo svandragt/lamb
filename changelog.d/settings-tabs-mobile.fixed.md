@@ -1,1 +1,1 @@
-- The tab bar on the settings page scrolls inside its own box on a phone, so the page no longer scrolls sideways.
+- The tab bar on the settings page scrolls inside its own box on a phone, so the page no longer scrolls sideways, and moving between tabs with the arrow keys scrolls the selected tab into view.

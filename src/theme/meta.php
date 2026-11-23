@@ -23,13 +23,11 @@ function the_opengraph(): void
     global $data;
     if ($template === 'status') {
         $bean = $data['posts'][0];
-        $url = permalink($bean);
         $description = $bean->description;
         $title = $bean->title ?? null;
         $type = 'article';
     } elseif ($template === 'home' && !empty($data['home_post'])) {
         $bean = $data['home_post'];
-        $url = ROOT_URL;
         $description = ($bean->description ?? '') ?: ($config['site_description'] ?? '');
         $title = ($bean->title ?? '') ?: ($config['site_title'] ?? '');
         $type = 'website';
@@ -54,18 +52,20 @@ function the_opengraph(): void
     }
     $og_tags += [
         'og:locale' => 'en_GB',
-        'og:modified_time' => $bean->updated,
-        'og:published_time' => $bean->created,
         'og:publisher' => ROOT_URL,
         'og:site_name' => $config['site_title'],
         'og:type' => $type,
-        'og:url' => $url,
+        'og:url' => permalink($bean),
         'twitter:card' => $image['card'],
         'twitter:description' => $description,
         'twitter:domain' => $_SERVER["HTTP_HOST"],
         'twitter:image' => $image['url'],
-        'twitter:url' => $url,
+        'twitter:url' => permalink($bean),
     ];
+    if ($type === 'article') {
+        $og_tags['og:modified_time'] = $bean->updated;
+        $og_tags['og:published_time'] = $bean->created;
+    }
     if (isset($title)) {
         $og_tags['og:title'] = $title;
         $og_tags['twitter:title'] = $title;

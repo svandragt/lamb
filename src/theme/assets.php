@@ -136,7 +136,7 @@ function the_scripts(): void
         '' => ['shorthand.js', 'image-modal.js'],
         'logged_in' => ['growing-input.js', 'link-edit-buttons.js', 'upload-image.js', 'paste-link.js', 'toggle-checkbox.js', 'draft-autosave.js'],
         'search' => ['search-highlight.js'],
-        'settings' => ['filter-redirects.js'],
+        'settings' => ['filter-redirects.js', 'tab-scroll.js'],
     ];
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
