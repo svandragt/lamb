@@ -7,8 +7,12 @@ use PHPUnit\Framework\TestCase;
 use function Lamb\Config\compose_config;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
+use function Lamb\Config\is_config_section;
+use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\normalize_config;
 use function Lamb\Config\shape_warnings;
+
+use const Lamb\Config\SETTINGS_FORM_SECTIONS;
 
 /**
  * The settings INI is parsed with sections enabled, so the author decides each
@@ -266,6 +270,16 @@ class ConfigTypesTest extends TestCase
 
         foreach (['menu_items', 'footer_items', 'feeds', 'me', 'redirections', 'syndicate_to'] as $key) {
             $this->assertIsArray($config[$key], "$key must stay an array");
+        }
+    }
+
+    public function testSeededDefaultsHoldAnArrayForEveryFormSection(): void
+    {
+        $defaults = parse_ini_safe(get_default_ini_text());
+
+        foreach (SETTINGS_FORM_SECTIONS as $name) {
+            $this->assertIsArray($defaults[$name] ?? null, "$name must parse as an array in the defaults");
+            $this->assertTrue(is_config_section($name, $defaults), "$name must be a config section");
         }
     }
 }
