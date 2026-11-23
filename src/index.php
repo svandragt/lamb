@@ -16,8 +16,7 @@ Bootstrap\bootstrap_db($data_dir);
 // post subscribers are registered.
 $config = Config\load();
 $site_url = Config\canonical_site_url($config);
-// One decision for every cookie: behind a TLS proxy this request is plain HTTP, so the
-// connection alone would leave them without Secure (see Http\is_https()).
+// One decision for every cookie (see Http\is_https()).
 define('IS_HTTPS', Http\is_https($_SERVER, $site_url));
 Bootstrap\bootstrap_session($data_dir, IS_HTTPS);
 Post\register_default_subscribers();

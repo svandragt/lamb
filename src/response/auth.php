@@ -629,12 +629,11 @@ function respond_settings(): array
                 $_SESSION['flash'][] = $warning;
             }
             $saved_site_url = Config\normalize_site_url((string) (Config\parse_ini_safe($submitted_ini)['site_url'] ?? ''));
-            if (
-                $saved_site_url !== null
+            $locks_out_http = $saved_site_url !== null
                 && str_starts_with($saved_site_url, 'https://')
                 && !\Lamb\Http\arrived_over_tls($_SERVER)
-                && \Lamb\Http\request_host_matches($_SERVER, $saved_site_url)
-            ) {
+                && \Lamb\Http\request_host_matches($_SERVER, $saved_site_url);
+            if ($locks_out_http) {
                 $_SESSION['flash'][] = 'Your login cookies now need HTTPS on this host. This request is plain HTTP, '
                     . 'so you cannot log in here again until the site serves HTTPS. To undo it, set LAMB_SITE_URL to the http:// address.';
             }

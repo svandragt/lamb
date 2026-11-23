@@ -32,8 +32,6 @@ class SessionBootstrapTest extends TestCase
     /** @var string|false */
     private $previous_secret;
 
-    private string|false $previous_cookie_secure;
-
     /** @var array<string, mixed> */
     private array $previous_cookie_params;
 
@@ -41,7 +39,6 @@ class SessionBootstrapTest extends TestCase
     {
         $this->previous_secret = getenv('LAMB_LOGIN_PASSWORD');
         putenv('LAMB_LOGIN_PASSWORD=' . self::SECRET);
-        $this->previous_cookie_secure = ini_get('session.cookie_secure');
         $this->previous_cookie_params = session_get_cookie_params();
     }
 
@@ -51,7 +48,6 @@ class SessionBootstrapTest extends TestCase
         if (session_status() !== PHP_SESSION_ACTIVE) {
             session_set_cookie_params($this->previous_cookie_params);
         }
-        ini_set('session.cookie_secure', (string) $this->previous_cookie_secure);
         if ($this->previous_secret === false) {
             putenv('LAMB_LOGIN_PASSWORD');
         } else {

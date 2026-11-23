@@ -74,12 +74,13 @@ runs without it. Setting it matters because:
   requests addressed to that host, even when a TLS proxy passes it plain HTTP. The
   proxy must pass on the visitor's `Host` header. A plain HTTP request to any other
   host, such as the same install reached by IP address, gets cookies without
-  `Secure`, so you can still log in. A site that serves only plain HTTP, with an
-  `https://` `site_url` saved for its own host, gets `Secure` cookies that the
-  browser drops and cannot log in; set `LAMB_SITE_URL` to the `http://` address to
-  recover. Lamb ignores the `X-Forwarded-Proto` header, because any client can send
-  it. Without a `site_url`, or with an `http://` one, Lamb marks its cookies
-  `Secure` only when the request itself arrived over HTTPS.
+  `Secure`, so you can still log in. If you save an `https://` `site_url` for the
+  host you are reading the settings page on over plain HTTP, the save works and a
+  warning says that login cookies now need HTTPS there, because the browser drops
+  them over `http://` and you cannot log in again. Set `LAMB_SITE_URL` to the
+  `http://` address to recover. Lamb does not use the `X-Forwarded-Proto` header.
+  Without a `site_url`, or with an `http://` one, Lamb marks its cookies `Secure`
+  only when the request itself arrived over HTTPS.
 
 You can also set it outside the settings form with the `LAMB_SITE_URL` environment
 variable, which takes precedence over the saved value — handy when the same

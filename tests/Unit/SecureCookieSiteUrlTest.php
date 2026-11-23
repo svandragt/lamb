@@ -3,7 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\TestCase;
-use Tests\Support\FrontControllerProbe;
+use Tests\Support\CronProbe;
 use Tests\Support\Filesystem;
 
 use function Lamb\Bootstrap\sign_login_marker;
@@ -18,7 +18,7 @@ use function Lamb\Response\login_csrf_secret;
  * browser would drop them and the owner could not log in to fix the setting.
  *
  * The first tests pin the decision. The rest send a login through the real
- * front controller and read the cookies it sets (see FrontControllerProbe).
+ * front controller and read the cookies it sets (see CronProbe).
  */
 class SecureCookieSiteUrlTest extends TestCase
 {
@@ -147,14 +147,14 @@ class SecureCookieSiteUrlTest extends TestCase
      *
      * @dataProvider logins
      *
-     * @param array<string, string> $request As for FrontControllerProbe::run().
+     * @param array<string, string> $request As for CronProbe::run().
      * @param bool                  $secure  Whether every cookie must carry Secure.
      */
     public function testLoginCookiesCarrySecureOnlyWhenTheRequestIsHttps(array $request, bool $secure): void
     {
         $token = sign_login_marker(bin2hex(random_bytes(8)), login_csrf_secret(self::$secretHash));
 
-        $login = FrontControllerProbe::run($this->dataDir(), [
+        $login = CronProbe::run($this->dataDir(), request: [
             'method' => 'POST',
             'uri' => '/login',
             'cookies' => ['lamb_login_csrf' => $token],
@@ -173,8 +173,8 @@ class SecureCookieSiteUrlTest extends TestCase
     {
         $site = ['site_url' => 'https://example.com', 'login_hash' => self::$secretHash, 'uri' => '/login'];
 
-        $own_host = FrontControllerProbe::run($this->dataDir(), $site + ['host' => 'example.com']);
-        $other_host = FrontControllerProbe::run($this->dataDir(), $site + ['host' => '192.168.1.20']);
+        $own_host = CronProbe::run($this->dataDir(), request: $site + ['host' => 'example.com']);
+        $other_host = CronProbe::run($this->dataDir(), request: $site + ['host' => '192.168.1.20']);
 
         $this->assertTrue($own_host['cookies']['lamb_login_csrf']['secure']);
         $this->assertFalse($other_host['cookies']['lamb_login_csrf']['secure']);
@@ -182,9 +182,9 @@ class SecureCookieSiteUrlTest extends TestCase
 
     public function testAbsoluteLinksUseTheSiteUrlScheme(): void
     {
-        $result = FrontControllerProbe::run(
+        $result = CronProbe::run(
             $this->dataDir(),
-            ['host' => '192.168.1.20', 'site_url' => 'https://example.com']
+            request: ['host' => '192.168.1.20', 'site_url' => 'https://example.com']
         );
 
         $this->assertSame('https://example.com', $result['root_url']);

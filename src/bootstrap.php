@@ -1006,9 +1006,7 @@ function mark_backfill_done(string $name): void
  * starting a session does not emit no-cache headers — the application manages cache
  * headers itself (see cache_headers()).
  *
- * The cookie is Secure when the request counts as HTTPS. index.php decides that once
- * per request, with Http\is_https(), and passes it in; the connection alone would be
- * wrong behind a TLS proxy.
+ * The cookie is Secure when `$secure` is true (see Http\is_https()).
  *
  * @param bool $secure Whether the request counts as HTTPS (the IS_HTTPS constant).
  * @return void
