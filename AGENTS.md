@@ -197,7 +197,7 @@ lamb/
 │   ├── themes/
 │   │   ├── base/         # Base theme + fallback library (HTML, parts, feeds, CSS)
 │   │   └── 2026/         # "Notes" theme — default for new installs
-│   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
+│   └── scripts/          # JS, loaded by folder: top level, logged_in/, <template>/
 ├── tests/
 │   ├── Unit/             # PHPUnit tests (ConfigTest.php)
 │   ├── Acceptance/       # Codeception browser tests
@@ -479,6 +479,8 @@ It discovers scripts from the folder layout through `Theme\script_groups()`, so 
 - `src/scripts/` loads on every page.
 - `src/scripts/logged_in/` loads only when the user is logged in.
 - `src/scripts/<template>/` loads only on the page whose template has that name, such as `search` or `settings`.
+
+Within a folder, files load in name order, except that `shorthand.js` loads first because every other script calls its `onLoaded()`.
 
 ### Upload asset storage
 

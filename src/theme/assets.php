@@ -128,24 +128,37 @@ function minify_css(string $css): string
 /**
  * Groups the `*.js` files under a scripts directory by the folder they sit in:
  * top-level files under '', and each subfolder's files under its own name.
- * Basenames are sorted so the output order is deterministic.
+ * Basenames are sorted so the output order is deterministic, except that
+ * `shorthand.js` comes first: every other script calls its `onLoaded()`.
  *
  * @param string $dir Absolute path to the scripts directory.
  * @return array<string, list<string>>
  */
 function script_groups(string $dir): array
 {
-    $folders = [''  => $dir];
-    foreach (glob($dir . '/*', GLOB_ONLYDIR) ?: [] as $path) {
-        $folders[basename($path)] = $path;
+    // scandir() rather than glob(): glob() reads `[`, `*` and `?` in the
+    // install path as patterns and then finds no scripts at all.
+    $entries = static fn(string $path): array => is_dir($path)
+        ? array_values(array_filter(scandir($path) ?: [], static fn(string $e): bool => $e[0] !== '.'))
+        : [];
+
+    $folders = ['' => $dir];
+    foreach ($entries($dir) as $entry) {
+        if (is_dir("$dir/$entry")) {
+            $folders[$entry] = "$dir/$entry";
+        }
     }
 
     $groups = [];
     foreach ($folders as $name => $path) {
-        $files = array_map('basename', glob($path . '/*.js') ?: []);
+        $files = array_values(array_filter(
+            $entries($path),
+            static fn(string $e): bool => str_ends_with($e, '.js') && is_file("$path/$e")
+        ));
+        usort($files, static fn(string $a, string $b): int
+            => [$a !== 'shorthand.js', $a] <=> [$b !== 'shorthand.js', $b]);
         if ($files !== []) {
-            sort($files);
-            $groups[$name] = $files;
+            $groups[(string) $name] = $files;
         }
     }
     return $groups;

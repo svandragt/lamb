@@ -299,30 +299,75 @@ class ThemeAssetsTest extends TestCase
     // the_scripts
     // -------------------------------------------------------------------------
 
+    /**
+     * Builds a scripts tree under a fresh temp directory, runs script_groups()
+     * on it, and removes the tree even when script_groups() throws.
+     *
+     * @param list<string> $files Relative paths of files to create.
+     * @param list<string> $dirs  Relative paths of extra empty directories.
+     * @return array<string, list<string>>
+     */
+    private function scriptGroupsFor(string $root_name, array $files, array $dirs = []): array
+    {
+        $dir = sys_get_temp_dir() . '/' . $root_name . '-' . uniqid();
+        mkdir($dir, 0777, true);
+        foreach ($dirs as $sub) {
+            mkdir("$dir/$sub", 0777, true);
+        }
+        foreach ($files as $file) {
+            if (!is_dir(dirname("$dir/$file"))) {
+                mkdir(dirname("$dir/$file"), 0777, true);
+            }
+            touch("$dir/$file");
+        }
+
+        try {
+            return script_groups($dir);
+        } finally {
+            $items = new \RecursiveIteratorIterator(
+                new \RecursiveDirectoryIterator($dir, \FilesystemIterator::SKIP_DOTS),
+                \RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($items as $item) {
+                $item->isDir() ? rmdir($item->getPathname()) : unlink($item->getPathname());
+            }
+            rmdir($dir);
+        }
+    }
+
     public function testScriptGroupsKeysTopLevelFilesAsEmptyAndFoldersByName(): void
     {
-        $dir = sys_get_temp_dir() . '/lamb-scripts-' . uniqid();
-        mkdir($dir . '/logged_in', 0777, true);
-        mkdir($dir . '/empty');
-        touch($dir . '/b.js');
-        touch($dir . '/a.js');
-        touch($dir . '/notes.txt');
-        touch($dir . '/logged_in/z.js');
-
-        $groups = script_groups($dir);
-
-        array_map('unlink', glob($dir . '/*/*.js') ?: []);
-        array_map('unlink', glob($dir . '/*.*') ?: []);
-        @rmdir($dir . '/logged_in');
-        @rmdir($dir . '/empty');
-        @rmdir($dir);
+        $groups = $this->scriptGroupsFor(
+            'lamb-scripts',
+            ['b.js', 'a.js', 'notes.txt', 'logged_in/z.js'],
+            ['empty']
+        );
 
         $this->assertSame(['' => ['a.js', 'b.js'], 'logged_in' => ['z.js']], $groups);
+    }
+
+    public function testScriptGroupsFindsScriptsWhenThePathHasGlobCharacters(): void
+    {
+        $groups = $this->scriptGroupsFor('lamb-scripts[1]', ['a.js', 'logged_in/z.js']);
+
+        $this->assertSame(['' => ['a.js'], 'logged_in' => ['z.js']], $groups);
     }
 
     public function testScriptGroupsReturnsEmptyArrayForMissingDirectory(): void
     {
         $this->assertSame([], script_groups('/nonexistent/lamb-scripts'));
+    }
+
+    public function testTheScriptsLoadsShorthandBeforeTheScriptsThatUseIt(): void
+    {
+        $_SESSION[SESSION_LOGIN] = true;
+
+        ob_start();
+        the_scripts();
+        $output = ob_get_clean();
+
+        preg_match_all('/src="[^"]*\/([^\/"?]+\.js)/', $output, $m);
+        $this->assertSame('shorthand.js', $m[1][0] ?? null, 'Every other script calls onLoaded() from shorthand.js');
     }
 
     public function testTheScriptsOutputsShorthandJs(): void
