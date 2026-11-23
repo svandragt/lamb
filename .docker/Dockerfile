@@ -1,8 +1,8 @@
 FROM dunglas/frankenphp:php8.5
 LABEL maintainer="Sander van Dragt <sander@vandragt.com>"
 
-# Install application dependencies (gd powers WebP upload conversion)
-RUN install-php-extensions yaml gettext pdo_mysql gd
+# Install application dependencies (gd powers WebP upload conversion, zip powers export and restore)
+RUN install-php-extensions yaml gettext pdo_mysql gd zip
 
 # git is needed by the bin/upgrade tests
 RUN apt-get update -y && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*

@@ -21,7 +21,7 @@ Run the bundled upgrade script:
 bin/upgrade
 ```
 
-It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds, trying up to three times a few seconds apart. If the health check still fails, it prints the exact command to roll back to the previous version.
+It resets your checkout to the latest version of the branch you are on, installs production dependencies, and — when `SITE_URL` is set in `.env` — checks that the site still responds, trying up to three times a few seconds apart. If the health check still fails, it prints the exact command to roll back to the previous version only when it can show that no migration was needed. Otherwise it says that rolling back is not safe, as the [next section](#what-binupgrade-does-with-the-result) explains.
 
 Note: the reset discards any local changes to tracked files. Your database (`data/`), uploads (`src/assets/`), and `.env` are not tracked, so they are unaffected.
 
@@ -73,19 +73,25 @@ It's safe to run at any time: each migration checks whether it still has anythin
 
 One of these steps lists the settings 0.17 removed that your stored settings still hold, without changing them (see [Upgrading to 0.17](#upgrading-to-017)). Another migration adds `draft: true` to the front matter of every [feed draft]({{ site.baseurl }}{% link drafts.md %}) that lacks it. Without the line, editing a feed draft in Lamb publishes it.
 
-`bin/lamb migrate` also brings every stored post up to date. [`bin/lamb upgrade-posts`]({{ site.baseurl }}{% link upgrade-posts.md %}) runs only that part, for when that is all you need. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs. After restoring an old `lamb.db` backup, run `bin/lamb migrate` to bring it fully current.
+`bin/lamb migrate` also brings every stored post up to date. [`bin/lamb upgrade-posts`]({{ site.baseurl }}{% link upgrade-posts.md %}) runs only that part, for when that is all you need. Viewing a post no longer upgrades it as a side effect: a listing, feed or search page always shows a post's content correctly, but a post whose stored `version` is behind keeps that old version until `bin/lamb migrate` (or `upgrade-posts`) runs.
 
-`bin/upgrade` runs it automatically after installing dependencies and before the health check, so a git install with cron scheduled needs no extra step. Any other upgrade path — a tarball extract, a Docker rebuild, or a git install that skips `bin/upgrade` — needs it run by hand, once, right after switching to the new code.
+Lamb runs these migrations for you after every upgrade, whichever way you upgrade. The first [`/_cron` request]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}) after the code changes runs them, before the other scheduled tasks and even when those are not due yet. `/_cron` runs as the user that owns the database, so it works where `bin/lamb migrate` cannot, as when `bin/upgrade` runs as a different user. The reply to that request lists each step.
+
+`bin/upgrade` also runs `bin/lamb migrate` itself after installing dependencies and before the health check. A manual run counts too: Lamb notes which version of its code it last migrated your data for, so `/_cron` does not repeat it. If a migration fails, Lamb writes the error to the PHP error log and tries again on a `/_cron` request a minute or more later.
+
+Run `bin/lamb migrate` yourself when you do not schedule `/_cron`, or to see the migrations' output straight away. Run it as the user that owns the database. After you restore an old `lamb.db` backup, the next `/_cron` request brings it current, or run `bin/lamb migrate` to do it at once.
 
 ### What `bin/upgrade` does with the result
 
 `bin/lamb migrate` reports one of three outcomes, and `bin/upgrade` reacts differently to each:
 
 - **Ran successfully.** The upgrade continues straight to the health check, as normal.
-- **Refused to run.** `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the [ownership guard](#the-deploying-user-must-own-the-checkout) that protects against leaving unwritable WAL sidecar files behind. This is the *normal* shape of a cron deploy: the checkout and database owned by the webserver user, cron running as a human. `bin/upgrade` prints a loud warning naming the exact command to run by hand (`sudo -u <owner> bin/lamb migrate`), then carries on to the health check and finishes the upgrade successfully — the code and dependencies are fine, only the migration is outstanding.
-- **Genuinely failed.** Something else went wrong running a migration. `bin/upgrade` prints a rollback command and stops before the health check, the same as a failed dependency install.
+- **Ran nothing.** `bin/lamb migrate` exits with code 3 when `data/lamb.db` is owned by a different user than the one running `bin/upgrade` — the [ownership guard](#the-deploying-user-must-own-the-checkout) that protects against leaving unwritable WAL sidecar files behind — when a `/_cron` run is in progress, or when it cannot open or lock the file `data/cron.lock`. In each case nothing ran. A different owner is the *normal* shape of a cron deploy: the checkout and database owned by the webserver user, cron running as a human. The code and dependencies are fine, so `bin/upgrade` hands the migrations to your site. When `SITE_URL` is set in `.env`, it waits a few seconds for PHP's code cache to pick up the new files (if your server never revalidates its code cache, reload PHP-FPM after an upgrade), then requests `/_cron?migrations` on your site, which runs only the migrations, as the database's owner. That request ends after the migrations and never waits for the scheduled tasks. It reads the first line of the reply, `Data migrations: migrated` or `Data migrations: already current`, and prints one line saying which. If the reply says `busy`, it asks again, up to five times, a few seconds apart. If the site is still busy after that, nothing ran, so `bin/upgrade` prints one line saying that the next scheduled `/_cron` request runs the migrations and carries on to the health check. If the reply says `failed`, `bin/upgrade` stops with exit code 1 and points you to the PHP error log. If the request times out, a proxy answers 502 or 504, or the reply has no `Data migrations:` line, the migration may still be running or may have failed, so `bin/upgrade` warns you, leaves the retry to the next `/_cron` request and carries on to the health check. Without `SITE_URL` or `curl`, it prints the command to run by hand, `sudo -u <owner> bin/lamb migrate`, and says that a scheduled `/_cron` request also runs the migrations. `bin/upgrade` never runs `sudo` itself.
+- **Genuinely failed.** Any other exit code means a migration went wrong, so the data may be partly migrated. `bin/upgrade` stops with exit code 1 before the health check, tells you to read the error output above, fix the cause and run `bin/lamb migrate` again as the user that owns `data/lamb.db`, and prints no rollback command.
 
-If you see the ownership warning in cron mail, run the command it prints as the user it names, once, and you're caught up.
+`bin/upgrade` never prints a rollback command for the migration step. Migrations only move forward, so rolling the code back could put old code on migrated data. When a migration fails, fix the cause shown in the PHP error log. The next `/_cron` request, or `bin/upgrade`, tries again.
+
+The same holds for the health check. `bin/upgrade` prints the rollback command after a failed health check only when it can show that no migration was needed. An answer of `Data migrations: already current` does not show that, because a scheduled `/_cron` request can migrate while the dependencies install. So `bin/upgrade` reads the marker the data was migrated for before it changes anything, with `bin/lamb marker stored`, and compares it with the new code's marker. It prints the command only when the two are equal and the migration step then answered `already current`. After any other result, `bin/upgrade` says that rolling back is not safe and points you to the PHP error log. That includes the case where it could not read the marker: when another user owns `data/lamb.db`, `bin/upgrade` does not open the database, and the first upgrade to a version with this command has no such command to ask. In those cases roll back only when you know that no migration ran.
 
 **Upgrade floor:** these migrations shipped in 0.14.0. Restoring a `lamb.db` backup older than 0.14.0, or upgrading a checkout that has been stuck before it, needs a stop at 0.14.0 first — run `bin/lamb migrate` there — before continuing on to a later version.
 
@@ -99,6 +105,8 @@ tar -xzf lamb-<version>.tar.gz --strip-components=1 -C /path/to/lamb
 
 Your database (`data/`), uploads (`src/assets/`), and `.env` are preserved — the tarball does not contain them.
 
+The next `/_cron` request runs the [data migrations](#data-migrations). To run them at once, run `bin/lamb migrate` as the user that owns `data/lamb.db`.
+
 ## Docker install
 
 Rebuild the image from an updated checkout and recreate the container:
@@ -111,7 +119,7 @@ docker stop lamb && docker rm lamb
 
 Then start the container again with the `docker run` command in [Docker]({{ site.baseurl }}{% link docker.md %}#run-the-release-image), using the same hash and the same volume names. The database and uploads live in the named volumes and survive the recreate.
 
-Once the container is up, run the [data migrations](#data-migrations) inside it, as `www-data` so the database keeps its owner:
+Once the container is up, the next `/_cron` request runs the [data migrations](#data-migrations). To run them at once, run them inside the container as `www-data` so the database keeps its owner:
 
 ```
 docker exec -u www-data lamb php bin/lamb migrate
@@ -124,7 +132,7 @@ docker exec -u www-data lamb php bin/lamb migrate
 
 ## Upgrading to 0.17
 
-* Lamb removed the five settings that 0.16 deprecated: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. A leftover setting does nothing, and `bin/lamb migrate` lists each one you had set, with what replaces it, and does not change those settings. `bin/upgrade` runs `bin/lamb migrate`, so its output reports them; when `bin/upgrade` cannot run the migration (the ownership warning above), run `bin/lamb migrate` by hand to get the same report. Saving the settings page removes them. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings) for what replaces each one.
+* Lamb removed the five settings that 0.16 deprecated: `posts_per_page`, `404_fallback`, `[preconnect]`, `micropub_debug` and `experimental_features`. A leftover setting does nothing, and `bin/lamb migrate` lists each one you had set, with what replaces it, and does not change those settings. `bin/upgrade` runs `bin/lamb migrate`, so its output reports them. The reply to a `/_cron` request does not list them, because anyone can read it. When `bin/upgrade` cannot run the migration, run `bin/lamb migrate` as the user that owns the database to get the same report. Saving the settings page removes them. See [Site Configuration]({{ site.baseurl }}{% link site-configuration.md %}#removed-settings) for what replaces each one.
 * A site with no author name in its settings no longer shows `Joe Sheeple`. Both feeds name the site title as the author (the host of your site URL when there is no title either), and the pages have no `author` meta tag. Open the settings page and fill in the author name.
 * The `2024` theme is removed. A site set to `theme = 2024` renders with the `2026` theme, and saving the theme at `/settings` stores `2026`.
 * If you upgrade by extracting a tarball over your installation, or by any other method that copies files over the old ones, the old `src/themes/2024` directory stays behind. Delete it after extracting. Lamb no longer uses it.

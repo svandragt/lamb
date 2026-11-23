@@ -5,10 +5,13 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
+use function Lamb\Bootstrap\code_marker;
 use function Lamb\Bootstrap\db_owned_by_another_user;
 use function Lamb\Import\get_source;
 use function Lamb\Import\register_source;
 use function Lamb\Import\source_names;
+use function Lamb\Network\acquire_cron_lock;
+use function Lamb\Network\cron_lock_path;
 
 /**
  * Covers the importer registry (Import\register_source / get_source /
@@ -601,6 +604,270 @@ XML;
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
         $this->assertStringContainsString('[dry-run] drop_experimental_gate_stamp: would delete 1 unused option row(s)', $process->getOutput());
         $this->assertSame(1, $this->gateStampCount($data_dir));
+    }
+
+    private function storedDataMarker(string $data_dir): string
+    {
+        return $this->inDatabase(
+            $data_dir,
+            'echo \RedBeanPHP\R::getCell("SELECT value FROM option WHERE name = ?", ["data_migrated_for"]);'
+        );
+    }
+
+    /**
+     * A manual run counts as the migration for the code it ran with, so the
+     * next /_cron request does not repeat it.
+     */
+    public function testMigrateCommandRecordsTheCodeItMigratedFor(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+
+        $this->runMigrate($data_dir);
+
+        $this->assertSame(code_marker(), $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * bin/upgrade reads this line, as it reads the one /_cron prints, to learn whether a
+     * migration ran for the new code. A rerun for the same code still runs the idempotent steps.
+     */
+    public function testMigrateSaysWhetherItMigratedOrFoundTheDataCurrent(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $first = $this->runMigrate($data_dir);
+        $second = $this->runMigrate($data_dir);
+
+        $this->assertStringContainsString("Data migrations: migrated\n", $first->getOutput());
+        $this->assertStringNotContainsString('Data migrations: already current', $first->getOutput());
+        $this->assertStringContainsString("Data migrations: already current\n", $second->getOutput());
+        $this->assertStringNotContainsString('Data migrations: migrated', $second->getOutput());
+        $this->assertStringContainsString('upgrade_all_posts:', $second->getOutput());
+    }
+
+    public function testMigrateDryRunReportsNoMigrationResult(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $process = $this->runMigrate($data_dir, ['--dry-run']);
+
+        $this->assertStringNotContainsString('Data migrations:', $process->getOutput());
+    }
+
+    public function testMigrateDryRunDoesNotRecordTheMarker(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+
+        $this->runMigrate($data_dir, ['--dry-run']);
+
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * /_cron and `bin/lamb migrate` share the cron lock, so they never migrate at once. Exit 3
+     * is the code bin/upgrade reads as "this command did not run the migrations".
+     */
+    public function testMigrateCommandRefusesWhileAnotherRunHoldsTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+        fclose($lock);
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('holds the lock', $process->getErrorOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    private function runMarker(string $data_dir, string ...$args): Process
+    {
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'marker', ...$args],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        return $process;
+    }
+
+    /**
+     * bin/upgrade reads the stored marker before it replaces the code, and the new code's marker
+     * after, to know whether the data needed a migration during the upgrade. The code marker needs
+     * no database.
+     */
+    public function testMarkerCodePrintsTheMarkerOfTheRunningCodeWithoutOpeningADatabase(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+
+        $process = $this->runMarker($data_dir, 'code');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame(code_marker() . "\n", $process->getOutput());
+        $this->assertDirectoryDoesNotExist($data_dir);
+    }
+
+    public function testMarkerStoredPrintsWhatTheLastMigrationRecorded(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->runMigrate($data_dir);
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame(code_marker() . "\n", $process->getOutput());
+    }
+
+    /**
+     * Reading the marker must not create a database or change one. The sidecar files of a
+     * database in WAL mode would be left behind by a reader that did not close cleanly.
+     */
+    public function testMarkerStoredIsEmptyWithoutADatabaseAndOpensNone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame("\n", $process->getOutput());
+        $this->assertSame([], array_values(array_diff(scandir($data_dir) ?: [], ['.', '..'])));
+    }
+
+    public function testMarkerStoredLeavesTheDatabaseAndItsFolderAlone(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $files = scandir($data_dir) ?: [];
+        $digest = md5_file("$data_dir/lamb.db");
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame("\n", $process->getOutput(), 'nothing has been migrated yet');
+        $this->assertSame($files, scandir($data_dir));
+        $this->assertSame($digest, md5_file("$data_dir/lamb.db"));
+    }
+
+    /**
+     * Without the posix extension the uid is unknown, so ownership cannot be checked, and the
+     * database is not opened. disable_functions makes function_exists() false for posix_geteuid().
+     */
+    public function testMarkerStoredExitsThreeWhenTheUserIsUnknown(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, POST_VERSION, 'plain body');
+        $this->runMigrate($data_dir);
+        $files = scandir($data_dir) ?: [];
+
+        $process = new Process(
+            ['php', '-d', 'disable_functions=posix_geteuid', codecept_root_dir('bin/lamb'), 'marker', 'stored'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame('', $process->getOutput());
+        $this->assertSame($files, scandir($data_dir), 'the database was not opened');
+    }
+
+    public function testMarkerWithoutAKnownKindIsAUsageError(): void
+    {
+        $process = $this->runMarker("$this->tmp_dir/data", 'nonsense');
+
+        $this->assertSame(1, $process->getExitCode());
+        $this->assertStringContainsString('Usage: bin/lamb marker stored|code', $process->getErrorOutput());
+    }
+
+    /**
+     * A user who does not own the database never opens it, not even to read: SQLite would create
+     * WAL sidecar files owned by that user, which is what the ownership guard exists to prevent.
+     */
+    public function testMarkerStoredExitsThreeForADatabaseOfAnotherUser(): void
+    {
+        if (!self::canChownToAnotherUser()) {
+            $this->markTestSkipped('Requires passwordless sudo to chown a file to another real user.');
+        }
+        $data_dir = "$this->tmp_dir/data";
+        mkdir($data_dir, 0777, true);
+        touch("$data_dir/lamb.db");
+        (new Process(['sudo', '-n', 'chown', 'nobody:nogroup', "$data_dir/lamb.db"]))->mustRun();
+
+        $process = $this->runMarker($data_dir, 'stored');
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertSame('', $process->getOutput());
+        $this->assertSame(['lamb.db'], array_values(array_diff(scandir($data_dir) ?: [], ['.', '..'])));
+    }
+
+    /**
+     * A lock file the CLI user cannot open means no migration ran, the same as a held lock, so
+     * bin/upgrade hands the migrations to /_cron instead of reporting a partly migrated database.
+     */
+    public function testMigrateCommandExitsThreeWhenItCannotOpenTheLockFile(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $id = $this->seedPost($data_dir, 1, 'plain body');
+        symlink("$this->tmp_dir/no-such-directory/cron.lock", cron_lock_path($data_dir));
+
+        $process = new Process(
+            ['php', codecept_root_dir('bin/lamb'), 'migrate'],
+            codecept_root_dir(),
+            ['LAMB_DATA_DIR' => $data_dir] + getenv(),
+        );
+        $process->run();
+
+        $this->assertSame(3, $process->getExitCode(), $process->getErrorOutput());
+        $this->assertStringContainsString('cannot take the lock', $process->getErrorOutput());
+        $this->assertStringContainsString('no migration ran', $process->getErrorOutput());
+        $this->assertSame(1, $this->storedPostVersion($data_dir, $id));
+        $this->assertSame('', $this->storedDataMarker($data_dir));
+    }
+
+    /**
+     * The marker names the code that ran the migrations, so it is computed before the first
+     * step, as /_cron does. Computed after, a file replaced while the steps ran would be
+     * recorded as migrated for.
+     */
+    public function testMigrateComputesTheMarkerBeforeItRunsTheSteps(): void
+    {
+        $source = (string) file_get_contents(codecept_root_dir('bin/lamb'));
+
+        $marker = strpos($source, 'code_marker()');
+        $steps = strpos($source, 'migrate_data($dry_run)');
+
+        $this->assertNotFalse($marker);
+        $this->assertNotFalse($steps);
+        $this->assertLessThan($steps, $marker, 'code_marker() must come before the migrate_data() call');
+    }
+
+    public function testMigrateDryRunDoesNotNeedTheLock(): void
+    {
+        $data_dir = "$this->tmp_dir/data";
+        $this->seedPost($data_dir, 1, 'plain body');
+        $lock = acquire_cron_lock(cron_lock_path($data_dir));
+        $this->assertIsResource($lock);
+
+        $process = $this->runMigrate($data_dir, ['--dry-run']);
+        fclose($lock);
+
+        $this->assertStringContainsString('upgrade_all_posts: would upgrade 1 post(s)', $process->getOutput());
     }
 
     private function storeSettings(string $data_dir, string $ini): void

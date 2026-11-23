@@ -1570,10 +1570,7 @@ function respond_micropub(): void
         'body_len'        => $rawBody !== null ? strlen($rawBody) : 0,
     ]);
 
-    // The spec forbids sending the token in both places (micropub.rocks test 805).
-    if (bearer_token($lcHeaders['authorization'] ?? '') !== null && isset($_POST['access_token'])) {
-        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
-    }
+    $request = with_access_token($request, request_access_token($lcHeaders['authorization'] ?? ''));
 
     $adapter = new LambMicropubAdapter();
     if (mp_debug_enabled()) {
@@ -1746,7 +1743,7 @@ function micropub_error(int $status, string $error, string $description, ?string
 
 /**
  * Handles Micropub media endpoint requests (POST multipart/form-data with a 'file' field).
- * Validates the bearer token, saves the uploaded file, and returns HTTP 201 + Location.
+ * Validates the access token (Authorization header or form body), saves the uploaded file, and returns HTTP 201 + Location.
  *
  * @param mixed $args The router's positional route arguments. Unused — this
  *     endpoint reads $_FILES/$_POST directly — but declared first because
@@ -1763,19 +1760,19 @@ function respond_micropub_media(mixed $args = null): void
         header($cache_header);
     }
 
-    $headers = getallheaders() ?: [];
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? '';
-    $lcHeaders = array_change_key_case($headers, CASE_LOWER);
+    $lcHeaders = array_change_key_case(getallheaders() ?: [], CASE_LOWER);
+    $authHeader = $lcHeaders['authorization'] ?? '';
 
     mp_log('media_request', [
         'method'          => $_SERVER['REQUEST_METHOD'] ?? null,
         'content_type'    => $lcHeaders['content-type'] ?? null,
         'user_agent'      => $lcHeaders['user-agent'] ?? null,
         'has_auth_header' => $authHeader !== '',
+        'has_body_token'  => isset($_POST['access_token']),
         'has_file'        => !empty($_FILES['file']),
     ]);
 
-    authorize_media_request($authHeader);
+    authorize_media_request(request_access_token($authHeader));
     [$file, $ext] = validated_media_upload();
 
     $sub_path  = \Lamb\Response\upload_subpath();
@@ -1805,8 +1802,8 @@ function respond_micropub_media(mixed $args = null): void
 /**
  * The Bearer token in an Authorization header value.
  *
- * Other schemes (Basic, say) and an empty value carry no token; the adapter
- * then falls back to the body, so callers must treat them the same way.
+ * Other schemes (Basic, say), a Bearer scheme with nothing after it, and an
+ * empty value carry no token. request_access_token() then falls back to the body.
  *
  * @param string $authHeader The Authorization header value, or ''.
  * @return string|null The token, or null when the header carries none.
@@ -1824,20 +1821,77 @@ function bearer_token(string $authHeader): ?string
 }
 
 /**
- * Reject a media request unless its bearer token is valid and carries the create scope.
+ * The access token a Micropub request carries, by the one rule both endpoints use.
+ *
+ * The token is the Bearer token in the Authorization header, or the `access_token`
+ * form field when the header carries none. A header with another scheme (Basic,
+ * say), a Bearer scheme with no token, or no header at all carries none. Either
+ * kind of token is trimmed, and one that is empty after that is no token.
+ *
+ * Ends the request with `400 invalid_request` when a header token and a body
+ * token are both present: the Micropub spec forbids both (micropub.rocks test 805).
+ * A blank or non-string form field is no body token, so it does not trigger this.
+ *
+ * @param string $authHeader The request's Authorization header, or ''.
+ * @return string|null The token, or null when the request carries none.
+ */
+function request_access_token(string $authHeader): ?string
+{
+    $headerToken = bearer_token($authHeader);
+    $bodyToken = $_POST['access_token'] ?? null;
+    $bodyToken = is_string($bodyToken) ? trim($bodyToken) : '';
+
+    if ($headerToken !== null && $bodyToken !== '') {
+        micropub_error(400, 'invalid_request', 'Send the access token in the Authorization header or the body, not both.');
+    }
+
+    return $headerToken ?? ($bodyToken === '' ? null : $bodyToken);
+}
+
+/**
+ * The request with its access token where the adapter looks first, and nowhere else.
+ *
+ * The adapter picks its own token from the request, by a looser rule than
+ * request_access_token(): it takes an untrimmed token, a whitespace-only one,
+ * and the tail of any header that starts with "Bearer". Handing it the token
+ * request_access_token() chose makes /micropub follow the same rule as the media
+ * endpoint. A request with no token reaches the adapter with none, and gets its 401.
+ *
+ * @param ServerRequest $request The request built from the globals.
+ * @param string|null   $token   The token request_access_token() chose.
+ * @return ServerRequest
+ */
+function with_access_token(ServerRequest $request, ?string $token): ServerRequest
+{
+    $request = $request->withoutHeader('Authorization');
+
+    $body = $request->getParsedBody();
+    if (is_array($body)) {
+        unset($body['access_token']);
+        $request = $request->withParsedBody($body);
+    }
+
+    return $token === null ? $request : $request->withHeader('Authorization', 'Bearer ' . $token);
+}
+
+/**
+ * Reject a media request unless its token is valid and carries the create scope.
  *
  * Ends the request with a JSON error when it is not.
  *
- * @param string $authHeader The request's Authorization header, or ''.
+ * @param string|null $token The request's access token, from request_access_token().
  * @return void
  */
-function authorize_media_request(string $authHeader): void
+function authorize_media_request(?string $token): void
 {
-    $token = bearer_token($authHeader);
-
-    if (!$token) {
+    if ($token === null) {
         // No credentials supplied: bare Bearer challenge, no error code (RFC 6750 §3.1).
-        micropub_error(401, 'unauthorized', 'Missing bearer token.', bearer_challenge());
+        micropub_error(
+            401,
+            'unauthorized',
+            'The request did not provide an access token. Send it in the Authorization header or the access_token form field.',
+            bearer_challenge()
+        );
     }
 
     $adapter = new LambMicropubAdapter();
