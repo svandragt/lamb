@@ -420,37 +420,103 @@ class UpgradeScriptTest extends TestCase
     {
         mkdir($this->site . '/data');
         touch($this->site . '/data/lamb.db');
+        $this->writeStatStub(['-c' => ['%U' => 'deployer']]);
         $this->commitMigrateExit(3);
 
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $owner = trim((string) shell_exec('id -un 2>/dev/null'));
-        if ($owner === '' || ctype_digit($owner)) {
-            $owner = "'#" . trim((string) shell_exec('id -u')) . "'";
-        }
-        $this->assertStringContainsString("sudo -u {$owner} bin/lamb migrate", $output, 'a hint for the operator, never run by the script');
+        $this->assertStringContainsString('sudo -u deployer bin/lamb migrate', $output, 'a hint for the operator, never run by the script');
         $this->assertStringContainsString('a scheduled /_cron request also runs the data migrations', $output);
         $this->assertStringContainsString('Upgraded', $output);
         $this->assertFileDoesNotExist($this->curlLog, 'there is no site to request');
     }
 
-    public function testMigrateRefusalHintUsesTheNumericUidWhenTheOwnerHasNoName(): void
+    /**
+     * @return array<string, array{0: array<string, array<string, string>>}>
+     */
+    public static function databaseOwnersWithoutAName(): array
+    {
+        return [
+            'GNU stat prints UNKNOWN' => [['-c' => ['%U' => 'UNKNOWN', '%u' => '1234', '%g' => '5678']]],
+            'BSD stat prints the uid as the name' => [['-f' => ['%Su' => '1234', '%u' => '1234', '%g' => '5678']]],
+            'BSD stat prints no name' => [['-f' => ['%Su' => '', '%u' => '1234', '%g' => '5678']]],
+        ];
+    }
+
+    /**
+     * sudo (1.8.30 and later) refuses a numeric runas uid with no passwd entry, so the
+     * hint names the uid and gid and uses setpriv, which root can run for any id.
+     *
+     * @dataProvider databaseOwnersWithoutAName
+     *
+     * @param array<string, array<string, string>> $answers
+     */
+    public function testMigrateRefusalHintUsesSetprivWhenTheOwnerHasNoName(array $answers): void
     {
         mkdir($this->site . '/data');
         touch($this->site . '/data/lamb.db');
-        $script = "#!/bin/sh\ncase \"\$2\" in\n    %U) echo UNKNOWN ;;\n    %u) echo 1234 ;;\nesac\n";
-        file_put_contents($this->stubs . '/stat', $script);
-        chmod($this->stubs . '/stat', 0755);
+        $this->writeStatStub($answers);
         $this->commitMigrateExit(3);
 
         $process = $this->runUpgrade();
 
         $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
         $output = $process->getOutput() . $process->getErrorOutput();
-        $this->assertStringContainsString("sudo -u '#1234' bin/lamb migrate", $output, 'sudo takes a numeric uid as #uid');
+        $this->assertStringContainsString('setpriv --reuid=1234 --regid=5678 --clear-groups bin/lamb migrate', $output);
+        $this->assertStringContainsString('as root', $output);
+        $this->assertStringNotContainsString('sudo -u', $output);
         $this->assertStringNotContainsString('UNKNOWN', $output);
+    }
+
+    public function testMigrateRefusalHintFallsBackToAPlaceholderWhenStatCannotReadTheDatabase(): void
+    {
+        mkdir($this->site . '/data');
+        touch($this->site . '/data/lamb.db');
+        $this->writeStatStub([]);
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $output = $process->getOutput() . $process->getErrorOutput();
+        $this->assertStringContainsString('sudo -u <web server user> bin/lamb migrate', $output);
+        $this->assertStringNotContainsString('setpriv', $output);
+    }
+
+    public function testMigrateRefusalHintUsesTheBsdStatNameWhenGnuStatFails(): void
+    {
+        mkdir($this->site . '/data');
+        touch($this->site . '/data/lamb.db');
+        $this->writeStatStub(['-f' => ['%Su' => 'www', '%u' => '33', '%g' => '33']]);
+        $this->commitMigrateExit(3);
+
+        $process = $this->runUpgrade();
+
+        $this->assertSame(0, $process->getExitCode(), $process->getErrorOutput() . $process->getOutput());
+        $this->assertStringContainsString('sudo -u www bin/lamb migrate', $process->getOutput() . $process->getErrorOutput());
+    }
+
+    /**
+     * Stubs stat the way the two flavours answer: `-c` is GNU, `-f` is BSD. A flag or format
+     * with no answer exits 1, as a stat that does not know the flag does.
+     *
+     * @param array<string, array<string, string>> $answers Flag, then format, then output.
+     */
+    private function writeStatStub(array $answers): void
+    {
+        $script = "#!/bin/sh\ncase \"\$1\" in\n";
+        foreach ($answers as $flag => $formats) {
+            $script .= "    {$flag})\n        case \"\$2\" in\n";
+            foreach ($formats as $format => $output) {
+                $script .= "            {$format}) echo " . escapeshellarg($output) . " ; exit 0 ;;\n";
+            }
+            $script .= "        esac ;;\n";
+        }
+        $script .= "esac\nexit 1\n";
+        file_put_contents($this->stubs . '/stat', $script);
+        chmod($this->stubs . '/stat', 0755);
     }
 
     public function testMigrateRefusalWithoutCurlGivesTheManualCommandToo(): void
