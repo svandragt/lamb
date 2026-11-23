@@ -705,6 +705,7 @@ function admin_toolbar_html(): string
     $drafts    = \Lamb\Response\count_drafts();
     $scheduled = \Lamb\Response\count_scheduled();
     $trash     = \Lamb\Response\count_trash();
+    $mentions  = \Lamb\Response\count_webmentions();
 
     $draftsLabel    = 'Drafts'    . ($drafts > 0 ? " ($drafts)" : '');
     $scheduledLabel = 'Scheduled' . ($scheduled > 0 ? " ($scheduled)" : '');
@@ -714,9 +715,14 @@ function admin_toolbar_html(): string
         ? '<a href="/scheduled">' . escape($scheduledLabel) . '</a>'
         : '';
 
+    $mentionsLink = $mentions > 0
+        ? '<a href="/mentions">' . escape("Mentions ($mentions)") . '</a>'
+        : '';
+
     return '<div id="admin-toolbar">'
         . '<a href="/drafts">'   . escape($draftsLabel) . '</a>'
         . $scheduledLink
+        . $mentionsLink
         . '<a href="/trash">'    . escape($trashLabel)  . '</a>'
         . '<a href="/settings">Settings</a>'
         . '<a href="' . escape(FEEDBACK_DISCUSSION_URL) . '" target="_blank">Feedback</a>'

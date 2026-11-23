@@ -20,6 +20,7 @@ use const Lamb\HOME_SLUG;
 use const Lamb\SQL_IS_DELETED;
 use const Lamb\SQL_IS_DRAFT;
 use const Lamb\SQL_IS_SCHEDULED;
+use const Lamb\SQL_NOT_DELETED;
 use const ROOT_URL;
 
 /**
@@ -122,6 +123,51 @@ function count_drafts(): int
 function count_trash(): int
 {
     return R::count('post', SQL_IS_DELETED);
+}
+
+// The list and the count share this filter, so the toolbar number matches what /mentions shows.
+// Only the list is capped, at WEBMENTION_DISPLAY_LIMIT; the count is not.
+const MENTION_LISTED = ' verified_at IS NOT NULL AND post_id IN (SELECT id FROM post WHERE ' . SQL_NOT_DELETED . ') ';
+
+/**
+ * Responds with the mentions page listing received webmentions across all posts (login required).
+ *
+ * Newest verified first, bounded to WEBMENTION_DISPLAY_LIMIT. Mentions of a
+ * trashed or purged post are left out, so each entry carries its post.
+ *
+ * @return array{title: string, mentions: list<array{mention: \RedBeanPHP\OODBBean, post: \RedBeanPHP\OODBBean}>}
+ */
+function respond_mentions(): array
+{
+    Security\require_login();
+
+    $rows = array_values(R::find(
+        'webmention',
+        MENTION_LISTED . ' ORDER BY verified_at DESC, id DESC LIMIT ? ',
+        [\Lamb\Webmention\WEBMENTION_DISPLAY_LIMIT]
+    ));
+    $posts = R::batch('post', array_unique(array_map(static fn($row) => (int) $row->post_id, $rows)));
+
+    $mentions = [];
+    foreach ($rows as $row) {
+        $mentions[] = ['mention' => $row, 'post' => $posts[(int) $row->post_id]];
+    }
+
+    return ['title' => 'Mentions', 'mentions' => $mentions];
+}
+
+/**
+ * Returns the count of received (inbound) webmentions.
+ *
+ * Outbound ones live in the separate webmentionoutbox table, so every webmention
+ * row is a received one. Counts the rows respond_mentions() lists: verified, and
+ * on a post that is neither trashed nor purged.
+ *
+ * @return int
+ */
+function count_webmentions(): int
+{
+    return R::count('webmention', MENTION_LISTED);
 }
 
 /**

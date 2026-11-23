@@ -41,7 +41,7 @@ class RobotsTest extends TestCase
         $body = robots_txt_body();
         $expected = [
             '/_cron', '/checkbox', '/delete', '/drafts', '/edit', '/login',
-            '/logout', '/restore', '/scheduled', '/settings', '/trash', '/upload',
+            '/logout', '/mentions', '/restore', '/scheduled', '/settings', '/trash', '/upload',
         ];
         foreach ($expected as $path) {
             $this->assertStringContainsString('Disallow: ' . $path, $body);
