@@ -36,7 +36,7 @@ class ImportItemTest extends TestCase
      *     allowed_types: list<string>,
      *     title: callable(array<string, mixed>): string,
      *     slug: callable(array<string, mixed>): string,
-     *     dom_pass: ?callable(\DOMDocument): void,
+     *     dom_pass: ?callable(\Dom\HTMLDocument): void,
      *     markdown: callable(string): string,
      *     tags: callable(array<string, mixed>, string): list<string>,
      *     finalize_markdown: callable(array<string, mixed>, string): string,

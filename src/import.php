@@ -1260,7 +1260,35 @@ function dump_html_fragment(HTMLDocument $dom): string
     }
     $out = '';
     foreach ($body->childNodes as $child) {
-        $out .= $dom->saveHtml($child);
+        $out .= $dom->saveHtml(restore_dropped_leading_newlines($child));
     }
     return $out;
+}
+
+/**
+ * The HTML5 parser drops one newline right after <pre>, <textarea> and <listing>,
+ * and saveHtml() does not write it back, so each load/dump pass would lose one.
+ * The HTML spec serialiser emits an extra newline when the first text child
+ * starts with one. Returns a clone with that newline restored, leaving the
+ * document untouched.
+ */
+function restore_dropped_leading_newlines(\Dom\Node $node): \Dom\Node
+{
+    $copy = $node->cloneNode(true);
+    $targets = [];
+    if ($copy instanceof \Dom\Element) {
+        if (in_array($copy->localName, ['pre', 'textarea', 'listing'], true)) {
+            $targets[] = $copy;
+        }
+        foreach ($copy->querySelectorAll('pre, textarea, listing') as $el) {
+            $targets[] = $el;
+        }
+    }
+    foreach ($targets as $el) {
+        $first = $el->firstChild;
+        if ($first instanceof \Dom\Text && str_starts_with($first->data, "\n")) {
+            $first->data = "\n" . $first->data;
+        }
+    }
+    return $copy;
 }

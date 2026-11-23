@@ -185,12 +185,7 @@ XML;
         $this->assertStringContainsString('href="x"', $clean);
     }
 
-    /**
-     * Regression test: an earlier load/dump implementation relied on
-     * LIBXML_HTML_NOIMPLIED behaviour that changed between libxml 2.9 and 2.12.
-     * On 2.12 the round-trip collapsed to just a stray <meta> hint, losing the
-     * actual content. Pin the round-trip explicitly so it can't drift again.
-     */
+    /** The synthesised html/body wrapper must not leak into the output. */
     public function testSanitizeHtmlPreservesContentAcrossRoundTrip(): void
     {
         $clean = $this->sanitizeFragment('<p>Hello <em>world</em>.</p>');
@@ -204,6 +199,35 @@ XML;
         $clean = $this->sanitizeFragment('<p>Cliché — naïve façade. 日本語</p>');
         $this->assertStringContainsString('Cliché', $clean);
         $this->assertStringContainsString('日本語', $clean);
+    }
+
+    public function testNormalizeHtmlKeepsLeadingNewlinesAcrossRepeatedPasses(): void
+    {
+        foreach (['pre', 'textarea', 'listing'] as $tag) {
+            $html = "<$tag>\n\n\nx</$tag>";
+            $once = normalize_html($html);
+            $this->assertSame($html, $once, $tag);
+            $this->assertSame($once, normalize_html(normalize_html($once)), $tag);
+        }
+    }
+
+    public function testNormalizeHtmlLeavesTagWithoutLeadingNewlineUnchanged(): void
+    {
+        foreach (['pre', 'textarea', 'listing'] as $tag) {
+            $this->assertSame("<$tag>x</$tag>", normalize_html("<$tag>x</$tag>"), $tag);
+            // The parser drops one leading newline, so this one is not content.
+            $this->assertSame("<div><$tag>x</$tag></div>", normalize_html("<div><$tag>\nx</$tag></div>"), $tag);
+            $this->assertSame("<div><$tag>\n\nx</$tag></div>", normalize_html("<div><$tag>\n\nx</$tag></div>"), $tag);
+        }
+    }
+
+    public function testHtmlToMarkdownKeepsBlankFirstLineOfPre(): void
+    {
+        if (!class_exists(\League\HTMLToMarkdown\HtmlConverter::class)) {
+            $this->markTestSkipped('league/html-to-markdown is not installed');
+        }
+        $md = \Lamb\Import\html_to_markdown("<pre>\n\nfirst blank</pre>");
+        $this->assertStringContainsString("```\n\nfirst blank", $md);
     }
 
     public function testHtmlToMarkdownConvertsBasicTags(): void
@@ -580,9 +604,8 @@ XML;
         $out = prepare_imported_html($html, '2024-03-03 10:00:00', fn(): ?string => null, convert_video_shortcodes_in_dom(...));
 
         // The quote is escaped, so the value cannot close the attribute and open a script element.
-        // How it is escaped depends on the libxml version (`&quot;` or `%22`), so accept either,
-        // and require that no bare quote follows `x=`.
-        $this->assertMatchesRegularExpression('/a\.mp4\?x=(&quot;|%22)/', $out);
+        // The serialiser escapes the quote as `&quot;`, and no bare quote follows `x=`.
+        $this->assertStringContainsString('a.mp4?x=&quot;', $out);
         $this->assertStringNotContainsString('x="', $out);
         $dom = \Lamb\Import\load_html_fragment($out);
         $this->assertSame(0, $dom->getElementsByTagName('script')->length);
