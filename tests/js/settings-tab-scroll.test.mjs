@@ -28,5 +28,10 @@ test('selecting a tab scrolls its label into view in the nav', () => {
 
 test('a page without the tabs does nothing', () => {
   const ctx = loadScripts({ files: ['shorthand.js', 'settings/tab-scroll.js'], html: '<!DOCTYPE html><body></body>' })
+  const errors = []
+  ctx.window.addEventListener('error', (event) => errors.push(event.message))
+
   ctx.document.dispatchEvent(new ctx.window.Event('DOMContentLoaded'))
+
+  assert.deepEqual(errors, [])
 })
