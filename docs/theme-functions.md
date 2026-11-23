@@ -89,7 +89,7 @@ logged in.
 | Function | Returns | Description |
 |----------|---------|-------------|
 | `the_styles()` | `void` | Emits the stylesheet. It always loads `styles/styles.css` from the active theme — small stylesheets are inlined, larger ones linked with a cache-busting hash. |
-| `the_scripts()` | `void` | Emits the application `<script>` tags from `src/scripts/`; logged-in users also get the admin scripts. It does **not** load scripts from the theme directory. |
+| `the_scripts()` | `void` | Emits a `<script>` tag for each file in `src/scripts/`, `src/scripts/logged_in/` (logged-in users) and `src/scripts/<template>/` (matching template). Drop a file into one of those folders to register it. It does **not** load scripts from the theme directory. |
 | `the_opengraph()` | `void` | Emits OpenGraph/Twitter `<meta>` tags for a single post, and for the root when a `home` post is shown there. |
 | `the_preconnect()` | `void` | Emits `<link rel="preconnect">` and `<link rel="dns-prefetch">` tags for up to three of the remote origins that the posts on the page load images and video from. See "Preconnect hints" below. |
 | `the_robots()` | `void` | Emits `<meta name="robots" content="noindex, nofollow">` on admin pages and `?preview=` links; nothing on public pages. Call it in your theme's `<head>` so previews stay out of search results. |

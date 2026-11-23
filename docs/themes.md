@@ -43,8 +43,7 @@ Default:
 * CSS stylesheets must be saved in a subfolder of the theme called `styles/` and are loaded using `the_styles()`.
 * `the_styles()` takes no arguments and loads `styles/styles.css` from the active theme.
 * `the_scripts()` takes no arguments and loads application scripts from `src/scripts/`, not from the active theme directory.
-* `the_scripts()` always loads `src/scripts/shorthand.js`.
-* Logged-in users additionally get the admin scripts in `src/scripts/logged_in/`.
+* To add a script, drop a `.js` file into `src/scripts/` (every page), `src/scripts/logged_in/` (logged-in users only) or `src/scripts/<template>/` (pages using that template only).
 * Post bodies are stored at the author's literal heading levels (`#` → `<h1>`, `##` → `<h2>`, …). A theme decides where those headings sit in its own outline at render time with `anchor_headings($bean->transformed, $top)`: it shifts the body so its highest heading lands at level `$top`, keeping the rest relative (clamped at `<h6>`) so the outline stays in order for screen readers. The shift is signed — a body written deeper than `$top` is pulled up just as a shallower one is pushed down — so the level the author typed is immaterial. The built-in themes render the post title at `<h2>` and pass `$top = 3`, so the body's first heading always becomes `<h3>`. A theme that titles posts differently passes a different level, and one that wants the literal levels can echo `$bean->transformed` without anchoring.
 
 * Images inside `$bean->transformed` carry intrinsic `width` and `height` attributes (see [Media]({{ site.baseurl }}{% link media.md %})), so a theme's stylesheet **must** leave the aspect ratio free. If you constrain image width — the usual `img { max-width: 100% }` — pair it with `height: auto`, or images wider than their container will be squashed to the attribute's height. Both built-in themes set both.

@@ -9,6 +9,7 @@ use function Lamb\Theme\attach_image_control;
 use function Lamb\Theme\minify_css;
 use function Lamb\Theme\redirect_to;
 use function Lamb\Theme\rewrite_css_urls;
+use function Lamb\Theme\script_groups;
 use function Lamb\Theme\styles_markup;
 use function Lamb\Theme\the_scripts;
 use function Lamb\Theme\the_styles;
@@ -297,6 +298,32 @@ class ThemeAssetsTest extends TestCase
     // -------------------------------------------------------------------------
     // the_scripts
     // -------------------------------------------------------------------------
+
+    public function testScriptGroupsKeysTopLevelFilesAsEmptyAndFoldersByName(): void
+    {
+        $dir = sys_get_temp_dir() . '/lamb-scripts-' . uniqid();
+        mkdir($dir . '/logged_in', 0777, true);
+        mkdir($dir . '/empty');
+        touch($dir . '/b.js');
+        touch($dir . '/a.js');
+        touch($dir . '/notes.txt');
+        touch($dir . '/logged_in/z.js');
+
+        $groups = script_groups($dir);
+
+        array_map('unlink', glob($dir . '/*/*.js') ?: []);
+        array_map('unlink', glob($dir . '/*.*') ?: []);
+        @rmdir($dir . '/logged_in');
+        @rmdir($dir . '/empty');
+        @rmdir($dir);
+
+        $this->assertSame(['' => ['a.js', 'b.js'], 'logged_in' => ['z.js']], $groups);
+    }
+
+    public function testScriptGroupsReturnsEmptyArrayForMissingDirectory(): void
+    {
+        $this->assertSame([], script_groups('/nonexistent/lamb-scripts'));
+    }
 
     public function testTheScriptsOutputsShorthandJs(): void
     {

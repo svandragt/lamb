@@ -126,18 +126,39 @@ function minify_css(string $css): string
 }
 
 /**
- * Emits <script defer> tags for shorthand.js and, when logged in, the admin-only JS files.
+ * Groups the `*.js` files under a scripts directory by the folder they sit in:
+ * top-level files under '', and each subfolder's files under its own name.
+ * Basenames are sorted so the output order is deterministic.
+ *
+ * @param string $dir Absolute path to the scripts directory.
+ * @return array<string, list<string>>
+ */
+function script_groups(string $dir): array
+{
+    $folders = [''  => $dir];
+    foreach (glob($dir . '/*', GLOB_ONLYDIR) ?: [] as $path) {
+        $folders[basename($path)] = $path;
+    }
+
+    $groups = [];
+    foreach ($folders as $name => $path) {
+        $files = array_map('basename', glob($path . '/*.js') ?: []);
+        if ($files !== []) {
+            sort($files);
+            $groups[$name] = $files;
+        }
+    }
+    return $groups;
+}
+
+/**
+ * Emits <script defer> tags for every file in `src/scripts/`, grouped by folder.
  *
  * @return void
  */
 function the_scripts(): void
 {
-    $scripts = [
-        '' => ['shorthand.js', 'image-modal.js'],
-        'logged_in' => ['growing-input.js', 'link-edit-buttons.js', 'upload-image.js', 'paste-link.js', 'toggle-checkbox.js', 'draft-autosave.js'],
-        'search' => ['search-highlight.js'],
-        'settings' => ['filter-redirects.js', 'tab-scroll.js'],
-    ];
+    $scripts = script_groups(dirname(__DIR__) . '/scripts');
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
         printf('<script id="%1$s" defer src="%2$s?ver=%1$s"></script>', $id, $href);
