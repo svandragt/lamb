@@ -112,6 +112,45 @@ class Acceptance extends Module
     }
 
     /**
+     * Stores a received (inbound) webmention against the post whose body contains $postText.
+     *
+     * Receiving one over HTTP fetches the source page, which an acceptance run cannot
+     * serve, so the row goes straight into the SQLite file the test server reads. Make a
+     * request first, so the server has created the database. A test that calls this must
+     * be in the `seeds-db` group.
+     *
+     * @param string $postText Text the target post's body contains.
+     * @param string $source   The URL of the page that mentions the post.
+     * @param string $author   The mention's author name.
+     * @param string $content  The mention's snippet.
+     *
+     * @return void
+     *
+     * @throws \PDOException When the database cannot be opened or written.
+     */
+    public function haveReceivedWebmention(string $postText, string $source, string $author, string $content): void
+    {
+        $db = dirname(__DIR__) . '/Data/lamb.db';
+        $this->assertFileExists($db, 'Expected the acceptance database to exist: make a request before seeding a webmention');
+
+        $pdo = new \PDO('sqlite:' . $db, null, null, [\PDO::ATTR_ERRMODE => \PDO::ERRMODE_EXCEPTION]);
+        try {
+            $find = $pdo->prepare('SELECT id FROM post WHERE body LIKE ?');
+            $find->execute(['%' . $postText . '%']);
+            $postId = $find->fetchColumn();
+            $this->assertNotFalse($postId, "Expected a post containing: $postText");
+
+            $now = date('Y-m-d H:i:s');
+            $pdo->prepare(
+                'INSERT INTO webmention (source, target, post_id, type, author, content, status, created, verified_at)'
+                . ' VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            )->execute([$source, 'https://example.test/status/' . $postId, $postId, 'mention', $author, $content, 'pending', $now, $now]);
+        } finally {
+            $pdo = null;
+        }
+    }
+
+    /**
      * Runs $read against a throwaway copy of the acceptance database.
      *
      * @param callable(\PDO): mixed $read Receives a connection to the copy.

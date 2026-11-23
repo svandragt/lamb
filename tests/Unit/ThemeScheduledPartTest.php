@@ -51,6 +51,7 @@ class ThemeScheduledPartTest extends TestCase
             'drafts'    => ['drafts.php'],
             'trash'     => ['trash.php'],
             'scheduled' => ['scheduled.php'],
+            'mentions'  => ['mentions.php'],
         ];
     }
 }

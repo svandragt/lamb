@@ -28,6 +28,8 @@ Senders that don't follow the rules are rejected: a missing or non-`http(s)` `so
 
 Received webmentions appear at the bottom of the relevant post page, visible to the **logged-in author only**. Lamb treats them as a private notification for you rather than public comments, so they are not displayed to visitors. Each entry links to the source page, with the author and a short snippet where they can be detected.
 
+To see mentions on posts you are not looking at, open **Mentions** in the admin toolbar, or go to `/mentions`. The toolbar link shows the number of received mentions and appears only when there is at least one. The page lists the 100 newest mentions across all your posts, newest first. Each entry links to the source page and to the post it mentions. Like the other admin pages, it needs you to be logged in.
+
 ## Sending
 
 When you publish or edit a post, Lamb scans its rendered HTML for links to **other** sites and queues a webmention for each. The queue is worked through on the next [`/_cron`]({{ site.baseurl }}{% link cron-scheduled-tasks.md %}) run rather than during the publish request, so saving a post stays fast. For each queued target Lamb:

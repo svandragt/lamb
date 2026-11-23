@@ -91,6 +91,7 @@ function register_app_routes(
     register_private_route('delete', 'Lamb\\Response\\redirect_deleted', $lookup);
     register_private_route('restore', 'Lamb\\Response\\redirect_restored', $lookup);
     register_private_route('drafts', 'Lamb\\Response\\respond_drafts');
+    register_private_route('mentions', 'Lamb\\Response\\respond_mentions');
     register_private_route('scheduled', 'Lamb\\Response\\respond_scheduled');
     register_private_route('trash', 'Lamb\\Response\\respond_trash');
     register_private_route('edit', 'Lamb\\Response\\respond_edit', $lookup);

@@ -125,6 +125,46 @@ function count_trash(): int
 }
 
 /**
+ * Responds with the mentions page listing received webmentions across all posts (login required).
+ *
+ * Newest first, bounded to WEBMENTION_DISPLAY_LIMIT. Each entry carries the post
+ * it landed on, or null when that post row no longer exists.
+ *
+ * @return array{title: string, mentions: list<array{mention: \RedBeanPHP\OODBBean, post: ?\RedBeanPHP\OODBBean}>}
+ */
+function respond_mentions(): array
+{
+    Security\require_login();
+
+    $rows = array_values(R::find(
+        'webmention',
+        ' verified_at IS NOT NULL ORDER BY created DESC, id DESC LIMIT ? ',
+        [\Lamb\Webmention\WEBMENTION_DISPLAY_LIMIT]
+    ));
+    $posts = R::batch('post', array_unique(array_map(static fn($row) => (int) $row->post_id, $rows)));
+
+    $mentions = [];
+    foreach ($rows as $row) {
+        $mentions[] = ['mention' => $row, 'post' => $posts[(int) $row->post_id] ?? null];
+    }
+
+    return ['title' => 'Mentions', 'mentions' => $mentions];
+}
+
+/**
+ * Returns the count of received (inbound) webmentions.
+ *
+ * Outbound ones live in the separate webmentionoutbox table, so every webmention
+ * row is a received one. Counts the rows respond_mentions() lists.
+ *
+ * @return int
+ */
+function count_webmentions(): int
+{
+    return R::count('webmention', ' verified_at IS NOT NULL ');
+}
+
+/**
  * Responds with the scheduled page showing posts dated in the future (login required).
  *
  * @return array<string, mixed> The scheduled page data including posts and pagination.

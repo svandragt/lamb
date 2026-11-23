@@ -30,7 +30,7 @@ class NoIndexTest extends TestCase
 
     public function testPrivateRoutesAreRecognised(): void
     {
-        foreach (['edit', 'drafts', 'trash', 'scheduled', 'settings', 'login', '_cron'] as $action) {
+        foreach (['edit', 'drafts', 'trash', 'scheduled', 'mentions', 'settings', 'login', '_cron'] as $action) {
             $this->assertTrue(is_private_route($action), "'$action' should be private");
         }
     }
