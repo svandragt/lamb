@@ -8,8 +8,8 @@ use function Lamb\Config\compose_config;
 use function Lamb\Config\get_default_ini_text;
 use function Lamb\Config\get_menu_slugs;
 use function Lamb\Config\is_config_section;
-use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\normalize_config;
+use function Lamb\Config\parse_ini_safe;
 use function Lamb\Config\shape_warnings;
 
 use const Lamb\Config\SETTINGS_FORM_SECTIONS;
