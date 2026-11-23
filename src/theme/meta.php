@@ -9,8 +9,10 @@ use function Lamb\permalink;
 use const ROOT_URL;
 
 /**
- * Emits OpenGraph and Twitter Card <meta> tags for the current status post.
- * Does nothing when the current template is not 'status'.
+ * Emits OpenGraph and Twitter Card <meta> tags for the current status post, or for the root
+ * when the `home` post is shown above the timeline. The root card falls back to the site
+ * description and title for whatever the home post leaves empty.
+ * Does nothing on other pages, and on the root when there is no home post.
  *
  * @return void
  */
@@ -19,11 +21,21 @@ function the_opengraph(): void
     global $template;
     global $config;
     global $data;
-    if ($template !== 'status') {
+    if ($template === 'status') {
+        $bean = $data['posts'][0];
+        $url = permalink($bean);
+        $description = $bean->description;
+        $title = $bean->title ?? null;
+        $type = 'article';
+    } elseif ($template === 'home' && !empty($data['home_post'])) {
+        $bean = $data['home_post'];
+        $url = ROOT_URL;
+        $description = ($bean->description ?? '') ?: ($config['site_description'] ?? '');
+        $title = ($bean->title ?? '') ?: ($config['site_title'] ?? '');
+        $type = 'website';
+    } else {
         return;
     }
-    $bean = $data['posts'][0];
-    $description = $bean->description;
 
     $image = og_image($bean);
 
@@ -46,17 +58,17 @@ function the_opengraph(): void
         'og:published_time' => $bean->created,
         'og:publisher' => ROOT_URL,
         'og:site_name' => $config['site_title'],
-        'og:type' => 'article',
-        'og:url' => permalink($bean),
+        'og:type' => $type,
+        'og:url' => $url,
         'twitter:card' => $image['card'],
         'twitter:description' => $description,
         'twitter:domain' => $_SERVER["HTTP_HOST"],
         'twitter:image' => $image['url'],
-        'twitter:url' => permalink($bean),
+        'twitter:url' => $url,
     ];
-    if (isset($bean->title)) {
-        $og_tags['og:title'] = $bean->title;
-        $og_tags['twitter:title'] = $bean->title;
+    if (isset($title)) {
+        $og_tags['og:title'] = $title;
+        $og_tags['twitter:title'] = $title;
     }
     foreach ($og_tags as $property => $content) {
         if (empty($content)) {
@@ -204,7 +216,8 @@ function the_robots(): void
  * Emits a <meta name="description"> tag for the current page.
  *
  * For single-post (status) pages: uses the post's description field.
- * For all other pages: uses $config['site_description'] when configured.
+ * For the root with a `home` post: uses that post's description when it has one.
+ * For all other pages, and as the fallback: uses $config['site_description'] when configured.
  * Outputs nothing when no description is available.
  *
  * @return void
@@ -218,7 +231,13 @@ function the_meta_description(): void
     if ($template === 'status' && !empty($data['posts'][0])) {
         $description = (string) ($data['posts'][0]->description ?? '');
     } else {
-        $description = (string) ($config['site_description'] ?? '');
+        $description = '';
+        if ($template === 'home' && !empty($data['home_post'])) {
+            $description = (string) ($data['home_post']->description ?? '');
+        }
+        if ($description === '') {
+            $description = (string) ($config['site_description'] ?? '');
+        }
     }
 
     if ($description === '') {

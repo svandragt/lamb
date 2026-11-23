@@ -1,0 +1,1 @@
+- The site root uses the `home` post's description and title for its meta description and social card, and falls back to the site description and title when there is no home post or it has no description.

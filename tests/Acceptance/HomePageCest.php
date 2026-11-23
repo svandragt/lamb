@@ -79,6 +79,51 @@ class HomePageCest
         $I->seeElement('.home-post [hidden] .u-url[href="/"]');
     }
 
+    /**
+     * @group seeds-db
+     */
+    public function homePostSetsTheRootMetaTags(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $this->setIni($I, "site_title = Site title\nsite_description = Site description\n");
+        $this->createHomePost($I, self::HOME_BODY, "title: Home title\nsummary: Home summary\n");
+        $I->amOnPage('/logout');
+
+        $I->amOnPage('/');
+        $I->seeElement('meta', ['name' => 'description', 'content' => 'Home summary']);
+        $I->seeElement('meta', ['property' => 'og:description', 'content' => 'Home summary']);
+        $I->seeElement('meta', ['property' => 'og:title', 'content' => 'Home title']);
+        $I->dontSeeElement('meta', ['content' => 'Site description']);
+    }
+
+    /**
+     * @group seeds-db
+     */
+    public function rootMetaTagsFallBackToTheSiteSettingsWithoutAHomePostDescription(AcceptanceTester $I): void
+    {
+        $this->login($I);
+        $this->setIni($I, "site_title = Site title\nsite_description = Site description\n");
+        $this->createPost($I, self::TIMELINE_BODY);
+        $I->amOnPage('/logout');
+
+        // No home post: the description is the site's, and no card is emitted.
+        $I->amOnPage('/');
+        $I->seeElement('meta', ['name' => 'description', 'content' => 'Site description']);
+        $I->dontSeeElement('meta', ['property' => 'og:title']);
+
+        // A home post with a description of its own is covered above; without one,
+        // the card keeps the site's description and title. A body of only an image
+        // gives the post an empty description.
+        $this->login($I);
+        $this->createHomePost($I, '![](/images/og-image-lamb.webp)');
+        $I->amOnPage('/logout');
+
+        $I->amOnPage('/');
+        $I->seeElement('meta', ['name' => 'description', 'content' => 'Site description']);
+        $I->seeElement('meta', ['property' => 'og:description', 'content' => 'Site description']);
+        $I->seeElement('meta', ['property' => 'og:title', 'content' => 'Site title']);
+    }
+
     public function homeUrlRedirectsToTheRoot(AcceptanceTester $I): void
     {
         $this->login($I);

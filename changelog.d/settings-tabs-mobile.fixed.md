@@ -1,0 +1,1 @@
+- The tab bar on the settings page scrolls inside its own box on a phone, so the page no longer scrolls sideways.
