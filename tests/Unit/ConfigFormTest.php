@@ -610,45 +610,59 @@ class ConfigFormTest extends TestCase
     }
 
     /**
-     * An owner on plain HTTP who saves an https:// site URL for the host they are on gets
-     * Secure cookies that the browser drops over http://, so they could not log in again
-     * (issue #995). The save is not blocked; the warning says what changes.
+     * An owner on plain HTTP who switches the effective site URL to https:// for the host they
+     * are on gets Secure cookies that the browser drops over http://, so they could not log in
+     * again (issue #995). The save is not blocked; the warning says what changes. A re-save of
+     * an https:// URL does not warn: behind a TLS proxy every request looks like plain HTTP.
      *
-     * @return array<string, array{0: array<string, string>, 1: string, 2: bool}>
+     * @return array<string, array{0: array<string, string>, 1: string, 2: string, 3: bool, 4: array<string, string>}>
      */
     public static function siteUrlSaves(): array
     {
         $own_host = ['HTTP_HOST' => 'blog.example'];
+        $http = "site_title = Blog\nsite_url = http://blog.example\n";
+        $https = "site_title = Blog\nsite_url = https://blog.example\n";
+        $none = "site_title = Blog\n";
 
         return [
-            'plain HTTP to the saved host'        => [$own_host, 'https://blog.example', true],
-            'HTTPS set to off'                    => [$own_host + ['HTTPS' => 'off'], 'https://blog.example', true],
-            'HTTPS set to 0'                      => [$own_host + ['HTTPS' => '0'], 'https://blog.example', true],
-            'HTTPS set but empty'                 => [$own_host + ['HTTPS' => ''], 'https://blog.example', true],
-            'host with a port and a trailing dot' => [['HTTP_HOST' => 'Blog.example.:8080'], 'https://blog.example', true],
-            'request over TLS'                    => [$own_host + ['HTTPS' => 'on'], 'https://blog.example', false],
-            'request to another host'             => [['HTTP_HOST' => '192.168.1.20'], 'https://blog.example', false],
-            'http site URL'                       => [$own_host, 'http://blog.example', false],
-            'no site URL'                         => [$own_host, '', false],
+            'first switch over plain HTTP'        => [$own_host, $http, 'https://blog.example', true, []],
+            'first set from no site URL'          => [$own_host, $none, 'https://blog.example', true, []],
+            'HTTPS set to off'                    => [$own_host + ['HTTPS' => 'off'], $http, 'https://blog.example', true, []],
+            'HTTPS set to 0'                      => [$own_host + ['HTTPS' => '0'], $http, 'https://blog.example', true, []],
+            'HTTPS set but empty'                 => [$own_host + ['HTTPS' => ''], $http, 'https://blog.example', true, []],
+            'host with a port and a trailing dot' => [['HTTP_HOST' => 'Blog.example.:8080'], $http, 'https://blog.example', true, []],
+            'host with an empty port'             => [['HTTP_HOST' => 'blog.example:'], $http, 'https://blog.example', true, []],
+            're-save of an https site URL'        => [$own_host, $https, 'https://blog.example', false, []],
+            'request over TLS'                    => [$own_host + ['HTTPS' => 'on'], $http, 'https://blog.example', false, []],
+            'request to another host'             => [['HTTP_HOST' => '192.168.1.20'], $http, 'https://blog.example', false, []],
+            'http site URL'                       => [$own_host, $none, 'http://blog.example', false, []],
+            'no site URL'                         => [$own_host, $none, '', false, []],
+            'LAMB_SITE_URL set to https'          => [$own_host, $http, 'https://blog.example', false, ['LAMB_SITE_URL' => 'https://blog.example']],
+            'LAMB_SITE_URL set to http'           => [$own_host, $http, 'https://blog.example', false, ['LAMB_SITE_URL' => 'http://blog.example']],
         ];
     }
 
     /**
      * @dataProvider siteUrlSaves
      *
-     * @param array<string, string> $server  The request's $_SERVER values.
-     * @param string                $site_url The site URL the form saves.
-     * @param bool                  $warns   Whether the save must warn about login cookies.
+     * @param array<string, string> $server     The request's $_SERVER values.
+     * @param string                $stored_ini The INI stored before the save.
+     * @param string                $site_url   The site URL the form saves.
+     * @param bool                  $warns      Whether the save must warn about login cookies.
+     * @param array<string, string> $env        Environment variables of the request.
      */
-    public function testRespondSettingsWarnsWhenAnHttpsSiteUrlForThisHostIsSavedOverPlainHttp(
+    public function testRespondSettingsWarnsWhenTheSiteUrlFirstBecomesHttpsForThisHostOverPlainHttp(
         array $server,
+        string $stored_ini,
         string $site_url,
-        bool $warns
+        bool $warns,
+        array $env
     ): void {
         $result = $this->runSettingsPost(
             $this->post(['site_url' => $site_url, 'menu_items' => 'Home = /']),
-            "site_title = Blog\n",
-            $server
+            $stored_ini,
+            $server,
+            $env
         );
 
         $this->assertSame($site_url, parse_ini_safe($result['ini'])['site_url'] ?? '', 'The save is not blocked');
@@ -698,10 +712,11 @@ class ConfigFormTest extends TestCase
      * @param array<string, string> $post       The posted fields.
      * @param string                $stored_ini The INI stored before the request.
      * @param array<string, string> $server     Extra $_SERVER values, such as HTTP_HOST.
+     * @param array<string, string> $env        Extra environment variables, such as LAMB_SITE_URL.
      * @return array{ini: string, flash: list<string>}
      * @throws \JsonException When the subprocess prints something that is not JSON.
      */
-    private function runSettingsPost(array $post, string $stored_ini, array $server = []): array
+    private function runSettingsPost(array $post, string $stored_ini, array $server = [], array $env = []): array
     {
         $script = <<<'PHP'
         use RedBeanPHP\R;
@@ -732,7 +747,7 @@ class ConfigFormTest extends TestCase
             json_encode($post, JSON_THROW_ON_ERROR),
             $stored_ini,
             json_encode($server, JSON_THROW_ON_ERROR),
-        ]);
+        ], null, $env);
         $process->run();
 
         /** @var array{ini: string, flash: list<string>} */

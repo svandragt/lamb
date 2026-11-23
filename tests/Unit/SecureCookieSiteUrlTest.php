@@ -54,6 +54,11 @@ class SecureCookieSiteUrlTest extends TestCase
         $this->assertTrue(is_https(['HTTP_HOST' => '[::1]:8080'], 'https://[::1]'));
     }
 
+    public function testAnEmptyPortOnTheHostIsIgnored(): void
+    {
+        $this->assertTrue(is_https(['HTTP_HOST' => 'example.com:'], 'https://example.com'));
+    }
+
     public function testATrailingDotOnEitherHostIsIgnored(): void
     {
         $this->assertTrue(is_https(['HTTP_HOST' => 'example.com.'], 'https://example.com'));

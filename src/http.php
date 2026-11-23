@@ -171,7 +171,7 @@ function request_host_matches(array $server, string $url): bool
     if (!is_string($request_host) || $request_host === '') {
         return false;
     }
-    $request_host = strtolower((string) preg_replace('/\.$/', '', (string) preg_replace('/:\d{1,5}$/', '', $request_host)));
+    $request_host = strtolower((string) preg_replace('/\.$/', '', (string) preg_replace('/:\d{0,5}$/', '', $request_host)));
 
     return $request_host === strtolower((string) preg_replace('/\.$/', '', (string) parse_url($url, PHP_URL_HOST)));
 }

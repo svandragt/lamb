@@ -628,14 +628,19 @@ function respond_settings(): array
             foreach ([...Config\removed_setting_warnings($stored_ini), ...Config\shape_warnings($submitted_ini)] as $warning) {
                 $_SESSION['flash'][] = $warning;
             }
-            $saved_site_url = Config\normalize_site_url((string) (Config\parse_ini_safe($submitted_ini)['site_url'] ?? ''));
-            $locks_out_http = $saved_site_url !== null
-                && str_starts_with($saved_site_url, 'https://')
+            // Warn only on the save that changes the effective URL (what cookies follow, so
+            // LAMB_SITE_URL wins) to https. Behind a TLS proxy every request looks like plain
+            // HTTP, so a re-save of an https URL must stay quiet.
+            $effective_before = Config\canonical_site_url(Config\parse_ini_safe($stored_ini));
+            $effective_after = Config\canonical_site_url(Config\parse_ini_safe($submitted_ini));
+            $locks_out_http = $effective_after !== null
+                && str_starts_with($effective_after, 'https://')
+                && ($effective_before === null || !str_starts_with($effective_before, 'https://'))
                 && !\Lamb\Http\arrived_over_tls($_SERVER)
-                && \Lamb\Http\request_host_matches($_SERVER, $saved_site_url);
+                && \Lamb\Http\request_host_matches($_SERVER, $effective_after);
             if ($locks_out_http) {
-                $_SESSION['flash'][] = 'Your login cookies now need HTTPS on this host. This request is plain HTTP, '
-                    . 'so you cannot log in here again until the site serves HTTPS. To undo it, set LAMB_SITE_URL to the http:// address.';
+                $_SESSION['flash'][] = 'Your login cookies now need HTTPS on this host. If you opened this page over http://, '
+                    . 'you cannot log in here again until the site serves HTTPS. To undo it, set LAMB_SITE_URL to the http:// address.';
             }
             redirect_uri('/settings');
         } else {

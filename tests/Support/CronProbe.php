@@ -19,7 +19,8 @@ use Symfony\Component\Process\Process;
  * marker where it is called, which splits the output into what the client received and what
  * it did not.
  *
- * `$query` is the request's query string, which PHP would put into $_GET.
+ * `$query` is the request's query string, which PHP would put into $_GET. A `uri` that carries
+ * a query string supplies it instead; passing a different `$query` as well throws.
  *
  * The CLI ignores header(), so the child records the headers that code in `Lamb\Network` sets,
  * each with the number of bytes the request had printed by then.
@@ -142,6 +143,13 @@ final class CronProbe
      */
     private static function script(bool $fastcgi, string $query, array $request): string
     {
+        $uri_query = isset($request['uri']) ? parse_url($request['uri'], PHP_URL_QUERY) : null;
+        if (is_string($uri_query)) {
+            if ($query !== '' && $query !== $uri_query) {
+                throw new \InvalidArgumentException('Pass the query string in the URI or in $query, not both.');
+            }
+            $query = $uri_query;
+        }
         $server = [
             'REQUEST_METHOD'  => $request['method'] ?? 'GET',
             'REQUEST_URI'     => $request['uri'] ?? '/_cron' . ($query === '' ? '' : '?' . $query),
