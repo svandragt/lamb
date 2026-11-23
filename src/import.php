@@ -2,10 +2,12 @@
 
 namespace Lamb\Import;
 
-use DOMDocument;
-use DOMElement;
-use DOMText;
-use DOMXPath;
+use Dom\HTMLDocument;
+use Dom\Document;
+use Dom\Element;
+use Dom\Node;
+use Dom\Text;
+use Dom\XPath;
 use League\HTMLToMarkdown\HtmlConverter;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -73,25 +75,41 @@ function local_datetime_from_rfc822(string $pub_date): string
 }
 
 /**
- * In-place sanitisation pass: removes script/style/iframe nodes and any
+ * Builds an XPath for a fragment from {@see load_html_fragment}. Elements of an
+ * HTML5 document are in the XHTML namespace, so a query names them with the
+ * `h:` prefix registered here: `//h:video`, not `//video`.
+ */
+function html_xpath(Document $dom): XPath
+{
+    $xpath = new XPath($dom);
+    $xpath->registerNamespace('h', 'http://www.w3.org/1999/xhtml');
+    return $xpath;
+}
+
+/**
+ * In-place sanitisation pass: removes script/style/iframe/template nodes and any
  * `on*` event-handler attributes from every element. Extracted so {@see
  * prepare_imported_html} can chain it onto the same DOM as the image rewrite
  * pass, avoiding a parse/serialise round-trip between the two stages.
  */
-function sanitize_html_in_dom(DOMDocument $dom): void
+function sanitize_html_in_dom(HTMLDocument $dom): void
 {
-    $xpath = new DOMXPath($dom);
+    $xpath = html_xpath($dom);
 
-    $strip = $xpath->query('//script | //style | //iframe') ?: [];
+    // By local name, in any namespace: HTML5 puts a `<script>` inside inline
+    // `<svg>` or `<math>` in the SVG or MathML namespace, where `h:script`
+    // does not match it. `<template>` goes too: its content sits in a separate
+    // fragment that XPath does not enter, but saving the document writes it out.
+    $strip = $xpath->query(
+        '//*[local-name()="script" or local-name()="style" or local-name()="iframe" or local-name()="template"]'
+    );
     foreach ($strip as $node) {
-        if ($node instanceof \DOMNode) {
-            $node->parentNode?->removeChild($node);
-        }
+        $node->parentNode?->removeChild($node);
     }
 
-    $elements = $xpath->query('//*') ?: [];
+    $elements = $xpath->query('//*');
     foreach ($elements as $el) {
-        if (!$el instanceof DOMElement) {
+        if (!$el instanceof Element) {
             continue;
         }
         $remove = [];
@@ -163,11 +181,11 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
     }
 
     $dom = load_html_fragment($html);
-    $xpath = new DOMXPath($dom);
+    $xpath = html_xpath($dom);
 
-    $tables = $xpath->query('//table') ?: [];
+    $tables = $xpath->query('//h:table');
     foreach ($tables as $table) {
-        if (!$table instanceof DOMElement || $table->parentNode === null) {
+        if (!$table instanceof Element || $table->parentNode === null) {
             continue;
         }
         $key = 'LAMBTABLEPLACEHOLDER' . count($placeholders);
@@ -177,11 +195,9 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
 
     // Known wraps long URLs in <wbr /> line-break hints. They carry no content
     // and the Markdown converter would preserve them as visible tags.
-    $breaks = $xpath->query('//wbr') ?: [];
+    $breaks = $xpath->query('//h:wbr');
     foreach ($breaks as $wbr) {
-        if ($wbr instanceof \DOMNode) {
-            $wbr->parentNode?->removeChild($wbr);
-        }
+        $wbr->parentNode?->removeChild($wbr);
     }
 
     // Lamb renders a video from `![](clip.mp4)`, so a supported clip becomes an
@@ -190,15 +206,15 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
     // no poster support. A video with no supported clip falls back to an
     // autolink on its first URL, and one with no URL at all is removed, since
     // raw `<video>` would reach the safe renderer as escaped text.
-    $videos = $xpath->query('//video') ?: [];
+    $videos = $xpath->query('//h:video');
     foreach ($videos as $video) {
-        if (!$video instanceof DOMElement || $video->parentNode === null) {
+        if (!$video instanceof Element || $video->parentNode === null) {
             continue;
         }
-        $urls = [$video->getAttribute('src')];
-        foreach ($video->getElementsByTagName('source') as $source) {
-            $urls[] = $source->getAttribute('src');
-        }
+        $urls = array_map(
+            static fn(Element $node): string => $node->getAttribute('src') ?? '',
+            video_source_elements($xpath, $video)
+        );
         $urls = array_values(array_filter($urls, static fn(string $url): bool => $url !== ''));
         $clips = array_values(array_filter($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)));
         $clip = array_find($clips, static fn(string $url): bool => href_has_extension($url, ['mp4'])) ?? ($clips[0] ?? null);
@@ -214,10 +230,10 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
             $video->parentNode->removeChild($video);
             continue;
         }
-        $inline = $video->parentNode->nodeName === 'p'
+        $inline = ($video->parentNode instanceof Element && $video->parentNode->localName === 'p')
             || array_any(
                 [$video->previousSibling, $video->nextSibling],
-                static fn(?\DOMNode $sibling): bool => $sibling instanceof DOMText && trim($sibling->data) !== ''
+                static fn(?Node $sibling): bool => $sibling instanceof Text && trim($sibling->data) !== ''
             );
         if (!$inline) {
             $p = $dom->createElement('p');
@@ -235,15 +251,15 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
     do {
         $changed = false;
         $wrappers = $xpath->query(
-            '//*[self::figure or self::figcaption or self::cite or self::span'
-            . ' or ((self::div or self::section)'
+            '//*[self::h:figure or self::h:figcaption or self::h:cite or self::h:span'
+            . ' or ((self::h:div or self::h:section)'
             . ' and (false()' . $class_condition . '))]'
-        ) ?: [];
+        );
         foreach ($wrappers as $wrapper) {
-            if (!$wrapper instanceof DOMElement || $wrapper->parentNode === null) {
+            if (!$wrapper instanceof Element || $wrapper->parentNode === null) {
                 continue;
             }
-            unwrap_element($dom, $wrapper, in_array($wrapper->tagName, ['div', 'section', 'figure', 'figcaption'], true));
+            unwrap_element($dom, $wrapper, in_array($wrapper->localName, ['div', 'section', 'figure', 'figcaption'], true));
             $changed = true;
         }
     } while ($changed);
@@ -251,7 +267,7 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
     return dump_html_fragment($dom);
 }
 
-function unwrap_element(DOMDocument $dom, DOMElement $element, bool $block): void
+function unwrap_element(HTMLDocument $dom, Element $element, bool $block): void
 {
     $parent = $element->parentNode;
     if ($parent === null) {
@@ -274,21 +290,21 @@ function unwrap_element(DOMDocument $dom, DOMElement $element, bool $block): voi
  *                     html_to_markdown() call for each cell so table cells
  *                     containing CMS-specific block wrappers unwrap correctly.
  */
-function markdown_table(DOMElement $table, array $unwrap_class_prefixes = []): string
+function markdown_table(Element $table, array $unwrap_class_prefixes = []): string
 {
     $doc = $table->ownerDocument;
     if ($doc === null) {
         return '';
     }
-    $xpath = new DOMXPath($doc);
+    $xpath = html_xpath($doc);
     $rows = [];
-    foreach ($xpath->query('.//tr', $table) ?: [] as $tr) {
-        if (!$tr instanceof DOMElement) {
+    foreach ($xpath->query('.//h:tr', $table) as $tr) {
+        if (!$tr instanceof Element) {
             continue;
         }
         $cells = [];
-        foreach ($xpath->query('./th|./td', $tr) ?: [] as $cell) {
-            if (!$cell instanceof DOMElement) {
+        foreach ($xpath->query('./h:th|./h:td', $tr) as $cell) {
+            if (!$cell instanceof Element) {
                 continue;
             }
             $cells[] = markdown_table_cell($cell, $unwrap_class_prefixes);
@@ -316,15 +332,15 @@ function markdown_table(DOMElement $table, array $unwrap_class_prefixes = []): s
 /**
  * @param list<string> $unwrap_class_prefixes
  */
-function markdown_table_cell(DOMElement $cell, array $unwrap_class_prefixes = []): string
+function markdown_table_cell(Element $cell, array $unwrap_class_prefixes = []): string
 {
     $doc = $cell->ownerDocument;
-    if ($doc === null) {
+    if (!$doc instanceof HTMLDocument) {
         return '';
     }
     $html = '';
     foreach ($cell->childNodes as $child) {
-        $html .= $doc->saveHTML($child);
+        $html .= $doc->saveHtml(restore_dropped_leading_newlines($child));
     }
     $markdown = html_to_markdown($html, $unwrap_class_prefixes);
     $markdown = preg_replace('/\s+/', ' ', $markdown) ?? $markdown;
@@ -456,25 +472,50 @@ function rewrite_media_links(string $html, string $created, callable $downloader
 }
 
 /**
+ * The elements that carry a video's clip URLs, in document order: the video
+ * itself when it has a `src`, then each `<source src>` below it whose nearest
+ * `<video>`, `<audio>` or `<picture>` ancestor is this video. A source wrapped
+ * in a `<span>` still counts; one inside a nested `<audio>` does not.
+ * {@see normalize_html} and {@see rewrite_media_links_in_dom} share this rule so
+ * every clip that is chosen is also downloaded.
+ *
+ * @return list<Element>
+ */
+function video_source_elements(XPath $xpath, Element $video): array
+{
+    $elements = [];
+    if ($video->hasAttribute('src') && $video->getAttribute('src') !== '') {
+        $elements[] = $video;
+    }
+    foreach ($xpath->query('.//h:source[@src]', $video) as $source) {
+        $owner = $xpath->query('ancestor::*[self::h:video or self::h:audio or self::h:picture][1]', $source)->item(0);
+        if ($source instanceof Element && $owner !== null && $owner->isSameNode($video)) {
+            $elements[] = $source;
+        }
+    }
+    return $elements;
+}
+
+/**
  * In-place version of {@see rewrite_media_links}, chained on the same DOM as
  * {@see sanitize_html_in_dom} from {@see prepare_imported_html} so the two
  * passes don't each parse and serialise the body separately.
  *
- * @param DOMDocument                     $dom         Document rewritten in place.
+ * @param HTMLDocument                    $dom         Document rewritten in place.
  * @param string                          $created     The post's creation date (picks the assets subdirectory).
  * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
  * @return void
  */
-function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable $downloader): void
+function rewrite_media_links_in_dom(HTMLDocument $dom, string $created, callable $downloader): void
 {
-    $xpath = new DOMXPath($dom);
+    $xpath = html_xpath($dom);
     $sub_path = asset_dir_for_date($created);
 
     unwrap_picture_elements($dom, $xpath);
 
-    $imgs = $xpath->query('//img[@src or @data-src or @data-full-url]') ?: [];
+    $imgs = $xpath->query('//h:img[@src or @data-src or @data-full-url]');
     foreach ($imgs as $img) {
-        if (!$img instanceof DOMElement) {
+        if (!$img instanceof Element) {
             continue;
         }
         $src = pick_image_url($img);
@@ -492,19 +533,14 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
         }
     }
 
-    // `//video//source`, not `//video/source`: libxml 2.9 does not know `<source>` is a
-    // void element and nests each `<source>` inside the one before it. The nearest
-    // media ancestor must be the video, so a `<source>` in a nested `<audio>` or
-    // `<picture>` stays untouched.
-    $videos = $xpath->query(
-        '//video[@src] | //video//source[@src]'
-        . '[ancestor::*[self::video or self::audio or self::picture][1][self::video]]'
-    ) ?: [];
-    foreach ($videos as $video) {
-        if (!$video instanceof DOMElement) {
-            continue;
+    $media = [];
+    foreach ($xpath->query('//h:video') as $video) {
+        if ($video instanceof Element) {
+            array_push($media, ...video_source_elements($xpath, $video));
         }
-        $url = normalize_media_url($video->getAttribute('src'));
+    }
+    foreach ($media as $video) {
+        $url = normalize_media_url($video->getAttribute('src') ?? '');
         if ($url === null || !href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
             continue;
         }
@@ -516,12 +552,12 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
     }
 
     $link_extensions = array_merge(IMAGE_UPLOAD_EXTENSIONS, VIDEO_UPLOAD_EXTENSIONS);
-    $anchors = $xpath->query('//a[@href]') ?: [];
+    $anchors = $xpath->query('//h:a[@href]');
     foreach ($anchors as $a) {
-        if (!$a instanceof DOMElement) {
+        if (!$a instanceof Element) {
             continue;
         }
-        $href = $a->getAttribute('href');
+        $href = $a->getAttribute('href') ?? '';
         if (!href_has_extension($href, $link_extensions)) {
             continue;
         }
@@ -548,11 +584,11 @@ function rewrite_media_links_in_dom(DOMDocument $dom, string $created, callable 
  * srcset would leak the old host into the body. Unwrapping here means the
  * single canonical `<img>` flows through the normal rewrite path.
  */
-function unwrap_picture_elements(DOMDocument $dom, DOMXPath $xpath): void
+function unwrap_picture_elements(HTMLDocument $dom, XPath $xpath): void
 {
-    $pictures = $xpath->query('//picture') ?: [];
+    $pictures = $xpath->query('//h:picture');
     foreach ($pictures as $picture) {
-        if (!$picture instanceof DOMElement || $picture->parentNode === null) {
+        if (!$picture instanceof Element || $picture->parentNode === null) {
             continue;
         }
         $img = first_descendant_img($xpath, $picture)
@@ -569,31 +605,23 @@ function unwrap_picture_elements(DOMDocument $dom, DOMXPath $xpath): void
     }
 }
 
-function first_descendant_img(DOMXPath $xpath, DOMElement $picture): ?DOMElement
+function first_descendant_img(XPath $xpath, Element $picture): ?Element
 {
-    $found = $xpath->query('.//img', $picture);
-    if ($found === false) {
-        return null;
-    }
-    foreach ($found as $node) {
-        if ($node instanceof DOMElement) {
+    foreach ($xpath->query('.//h:img', $picture) as $node) {
+        if ($node instanceof Element) {
             return $node;
         }
     }
     return null;
 }
 
-function synthesise_img_from_source(DOMXPath $xpath, DOMElement $picture, DOMDocument $dom): ?DOMElement
+function synthesise_img_from_source(XPath $xpath, Element $picture, HTMLDocument $dom): ?Element
 {
-    $sources = $xpath->query('.//source[@srcset]', $picture);
-    if ($sources === false) {
-        return null;
-    }
-    foreach ($sources as $source) {
-        if (!$source instanceof DOMElement) {
+    foreach ($xpath->query('.//h:source[@srcset]', $picture) as $source) {
+        if (!$source instanceof Element) {
             continue;
         }
-        $first = first_srcset_url($source->getAttribute('srcset'));
+        $first = first_srcset_url($source->getAttribute('srcset') ?? '');
         if ($first === null) {
             continue;
         }
@@ -624,10 +652,10 @@ function first_srcset_url(string $srcset): ?string
  * Picks the best source URL for an `<img>` element: full-res variant first,
  * then the regular `src`, then lazy-load `data-src`.
  */
-function pick_image_url(DOMElement $img): string
+function pick_image_url(Element $img): string
 {
     foreach (['data-full-url', 'src', 'data-src'] as $attr) {
-        $value = trim($img->getAttribute($attr));
+        $value = trim($img->getAttribute($attr) ?? '');
         if ($value !== '') {
             return $value;
         }
@@ -838,7 +866,7 @@ function response_is_media(array $headers, string $family): bool
  * artifacts (entity normalisation, attribute reordering) between the stages.
  *
  * @param callable(string,string):?string $downloader ($url, $sub_path) → saved filename or null.
- * @param ?callable(DOMDocument):void     $dom_pass    Optional CMS-specific DOM
+ * @param ?callable(HTMLDocument):void    $dom_pass    Optional CMS-specific DOM
  *                     surgery run after sanitisation and before the image
  *                     rewrite (e.g. Known's unfurl-block removal).
  */
@@ -945,7 +973,7 @@ function should_import(array $item, array $allowed_types): bool
  *     allowed_types: list<string>,
  *     title: callable(array<string, mixed>): string,
  *     slug: callable(array<string, mixed>): string,
- *     dom_pass: ?callable(DOMDocument): void,
+ *     dom_pass: ?callable(HTMLDocument): void,
  *     markdown: callable(string): string,
  *     tags: callable(array<string, mixed>, string): list<string>,
  *     finalize_markdown: callable(array<string, mixed>, string): string,
@@ -1202,27 +1230,21 @@ function source_names(): array
 }
 
 /**
- * Loads an HTML fragment into DOMDocument with UTF-8 preserved.
+ * Loads an HTML fragment into an HTML5 document with UTF-8 preserved.
  *
- * Wraps the input in a full <!doctype html><html><body> tree rather than using
- * LIBXML_HTML_NOIMPLIED, because libxml's handling of top-level fragment
- * elements changed between 2.9 and 2.12: the older NOIMPLIED + sibling-div
- * trick lost the wrapper on the newer parser and the round-trip collapsed to
- * just the meta hint. The full wrap parses identically on every libxml
- * version we support. The `<?xml encoding="utf-8" ?>` processing instruction
- * forces UTF-8; without it loadHTML defaults to ISO-8859-1 and mangles
- * multibyte input.
+ * Uses the HTML5 parser (`\Dom\HTMLDocument`) rather than libxml's HTML4 one:
+ * the HTML4 parser on libxml 2.9 does not know `source`, `track`, `wbr` and
+ * `embed` are void elements and nests each inside the one before it. The input
+ * is wrapped in a full <!DOCTYPE html><html><body> tree so the fragment parses
+ * as body content.
  */
-function load_html_fragment(string $html): DOMDocument
+function load_html_fragment(string $html): HTMLDocument
 {
-    $dom = new DOMDocument();
-    $previous = libxml_use_internal_errors(true);
-    $dom->loadHTML(
-        '<?xml encoding="utf-8" ?><!DOCTYPE html><html><body>' . $html . '</body></html>'
+    return HTMLDocument::createFromString(
+        '<!DOCTYPE html><html><body>' . $html . '</body></html>',
+        LIBXML_NOERROR,
+        'UTF-8'
     );
-    libxml_clear_errors();
-    libxml_use_internal_errors($previous);
-    return $dom;
 }
 
 /**
@@ -1230,15 +1252,39 @@ function load_html_fragment(string $html): DOMDocument
  * The original input lives as body's direct children, so we serialise each in
  * order and skip the wrapper.
  */
-function dump_html_fragment(DOMDocument $dom): string
+function dump_html_fragment(HTMLDocument $dom): string
 {
-    $body = $dom->getElementsByTagName('body')->item(0);
-    if (!$body instanceof DOMElement) {
-        return trim((string) $dom->saveHTML());
-    }
     $out = '';
-    foreach ($body->childNodes as $child) {
-        $out .= $dom->saveHTML($child);
+    foreach ($dom->body->childNodes ?? [] as $child) {
+        $out .= $dom->saveHtml(restore_dropped_leading_newlines($child));
     }
     return $out;
+}
+
+/**
+ * The HTML5 parser drops one newline right after <pre>, <textarea> and <listing>,
+ * and saveHtml() does not write it back, so each load/dump pass would lose one.
+ * The HTML spec serialiser emits an extra newline when the first text child
+ * starts with one. Returns a clone with that newline restored, leaving the
+ * document untouched.
+ */
+function restore_dropped_leading_newlines(\Dom\Node $node): \Dom\Node
+{
+    $copy = $node->cloneNode(true);
+    $targets = [];
+    if ($copy instanceof \Dom\Element) {
+        if (in_array($copy->localName, ['pre', 'textarea', 'listing'], true)) {
+            $targets[] = $copy;
+        }
+        foreach ($copy->querySelectorAll('pre, textarea, listing') as $el) {
+            $targets[] = $el;
+        }
+    }
+    foreach ($targets as $el) {
+        $first = $el->firstChild;
+        if ($first instanceof \Dom\Text && str_starts_with($first->data, "\n")) {
+            $first->data = "\n" . $first->data;
+        }
+    }
+    return $copy;
 }
