@@ -142,6 +142,27 @@ XML;
         $this->assertStringNotContainsString('alert', $this->sanitizeFragment($html));
     }
 
+    public function testSanitizeHtmlStripsScriptAndStyleInsideSvgAndMath(): void
+    {
+        $out = $this->sanitizeFragment(
+            '<svg><script>alert(1)</script><style>a{b:c}</style></svg><math><script>alert(3)</script></math>'
+        );
+        $this->assertStringNotContainsString('<script', $out);
+        $this->assertStringNotContainsString('<style', $out);
+        $this->assertStringNotContainsString('alert', $out);
+    }
+
+    public function testSanitizeHtmlRemovesTemplateContent(): void
+    {
+        $out = $this->sanitizeFragment(
+            '<p>ok</p><template><img src=x onerror=alert(2)><script>s()</script></template>'
+        );
+        $this->assertStringNotContainsString('onerror', $out);
+        $this->assertStringNotContainsString('<script', $out);
+        $this->assertStringNotContainsString('<template', $out);
+        $this->assertStringContainsString('ok', $out);
+    }
+
     public function testSanitizeHtmlStripsStyleTags(): void
     {
         $html = '<p>ok</p><style>body{color:red}</style>';
@@ -391,6 +412,33 @@ XML;
 
         $this->assertStringContainsString('<video src="/assets/2024/03/abc123.mp4" controls="controls"', $html);
         $this->assertStringNotContainsString('&lt;video', $html);
+    }
+
+    public function testWrappedVideoSourceIsDownloaded(): void
+    {
+        $urls = [];
+        $out = prepare_imported_html(
+            '<video><span><source src="https://old.example/clip.mp4"></span></video>',
+            '2024-03-03 10:00:00',
+            function (string $url) use (&$urls): string {
+                $urls[] = $url;
+                return 'abc123.mp4';
+            }
+        );
+
+        $this->assertSame(['https://old.example/clip.mp4'], $urls);
+        $this->assertStringNotContainsString('old.example', $out);
+    }
+
+    public function testSourceInsideNestedAudioIsNotTheVideoClip(): void
+    {
+        $md = html_to_markdown(
+            '<video><audio><source src="https://old.example/a.mp4"></audio>'
+            . '<source src="https://old.example/b.webm"></video>'
+        );
+
+        $this->assertStringNotContainsString('a.mp4', $md);
+        $this->assertStringContainsString('b.webm', $md);
     }
 
     public function testVideoShortcodesBecomeLocalVideoElements(): void

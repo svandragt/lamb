@@ -87,7 +87,7 @@ function html_xpath(Document $dom): XPath
 }
 
 /**
- * In-place sanitisation pass: removes script/style/iframe nodes and any
+ * In-place sanitisation pass: removes script/style/iframe/template nodes and any
  * `on*` event-handler attributes from every element. Extracted so {@see
  * prepare_imported_html} can chain it onto the same DOM as the image rewrite
  * pass, avoiding a parse/serialise round-trip between the two stages.
@@ -96,7 +96,13 @@ function sanitize_html_in_dom(HTMLDocument $dom): void
 {
     $xpath = html_xpath($dom);
 
-    $strip = $xpath->query('//h:script | //h:style | //h:iframe');
+    // By local name, in any namespace: HTML5 puts a `<script>` inside inline
+    // `<svg>` or `<math>` in the SVG or MathML namespace, where `h:script`
+    // does not match it. `<template>` goes too: its content sits in a separate
+    // fragment that XPath does not enter, but saving the document writes it out.
+    $strip = $xpath->query(
+        '//*[local-name()="script" or local-name()="style" or local-name()="iframe" or local-name()="template"]'
+    );
     foreach ($strip as $node) {
         $node->parentNode?->removeChild($node);
     }
@@ -205,10 +211,10 @@ function normalize_html(string $html, array &$placeholders = [], array $unwrap_c
         if (!$video instanceof Element || $video->parentNode === null) {
             continue;
         }
-        $urls = [$video->getAttribute('src') ?? ''];
-        foreach ($video->getElementsByTagName('source') as $source) {
-            $urls[] = $source->getAttribute('src') ?? '';
-        }
+        $urls = array_map(
+            static fn(Element $node): string => $node->getAttribute('src') ?? '',
+            video_source_elements($xpath, $video)
+        );
         $urls = array_values(array_filter($urls, static fn(string $url): bool => $url !== ''));
         $clips = array_values(array_filter($urls, static fn(string $url): bool => href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)));
         $clip = array_find($clips, static fn(string $url): bool => href_has_extension($url, ['mp4'])) ?? ($clips[0] ?? null);
@@ -466,11 +472,36 @@ function rewrite_media_links(string $html, string $created, callable $downloader
 }
 
 /**
+ * The elements that carry a video's clip URLs, in document order: the video
+ * itself when it has a `src`, then each `<source src>` below it whose nearest
+ * `<video>`, `<audio>` or `<picture>` ancestor is this video. A source wrapped
+ * in a `<span>` still counts; one inside a nested `<audio>` does not.
+ * {@see normalize_html} and {@see rewrite_media_links_in_dom} share this rule so
+ * every clip that is chosen is also downloaded.
+ *
+ * @return list<Element>
+ */
+function video_source_elements(XPath $xpath, Element $video): array
+{
+    $elements = [];
+    if ($video->hasAttribute('src') && $video->getAttribute('src') !== '') {
+        $elements[] = $video;
+    }
+    foreach ($xpath->query('.//h:source[@src]', $video) as $source) {
+        $owner = $xpath->query('ancestor::*[self::h:video or self::h:audio or self::h:picture][1]', $source)->item(0);
+        if ($source instanceof Element && $owner !== null && $owner->isSameNode($video)) {
+            $elements[] = $source;
+        }
+    }
+    return $elements;
+}
+
+/**
  * In-place version of {@see rewrite_media_links}, chained on the same DOM as
  * {@see sanitize_html_in_dom} from {@see prepare_imported_html} so the two
  * passes don't each parse and serialise the body separately.
  *
- * @param HTMLDocument                     $dom         Document rewritten in place.
+ * @param HTMLDocument                    $dom         Document rewritten in place.
  * @param string                          $created     The post's creation date (picks the assets subdirectory).
  * @param callable(string,string):?string $downloader  ($url, $sub_path) → saved filename or null.
  * @return void
@@ -502,11 +533,13 @@ function rewrite_media_links_in_dom(HTMLDocument $dom, string $created, callable
         }
     }
 
-    $videos = $xpath->query('//h:video[@src] | //h:video/h:source[@src]');
-    foreach ($videos as $video) {
-        if (!$video instanceof Element) {
-            continue;
+    $media = [];
+    foreach ($xpath->query('//h:video') as $video) {
+        if ($video instanceof Element) {
+            array_push($media, ...video_source_elements($xpath, $video));
         }
+    }
+    foreach ($media as $video) {
         $url = normalize_media_url($video->getAttribute('src') ?? '');
         if ($url === null || !href_has_extension($url, VIDEO_UPLOAD_EXTENSIONS)) {
             continue;
@@ -833,7 +866,7 @@ function response_is_media(array $headers, string $family): bool
  * artifacts (entity normalisation, attribute reordering) between the stages.
  *
  * @param callable(string,string):?string $downloader ($url, $sub_path) → saved filename or null.
- * @param ?callable(HTMLDocument):void     $dom_pass    Optional CMS-specific DOM
+ * @param ?callable(HTMLDocument):void    $dom_pass    Optional CMS-specific DOM
  *                     surgery run after sanitisation and before the image
  *                     rewrite (e.g. Known's unfurl-block removal).
  */
