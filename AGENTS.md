@@ -155,7 +155,7 @@ Lamb supports every PHP version in `composer.json`'s `require` (currently
   `config.platform.php` (so the lock never picks a dependency the floor can't
   run), `phpcs.xml` `php_version`/`testVersion`, `phpstan.neon` `phpVersion`,
   and the CI `test` matrix's lowest entry.
-- **Default (newest):** Docker images, devbox, devcontainer, DDEV, `.workshop`,
+- **Default runtime:** Docker images, devbox, devcontainer, DDEV, `.workshop`,
   `.nginx` snippet, single-version CI jobs, and doc examples.
 
 When a new PHP ships, add it to the CI matrix and `testVersion`, then move the
