@@ -159,8 +159,10 @@ Lamb supports every PHP version in `composer.json`'s `require` (currently
 - **Default runtime:** Docker images, devbox, devcontainer, DDEV, `.workshop`,
   `.nginx` snippet, single-version CI jobs, and doc examples.
 
-When a new PHP ships, add it to the CI matrix and `testVersion`, then move the
-defaults. Raise the floor only when that version reaches end of life.
+When a new PHP ships, add it to the CI matrix, `testVersion` and the
+`docs/index.md` requirements line, then move the defaults.
+`PhpTestedVersionsGuardTest` fails when those three name different ranges.
+Raise the floor only when that version reaches end of life.
 
 ## Project Structure
 

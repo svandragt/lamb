@@ -634,7 +634,7 @@ function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quali
  * the tail shared by convert_to_webp() and convert_to_webp_from_bytes()
  * once each has its own decoded $image.
  *
- * @param \GdImage $image         Decoded source image; consumed.
+ * @param \GdImage $image         Decoded source image.
  * @param string   $dest_path     Path the WebP should be written to.
  * @param int      $quality       WebP quality (0-100).
  * @param int      $max_dimension Longest edge to keep; larger images are scaled down.

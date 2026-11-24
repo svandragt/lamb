@@ -5,7 +5,7 @@
     <!-- Minimum supported PHP (matches composer.json require); keep at the floor, not the default. -->
     <config name="php_version" value="80400"/>
 
-    <!-- Set the PHP version range for PHPCompatibility (matches composer.json require). -->
+    <!-- PHPCompatibility range: the composer.json floor up to the newest PHP in the CI test matrix. -->
     <config name="testVersion" value="8.4-8.6"/>
 
     <!-- Show sniff codes in all reports. -->
