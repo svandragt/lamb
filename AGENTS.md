@@ -148,13 +148,14 @@ hand — e.g. a same-day security patch — use
 ### PHP versions
 
 Lamb supports every PHP version in `composer.json`'s `require` (currently
-8.4.1 or newer, with 8.5 the newest tested) and defaults to the newest. Two kinds of setting, kept apart:
+8.4.1 or newer, with 8.6 the newest tested). The defaults stay on 8.5 until
+#1026 (Make PHP 8.6 the default runtime once RedBean ships its 8.6 fix). Two kinds of setting, kept apart:
 
 - **Floor (oldest supported):** `composer.json` `require.php` and
   `config.platform.php` (so the lock never picks a dependency the floor can't
   run), `phpcs.xml` `php_version`/`testVersion`, `phpstan.neon` `phpVersion`,
   and the CI `test` matrix's lowest entry.
-- **Default (newest):** Docker images, devbox, devcontainer, DDEV, `.workshop`,
+- **Default runtime:** Docker images, devbox, devcontainer, DDEV, `.workshop`,
   `.nginx` snippet, single-version CI jobs, and doc examples.
 
 When a new PHP ships, add it to the CI matrix and `testVersion`, then move the
