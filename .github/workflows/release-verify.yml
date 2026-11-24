@@ -2,7 +2,7 @@
 # server-distinct documented ways of running Lamb that ci.yml does not cover.
 #
 # ci.yml already exercises the built-in PHP server (viv run serve) on every PR
-# across PHP 8.4-8.5, so that path is intentionally not duplicated here. This
+# across PHP 8.4-8.6, so that path is intentionally not duplicated here. This
 # workflow adds:
 #   - the Docker/FrankenPHP release image (.docker/Dockerfile.release, which
 #     operators build themselves from a checkout)

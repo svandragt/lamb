@@ -1,0 +1,1 @@
+- PHP 8.6 is now tested and supported, alongside 8.4 and 8.5. With `error_reporting` including `E_DEPRECATED`, PHP 8.6 logs deprecation notices from RedBeanPHP 5.7.6 on requests that touch the database. The notices are harmless and go away when RedBeanPHP ships its fix ([#853](https://github.com/svandragt/lamb/issues/853)).
