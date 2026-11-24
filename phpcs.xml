@@ -21,7 +21,10 @@
     <exclude-pattern>node_modules/</exclude-pattern>
 
     <!-- Check for PHP cross-version compatibility. -->
-    <rule ref="PHPCompatibility"/>
+    <rule ref="PHPCompatibility">
+        <!-- PHP 8.6's trim() default only adds \f, which is harmless for the text Lamb trims, and the sniff flags every trim() call. -->
+        <exclude name="PHPCompatibility.ParameterValues.NewTrimCharactersDefault"/>
+    </rule>
     <rule ref="PSR2">
         <!-- tests/-->
         <exclude name="PSR2.Methods.MethodDeclaration.Underscore"/>

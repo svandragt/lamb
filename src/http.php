@@ -661,7 +661,6 @@ function fetch_pinned(string $url, array $opts, array $pin): ?array
     curl_setopt_array($ch, $options);
     $ok = curl_exec($ch);
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-    curl_close($ch);
 
     if ($ok === false || $truncated) {
         return null;

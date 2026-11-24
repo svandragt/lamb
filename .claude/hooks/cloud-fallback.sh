@@ -119,7 +119,7 @@ fi
 # ---------------------------------------------------------------------------
 
 if [ -x vendor/bin/phpcs ]; then
-  "$PHP" vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility >/dev/null 2>&1 || true
+  "$PHP" vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility,vendor/phpcsstandards/phpcsutils >/dev/null 2>&1 || true
 fi
 
 if [ "$failed" -ne 0 ]; then

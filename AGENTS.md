@@ -30,7 +30,7 @@ viv install
 # Start dev server (PHP built-in, port 8747)
 viv run serve
 
-# Lint (PSR-2/PSR-12 + PHPCompatibility)
+# Lint (PSR-2/PSR-12 + PHPCompatibility for PHP 8.4-8.6)
 viv run lint
 
 # Run all tests
@@ -79,9 +79,9 @@ checkout's `vendor/` into another: the generated autoloader resolves to
 the checkout that created it, so a worktree pointed at another checkout's
 `vendor/` silently runs and tests that checkout's `src/`, not the worktree's —
 green tests against the wrong code. A per-worktree `viv install` also
-registers the PHPCompatibility standard for that checkout (handled on install
-by the `phpcodesniffer-composer-installer` plugin), so `viv run lint` works
-without any global phpcs config.
+registers the PHPCompatibility and PHPCSUtils standards for that checkout
+(handled on install by the `phpcodesniffer-composer-installer` plugin), so
+`viv run lint` works without any global phpcs config.
 
 Generate each worktree's own `.env` with
 `LAMB_WRITE_TEST_PASSWORD=1 php make-password.php <pw>` instead of copying
@@ -153,8 +153,9 @@ Lamb supports every PHP version in `composer.json`'s `require` (currently
 
 - **Floor (oldest supported):** `composer.json` `require.php` and
   `config.platform.php` (so the lock never picks a dependency the floor can't
-  run), `phpcs.xml` `php_version`/`testVersion`, `phpstan.neon` `phpVersion`,
-  and the CI `test` matrix's lowest entry.
+  run), `phpcs.xml` `php_version` and the lower end of `testVersion` (its upper
+  end is the newest PHP tested), `phpstan.neon` `phpVersion`, and the CI `test`
+  matrix's lowest entry.
 - **Default runtime:** Docker images, devbox, devcontainer, DDEV, `.workshop`,
   `.nginx` snippet, single-version CI jobs, and doc examples.
 
@@ -564,7 +565,11 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ## Coding Standards
 
-- **PSR-12** with PHPCompatibility checks for PHP 8.4+
+- **PSR-12** with PHPCompatibility checks for PHP 8.4-8.6 (`testVersion` in `phpcs.xml`).
+  PHPCompatibility 9.3 only knows PHP up to 8.0, so `composer.json` pins
+  `10.0.0-alpha3@alpha` (needs phpcs 4). Drop the `@alpha` flag and the exact pin
+  once 10.0.0 is stable. `phpcs.xml` excludes `NewTrimCharactersDefault`, which
+  flags every `trim()` call without a character list.
 - Line length limit disabled (`Generic.Files.LineLength.TooLong` excluded)
 - Side effects with symbols allowed (`PSR1.Files.SideEffects.FoundWithSymbols` excluded)
 - Underscore method names allowed in tests

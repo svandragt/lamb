@@ -36,7 +36,7 @@ fi
 # --no-scripts or a failed install skipped it. Without it phpcs cannot resolve
 # the PHPCompatibility standard phpcs.xml names.
 if [ -x vendor/bin/phpcs ]; then
-  vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility >/dev/null 2>&1 || true
+  vendor/bin/phpcs --config-set installed_paths vendor/phpcompatibility/php-compatibility,vendor/phpcsstandards/phpcsutils >/dev/null 2>&1 || true
 fi
 
 # ---------------------------------------------------------------------------
