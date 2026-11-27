@@ -198,7 +198,7 @@ lamb/
 │   ├── themes/
 │   │   ├── base/         # Base theme + fallback library (HTML, parts, feeds, CSS)
 │   │   └── 2026/         # "Notes" theme — default for new installs
-│   └── scripts/          # JS: shorthand.js + logged_in/ (admin-only)
+│   └── scripts/          # JS, loaded by folder: top level, logged_in/, <template>/
 ├── tests/
 │   ├── Unit/             # PHPUnit tests (ConfigTest.php)
 │   ├── Acceptance/       # Codeception browser tests
@@ -475,16 +475,13 @@ Additional helper from `Lamb\Config`:
 
 `the_scripts()` takes no arguments. It does not load scripts from the active theme directory.
 
-It always loads:
+It discovers scripts from the folder layout through `Theme\script_groups()`, so there is no list to edit. To add a script, drop a `.js` file into one of these folders:
 
-- `src/scripts/shorthand.js`
+- `src/scripts/` loads on every page.
+- `src/scripts/logged_in/` loads only when the user is logged in.
+- `src/scripts/<template>/` loads only on the page whose template has that name, such as `search` or `settings`.
 
-When the user is logged in, it also loads:
-
-- `src/scripts/logged_in/growing-input.js`
-- `src/scripts/logged_in/link-edit-buttons.js`
-- `src/scripts/logged_in/upload-image.js`
-- `src/scripts/logged_in/paste-link.js`
+Within a folder, files load in name order, except that `shorthand.js` loads first because every other script calls its `onLoaded()`.
 
 ### Upload asset storage
 

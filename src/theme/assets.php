@@ -126,18 +126,52 @@ function minify_css(string $css): string
 }
 
 /**
- * Emits <script defer> tags for shorthand.js and, when logged in, the admin-only JS files.
+ * Groups the `*.js` files under a scripts directory by the folder they sit in:
+ * top-level files under '', and each subfolder's files under its own name.
+ * Basenames are sorted so the output order is deterministic, except that
+ * `shorthand.js` comes first: every other script calls its `onLoaded()`.
+ *
+ * @param string $dir Absolute path to the scripts directory.
+ * @return array<string, list<string>>
+ */
+function script_groups(string $dir): array
+{
+    // scandir() rather than glob(): glob() reads `[`, `*` and `?` in the
+    // install path as patterns and then finds no scripts at all.
+    $entries = static fn(string $path): array => is_dir($path)
+        ? array_values(array_filter(scandir($path) ?: [], static fn(string $e): bool => $e[0] !== '.'))
+        : [];
+
+    $folders = ['' => $dir];
+    foreach ($entries($dir) as $entry) {
+        if (is_dir("$dir/$entry")) {
+            $folders[$entry] = "$dir/$entry";
+        }
+    }
+
+    $groups = [];
+    foreach ($folders as $name => $path) {
+        $files = array_values(array_filter(
+            $entries($path),
+            static fn(string $e): bool => str_ends_with($e, '.js') && is_file("$path/$e")
+        ));
+        usort($files, static fn(string $a, string $b): int
+            => [$a !== 'shorthand.js', $a] <=> [$b !== 'shorthand.js', $b]);
+        if ($files !== []) {
+            $groups[(string) $name] = $files;
+        }
+    }
+    return $groups;
+}
+
+/**
+ * Emits <script defer> tags for every file in `src/scripts/`, grouped by folder.
  *
  * @return void
  */
 function the_scripts(): void
 {
-    $scripts = [
-        '' => ['shorthand.js', 'image-modal.js'],
-        'logged_in' => ['growing-input.js', 'link-edit-buttons.js', 'upload-image.js', 'paste-link.js', 'toggle-checkbox.js', 'draft-autosave.js'],
-        'search' => ['search-highlight.js'],
-        'settings' => ['filter-redirects.js', 'tab-scroll.js'],
-    ];
+    $scripts = script_groups(dirname(__DIR__) . '/scripts');
     $assets = asset_loader($scripts, 'scripts');
     foreach ($assets as $id => $href) {
         printf('<script id="%1$s" defer src="%2$s?ver=%1$s"></script>', $id, $href);
