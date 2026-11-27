@@ -201,27 +201,6 @@ function author_display_name(array $config): string
 }
 
 /**
- * The config keys written as `[section]` blocks of `label = value` entries.
- *
- * Lamb's settings are these sections, the single-value settings in
- * SETTINGS_FORM_SCALARS, and the sections an author or a theme owns (any other
- * array). This is the shape schema normalize_config() and shape_warnings()
- * work from. It is spelled out rather
- * than inferred from the seeded defaults because the defaults keep the
- * personal-identity and opt-in settings (`author_name`, `site_description`,
- * `websub_hubs`, …) commented out, so they are absent from the parsed
- * defaults and inference could not tell they are scalars.
- */
-const CONFIG_SECTIONS = [
-    'menu_items',
-    'footer_items',
-    'feeds',
-    'me',
-    'redirections',
-    'syndicate_to',
-];
-
-/**
  * The settings Lamb 0.17 removed, each with what replaces it.
  *
  * The replacement text is the one in the "Removed settings" table of
@@ -240,9 +219,9 @@ const REMOVED_SETTINGS = [
 /**
  * Returns true when the named config key holds a section rather than a value.
  *
- * The seeded defaults are consulted as well as CONFIG_SECTIONS, so a section
- * added to get_default_ini_text() is classified correctly even if this list is
- * not updated with it.
+ * A key is a section when the seeded defaults parse it as an array, so every
+ * `[header]` in get_default_ini_text() counts, even when all its entries are
+ * commented out.
  *
  * @param string $key The config key.
  * @param array<string, mixed> $defaults The parsed seeded defaults.
@@ -250,7 +229,7 @@ const REMOVED_SETTINGS = [
  */
 function is_config_section(string $key, array $defaults): bool
 {
-    return in_array($key, CONFIG_SECTIONS, true) || is_array($defaults[$key] ?? null);
+    return is_array($defaults[$key] ?? null);
 }
 
 /**
