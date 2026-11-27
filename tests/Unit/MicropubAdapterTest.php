@@ -24,8 +24,10 @@ class MicropubAdapterTest extends TestCase
             R::setup('sqlite::memory:');
         }
         R::freeze(false);
-        // Posts a sibling test left behind would match the LIKE lookups below.
-        R::wipe('post');
+        // Posts a sibling test left behind would match the LIKE lookups below, and
+        // a post table it left with a narrow column (deleted_at INTEGER) makes the
+        // first soft delete rebuild the table, which nulls webmentionoutbox.post_id.
+        R::nuke();
 
         global $config;
         $config = $config ?? [];

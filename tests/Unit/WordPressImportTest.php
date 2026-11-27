@@ -1734,13 +1734,11 @@ XML;
         ob_start();
         imagepng($png);
         $pngBytes = (string) ob_get_clean();
-        imagedestroy($png);
 
         $jpeg = imagecreatetruecolor(4, 4);
         ob_start();
         imagejpeg($jpeg);
         $jpegBytes = (string) ob_get_clean();
-        imagedestroy($jpeg);
 
         $this->assertSame('png', image_ext_for_bytes($pngBytes));
         $this->assertSame('jpg', image_ext_for_bytes($jpegBytes));

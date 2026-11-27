@@ -655,7 +655,6 @@ class LambRestoreTest extends TestCase
         }
         $image = imagecreatetruecolor(4, 3);
         imagepng($image, "$root/2026/07/photo.png");
-        imagedestroy($image);
 
         return $root;
     }
@@ -873,7 +872,6 @@ class LambRestoreTest extends TestCase
         $image = imagecreatetruecolor(4, 3);
         ob_start();
         imagepng($image);
-        imagedestroy($image);
 
         return (string) ob_get_clean();
     }

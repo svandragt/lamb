@@ -634,7 +634,7 @@ function convert_to_webp_from_bytes(string $bytes, string $dest_path, int $quali
  * the tail shared by convert_to_webp() and convert_to_webp_from_bytes()
  * once each has its own decoded $image.
  *
- * @param \GdImage $image         Decoded source image; consumed and destroyed.
+ * @param \GdImage $image         Decoded source image.
  * @param string   $dest_path     Path the WebP should be written to.
  * @param int      $quality       WebP quality (0-100).
  * @param int      $max_dimension Longest edge to keep; larger images are scaled down.
@@ -653,14 +653,10 @@ function finish_webp_from_image(\GdImage $image, string $dest_path, int $quality
         imagealphablending($resized, false);
         imagesavealpha($resized, true);
         imagecopyresampled($resized, $image, 0, 0, 0, 0, $new_width, $new_height, imagesx($image), imagesy($image));
-        imagedestroy($image);
         $image = $resized;
     }
 
-    $ok = imagewebp($image, $dest_path, $quality);
-    imagedestroy($image);
-
-    return $ok;
+    return imagewebp($image, $dest_path, $quality);
 }
 
 /**

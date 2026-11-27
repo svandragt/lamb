@@ -318,7 +318,6 @@ class UploadTest extends TestCase
         // Re-open the WebP and confirm the centre pixel kept a non-opaque alpha.
         $im = imagecreatefromwebp($dest);
         $alpha = (imagecolorat($im, 10, 10) >> 24) & 0x7F;
-        imagedestroy($im);
         $this->assertGreaterThan(0, $alpha);
     }
 
@@ -735,7 +734,6 @@ class UploadTest extends TestCase
         $im = imagecreatetruecolor($w, $h);
         imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
         imagepng($im, $path);
-        imagedestroy($im);
     }
 
     // asset_srcset — the responsive srcset candidates for a locally stored WebP
@@ -902,7 +900,6 @@ class UploadTest extends TestCase
         imagefill($im, 0, 0, imagecolorallocate($im, 10, 120, 200));
         $path = $this->tempRootDir . '/src_' . uniqid() . '.png';
         imagepng($im, $path);
-        imagedestroy($im);
         return $path;
     }
 
@@ -914,7 +911,6 @@ class UploadTest extends TestCase
         imagefill($im, 0, 0, imagecolorallocatealpha($im, 0, 0, 0, 127));
         $path = $this->tempRootDir . '/srcalpha_' . uniqid() . '.png';
         imagepng($im, $path);
-        imagedestroy($im);
         return $path;
     }
 }

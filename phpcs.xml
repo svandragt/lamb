@@ -5,7 +5,7 @@
     <!-- Minimum supported PHP (matches composer.json require); keep at the floor, not the default. -->
     <config name="php_version" value="80400"/>
 
-    <!-- Set the PHP version range for PHPCompatibility (matches composer.json require). -->
+    <!-- PHPCompatibility range: the composer.json floor up to the newest PHP in the CI test matrix. -->
     <config name="testVersion" value="8.4-8.6"/>
 
     <!-- Show sniff codes in all reports. -->
@@ -21,7 +21,10 @@
     <exclude-pattern>node_modules/</exclude-pattern>
 
     <!-- Check for PHP cross-version compatibility. -->
-    <rule ref="PHPCompatibility"/>
+    <rule ref="PHPCompatibility">
+        <!-- PHP 8.6's trim() default only adds \f, which is harmless for the text Lamb trims, and the sniff flags every trim() call. -->
+        <exclude name="PHPCompatibility.ParameterValues.NewTrimCharactersDefault"/>
+    </rule>
     <rule ref="PSR2">
         <!-- tests/-->
         <exclude name="PSR2.Methods.MethodDeclaration.Underscore"/>
