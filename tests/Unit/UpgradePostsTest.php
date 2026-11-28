@@ -28,7 +28,12 @@ class UpgradePostsTest extends TestCase
         $bean->version = 1;
         R::store($bean);
 
-        upgrade_posts([$bean]);
+        (require dirname(__DIR__, 2) . '/src/modules/highlight/module.php')();
+        try {
+            upgrade_posts([$bean]);
+        } finally {
+            \Lamb\Hooks\reset('render.code_block');
+        }
 
         $this->assertStringContainsString('phiki', $bean->transformed);
         $this->assertSame(POST_VERSION, (int)$bean->version);

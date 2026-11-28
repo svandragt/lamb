@@ -572,7 +572,8 @@ function front_matter_summary(array $front_matter): ?string
  *
  * Code blocks are pulled out before hashtag linking so a `#comment` or a
  * highlighter colour like `style="color: #005cc5"` can never become a /tag/
- * link, then highlighted and restored so visitors get pre-rendered markup.
+ * link, then passed through the `render.code_block` filter (the highlight
+ * module highlights them) and restored so visitors get pre-rendered markup.
  * The extract/restore order is load-bearing: linking must run on the
  * code-free HTML, and the highlighted blocks are spliced back afterwards.
  *
@@ -584,7 +585,7 @@ function front_matter_summary(array $front_matter): ?string
 function highlight_and_link(string $markdown): string
 {
     [$markdown_without_code, $code_blocks] = Highlight\extract_code_blocks($markdown);
-    $code_blocks = array_map('Lamb\Highlight\highlight_code_blocks', $code_blocks);
+    $code_blocks = array_map(static fn(string $block): string => Hooks\apply_filters('render.code_block', $block), $code_blocks);
 
     return Highlight\restore_code_blocks(parse_tags($markdown_without_code), $code_blocks);
 }

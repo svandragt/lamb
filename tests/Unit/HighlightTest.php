@@ -16,6 +16,25 @@ class HighlightTest extends TestCase
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
+        (require dirname(__DIR__, 2) . '/src/modules/highlight/module.php')();
+    }
+
+    protected function tearDown(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+    }
+
+    public function testWithoutTheModuleCodeBlocksStayPlain(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+        $bean = R::dispense('post');
+        $bean->body = "```php\necho 1;\n```";
+
+        parse_bean($bean);
+        $html = (string) $bean->transformed;
+
+        $this->assertStringNotContainsString('phiki', $html);
+        $this->assertStringContainsString('<pre><code class="language-php">', $html);
     }
 
     public function testHighlightsFencedPhpBlock(): void

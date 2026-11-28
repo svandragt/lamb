@@ -19,6 +19,8 @@
  *  - http.link_headers (filter, list<string> $links) — `Link:` header values.
  *  - feed.hubs (filter, list<string> $hubs, array $config) — WebSub hub URLs
  *    advertised in the Atom and JSON feeds.
+ *  - render.code_block (filter, string $html) — one fenced code block of a post
+ *    being rendered, as `<pre><code …>…</code></pre>` HTML.
  *  - cron.run (action, callable(string): void $output) — work for each /_cron
  *    run, after the feeds are crawled; write result lines to $output.
  */

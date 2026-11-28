@@ -195,8 +195,9 @@ lamb/
 │   ├── webmention.php    # Webmention receiving + outbound sending queue (via /_cron)
 │   ├── hooks.php         # Hook API (actions, filters, module loader)
 │   ├── modules/          # Optional features, one directory each, loaded via Hooks\load_modules(); see modules/README.md
+│   │   ├── highlight/    # Syntax highlighting of fenced code blocks (Phiki)
 │   │   └── websub/       # WebSub hub pings on publish, hub links in the feeds
-│   ├── highlight.php     # Syntax highlighting of fenced code blocks (Phiki)
+│   ├── highlight.php     # Extracts/restores fenced code blocks around hashtag linking
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
 │   ├── assets/           # Runtime upload storage (created under YYYY/MM)
 │   ├── images/           # Shipped static images (default social embed image)
@@ -253,6 +254,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `theme.php` + `theme/*.php` | `Lamb\Theme` |
 | `webmention.php` | `Lamb\Webmention` |
 | `hooks.php` | `Lamb\Hooks` |
+| `modules/highlight/*.php` | `Lamb\Highlight` |
 | `modules/websub/*.php` | `Lamb\Websub` |
 
 `response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
