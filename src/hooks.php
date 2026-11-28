@@ -174,7 +174,7 @@ function load_modules(string $dir): array
     $loaded = [];
     foreach ($files as $file) {
         $key = realpath($file) ?: $file;
-        if (isset($seen[$key])) {
+        if (array_key_exists($key, $seen)) {
             continue;
         }
         $seen[$key] = null;
@@ -184,7 +184,12 @@ function load_modules(string $dir): array
                 error_log(sprintf('Module %s did not return a callable; skipped.', $file));
                 continue;
             }
+            $render_hooks = render_hook_count();
             $register();
+            if (render_hook_count() !== $render_hooks) {
+                $renders = &render_module_registry();
+                $renders[basename(dirname($file))] = true;
+            }
         } catch (\Throwable $e) {
             error_log(sprintf('Module %s failed to load: %s: %s', $file, $e::class, $e->getMessage()));
             continue;
@@ -219,4 +224,47 @@ function loaded_modules(): array
     sort($names);
 
     return $names;
+}
+
+/**
+ * Modules that registered a `render.*` hook while loading, keyed by name.
+ *
+ * @return array<string, true> The mutable registry.
+ */
+function &render_module_registry(): array
+{
+    static $renders = [];
+
+    return $renders;
+}
+
+/**
+ * The names of the loaded modules that change how posts render (they register
+ * a `render.*` hook), sorted. Stored post HTML depends on exactly these.
+ *
+ * @return list<string> Module names.
+ */
+function render_modules(): array
+{
+    $names = array_values(array_intersect(loaded_modules(), array_keys(render_module_registry())));
+    sort($names);
+
+    return $names;
+}
+
+/**
+ * The number of callbacks registered on `render.*` hooks.
+ *
+ * @return int The callback count.
+ */
+function render_hook_count(): int
+{
+    $count = 0;
+    foreach (array_keys(registry()) as $hook) {
+        if (str_starts_with($hook, 'render.')) {
+            $count += count(callbacks($hook));
+        }
+    }
+
+    return $count;
 }

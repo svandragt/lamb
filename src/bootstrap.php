@@ -846,13 +846,14 @@ function migrate_data(bool $dry_run = false): array
 
 /**
  * Option row that holds the modules the stored post HTML was rendered with, as
- * the comma-separated names Hooks\loaded_modules() returns.
+ * the comma-separated names Hooks\render_modules() returns.
  */
 const RENDER_MODULES_OPTION = 'render_modules';
 
 /**
- * Marks every current post for re-rendering when the set of loaded modules has
- * changed since the posts were rendered.
+ * Marks every current post for re-rendering when the set of modules that change
+ * rendering (they register a `render.*` hook) has changed since the posts were
+ * rendered. Other modules (websub, importers) never trigger it.
  *
  * A module can change rendering (the highlight module's `render.code_block`
  * filter), and each post caches its HTML in `transformed`. Adding or removing a
@@ -866,7 +867,7 @@ const RENDER_MODULES_OPTION = 'render_modules';
  */
 function rerender_for_module_change(bool $dry_run = false): int
 {
-    $current = implode(',', \Lamb\Hooks\loaded_modules());
+    $current = implode(',', \Lamb\Hooks\render_modules());
     $option = get_option(RENDER_MODULES_OPTION, null);
     if ($option->id !== 0 && (string) $option->value === $current) {
         return 0;
