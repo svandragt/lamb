@@ -11,6 +11,8 @@ use function Lamb\Hooks\do_action;
 use function Lamb\Hooks\has;
 use function Lamb\Hooks\load_modules;
 use function Lamb\Hooks\reset;
+use function Lamb\Route\register_app_routes;
+use function Lamb\Route\register_route;
 
 class HooksTest extends TestCase
 {
@@ -72,19 +74,46 @@ class HooksTest extends TestCase
         mkdir("$dir/broken", 0777, true);
         file_put_contents("$dir/beta/module.php", '<?php return fn() => \Lamb\Hooks\add_action("m", fn() => null);');
         file_put_contents("$dir/alpha/module.php", '<?php return fn() => null;');
+        mkdir("$dir/throws", 0777, true);
         file_put_contents("$dir/broken/module.php", '<?php return 1;');
+        file_put_contents("$dir/throws/module.php", '<?php return fn() => throw new \RuntimeException("boom");');
 
         $log = ini_set('error_log', '/dev/null');
         try {
             $loaded = load_modules($dir);
+            $again = load_modules($dir);
         } finally {
-            ini_set('error_log', (string) $log);
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
             array_map('unlink', glob("$dir/*/module.php") ?: []);
             array_map('rmdir', glob("$dir/*") ?: []);
             rmdir($dir);
         }
 
         $this->assertSame(['alpha', 'beta'], $loaded);
+        $this->assertSame([], $again, 'A module loads at most once per process');
         $this->assertTrue(has('m'));
+    }
+
+    public function testAModuleCannotReplaceACoreRoute(): void
+    {
+        global $routes;
+        add_action('routes.register', function (): void {
+            register_route('login', 'Tests\\Unit\\hijack');
+            register_route('hello', 'Tests\\Unit\\hello');
+        });
+
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            register_app_routes('home');
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+        }
+
+        $this->assertSame('Lamb\\Response\\redirect_login', $routes['login'][0]);
+        $this->assertSame('Tests\\Unit\\hello', $routes['hello'][0]);
     }
 }

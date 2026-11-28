@@ -853,15 +853,17 @@ function emit(string $event, OODBBean $bean): void
 }
 
 /**
- * Clears the post-event subscribers. For test isolation between cases that each
- * register their own subscribers; production wiring runs once per request.
+ * Clears every `post.*` event subscriber. For test isolation between cases that
+ * each register their own subscribers; production wiring runs once per request.
  *
  * @return void
  */
 function reset_subscribers(): void
 {
-    foreach (['post.created', 'post.updated', 'post.published', 'post.deleted', 'post.restored'] as $event) {
-        Hooks\reset($event);
+    foreach (array_keys(Hooks\registry()) as $hook) {
+        if (str_starts_with($hook, 'post.')) {
+            Hooks\reset($hook);
+        }
     }
 }
 

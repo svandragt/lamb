@@ -152,23 +152,37 @@ function reset(?string $hook = null): void
  * Loads every module under a directory.
  *
  * A module is a directory holding `module.php`, which returns a callable that
- * registers the module's hooks. Modules load in directory-name order.
+ * registers the module's hooks. Modules load in directory-name order, each at
+ * most once per process. A module that fails to load is logged and skipped, so
+ * one broken module cannot take down the site (and the login to fix it).
  *
  * @param string $dir The modules directory.
  * @return list<string> The names of the loaded modules.
  */
 function load_modules(string $dir): array
 {
+    static $seen = [];
+
     $files = glob(rtrim($dir, '/') . '/*/module.php') ?: [];
     sort($files);
     $loaded = [];
     foreach ($files as $file) {
-        $register = require $file;
-        if (!is_callable($register)) {
-            error_log(sprintf('Module %s did not return a callable; skipped.', $file));
+        $key = realpath($file) ?: $file;
+        if (isset($seen[$key])) {
             continue;
         }
-        $register();
+        $seen[$key] = true;
+        try {
+            $register = require $file;
+            if (!is_callable($register)) {
+                error_log(sprintf('Module %s did not return a callable; skipped.', $file));
+                continue;
+            }
+            $register();
+        } catch (\Throwable $e) {
+            error_log(sprintf('Module %s failed to load: %s: %s', $file, $e::class, $e->getMessage()));
+            continue;
+        }
         $loaded[] = basename(dirname($file));
     }
 

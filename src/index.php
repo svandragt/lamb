@@ -59,12 +59,17 @@ define("THEME_URL", 'themes/' . THEME . '/');
 foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_header) {
     header($cache_header);
 }
-$link_headers = Hooks\apply_filters('http.link_headers', [
+$core_link_headers = [
     '<' . ROOT_URL . '/micropub>; rel="micropub"',
     '<' . ROOT_URL . '/webmention>; rel="webmention"',
     '<' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"',
     '<' . $config['token_endpoint'] . '>; rel="token_endpoint"',
-]);
+];
+$link_headers = Hooks\apply_filters('http.link_headers', $core_link_headers);
+// A filter that forgets to return its list must not drop endpoint discovery.
+if (!is_array($link_headers) || array_filter($link_headers, 'is_string') !== $link_headers) {
+    $link_headers = $core_link_headers;
+}
 foreach ($link_headers as $link_header) {
     header('Link: ' . $link_header, false);
 }
