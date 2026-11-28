@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Support\EndpointProbe;
 
 /**
- * Which access token /micropub and /micropub-media (src/micropub.php) use, and when they refuse the request.
+ * Which access token /micropub and /micropub-media (src/modules/micropub/micropub.php) use, and when they refuse the request.
  *
  * Both endpoints must pick the token by the same rule, so each case runs
  * against both and expects the same outcome. The probe sets getallheaders()

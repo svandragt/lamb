@@ -5,7 +5,7 @@ namespace Tests\Support;
 /**
  * Runs a Micropub request handler in its own `php` process and reports what it sent.
  *
- * respond_micropub() and respond_micropub_media() (src/micropub.php) read
+ * respond_micropub() and respond_micropub_media() (src/modules/micropub/micropub.php) read
  * php://input, send the response with header() and http_response_code(), and
  * then exit(). PHPUnit cannot observe that in-process: exit() ends the test run,
  * and the CLI SAPI keeps no headers for headers_list(). So the handler runs in a
@@ -229,6 +229,7 @@ final class EndpointProbe
 
         return strtr(self::TEMPLATE, [
             '__AUTOLOAD__' => var_export(__DIR__ . '/../../vendor/autoload.php', true),
+            '__MICROPUB__' => var_export(__DIR__ . '/../../src/modules/micropub/micropub.php', true),
             '__ROOT_DIR__' => var_export($rootDir, true),
             '__CONFIG__'   => var_export(['site_url' => 'https://example.com', 'token_endpoint' => $tokenEndpoint], true),
             '__SERVER__'   => var_export($server, true),
@@ -327,6 +328,8 @@ namespace Lamb\Response {
 
 namespace {
     require __AUTOLOAD__;
+    // Modules are not autoloaded; the micropub module loads this per request.
+    require __MICROPUB__;
 
     define('ROOT_DIR', __ROOT_DIR__);
     define('ROOT_URL', 'https://example.com');

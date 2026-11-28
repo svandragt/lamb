@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Support\EndpointProbe;
 
 /**
- * respond_micropub_media() (src/micropub.php) against the requests micropub.rocks sends.
+ * respond_micropub_media() (src/modules/micropub/micropub.php) against the requests micropub.rocks sends.
  *
  * It sets the response via http_response_code()/header() and then exit()s, a
  * shape PHPUnit cannot observe in-process, so EndpointProbe runs it in a child

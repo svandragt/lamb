@@ -191,12 +191,12 @@ lamb/
 │   ├── network.php       # Feed ingestion cron orchestrator (_cron route); helpers split into network/
 │   ├── network/          # Feed ingestion split: sources.php (config/SimplePie/RSS crawl), json_feed.php (JSON Feed parse + adapter), ingest.php (item→post pipeline), status.php (feedstatus health bean)
 │   ├── http.php          # get_request_uri(); shared HTTP client: fetch(), parse_status_line()
-│   ├── micropub.php      # Micropub endpoint (taproot/micropub-adapter subclass) + media endpoint
 │   ├── webmention.php    # Webmention receiving + outbound sending queue (via /_cron)
 │   ├── hooks.php         # Hook API (actions, filters, module loader)
 │   ├── modules/          # Optional features, one directory each, loaded via Hooks\load_modules(); see modules/README.md
 │   │   ├── highlight/    # Syntax highlighting of fenced code blocks (Phiki)
 │   │   ├── known/        # Known (RSS export) import source for bin/lamb import
+│   │   ├── micropub/     # Micropub endpoint (taproot/micropub-adapter subclass) + media endpoint
 │   │   ├── wordpress/    # WordPress (WXR) import source for bin/lamb import
 │   │   └── websub/       # WebSub hub pings on publish, hub links in the feeds
 │   ├── highlight.php     # Extracts/restores fenced code blocks around hashtag linking
@@ -246,7 +246,6 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `highlight.php` | `Lamb\Highlight` |
 | `http.php` | `Lamb\Http` |
 | `lamb.php` | `Lamb` |
-| `micropub.php` | `Lamb\Micropub` |
 | `network.php` + `network/*.php` | `Lamb\Network` |
 | `post.php` | `Lamb\Post` |
 | `response.php` + `response/*.php` | `Lamb\Response` |
@@ -258,6 +257,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `hooks.php` | `Lamb\Hooks` |
 | `modules/highlight/*.php` | `Lamb\Highlight` |
 | `modules/known/*.php` | `Lamb\Known` |
+| `modules/micropub/*.php` | `Lamb\Micropub` |
 | `modules/websub/*.php` | `Lamb\Websub` |
 | `modules/wordpress/*.php` | `Lamb\WordPress` |
 
@@ -502,7 +502,7 @@ When the user is logged in, it also loads:
 
 User-uploaded files live under `src/assets/`, not under theme directories.
 
-`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`) and downscaled so their longest edge is at most 1600px (`Response\scaled_dimensions()`) — large screenshots are not served at full resolution to phones; GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
+`respond_upload()` stores files in `src/assets/YYYY/MM/` and returns Markdown image links pointing at those uploaded files. JPEG/PNG uploads are re-encoded to WebP via GD (`Response\convert_to_webp()`, gated by `Response\should_convert_to_webp()`) and downscaled so their longest edge is at most 1600px (`Response\scaled_dimensions()`) — large screenshots are not served at full resolution to phones; GIF/WebP/AVIF are stored unchanged, and any conversion failure falls back to storing the original bytes. The same conversion is applied to Micropub uploads (inline `photo` files and the media endpoint) in `modules/micropub/micropub.php`. Deployment setups that support uploads must ensure `src/assets/` is writable by the web server or PHP-FPM user.
 
 ### `.gitignore` exemption
 
@@ -564,11 +564,11 @@ Parts you rarely need to override: `edit.php`, `login.php`, `settings.php`, `404
 
 ### IndieWeb Endpoints
 
-- `/micropub` + `/micropub-media` (`micropub.php`) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); tokens are introspected against the configured `token_endpoint`. Both endpoints choose the token through `request_access_token()` (Bearer header, else the trimmed `access_token` form field; both at once is a `400`), and `/micropub` hands the adapter that token via `with_access_token()` because the adapter's own `getAccessToken()` is looser. No function in `micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
+- `/micropub` + `/micropub-media` (`modules/micropub/`, loaded only on those requests) — Micropub create/update/delete/undelete and media uploads, built on `taproot/micropub-adapter` (`LambMicropubAdapter`); tokens are introspected against the configured `token_endpoint`. Both endpoints choose the token through `request_access_token()` (Bearer header, else the trimmed `access_token` form field; both at once is a `400`), and `/micropub` hands the adapter that token via `with_access_token()` because the adapter's own `getAccessToken()` is looser. No function in `modules/micropub/micropub.php` may exceed 60 lines (`MicropubFunctionLengthGuardTest`): split a handler into named steps rather than raising the limit
 - `/webmention` (`webmention.php`) — receives and verifies inbound webmentions (stored in the `webmention` table, rendered per post by `parts/_webmentions.php`, and across all live posts, newest verified first and bounded by `WEBMENTION_DISPLAY_LIMIT`, by `/mentions` (`respond_mentions()`, login required; `count_webmentions()` feeds the admin toolbar count)); publishing/editing a post enqueues outbound webmentions in `webmentionoutbox`, sent by `/_cron`
 - WebSub (`modules/websub/`) — pings the `websub_hubs` configured hubs when a post publishes
-- `index.php` advertises `micropub`, `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers
-- The theme `html.php` files emit the same endpoints as `<link>` tags, plus `rel="indieauth-metadata"` from the optional `indieauth_metadata` setting (`the_indieauth_metadata()` in `theme/meta.php`)
+- `index.php` advertises `webmention`, `authorization_endpoint` and `token_endpoint` via `Link` headers, and the micropub module adds `micropub` through the `http.link_headers` filter
+- The theme `html.php` files emit the same endpoints as `<link>` tags (`micropub` through the `theme.head` action, which a custom theme must fire to advertise module links), plus `rel="indieauth-metadata"` from the optional `indieauth_metadata` setting (`the_indieauth_metadata()` in `theme/meta.php`)
 
 ### Pagination
 
