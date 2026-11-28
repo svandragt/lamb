@@ -20,6 +20,7 @@ $site_url = Config\canonical_site_url($config);
 define('IS_HTTPS', Http\is_https($_SERVER, $site_url));
 Bootstrap\bootstrap_session($data_dir, IS_HTTPS);
 Post\register_default_subscribers();
+Hooks\load_modules(ROOT_DIR . '/modules');
 
 Config\apply_timezone($config);
 // Only for the owner: a health check or a bot must neither save the draft nor read
@@ -58,10 +59,20 @@ define("THEME_URL", 'themes/' . THEME . '/');
 foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_header) {
     header($cache_header);
 }
-header('Link: <' . ROOT_URL . '/micropub>; rel="micropub"', false);
-header('Link: <' . ROOT_URL . '/webmention>; rel="webmention"', false);
-header('Link: <' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"', false);
-header('Link: <' . $config['token_endpoint'] . '>; rel="token_endpoint"', false);
+$core_link_headers = [
+    '<' . ROOT_URL . '/micropub>; rel="micropub"',
+    '<' . ROOT_URL . '/webmention>; rel="webmention"',
+    '<' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"',
+    '<' . $config['token_endpoint'] . '>; rel="token_endpoint"',
+];
+$link_headers = Hooks\apply_filters('http.link_headers', $core_link_headers);
+// A filter that forgets to return its list must not drop endpoint discovery.
+if (!is_array($link_headers) || array_filter($link_headers, 'is_string') !== $link_headers) {
+    $link_headers = $core_link_headers;
+}
+foreach ($link_headers as $link_header) {
+    header('Link: ' . $link_header, false);
+}
 
 # Routing
 $request_uri = Http\get_request_uri();

@@ -46,6 +46,7 @@
             "src/config.php",
             "src/export.php",
             "src/highlight.php",
+            "src/hooks.php",
             "src/http.php",
             "src/import.php",
             "src/known.php",

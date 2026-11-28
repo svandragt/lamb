@@ -2,6 +2,7 @@
 
 namespace Lamb\Route;
 
+use Lamb\Hooks;
 use Lamb\Response;
 
 /**
@@ -126,6 +127,18 @@ function register_app_routes(
     register_private_route('upload', 'Lamb\\Response\\respond_upload', $lookup);
     register_private_route('checkbox', 'Lamb\\Response\\respond_checkbox', $lookup);
     register_private_route('_cron', 'Lamb\\Network\\process_feeds');
+    // Last, so module routes count as reserved (is_reserved_route()) and a post
+    // slug cannot shadow them. A module cannot replace a core route: a module that
+    // took over `login` or `settings` would lock the author out.
+    global $routes;
+    $core_routes = $routes;
+    Hooks\do_action('routes.register', $action, $lookup, $sublookup);
+    foreach ($core_routes as $name => $route) {
+        if ($routes[$name] !== $route) {
+            error_log(sprintf('A module tried to replace the core route "%s"; kept the core route.', $name));
+            $routes[$name] = $route;
+        }
+    }
 }
 
 /**

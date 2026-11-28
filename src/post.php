@@ -2,6 +2,7 @@
 
 namespace Lamb\Post;
 
+use Lamb\Hooks;
 use Lamb\Network\JsonFeedItem;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -806,26 +807,12 @@ function finalize_slug(OODBBean $bean): bool
 }
 
 /**
- * The registry of post-lifecycle event subscribers, keyed by event name.
- *
- * A by-reference accessor so on() and reset_subscribers() mutate the one static
- * array emit() reads. See save() for the events and the funnel that emits them.
- *
- * @return array<string, list<callable>> The mutable subscriber registry.
- */
-function &event_subscribers(): array
-{
-    static $subscribers = [];
-
-    return $subscribers;
-}
-
-/**
  * Registers a subscriber for a post-lifecycle event.
  *
  * Events are emitted by save(): `post.created`, `post.updated`, `post.published`
  * (and, as more write sites convert, `post.deleted` and `post.restored`). A
- * subscriber is called with the stored bean.
+ * subscriber is called with the stored bean. A thin wrapper over the hook API
+ * (src/hooks.php), so modules can subscribe with Hooks\add_action() directly.
  *
  * @param string   $event      The event name to subscribe to.
  * @param callable $subscriber fn(OODBBean $bean): void.
@@ -833,12 +820,11 @@ function &event_subscribers(): array
  */
 function on(string $event, callable $subscriber): void
 {
-    $subscribers = &event_subscribers();
-    $subscribers[$event][] = $subscriber;
+    Hooks\add_action($event, $subscriber);
 }
 
 /**
- * Calls every subscriber registered for an event, in registration order.
+ * Calls every subscriber registered for an event, in hook order.
  *
  * Events follow a committed write, so a subscriber that fails the database (a
  * locked file while /_cron holds it) is logged and the remaining subscribers
@@ -850,7 +836,7 @@ function on(string $event, callable $subscriber): void
  */
 function emit(string $event, OODBBean $bean): void
 {
-    foreach (event_subscribers()[$event] ?? [] as $subscriber) {
+    foreach (Hooks\callbacks($event) as $subscriber) {
         try {
             $subscriber($bean);
         } catch (SQL $e) {
@@ -867,15 +853,18 @@ function emit(string $event, OODBBean $bean): void
 }
 
 /**
- * Clears the subscriber registry. For test isolation between cases that each
- * register their own subscribers; production wiring runs once per request.
+ * Clears every `post.*` event subscriber. For test isolation between cases that
+ * each register their own subscribers; production wiring runs once per request.
  *
  * @return void
  */
 function reset_subscribers(): void
 {
-    $subscribers = &event_subscribers();
-    $subscribers = [];
+    foreach (array_keys(Hooks\registry()) as $hook) {
+        if (str_starts_with($hook, 'post.')) {
+            Hooks\reset($hook);
+        }
+    }
 }
 
 /**

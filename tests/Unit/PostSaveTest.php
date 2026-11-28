@@ -412,7 +412,7 @@ class PostSaveTest extends TestCase
 
         $this->assertSame(
             ['\Lamb\Webmention\enqueue_for_post', '\Lamb\Websub\ping_for_post'],
-            \Lamb\Post\event_subscribers()['post.published'] ?? []
+            \Lamb\Hooks\callbacks('post.published')
         );
     }
 
