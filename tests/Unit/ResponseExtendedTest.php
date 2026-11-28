@@ -185,7 +185,12 @@ class ResponseExtendedTest extends TestCase
         $bean->version = 1;
         R::store($bean);
 
-        get_results([], [$bean], build_pagination_meta(1, 1, 0));
+        (require dirname(__DIR__, 2) . '/src/modules/highlight/module.php')();
+        try {
+            get_results([], [$bean], build_pagination_meta(1, 1, 0));
+        } finally {
+            \Lamb\Hooks\reset('render.code_block');
+        }
 
         $this->assertStringContainsString('phiki', $bean->transformed);
     }

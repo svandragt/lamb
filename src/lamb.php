@@ -568,23 +568,49 @@ function front_matter_summary(array $front_matter): ?string
 }
 
 /**
+ * Runs one extracted code block through the `render.code_block` filter.
+ *
+ * A filter that throws or returns a non-string is logged and the block is kept
+ * as it was, so a broken module never stops a post from saving or rendering.
+ *
+ * @param string $block One `<pre><code …>…</code></pre>` block.
+ * @return string The filtered block, or the original.
+ *
+ * @internal Step of highlight_and_link(); not part of the public API.
+ */
+function filter_code_block(string $block): string
+{
+    try {
+        $filtered = Hooks\apply_filters('render.code_block', $block);
+    } catch (\Throwable $e) {
+        error_log(sprintf('render.code_block filter failed: %s: %s', $e::class, $e->getMessage()));
+
+        return $block;
+    }
+
+    return is_string($filtered) ? $filtered : $block;
+}
+
+/**
  * Hashtag-links the rendered HTML while server-side highlighting fenced code.
  *
  * Code blocks are pulled out before hashtag linking so a `#comment` or a
  * highlighter colour like `style="color: #005cc5"` can never become a /tag/
- * link, then highlighted and restored so visitors get pre-rendered markup.
+ * link, then passed through the `render.code_block` filter (the highlight
+ * module highlights them) and restored so visitors get pre-rendered markup.
  * The extract/restore order is load-bearing: linking must run on the
  * code-free HTML, and the highlighted blocks are spliced back afterwards.
  *
  * @param string $markdown The rendered post HTML.
- * @return string The HTML with hashtag links and highlighted code blocks.
+ * @return string The HTML with hashtag links, and code blocks as the
+ *                `render.code_block` filter returned them.
  *
  * @internal Decomposed step of parse_bean(); not part of the public API.
  */
 function highlight_and_link(string $markdown): string
 {
     [$markdown_without_code, $code_blocks] = Highlight\extract_code_blocks($markdown);
-    $code_blocks = array_map('Lamb\Highlight\highlight_code_blocks', $code_blocks);
+    $code_blocks = array_map(filter_code_block(...), $code_blocks);
 
     return Highlight\restore_code_blocks(parse_tags($markdown_without_code), $code_blocks);
 }

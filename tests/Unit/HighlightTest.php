@@ -16,6 +16,45 @@ class HighlightTest extends TestCase
         if (!R::testConnection()) {
             R::setup('sqlite::memory:');
         }
+        (require dirname(__DIR__, 2) . '/src/modules/highlight/module.php')();
+    }
+
+    protected function tearDown(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+    }
+
+    public function testAFilterThatThrowsOrReturnsANonStringKeepsTheBlock(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+        $block = '<pre><code class="language-php">echo 1;</code></pre>';
+
+        \Lamb\Hooks\add_filter('render.code_block', fn() => null);
+        $this->assertSame($block, \Lamb\filter_code_block($block));
+
+        \Lamb\Hooks\reset('render.code_block');
+        \Lamb\Hooks\add_filter('render.code_block', fn() => throw new \RuntimeException('boom'));
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $this->assertSame($block, \Lamb\filter_code_block($block));
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+        }
+    }
+
+    public function testWithoutTheModuleCodeBlocksStayPlain(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+        $bean = R::dispense('post');
+        $bean->body = "```php\necho 1;\n```";
+
+        parse_bean($bean);
+        $html = (string) $bean->transformed;
+
+        $this->assertStringNotContainsString('phiki', $html);
+        $this->assertStringContainsString('<pre><code class="language-php">', $html);
     }
 
     public function testHighlightsFencedPhpBlock(): void

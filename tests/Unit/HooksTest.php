@@ -73,7 +73,7 @@ class HooksTest extends TestCase
         mkdir("$dir/alpha", 0777, true);
         mkdir("$dir/broken", 0777, true);
         file_put_contents("$dir/beta/module.php", '<?php return fn() => \Lamb\Hooks\add_action("m", fn() => null);');
-        file_put_contents("$dir/alpha/module.php", '<?php return fn() => null;');
+        file_put_contents("$dir/alpha/module.php", '<?php return fn() => \Lamb\Hooks\add_filter("render.test", fn($v) => $v);');
         mkdir("$dir/throws", 0777, true);
         file_put_contents("$dir/broken/module.php", '<?php return 1;');
         file_put_contents("$dir/throws/module.php", '<?php return fn() => throw new \RuntimeException("boom");');
@@ -93,6 +93,8 @@ class HooksTest extends TestCase
 
         $this->assertSame(['alpha', 'beta'], $loaded);
         $this->assertSame([], $again, 'A module loads at most once per process');
+        $this->assertContains('alpha', \Lamb\Hooks\render_modules(), 'alpha registers a render.* hook');
+        $this->assertNotContains('beta', \Lamb\Hooks\render_modules());
         $this->assertTrue(has('m'));
     }
 
