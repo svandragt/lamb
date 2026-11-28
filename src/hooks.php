@@ -21,6 +21,8 @@
  *    advertised in the Atom and JSON feeds.
  *  - render.code_block (filter, string $html) — one fenced code block of a post
  *    being rendered, as `<pre><code …>…</code></pre>` HTML.
+ *  - import.sources (action) — fired by bin/lamb only; call
+ *    Import\register_source() here to add a `bin/lamb import` source.
  *  - cron.run (action, callable(string): void $output) — work for each /_cron
  *    run, after the feeds are crawled; write result lines to $output.
  */

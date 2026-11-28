@@ -257,6 +257,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 | `hooks.php` | `Lamb\Hooks` |
 | `modules/highlight/*.php` | `Lamb\Highlight` |
 | `modules/websub/*.php` | `Lamb\Websub` |
+| `modules/wordpress/*.php` | `Lamb\WordPress` |
 
 `response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
