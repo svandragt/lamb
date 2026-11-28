@@ -35,3 +35,9 @@ return static function (): void {
 ```
 
 The hooks core fires are listed in the `src/hooks.php` docblock.
+
+## Not yet supported
+
+Module settings. A module's settings (for example WebSub's `websub_hubs`) still
+live in core config (`src/config.php`) and the settings form. Letting a module
+declare its own settings, so they move with it, is planned for a later PR.
