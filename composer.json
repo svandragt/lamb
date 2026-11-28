@@ -73,8 +73,7 @@
             "src/theme/formatting.php",
             "src/theme/meta.php",
             "src/micropub.php",
-            "src/webmention.php",
-            "src/wordpress.php"
+            "src/webmention.php"
         ]
     },
     "autoload-dev": {

@@ -9,8 +9,9 @@
  *   bin/lamb migrate [--dry-run]
  *   bin/lamb marker stored|code
  *
- * <source> is one of the registered importers (wordpress, known, lamb — see
- * the registrations below). Each parses its own file format into items, then
+ * <source> is one of the registered importers: known and lamb (registered
+ * below) and wordpress (from the optional wordpress module, through the
+ * `import.sources` hook). Each parses its own file format into items, then
  * shares run_import()'s dedupe, progress and summary output.
  *
  * --dry-run     Parse and convert every item but write nothing to the DB
@@ -55,7 +56,6 @@ namespace Lamb;
 use Lamb\Import;
 use Lamb\Known;
 use Lamb\Restore;
-use Lamb\WordPress;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
@@ -74,15 +74,6 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 // and a post.published save reaches every subscriber.
 Post\register_default_subscribers();
 Hooks\load_modules(ROOT_DIR . '/modules');
-
-Import\register_source([
-    'name'        => 'wordpress',
-    'parse'       => WordPress\parse_wxr_file(...),
-    'extract'     => WordPress\extract_items(...),
-    'skip_reason' => WordPress\skip_reason(...),
-    'uuid'        => static fn(array $item): string => WordPress\wordpress_uuid((string) $item['guid']),
-    'import'      => WordPress\import_item(...),
-]);
 
 Import\register_source([
     'name'        => 'known',
@@ -286,6 +277,9 @@ if ($command === 'marker') {
     exit(0);
 }
 
+// Modules add their import sources here (the wordpress module).
+Hooks\do_action('import.sources');
+
 if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace] [--experimental]\n");
     fwrite(STDERR, "       bin/lamb upgrade-posts [--dry-run]\n");
@@ -300,6 +294,11 @@ $source = $name !== null ? Import\get_source($name) : null;
 if ($source === null) {
     fwrite(STDERR, 'Unknown import source' . ($name !== null ? ": $name" : '') . ".\n");
     fwrite(STDERR, 'Valid sources: ' . implode(', ', Import\source_names()) . "\n");
+    // A module source that failed to load looks unknown; point at the real cause.
+    $failed = array_keys(array_filter(Hooks\module_registry(), 'is_null'));
+    if ($failed !== []) {
+        fwrite(STDERR, 'These modules failed to load (see the PHP error log): ' . implode(', ', array_map(static fn(string $file): string => basename(dirname($file)), $failed)) . "\n");
+    }
     exit(1);
 }
 
