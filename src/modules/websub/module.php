@@ -2,7 +2,7 @@
 
 /**
  * WebSub: pings the configured hubs when a post is published and advertises
- * them in the RSS and JSON feeds. The `websub_hubs` setting still lives in core
+ * them in the Atom and JSON feeds. The `websub_hubs` setting still lives in core
  * config.
  */
 

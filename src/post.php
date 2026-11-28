@@ -889,8 +889,8 @@ function register_default_subscribers(): void
  * Stores the bean and emits the lifecycle events that used to be a convention
  * spread across the write sites: `post.created` for a new row or `post.updated`
  * for an existing one, and `post.published` when the caller asks for
- * notification (subscribers registered by register_default_subscribers() then
- * queue webmentions and ping the WebSub hubs). Moving notification onto the
+ * notification (register_default_subscribers() queues webmentions; the websub
+ * module pings the hubs). Moving notification onto the
  * funnel's success path makes #685's "never notify a failed write" fix
  * structural rather than a per-site habit.
  *

@@ -181,4 +181,36 @@ class RunFeedCycleTest extends TestCase
 
         $this->assertFalse($called);
     }
+
+    public function testTheDefaultDrainRunsEveryCronHookEvenWhenOneThrows(): void
+    {
+        $webmentionRan = false;
+        $lines = [];
+        \Lamb\Hooks\add_action('cron.run', function (): void {
+            throw new \RuntimeException('module failure');
+        });
+        \Lamb\Hooks\add_action('cron.run', function (callable $output): void {
+            $output('module line' . PHP_EOL);
+        });
+
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            run_feed_cycle(
+                feeds: [],
+                webmention_drain: function () use (&$webmentionRan): array {
+                    $webmentionRan = true;
+                    return ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0];
+                },
+                output: $this->collectingOutput($lines)
+            );
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+            \Lamb\Hooks\reset('cron.run');
+        }
+
+        $this->assertStringContainsString('module line', implode('', $lines));
+        $this->assertTrue($webmentionRan);
+    }
 }

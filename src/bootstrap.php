@@ -1300,7 +1300,7 @@ const CODE_DIGEST_SKIPPED_DIRECTORIES = ['assets', 'images', 'scripts', 'themes'
 
 /**
  * The PHP files that make up Lamb: `src/*.php`, the namespace directories one
- * level below it, and `bin/lamb`.
+ * level below it, each module under `src/modules/`, and `bin/lamb`.
  *
  * @param string|null $root Repository root; null means this install's own.
  * @return list<string> Absolute paths, sorted.
@@ -1314,6 +1314,7 @@ function code_digest_files(?string $root = null): array
             $files[] = $file;
         }
     }
+    array_push($files, ...(glob($root . '/src/modules/*/*.php') ?: []));
     if (is_file($root . '/bin/lamb')) {
         $files[] = $root . '/bin/lamb';
     }

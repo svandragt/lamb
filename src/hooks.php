@@ -18,7 +18,7 @@
  *    Route\register_route() here to add routes.
  *  - http.link_headers (filter, list<string> $links) — `Link:` header values.
  *  - feed.hubs (filter, list<string> $hubs, array $config) — WebSub hub URLs
- *    advertised in the RSS and JSON feeds.
+ *    advertised in the Atom and JSON feeds.
  *  - cron.run (action, callable(string): void $output) — work for each /_cron
  *    run, after the feeds are crawled; write result lines to $output.
  */

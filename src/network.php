@@ -139,9 +139,7 @@ function run_feed_cycle(
 ): void {
     $feeds ??= get_feeds();
     $crawler ??= static fn(string $name, string $url): array => crawl_feed_guarded($name, $url);
-    $module_drain ??= static function (callable $output): void {
-        \Lamb\Hooks\do_action('cron.run', $output);
-    };
+    $module_drain ??= static fn(callable $output) => run_cron_hooks($output);
     $webmention_drain ??= static fn(): array => \Lamb\Webmention\process_outbound();
     $output ??= static function (string $line): void {
         echo $line;
@@ -168,6 +166,32 @@ function run_feed_cycle(
 
         $module_drain($output);
         $output(webmention_line($webmention_drain()));
+    }
+}
+
+/**
+ * Runs each module's `cron.run` callback with the output sink.
+ *
+ * A callback that throws is logged and the rest still run, so one module cannot
+ * stop the webmention drain that follows, or hide an exception from the crawl.
+ *
+ * @param callable(string): void $output Output sink.
+ * @return void
+ */
+function run_cron_hooks(callable $output): void
+{
+    foreach (\Lamb\Hooks\callbacks('cron.run') as $callback) {
+        try {
+            $callback($output);
+        } catch (\Throwable $e) {
+            error_log(sprintf(
+                'cron.run callback failed: %s: %s in %s:%d',
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+        }
     }
 }
 
