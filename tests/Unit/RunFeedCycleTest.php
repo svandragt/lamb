@@ -27,10 +27,11 @@ class RunFeedCycleTest extends TestCase
         R::nuke();
     }
 
-    /** @return callable(): int */
-    private function noopWebsubDrain(): callable
+    /** @return callable(callable(string): void): void */
+    private function noopModuleDrain(): callable
     {
-        return fn(): int => 0;
+        return function (callable $output): void {
+        };
     }
 
     /** @return callable(): array{sent: int, failed: int, skipped: int, cancelled: int} */
@@ -62,7 +63,7 @@ class RunFeedCycleTest extends TestCase
         run_feed_cycle(
             feeds: ['bad' => 'https://example.com/bad'],
             crawler: fn(string $name, string $url): array => ['ok' => false, 'items' => 0, 'error' => 'boom'],
-            websub_drain: $this->noopWebsubDrain(),
+            module_drain: $this->noopModuleDrain(),
             webmention_drain: $this->noopWebmentionDrain(),
             output: $this->collectingOutput($lines)
         );
@@ -81,7 +82,7 @@ class RunFeedCycleTest extends TestCase
             crawler: fn(string $name, string $url): array => $name === 'bad'
                 ? ['ok' => false, 'items' => 0, 'error' => 'boom']
                 : ['ok' => true, 'items' => 3, 'error' => null],
-            websub_drain: $this->noopWebsubDrain(),
+            module_drain: $this->noopModuleDrain(),
             webmention_drain: $this->noopWebmentionDrain(),
             output: $this->collectingOutput($lines)
         );
@@ -100,9 +101,8 @@ class RunFeedCycleTest extends TestCase
         run_feed_cycle(
             feeds: ['bad' => 'https://example.com/bad'],
             crawler: fn(string $name, string $url): array => ['ok' => false, 'items' => 0, 'error' => 'boom'],
-            websub_drain: function () use (&$drained): int {
+            module_drain: function () use (&$drained): void {
                 $drained = true;
-                return 0;
             },
             webmention_drain: $this->noopWebmentionDrain(),
             output: $this->collectingOutput($lines)
@@ -119,7 +119,7 @@ class RunFeedCycleTest extends TestCase
 
         run_feed_cycle(
             feeds: [],
-            websub_drain: $this->noopWebsubDrain(),
+            module_drain: $this->noopModuleDrain(),
             webmention_drain: $this->noopWebmentionDrain(),
             advance_watermark: function (int $timestamp) use (&$seen): void {
                 $seen = $timestamp;
@@ -134,7 +134,7 @@ class RunFeedCycleTest extends TestCase
     public function testBothDrainsRunEvenWhenTheCrawlLoopThrows(): void
     {
         $this->due('exploding', 'https://example.com/exploding');
-        $websubRan = false;
+        $modulesRan = false;
         $webmentionRan = false;
         $lines = [];
 
@@ -144,9 +144,8 @@ class RunFeedCycleTest extends TestCase
                 crawler: function (): array {
                     throw new \RuntimeException('unexpected crawl failure');
                 },
-                websub_drain: function () use (&$websubRan): int {
-                    $websubRan = true;
-                    return 0;
+                module_drain: function () use (&$modulesRan): void {
+                    $modulesRan = true;
                 },
                 webmention_drain: function () use (&$webmentionRan): array {
                     $webmentionRan = true;
@@ -159,7 +158,7 @@ class RunFeedCycleTest extends TestCase
             $this->assertSame('unexpected crawl failure', $e->getMessage());
         }
 
-        $this->assertTrue($websubRan);
+        $this->assertTrue($modulesRan);
         $this->assertTrue($webmentionRan);
     }
 
@@ -175,11 +174,43 @@ class RunFeedCycleTest extends TestCase
                 $called = true;
                 return ['ok' => true, 'items' => 1, 'error' => null];
             },
-            websub_drain: $this->noopWebsubDrain(),
+            module_drain: $this->noopModuleDrain(),
             webmention_drain: $this->noopWebmentionDrain(),
             output: $this->collectingOutput($lines)
         );
 
         $this->assertFalse($called);
+    }
+
+    public function testTheDefaultDrainRunsEveryCronHookEvenWhenOneThrows(): void
+    {
+        $webmentionRan = false;
+        $lines = [];
+        \Lamb\Hooks\add_action('cron.run', function (): void {
+            throw new \RuntimeException('module failure');
+        });
+        \Lamb\Hooks\add_action('cron.run', function (callable $output): void {
+            $output('module line' . PHP_EOL);
+        });
+
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            run_feed_cycle(
+                feeds: [],
+                webmention_drain: function () use (&$webmentionRan): array {
+                    $webmentionRan = true;
+                    return ['sent' => 0, 'failed' => 0, 'skipped' => 0, 'cancelled' => 0];
+                },
+                output: $this->collectingOutput($lines)
+            );
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+            \Lamb\Hooks\reset('cron.run');
+        }
+
+        $this->assertStringContainsString('module line', implode('', $lines));
+        $this->assertTrue($webmentionRan);
     }
 }
