@@ -167,7 +167,7 @@ function reset(?string $hook = null): void
  */
 function load_modules(string $dir): array
 {
-    static $seen = [];
+    $seen = &module_registry();
 
     $files = glob(rtrim($dir, '/') . '/*/module.php') ?: [];
     sort($files);
@@ -177,7 +177,7 @@ function load_modules(string $dir): array
         if (isset($seen[$key])) {
             continue;
         }
-        $seen[$key] = true;
+        $seen[$key] = null;
         try {
             $register = require $file;
             if (!is_callable($register)) {
@@ -189,8 +189,34 @@ function load_modules(string $dir): array
             error_log(sprintf('Module %s failed to load: %s: %s', $file, $e::class, $e->getMessage()));
             continue;
         }
-        $loaded[] = basename(dirname($file));
+        $loaded[] = $seen[$key] = basename(dirname($file));
     }
 
     return $loaded;
+}
+
+/**
+ * Every module file load_modules() has tried this process, by real path, with
+ * the module's name once it loaded (null when it failed).
+ *
+ * @return array<string, string|null> The mutable registry.
+ */
+function &module_registry(): array
+{
+    static $seen = [];
+
+    return $seen;
+}
+
+/**
+ * The names of the modules that loaded this process, sorted.
+ *
+ * @return list<string> Module names.
+ */
+function loaded_modules(): array
+{
+    $names = array_values(array_filter(module_registry(), 'is_string'));
+    sort($names);
+
+    return $names;
 }

@@ -834,11 +834,53 @@ function migrate_data(bool $dry_run = false): array
     $count = drop_experimental_gate_stamp($dry_run);
     $lines[] = "{$prefix}drop_experimental_gate_stamp: " . ($dry_run ? 'would delete' : 'deleted') . " $count unused option row(s)";
 
+    $count = rerender_for_module_change($dry_run);
+    $lines[] = "{$prefix}rerender_for_module_change: " . ($dry_run ? 'would mark' : 'marked') . " $count post(s) for re-rendering";
+
     [$needing_upgrade, $upgraded] = \Lamb\Response\upgrade_all_posts($dry_run);
     $count = $dry_run ? $needing_upgrade : $upgraded;
     $lines[] = "{$prefix}upgrade_all_posts: " . ($dry_run ? 'would upgrade' : 'upgraded') . " $count post(s) to version " . POST_VERSION;
 
     return $lines;
+}
+
+/**
+ * Option row that holds the modules the stored post HTML was rendered with, as
+ * the comma-separated names Hooks\loaded_modules() returns.
+ */
+const RENDER_MODULES_OPTION = 'render_modules';
+
+/**
+ * Marks every current post for re-rendering when the set of loaded modules has
+ * changed since the posts were rendered.
+ *
+ * A module can change rendering (the highlight module's `render.code_block`
+ * filter), and each post caches its HTML in `transformed`. Adding or removing a
+ * module changes the code marker, so migrate_data() runs and this sets the
+ * posts' version one below POST_VERSION, so upgrade_all_posts() right after it
+ * re-renders them. The first run only records the set: posts rendered before
+ * modules existed match the modules that ship with Lamb.
+ *
+ * @param bool $dry_run When true, report the row count but write nothing.
+ * @return int Number of posts marked (or that dry-run would mark).
+ */
+function rerender_for_module_change(bool $dry_run = false): int
+{
+    $current = implode(',', \Lamb\Hooks\loaded_modules());
+    $option = get_option(RENDER_MODULES_OPTION, null);
+    if ($option->id !== 0 && (string) $option->value === $current) {
+        return 0;
+    }
+    $count = $option->id === 0 ? 0 : (int) R::getCell('SELECT COUNT(*) FROM post WHERE version = ?', [POST_VERSION]);
+    if ($dry_run) {
+        return $count;
+    }
+    if ($count > 0) {
+        R::exec('UPDATE post SET version = ? WHERE version = ?', [POST_VERSION - 1, POST_VERSION]);
+    }
+    set_option($option, $current);
+
+    return $count;
 }
 
 /**

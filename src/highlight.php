@@ -7,7 +7,8 @@ const PLACEHOLDER_FORMAT = '<!--lamb-code-%d-->';
 /**
  * Replaces fenced code blocks with placeholder comments so intermediate
  * transforms (e.g. hashtag linking) cannot mangle code content or the
- * inline style attributes added by the highlighter.
+ * inline style attributes a `render.code_block` filter (the highlight module)
+ * adds.
  *
  * @param string $html The Parsedown output.
  *

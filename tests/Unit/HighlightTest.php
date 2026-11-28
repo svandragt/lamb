@@ -24,6 +24,26 @@ class HighlightTest extends TestCase
         \Lamb\Hooks\reset('render.code_block');
     }
 
+    public function testAFilterThatThrowsOrReturnsANonStringKeepsTheBlock(): void
+    {
+        \Lamb\Hooks\reset('render.code_block');
+        $block = '<pre><code class="language-php">echo 1;</code></pre>';
+
+        \Lamb\Hooks\add_filter('render.code_block', fn() => null);
+        $this->assertSame($block, \Lamb\filter_code_block($block));
+
+        \Lamb\Hooks\reset('render.code_block');
+        \Lamb\Hooks\add_filter('render.code_block', fn() => throw new \RuntimeException('boom'));
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $this->assertSame($block, \Lamb\filter_code_block($block));
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+        }
+    }
+
     public function testWithoutTheModuleCodeBlocksStayPlain(): void
     {
         \Lamb\Hooks\reset('render.code_block');
