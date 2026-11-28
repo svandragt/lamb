@@ -29,7 +29,8 @@ class PhpTestedVersionsGuardTest extends TestCase
         $this->assertSame($range, $testVersion[1], 'phpcs.xml testVersion differs from the ci.yml test matrix');
 
         $docs = (string) file_get_contents(codecept_root_dir('docs/index.md'));
-        $this->assertSame(1, preg_match('/^- PHP [\d.]+ – (\d+\.\d+)/mu', $docs, $newest), 'docs/index.md has no PHP requirement line');
-        $this->assertSame(end($tested), $newest[1], 'docs/index.md names a different newest PHP from the ci.yml test matrix');
+        $this->assertSame(1, preg_match('/^- PHP (\d+\.\d+)[\d.]* – (\d+\.\d+)/mu', $docs, $docsRange), 'docs/index.md has no PHP requirement line');
+        $this->assertSame(reset($tested), $docsRange[1], 'docs/index.md names a different oldest PHP from the ci.yml test matrix');
+        $this->assertSame(end($tested), $docsRange[2], 'docs/index.md names a different newest PHP from the ci.yml test matrix');
     }
 }
