@@ -7,6 +7,18 @@ use RedBeanPHP\R;
 
 class FeedTemplateTest extends TestCase
 {
+    /** Registers the websub module's hooks for one test; tearDown() clears them. */
+    private function loadWebsubModule(): void
+    {
+        (require dirname(__DIR__, 2) . '/src/modules/websub/module.php')();
+    }
+
+    protected function tearDown(): void
+    {
+        \Lamb\Hooks\reset();
+        parent::tearDown();
+    }
+
     /**
      * @runInSeparateProcess
      * @preserveGlobalState disabled
@@ -269,6 +281,7 @@ class FeedTemplateTest extends TestCase
      */
     public function testFeedAdvertisesWebSubHubWhenConfigured(): void
     {
+        $this->loadWebsubModule();
         $xml = $this->renderFeedWithPost(
             ['title' => 'Post', 'transformed' => '<p>Body</p>'],
             [],
@@ -290,6 +303,7 @@ class FeedTemplateTest extends TestCase
      */
     public function testFeedAdvertisesEveryCommaSeparatedHub(): void
     {
+        $this->loadWebsubModule();
         $xml = $this->renderFeedWithPost(
             ['title' => 'Post', 'transformed' => '<p>Body</p>'],
             [],

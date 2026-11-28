@@ -78,6 +78,25 @@ class WebsubTest extends TestCase
         $this->assertFalse($called, 'Sender must not be invoked without a configured hub');
     }
 
+    // module ------------------------------------------------------------------
+
+    public function testModuleWiresPublishFeedHubsAndCron(): void
+    {
+        \Lamb\Hooks\reset();
+        try {
+            (require dirname(__DIR__, 2) . '/src/modules/websub/module.php')();
+
+            $this->assertSame(['Lamb\Websub\ping_for_post'], \Lamb\Hooks\callbacks('post.published'));
+            $this->assertSame(
+                ['https://a.example.com/', 'https://hub.example.com/'],
+                \Lamb\Hooks\apply_filters('feed.hubs', ['https://a.example.com/'], ['websub_hubs' => 'https://hub.example.com/'])
+            );
+            $this->assertTrue(\Lamb\Hooks\has('cron.run'));
+        } finally {
+            \Lamb\Hooks\reset();
+        }
+    }
+
     // ping_for_post ----------------------------------------------------------
 
     public function testPingForPostPingsForEligiblePost(): void

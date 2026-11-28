@@ -871,8 +871,8 @@ function reset_subscribers(): void
  * Wires the subscribers every request needs at the seam.
  *
  * Publication is an event: notify-requested saves emit `post.published`, and the
- * two notification subsystems subscribe here rather than each re-deriving
- * "published" from a different signal. Each callee self-filters ineligible posts
+ * notification subsystems subscribe to it rather than each re-deriving
+ * "published" from a different signal (WebSub subscribes from its module). Each callee self-filters ineligible posts
  * (drafts, feed items, future-dated), so subscribing them unconditionally is
  * safe. Called once from the request bootstrap (src/index.php).
  *
@@ -881,7 +881,6 @@ function reset_subscribers(): void
 function register_default_subscribers(): void
 {
     on('post.published', '\Lamb\Webmention\enqueue_for_post');
-    on('post.published', '\Lamb\Websub\ping_for_post');
 }
 
 /**

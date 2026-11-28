@@ -346,7 +346,7 @@ function render_atom_feed(array $data, array $config): void
     // a query-string `&`.
     $self->addAttribute('href', $channel_link);
 
-    foreach (\Lamb\Websub\hub_urls($config) as $websub_hub) {
+    foreach (\Lamb\Hooks\apply_filters('feed.hubs', [], $config) as $websub_hub) {
         $hub = $xml->addChild('link');
         $hub->addAttribute('rel', 'hub');
         $hub->addAttribute('href', $websub_hub);
@@ -426,7 +426,7 @@ function render_json_feed(array $data, array $config): void
         'items'         => [],
     ];
 
-    $websub_hubs = \Lamb\Websub\hub_urls($config);
+    $websub_hubs = \Lamb\Hooks\apply_filters('feed.hubs', [], $config);
     if ($websub_hubs !== []) {
         $feed['hubs'] = array_map(
             fn($hub) => ['type' => 'WebSub', 'url' => $hub],

@@ -7,6 +7,18 @@ use RedBeanPHP\R;
 
 class FeedJsonTemplateTest extends TestCase
 {
+    /** Registers the websub module's hooks for one test; tearDown() clears them. */
+    private function loadWebsubModule(): void
+    {
+        (require dirname(__DIR__, 2) . '/src/modules/websub/module.php')();
+    }
+
+    protected function tearDown(): void
+    {
+        \Lamb\Hooks\reset();
+        parent::tearDown();
+    }
+
     /**
      * @runInSeparateProcess
      * @preserveGlobalState disabled
@@ -76,6 +88,7 @@ class FeedJsonTemplateTest extends TestCase
      */
     public function testFeedJsonAdvertisesWebSubHubWhenConfigured(): void
     {
+        $this->loadWebsubModule();
         $json = $this->renderJsonFeedWithPost(
             ['title' => 'Hello', 'transformed' => '<p>Body</p>'],
             ['websub_hubs' => 'https://hub.example.com/']
@@ -94,6 +107,7 @@ class FeedJsonTemplateTest extends TestCase
      */
     public function testFeedJsonAdvertisesEveryCommaSeparatedHub(): void
     {
+        $this->loadWebsubModule();
         $json = $this->renderJsonFeedWithPost(
             ['title' => 'Hello', 'transformed' => '<p>Body</p>'],
             ['websub_hubs' => 'https://hub-a.example.com/, https://hub-b.example.com/']

@@ -118,8 +118,8 @@ function webmention_line(array $sent): string
  * @param array<string, string>|null $feeds Feed name => URL map (default get_feeds()).
  * @param callable(string, string): array{ok: bool, items: int, error: ?string}|null $crawler
  *        Per-feed crawler (default crawl_feed_guarded(), which never throws).
- * @param callable(): int|null $websub_drain WebSub drain returning the ping count
- *        (default ping_scheduled_publishes()).
+ * @param callable(callable(string): void): void|null $module_drain Runs the
+ *        modules' cron work, handed the output sink (default fires `cron.run`).
  * @param callable(): array{sent: int, failed: int, skipped: int, cancelled: int}|null $webmention_drain
  *        Outbound-webmention drain (default process_outbound()).
  * @param callable(int): void|null $advance_watermark Persists the run timestamp
@@ -131,7 +131,7 @@ function webmention_line(array $sent): string
 function run_feed_cycle(
     ?array $feeds = null,
     ?callable $crawler = null,
-    ?callable $websub_drain = null,
+    ?callable $module_drain = null,
     ?callable $webmention_drain = null,
     ?callable $advance_watermark = null,
     ?callable $output = null,
@@ -139,7 +139,9 @@ function run_feed_cycle(
 ): void {
     $feeds ??= get_feeds();
     $crawler ??= static fn(string $name, string $url): array => crawl_feed_guarded($name, $url);
-    $websub_drain ??= static fn(): int => \Lamb\Websub\ping_scheduled_publishes();
+    $module_drain ??= static function (callable $output): void {
+        \Lamb\Hooks\do_action('cron.run', $output);
+    };
     $webmention_drain ??= static fn(): array => \Lamb\Webmention\process_outbound();
     $output ??= static function (string $line): void {
         echo $line;
@@ -164,10 +166,7 @@ function run_feed_cycle(
     } finally {
         $advance_watermark($clock());
 
-        $output(count_line(
-            $websub_drain(),
-            'WebSub: pinged hub for %d scheduled post(s) now published.'
-        ));
+        $module_drain($output);
         $output(webmention_line($webmention_drain()));
     }
 }

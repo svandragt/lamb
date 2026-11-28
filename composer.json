@@ -74,7 +74,6 @@
             "src/theme/meta.php",
             "src/micropub.php",
             "src/webmention.php",
-            "src/websub.php",
             "src/wordpress.php"
         ]
     },
