@@ -123,6 +123,37 @@ function do_action(string $hook, mixed ...$args): void
 }
 
 /**
+ * Runs every callback on an action hook, logging and skipping any that throw
+ * (a broken module file included), so one module cannot stop the others or
+ * the caller.
+ *
+ * @param string $hook    The hook name.
+ * @param mixed  ...$args Passed to each callback.
+ * @return int The number of callbacks that threw.
+ */
+function do_action_safely(string $hook, mixed ...$args): int
+{
+    $failures = 0;
+    foreach (callbacks($hook) as $callback) {
+        try {
+            $callback(...$args);
+        } catch (\Throwable $e) {
+            $failures++;
+            error_log(sprintf(
+                '%s callback failed: %s: %s in %s:%d',
+                $hook,
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine()
+            ));
+        }
+    }
+
+    return $failures;
+}
+
+/**
  * Threads a value through every callback on a filter hook.
  *
  * @param string $hook    The hook name.

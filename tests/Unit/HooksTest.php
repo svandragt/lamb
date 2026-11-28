@@ -53,6 +53,29 @@ class HooksTest extends TestCase
         $this->assertSame('x', apply_filters('unhooked', 'x'));
     }
 
+    public function testDoActionSafelyLogsAThrowingCallbackAndRunsTheRest(): void
+    {
+        $ran = false;
+        add_action('s', function (): void {
+            throw new \Error('broken module');
+        });
+        add_action('s', function () use (&$ran): void {
+            $ran = true;
+        });
+
+        $log = ini_set('error_log', '/dev/null');
+        try {
+            $failures = \Lamb\Hooks\do_action_safely('s');
+        } finally {
+            if ($log !== false) {
+                ini_set('error_log', $log);
+            }
+        }
+
+        $this->assertSame(1, $failures);
+        $this->assertTrue($ran);
+    }
+
     public function testResetClearsOneHookOrAll(): void
     {
         add_action('a', fn() => null);

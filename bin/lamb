@@ -268,7 +268,8 @@ if ($command === 'marker') {
 }
 
 // Modules add their import sources here (the wordpress and known modules).
-Hooks\do_action('import.sources');
+// A broken importer is logged and skipped, so it cannot stop other commands.
+$import_source_failures = Hooks\do_action_safely('import.sources');
 
 if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace] [--experimental]\n");
@@ -288,6 +289,9 @@ if ($source === null) {
     $failed = array_keys(array_filter(Hooks\module_registry(), 'is_null'));
     if ($failed !== []) {
         fwrite(STDERR, 'These modules failed to load (see the PHP error log): ' . implode(', ', array_map(static fn(string $file): string => basename(dirname($file)), $failed)) . "\n");
+    }
+    if ($import_source_failures > 0) {
+        fwrite(STDERR, "$import_source_failures import source(s) failed to register (see the PHP error log).\n");
     }
     exit(1);
 }
