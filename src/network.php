@@ -180,19 +180,7 @@ function run_feed_cycle(
  */
 function run_cron_hooks(callable $output): void
 {
-    foreach (\Lamb\Hooks\callbacks('cron.run') as $callback) {
-        try {
-            $callback($output);
-        } catch (\Throwable $e) {
-            error_log(sprintf(
-                'cron.run callback failed: %s: %s in %s:%d',
-                $e::class,
-                $e->getMessage(),
-                $e->getFile(),
-                $e->getLine()
-            ));
-        }
-    }
+    \Lamb\Hooks\do_action_safely('cron.run', $output);
 }
 
 #[NoReturn] function process_feeds(): void

@@ -9,8 +9,8 @@
  *   bin/lamb migrate [--dry-run]
  *   bin/lamb marker stored|code
  *
- * <source> is one of the registered importers: known and lamb (registered
- * below) and wordpress (from the optional wordpress module, through the
+ * <source> is one of the registered importers: lamb (registered below), and
+ * wordpress and known (from their optional modules, through the
  * `import.sources` hook). Each parses its own file format into items, then
  * shares run_import()'s dedupe, progress and summary output.
  *
@@ -54,7 +54,6 @@
 namespace Lamb;
 
 use Lamb\Import;
-use Lamb\Known;
 use Lamb\Restore;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
@@ -74,15 +73,6 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 // and a post.published save reaches every subscriber.
 Post\register_default_subscribers();
 Hooks\load_modules(ROOT_DIR . '/modules');
-
-Import\register_source([
-    'name'        => 'known',
-    'parse'       => Import\parse_rss_file(...),
-    'extract'     => Known\extract_items(...),
-    'skip_reason' => Known\skip_reason(...),
-    'uuid'        => static fn(array $item): string => Known\known_uuid((string) $item['guid']),
-    'import'      => Known\import_item(...),
-]);
 
 Import\register_source([
     'name'        => 'lamb',
@@ -277,8 +267,9 @@ if ($command === 'marker') {
     exit(0);
 }
 
-// Modules add their import sources here (the wordpress module).
-Hooks\do_action('import.sources');
+// Modules add their import sources here (the wordpress and known modules).
+// A broken importer is logged and skipped, so it cannot stop other commands.
+$import_source_failures = Hooks\do_action_safely('import.sources');
 
 if ($command !== 'import') {
     fwrite(STDERR, "Usage: bin/lamb import <source> <path> [--dry-run] [--replace] [--experimental]\n");
@@ -298,6 +289,9 @@ if ($source === null) {
     $failed = array_keys(array_filter(Hooks\module_registry(), 'is_null'));
     if ($failed !== []) {
         fwrite(STDERR, 'These modules failed to load (see the PHP error log): ' . implode(', ', array_map(static fn(string $file): string => basename(dirname($file)), $failed)) . "\n");
+    }
+    if ($import_source_failures > 0) {
+        fwrite(STDERR, "$import_source_failures import source(s) failed to register (see the PHP error log).\n");
     }
     exit(1);
 }

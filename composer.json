@@ -49,7 +49,6 @@
             "src/hooks.php",
             "src/http.php",
             "src/import.php",
-            "src/known.php",
             "src/lamb.php",
             "src/routes.php",
             "src/network.php",
