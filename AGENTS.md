@@ -196,6 +196,7 @@ lamb/
 │   ├── hooks.php         # Hook API (actions, filters, module loader)
 │   ├── modules/          # Optional features, one directory each, loaded via Hooks\load_modules(); see modules/README.md
 │   │   ├── highlight/    # Syntax highlighting of fenced code blocks (Phiki)
+│   │   ├── wordpress/    # WordPress (WXR) import source for bin/lamb import
 │   │   └── websub/       # WebSub hub pings on publish, hub links in the feeds
 │   ├── highlight.php     # Extracts/restores fenced code blocks around hashtag linking
 │   ├── LambDown.php      # Parsedown subclass (restricts heading levels)
@@ -259,7 +260,7 @@ Each file declares a namespace; functions are called with the namespace prefix:
 
 `response/`, `theme/` and `network/` are namespace splits, not new namespaces: each file inside declares the parent's namespace, so callers don't care which file a function lives in.
 
-`known.php` and `wordpress.php` are thin sources over `Lamb\Import\import_item()`, which holds the one shared pipeline body (dedup, HTML prep, markdown conversion, save, redirects). A new importer adds a source array of callables (`uuid`, `allowed_types`, `title`, `slug`, `dom_pass`, `markdown`, `tags`, `finalize_markdown`, `store_redirects`) passed to that shared function — never a copy of `import_item()` itself.
+`known.php` and `modules/wordpress/wordpress.php` are thin sources over `Lamb\Import\import_item()`, which holds the one shared pipeline body (dedup, HTML prep, markdown conversion, save, redirects). A new importer adds a source array of callables (`uuid`, `allowed_types`, `title`, `slug`, `dom_pass`, `markdown`, `tags`, `finalize_markdown`, `store_redirects`) passed to that shared function — never a copy of `import_item()` itself.
 
 ### Database
 

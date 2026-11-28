@@ -55,7 +55,6 @@ namespace Lamb;
 use Lamb\Import;
 use Lamb\Known;
 use Lamb\Restore;
-use Lamb\WordPress;
 use RedBeanPHP\OODBBean;
 use RedBeanPHP\R;
 use RuntimeException;
@@ -71,18 +70,10 @@ define('ROOT_DIR', dirname(__DIR__) . '/src');
 require dirname(__DIR__) . '/vendor/autoload.php';
 // Before any command runs, wired as on the web (src/index.php): module routes
 // count as reserved when an importer pins a slug (Route\is_reserved_route()),
-// and a post.published save reaches every subscriber.
+// a post.published save reaches every subscriber, and module import sources
+// (the wordpress module) are registered.
 Post\register_default_subscribers();
 Hooks\load_modules(ROOT_DIR . '/modules');
-
-Import\register_source([
-    'name'        => 'wordpress',
-    'parse'       => WordPress\parse_wxr_file(...),
-    'extract'     => WordPress\extract_items(...),
-    'skip_reason' => WordPress\skip_reason(...),
-    'uuid'        => static fn(array $item): string => WordPress\wordpress_uuid((string) $item['guid']),
-    'import'      => WordPress\import_item(...),
-]);
 
 Import\register_source([
     'name'        => 'known',
