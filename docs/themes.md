@@ -36,7 +36,7 @@ Default:
 * All functions available in theme.php can be reused in the theme.
 * A theme does not need to provide every file. Lamb falls back to `src/themes/base/` when a file is missing in the active theme.
 * The only file path that is always expected in the active theme is `styles/styles.css`, because `the_styles()` always loads that stylesheet from the selected theme.
-* `html.php` is only needed when you want to change the outer page layout.
+* `html.php` is only needed when you want to change the outer page layout. A custom `html.php` must call `<?php \Lamb\Hooks\do_action_safely('theme.head'); ?>` inside `<head>`: optional features add tags there, such as the `<link rel="micropub">` that [Micropub]({{ site.baseurl }}{% link micropub.md %}) clients look for. Don't hard-code those tags as well, or they appear twice.
 * The Atom and JSON feeds are rendered by Lamb itself (`Lamb\Response`), not by a theme part, so a theme needs no `feed.php` or `feed_json.php` to have working feeds. Neither file is read any more: a theme that still ships one can delete it.
 * Use the `part($basename)` function to load any other theme includes. This enables a fallback to the base theme's
   files if the file does not exist in the theme. This makes the base theme a requirement for the 2026 theme.

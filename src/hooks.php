@@ -17,8 +17,8 @@
  *  - routes.register (action, $action, $lookup, $sublookup) — call
  *    Route\register_route() here to add routes.
  *  - http.link_headers (filter, list<string> $links) — `Link:` header values.
- *  - theme.head (action) — fired inside each theme's <head>; echo extra tags
- *    (the micropub module's discovery link).
+ *  - theme.head (action) — fired inside each theme's <head> with
+ *    do_action_safely(); echo extra tags (the micropub module's discovery link).
  *  - feed.hubs (filter, list<string> $hubs, array $config) — WebSub hub URLs
  *    advertised in the Atom and JSON feeds.
  *  - render.code_block (filter, string $html) — one fenced code block of a post
