@@ -5,7 +5,7 @@ namespace Tests\Unit;
 use PHPUnit\Framework\TestCase;
 
 /**
- * Keeps every function in src/micropub.php short enough to read at a glance.
+ * Keeps every function in src/modules/micropub/micropub.php short enough to read at a glance.
  *
  * Micropub had the most fix commits of any feature in the six months before #942,
  * and its two request handlers were the longest functions in src/. A handler
@@ -25,7 +25,7 @@ class MicropubFunctionLengthGuardTest extends TestCase
     public function testNoFunctionInMicropubPhpIsLongerThanTheLimit(): void
     {
         $tooLong = [];
-        foreach ($this->functionLengths(__DIR__ . '/../../src/micropub.php') as $declaration => $lines) {
+        foreach ($this->functionLengths(__DIR__ . '/../../src/modules/micropub/micropub.php') as $declaration => $lines) {
             if ($lines > self::MAX_LINES) {
                 $tooLong[] = sprintf('%s (%d lines)', $declaration, $lines);
             }
@@ -34,7 +34,7 @@ class MicropubFunctionLengthGuardTest extends TestCase
         $this->assertSame(
             [],
             $tooLong,
-            sprintf("src/micropub.php functions longer than %d lines:\n", self::MAX_LINES) . implode("\n", $tooLong)
+            sprintf("src/modules/micropub/micropub.php functions longer than %d lines:\n", self::MAX_LINES) . implode("\n", $tooLong)
         );
     }
 

@@ -5,7 +5,7 @@ namespace Tests\Acceptance;
 use Tests\Support\AcceptanceTester;
 
 /**
- * The Micropub media endpoint (src/micropub.php:respond_micropub_media) had no
+ * The Micropub media endpoint (src/modules/micropub/micropub.php:respond_micropub_media) had no
  * acceptance coverage at all before this. Exercising the full authenticated
  * upload path would need a stub IndieAuth token-introspection endpoint (it
  * calls out to a real `token_endpoint` over HTTP), so this covers only the

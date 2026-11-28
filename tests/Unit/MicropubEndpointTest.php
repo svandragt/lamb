@@ -6,7 +6,7 @@ use PHPUnit\Framework\TestCase;
 use Tests\Support\EndpointProbe;
 
 /**
- * respond_micropub() (src/micropub.php) against the requests micropub.rocks sends.
+ * respond_micropub() (src/modules/micropub/micropub.php) against the requests micropub.rocks sends.
  *
  * Each test is named after the micropub.rocks server test it mirrors and sends
  * the same request that test sends, through the same entry point a client

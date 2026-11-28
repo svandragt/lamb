@@ -60,7 +60,6 @@ foreach (Bootstrap\cache_headers(isset($_SESSION[SESSION_LOGIN])) as $cache_head
     header($cache_header);
 }
 $core_link_headers = [
-    '<' . ROOT_URL . '/micropub>; rel="micropub"',
     '<' . ROOT_URL . '/webmention>; rel="webmention"',
     '<' . $config['authorization_endpoint'] . '>; rel="authorization_endpoint"',
     '<' . $config['token_endpoint'] . '>; rel="token_endpoint"',

@@ -38,7 +38,7 @@ global $template;
     <link rel="authorization_endpoint" href="<?= escape($config['authorization_endpoint']) ?>">
     <link rel="token_endpoint" href="<?= escape($config['token_endpoint']) ?>">
     <?php the_indieauth_metadata(); ?>
-    <link rel="micropub" href="<?= ROOT_URL ?>/micropub">
+    <?php \Lamb\Hooks\do_action('theme.head'); ?>
     <link rel="webmention" href="<?= ROOT_URL ?>/webmention">
     <?php if (!empty($data['feed_url']) && $data['feed_url'] !== ROOT_URL . '/feed') : ?>
     <link rel="alternate" type="application/atom+xml" href="<?= escape($data['feed_url']) ?>"

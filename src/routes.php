@@ -122,8 +122,6 @@ function register_app_routes(
         register_route('tag', 'Lamb\\Response\\respond_tag', $lookup);
     }
     register_route('webmention', 'Lamb\\Webmention\\respond_webmention');
-    register_route('micropub', 'Lamb\\Micropub\\respond_micropub');
-    register_route('micropub-media', 'Lamb\\Micropub\\respond_micropub_media');
     register_private_route('upload', 'Lamb\\Response\\respond_upload', $lookup);
     register_private_route('checkbox', 'Lamb\\Response\\respond_checkbox', $lookup);
     register_private_route('_cron', 'Lamb\\Network\\process_feeds');
